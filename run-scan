@@ -123,13 +123,13 @@ if __name__ == "__main__":
 
 
     print("Saving to DB...")
-        db = DB(localdirs.db_dir)
-        db.connect()
-        scan = db.create_scan(options["id"])
-        scan.set_metadata(metadata)
-        fileset = scan.create_fileset("images")
-        for filename in scan_files:
-            fileset.import_file(filename)
-        scan.store()
-        db.disconnect()
+    db = DB(localdirs.db_dir)
+    db.connect()
+    scan = db.create_scan(options["id"])
+    scan.set_metadata(metadata)
+    fileset = scan.create_fileset("images")
+    for filename in scan_files:
+        fileset.import_file(filename)
+    scan.store()
+    db.disconnect()
     print("...done. Goodbye!")
