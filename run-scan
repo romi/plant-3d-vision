@@ -14,30 +14,15 @@ from scanner import localdirs
 def default_id():
     return time.strftime("%Y-%m-%d_%H-%M-%S")
 
-def scan(scanner_id, object_id):
-    pass
-
-def new_scanner(scanner_id):
-    pass
-
-def new_object(object_id):
-    pass
-
 if __name__ == "__main__":
     logger = logging.getLogger(__name__)
-    usage = "usage: %prog [options] PLANT_ID SCANNER_ID PATH_ID"
+    usage = "usage: %prog [options] OBJECT_ID SCANNER_ID PATH_ID"
     parser = OptionParser(usage=usage)
 
     parser.add_option("-i", "--id",
         dest="id",
         help ="scan id, default to current time formatted as %Y-%m-%d_%H-%M-%S",
         default=default_id())
-
-    parser.add_option("-y", "--no-confirm",
-        dest="no-confirm",
-        action="store_true",
-        default=False,
-        help="Do not ask for confirmation")
 
     (options, args) = parser.parse_args()
 
