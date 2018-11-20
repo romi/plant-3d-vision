@@ -1,0 +1,13 @@
+{
+    "id" : "circular_72",
+    "type" : "circular",
+    "args" : {
+        "num_points" : 72,
+        "xc" : 400,
+        "yc" : 400,
+        "radius" : 350,
+        "tilt" : -0.3,
+        "z" : 100,
+        "filetype" : "jpg"
+    }
+}
