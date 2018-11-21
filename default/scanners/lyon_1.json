@@ -1,0 +1,23 @@
+{
+    "id": "lyon_1",
+    "frame": "alu 40mm",
+    "cnc_hardware": "xcarve-v2",
+    "cnc_firmware": "grbl-v1.1",
+    "cnc_args": {
+        "port" : "/dev/ttyUSB0",
+        "homing" : true
+    },
+    "gimbal_hardware": "dynamixel",
+    "gimbal_firmware": "dynamixel-usb2dynamixel",
+    "gimbal_args": {
+        "port" : "/dev/ttyUSB1",
+        "baud_rate" : 57600,
+        "tilt0" : 3072
+    },
+    "camera_hardware": "Sony Alpha 5100",
+    "camera_firmware": "gphoto2",
+    "camera_args" : {
+        "api_url" : "http://192.168.122.1:8080"
+    },
+    "camera_lens": "16-35 stock"
+}
