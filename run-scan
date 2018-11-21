@@ -14,7 +14,7 @@ from scanner import localdirs
 def default_id():
     return time.strftime("%Y-%m-%d_%H-%M-%S")
 
-def scan(scanner_id, object_id):
+def new_scan(scanner_id, object_id):
     pass
 
 def new_scanner(scanner_id):
@@ -31,7 +31,8 @@ if __name__ == "__main__":
     parser.add_option("-i", "--id",
         dest="id",
         help ="scan id, default to current time formatted as %Y-%m-%d_%H-%M-%S",
-        default=default_id())
+        default=default_id(),
+        type="string")
 
     parser.add_option("-y", "--no-confirm",
         dest="no-confirm",
@@ -124,12 +125,15 @@ if __name__ == "__main__":
 
     print("Saving to DB...")
     db = DB(localdirs.db_dir)
-    db.connect()
-    scan = db.create_scan(options["id"])
+    db.connect(options.id)
+    scan = db.create_scan(options.id)
     scan.set_metadata(metadata)
     fileset = scan.create_fileset("images")
+    im_count = 0
     for filename in scan_files:
-        fileset.import_file(filename)
+        im_count += 1
+        file = fileset.create_file(str(im_count).zfill(3))
+        file.import_file(filename)
     scan.store()
     db.disconnect()
     print("...done. Goodbye!")
