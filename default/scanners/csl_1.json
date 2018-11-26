@@ -1,0 +1,24 @@
+{
+    "id": "csl_1",
+    "frame": "alu 40mm",
+    "cnc_hardware": "xcarve-v2",
+    "cnc_firmware": "grbl-v1.1",
+    "cnc_args": {
+        "port" : "/dev/ttyUSB0",
+        "homing" : true
+    },
+    "gimbal_hardware": "brushless",
+    "gimbal_firmware": "blgimbal",
+    "gimbal_args": {
+        "port" : "/dev/ttyACM0",
+        "has_tilt" : false,
+        "steps_per_turn" : 50,
+        "zero_pan" : 25
+    },
+    "camera_hardware": "Sony RX0",
+    "camera_firmware": "sony_wifi",
+    "camera_args" : {
+        "api_url" : "http://10.0.2.227:10000"
+    },
+    "camera_lens": "N/A"
+}

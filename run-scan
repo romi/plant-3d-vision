@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import lettucethink
+import subprocess
 from lettucethink.fsdb import DB
 from lettucethink import scan
 import time, datetime
@@ -24,7 +25,13 @@ if __name__ == "__main__":
         help ="scan id, default to current time formatted as %Y-%m-%d_%H-%M-%S",
         default=default_id())
 
+    parser.add_option("-d", "--remote-destination",
+        dest="dest",
+        help ="remote server to upload data to (optional)",
+        default=None)
+
     (options, args) = parser.parse_args()
+    options = vars(options)
 
     if len(args) != 3:
         parser.error("Incorrect number of arguments")
@@ -46,7 +53,7 @@ if __name__ == "__main__":
                                                 args[1] + ".json")))
     except Exception as e:
         logger.error("Failed to read scanner with id "
-            + str(args[0]) + ". Either it does not exist or it's wrongly formatted.")
+            + str(args[1]) + ". Either it does not exist or it's wrongly formatted.")
         raise
 
     if scanner_config["cnc_firmware"].split("-")[0] == "grbl":
@@ -85,15 +92,15 @@ if __name__ == "__main__":
 
     db = DB(localdirs.db_dir) 
     db.connect()
-    scan = db.create_scan(options["id"])
-    fileset = scan.create_fileset("images")
+    print(options["id"])
+    db_scan = db.create_scan(options["id"])
 
     # Init scanner
     try:
         cnc = CNC(**scanner_config["cnc_args"])
         gimbal = Gimbal(**scanner_config["gimbal_args"])
         camera = Camera(**scanner_config["camera_args"])
-        scanner = scan.Scanner(cnc, gimbal, camera, scan)
+        scanner = scan.Scanner(cnc, gimbal, camera, db_scan)
     except Exception as e:
         logger.error("Failed to initialize scanner")
         raise
@@ -105,16 +112,24 @@ if __name__ == "__main__":
         "scanner" : scanner_config,
         "path" : path_config
     }
-    scan.set_metadata(metadata)
-    fileset = scan.create_fileset("images")
+    db_scan.set_metadata(metadata)
 
     print("Starting scan...")
-    if path_config["type"] == "circular":
-        scan_files = scanner.do_circular_scan(**path_config["args"])
-    else:
-        raise ValueError("Unknown path type")
+    try:
+        if path_config["type"] == "circular":
+            scan_files = scanner.do_circular_scan(**path_config["args"])
+        else:
+            raise ValueError("Unknown path type")
+    except Exception as e:
+        logger.error("Failed to finish scan.")
+        raise
     print("...done")
-
-    scan.store()
     db.disconnect()
+    if options["dest"] is not None:
+        print("Syncing data to remote destination : " + options["dest"])
+        subprocess.run(["rsync", "-av",
+                                os.path.join(localdirs.db_dir, options["id"]),
+                                options["dest"]])
+        print("...done")
+
     print("...done. Goodbye!")
