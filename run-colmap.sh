@@ -14,7 +14,7 @@ if [ "x$MATCHER" == "x" ]; then
     MATCHER="sequential"
 fi
 
-python3 generate_poses.py -i $DATASET_ID
+./generate-poses -i $DATASET_ID
 
 colmap feature_extractor --database_path $DATASET_PATH/$DATASET_ID/database.db \
        --image_path $DATASET_PATH/$DATASET_ID/images \
