@@ -2,7 +2,7 @@
 
 exec 2> /dev/null
 
-DATASET_PATH="~/.local/share/lettucethink/scanner/data"
+DATASET_PATH="/home/foodlab/.local/share/lettucethink/scanner/data"
 
 DATASET_ID=$1
 if [ "x$DATASET_ID" == "x" ]; then
@@ -14,7 +14,7 @@ if [ "x$MATCHER" == "x" ]; then
     MATCHER="sequential"
 fi
 
-python3 generate_poses.py -i "2018-11-26_15-05-57"
+python3 generate_poses.py -i $DATASET_ID
 
 colmap feature_extractor --database_path $DATASET_PATH/$DATASET_ID/database.db \
        --image_path $DATASET_PATH/$DATASET_ID/images \
