@@ -1,0 +1,89 @@
+#!/usr/bin/env python3
+import open3d
+import numpy as np
+import sys
+import os
+from optparse import OptionParser
+from scipy.ndimage.morphology import binary_opening, binary_dilation, distance_transform_edt
+from scipy.ndimage.morphology import binary_erosion
+from scipy.ndimage.filters import gaussian_filter
+
+progname = os.path.basename(sys.argv[0])
+usage_str = "Usage: %s [--width=1.0] [--dist=1.0] <input.ply> <output.ply>"%progname
+
+parser = OptionParser(usage=usage_str)
+parser.add_option("-w", "--width", dest="width",
+                  help="voxel width", type="float", default=1.0)
+parser.add_option("-d", "--dist", dest="dist",
+                  help="distance of surface to voxel set", type="float", default=1.0)
+
+(options, args) = parser.parse_args()
+if len(args) < 2:
+    print(parser.usage)
+    parser.exit(1)
+
+input_filename = args[0]
+output_filename = args[1]
+
+pcd = open3d.read_point_cloud(input_filename)
+
+width = options.width
+dist_threshold = options.dist
+
+data = np.asarray(pcd.points)
+for i in range(3): 
+    data[:,i] = data[:,i] - np.min(data[:, i])
+indices = np.array(np.round(data[:, 0:3] / width), dtype=np.int)
+shape = indices.max(axis=0)
+ 
+A = np.zeros(shape+1, dtype=np.float)
+ 
+for i in range(data.shape[0]):
+    A[indices[i,0], indices[i, 1], indices[i, 2]] = 1.
+
+A_opened = binary_opening(A, np.ones((5,5,5))) #Get "block" at plant bottom
+x,y,z = np.nonzero(A_opened)
+min_z = z.max()
+A[:,:,:min_z] = 0
+
+dist = distance_transform_edt(A)
+mdist = distance_transform_edt(1-A)
+dist = np.where(dist>0.5, dist - 0.5, -mdist + 0.5)
+
+gx, gy, gz = np.gradient(dist)
+
+on_edge = (dist > -dist_threshold) * (dist <= -dist_threshold+np.sqrt(3))
+x,y,z = np.nonzero(on_edge)
+
+print("number of points = %d"%len(x))
+
+gx = gaussian_filter(gx, 1)
+gy = gaussian_filter(gy, 1)
+gz = gaussian_filter(gz, 1)
+
+pts = np.zeros((0, 3))
+normals = np.zeros((0, 3))
+
+for i in range(len(x)):
+    grad = np.array([gx[x[i], y[i], z[i]],
+                     gy[x[i], y[i], z[i]],
+                     gz[x[i], y[i], z[i]]])
+    grad_norm = np.linalg.norm(grad)
+    if grad_norm > 0:
+        grad_normalized = grad / grad_norm
+        val = dist[x[i], y[i], z[i]] + dist_threshold - np.sqrt(3)/2
+        pts = np.vstack([pts, width*np.array([x[i] - grad_normalized[0] * val,
+                                        y[i] - grad_normalized[1] * val,
+                                        z[i] - grad_normalized[2] * val])])
+        normals = np.vstack([normals, -np.array([grad_normalized[0],
+                                       grad_normalized[1],
+                                       grad_normalized[2]])])
+
+for i in range(3):
+    pts[:, i] = pts[:, i] + np.min(data[:, i])
+
+pcd.points = open3d.Vector3dVector(pts)
+pcd.normals = open3d.Vector3dVector(normals)
+pcd.normalize_normals()
+open3d.write_point_cloud(output_filename, pcd)
+
