@@ -92,7 +92,7 @@ for i in internodes:
             temp_tree = T.copy()
             temp_tree.remove_edge(n, i)
             fruit, _ = get_main_stem_and_internodes(temp_tree, n)
-            fruits.append(fruit)
+            fruits.append({ "internode" : i, "nodes" : fruit})
 
 print("Done! Adjusting point locations...")
 
@@ -103,12 +103,11 @@ for i in range(3):
 indices = np.array(np.round(data[:, 0:3] / options.width), dtype=np.int)
 shape = indices.max(axis=0)
 
-ac = active_contours.TubularActiveContours(4)
-ac.load_data(data, options.width)
-def adjust_segment(nodes, num_per_step=1000, tol=1e-3, coef=1e-4, max_steps=10):
-    y = np.zeros((len(nodes), 4))
-    y[:,0] = 2*options.width
-    y[:, 1:4] = pts[nodes, :]
+ac = active_contours.TubularActiveContours(4, options.width, 5*options.width, lam=0.5)
+ac.load_data(data)
+
+def adjust_segment(nodes, num_per_step=1000, tol=1e-2, coef=1e-6, max_steps=10):
+    y = pts[nodes, :]
     k = 0
     steps = 0
     prev_value = ac.V(y)
@@ -117,18 +116,17 @@ def adjust_segment(nodes, num_per_step=1000, tol=1e-3, coef=1e-4, max_steps=10):
         k += 1
         if k == num_per_step:
             new_value = ac.V(y)
-            print(prev_value - new_value)
             steps += 1
             if prev_value - new_value < tol or steps >= max_steps:
                 break
             prev_value = new_value
             k = 0
-    return y[:, 1:4]
+    print("finished in %d iterations"%steps)
+    return y
 
+print("main stem")
 pts_stem = adjust_segment(main_stem)
 pts[main_stem, :] = pts_stem
-
-print("Done! Plotting...")
 
 geometries = []
 pcd = open3d.PointCloud()
@@ -142,11 +140,37 @@ lines.lines = open3d.Vector2iVector(edges)
 
 geometries.append(lines)
 
-for f in fruits:
+for i,fruit in enumerate(fruits):
+    f = fruit["nodes"]
+    print("fruit number %d"%i)
     adjusted_fruit = adjust_segment(f)
     pts[f, :] = adjusted_fruit
     pcd = open3d.PointCloud()
     pcd.points = open3d.Vector3dVector(pts[f, :])
     pcd.paint_uniform_color(np.random.rand(3))
     geometries.append(pcd)
-open3d.draw_geometries(geometries)
+
+def fit_plane(nodes):
+    points = np.copy(pts[nodes,:])
+    m = points.mean(axis=0)
+    points = points - m[np.newaxis,:]
+    u,s,v = np.linalg.svd(points)
+    return m,v[0,:],v[1,:]
+
+n_nodes_fruit = 5
+n_nodes_stem = 20
+for fruit in fruits:
+    f = fruit["nodes"]
+    nodes = f[0:n_nodes_fruit]
+    idx = list(main_stem).index(fruit["internode"]) 
+    nodes = np.hstack([nodes, main_stem[idx-n_nodes_stem//2:idx+n_nodes_stem//2]])
+    width = options.width
+    m,v1,v2 = fit_plane(nodes)
+    if np.dot(m - pts[main_stem[idx], :], v1) < 0:
+        v1 = -v1
+    if np.dot(m - pts[main_stem[idx], :], v2) < 0:
+        v2 = -v2
+    l = open3d.LineSet()
+    l.points = open3d.Vector3dVector(np.vstack([m, m+10*width*v1, m+10*width*v2]))
+    l.lines = open3d.Vector2iVector(np.vstack([[0,1], [0,2]]))
+    geometries.append(l)
