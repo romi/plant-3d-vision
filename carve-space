@@ -1,0 +1,68 @@
+#!/usr/bin/env python3
+import space_carving
+import os
+import numpy as np
+import open3d
+import json
+from processing import parse_colmap
+
+if __name__ == "__main__":
+    usage = "usage: %prog [options] SCAN_ID"
+    parser = OptionParser(usage=usage)
+
+    parser.add_option("-i", "--id",
+        dest="id",
+        help ="scan id")
+
+    parser.add_option("-v", "--voxel-size",
+        dest="voxel_size",
+        help ="voxel size")
+
+    (options, args) = parser.parse_args()
+
+    db_dir = localdirs.db_dir
+    db = fsdb.DB(db_dir)
+    scan = db.get_scan(options.id)
+
+    fileset_masks = scan.get_fileset("masks")
+    fileset_colmap = scan.get_fileset("colmap")
+
+    points_str = fileset_colmap.get_file("points").read_text()
+    images_str = fileset_colmap.get_file("images").read_text()
+    cameras_str = fileset_colmap.get_file("cameras").read_text()
+
+    points = parse_colmap.parse_points_file(points_str)
+    images = parse_colmap.parse_images_file(images_str)
+    camera = parse_colmap.parse_cameras_file(cameras_str)
+
+    fs=fileset.get_files()
+
+    space_carving.init_opencl(0, 0)
+
+    width = camera["width"]
+    height = camera["height"]
+
+    sc = space_carving.SpaceCarving(center, widths, options.voxel_size, width, height)
+
+    f_c = camera["focal_length"]
+    c_x = camera["principal_point"][0]
+    c_y = camera["principal_point"][1]
+
+    intrinsics = [f_c, c_x, c_y]
+
+    pcd = open3d.PointCloud()
+
+    for im in images:
+        mask = fileset_masks.get_file(im["fname"]).read_image()
+        rot = sum(im["rotation"], [])
+        tvec = im["translation"]
+        sc.process_view(intrinsics, rot, tvec, mask)
+
+    open3d.write_point_cloud("/tmp/pcd.ply")
+    fileset_pcd = scan.get_fileset("pointcloud")
+    if fileset_pcd is None:
+        fileset_pcd = scan.create_fileset("pointcloud")
+
+    vox = fileset_pcd.create_file("voxels")
+    vox.import_file("/tmp/pcd.ply")
+
