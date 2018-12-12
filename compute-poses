@@ -57,7 +57,7 @@ if __name__ == "__main__":
     if not os.isfile(points_path):
         raise Exception("Colmap has not produced points3D.txt file")
 
-    fs_poses = scan.create_fileset("poses")
+    fs_poses = scan.create_fileset("colmap")
 
     images = fs_poses.create_file("images")
     images.import_file(images_path)
