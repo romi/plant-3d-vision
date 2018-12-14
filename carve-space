@@ -18,12 +18,6 @@ if __name__ == "__main__":
         type="float",
         help ="voxel size")
 
-    parser.add_option("-o", "--override",
-        dest="o",
-        default=False,
-        type="bool",
-        help="Overwrite existing filesets without asking")
-
     (options, args) = parser.parse_args()
 
     if len(args) < 1:
