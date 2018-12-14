@@ -20,5 +20,10 @@
     "camera_args" : {
         "api_url" : "http://10.0.2.227:10000"
     },
-    "camera_lens": "N/A"
+    "camera_lens": "N/A",
+    "workspace" : {
+        "x" : [0, 800],
+        "y" : [0, 800],
+        "z" : [0, 800]
+    }
 }

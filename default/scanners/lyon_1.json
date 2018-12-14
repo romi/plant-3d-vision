@@ -19,5 +19,10 @@
     "camera_args" : {
         "api_url" : "http://192.168.122.1:8080"
     },
-    "camera_lens": "16-35 stock"
+    "camera_lens": "16-35 stock",
+    "workspace" : {
+        "x" : [0, 800],
+        "y" : [0, 800],
+        "z" : [0, 800]
+    }
 }

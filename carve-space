@@ -35,6 +35,25 @@ if __name__ == "__main__":
     images = parse_colmap.parse_images_file(images_str)
     camera = parse_colmap.parse_cameras_file(cameras_str)
 
+    scanner_metadata = scan.get_metadata("scanner")
+
+    # Determine point cloud location by taking the bounds of the sparse
+    # point cloud within the scanner workspace
+    x_bounds = scanner_metadata["workspace"]["x"]
+    y_bounds = scanner_metadata["workspace"]["y"]
+    z_bounds = scanner_metadata["workspace"]["z"]
+
+    valid_index = ((points[:, 0] > x_bounds[0]) * (points[:, 0] < x_bounds[1]) *
+                    (points[:, 1] > y_bounds[0]) * (points[:, 1] < y_bounds[1]) *
+                    (points[:, 2] > z_bounds[0]) * (points[:, 2] < z_bounds[1]))
+
+    points = points[valid_index, :]
+    x_min, y_min, z_min = points.min(axis=0)
+    x_max, y_max, z_max = points.max(axis=0)
+
+    center = [(x_max + x_min)/2, (y_max + y_min)/2, (z_max + z_min)/2]
+    widths = [x_max - x_min, y_max - y_min, z_max - z_min]
+
     fs=fileset.get_files()
 
     space_carving.init_opencl(0, 0)
@@ -65,4 +84,5 @@ if __name__ == "__main__":
 
     vox = fileset_pcd.create_file("voxels")
     vox.import_file("/tmp/pcd.ply")
+    vox.set_metadata("width", options.voxel_size)
 
