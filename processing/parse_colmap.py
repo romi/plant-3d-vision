@@ -2,7 +2,7 @@ import numpy as np
 
 def parse_cameras_file(cameras_str):
     camera = {}
-    for line in cameras_str.splitLines():
+    for line in cameras_str.splitlines():
         if line[0] == '#':
             continue
         sp = line.split()
@@ -20,8 +20,8 @@ def parse_cameras_file(cameras_str):
     return camera
 
 def parse_images_file(images_str):
-    images = {}
-    for cnt, line in enumerate(images_str.splitLines()):
+    images = []
+    for cnt, line in enumerate(images_str.splitlines()):
         sp = line.split()
         if cnt % 2 == 0 and cnt >= 4:
             pose = {}
@@ -33,19 +33,19 @@ def parse_images_file(images_str):
                    [2*qx*qz - 2*qy*qw, 2*qy*qz + 2*qx*qw, 1 - 2*qx*qx - 2*qy*qy]]
             pose["translation"] = [tx, ty, tz]
             pose["image_key"] = key
-            images[key] = {
+            images.append({
                 "filename" : fname,
-                "extrinsics" : pose
-            }
+                "pose" : pose
+            })
     return images
 
 def parse_points_file(points_str):
     images = {}
     points = np.zeros((0, 3))
-    for line in points_str.splitLines():
+    for line in points_str.splitlines():
         if line[0] == '#':
             continue
         sp = line.split()
         x, y, z = sp[1:4]
-        points = np.vstack([points, [x, y, z]])
+        points = np.vstack([points, [float(x), float(y), float(z)]])
     return points

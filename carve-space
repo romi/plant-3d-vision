@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
+from optparse import OptionParser
 import space_carving
+from lettucethink import fsdb
 import os
+from scanner import localdirs
 import numpy as np
 import open3d
 import json
@@ -12,6 +15,7 @@ if __name__ == "__main__":
 
     parser.add_option("-v", "--voxel-size",
         dest="voxel_size",
+        type="float",
         help ="voxel size")
 
     (options, args) = parser.parse_args()
@@ -27,6 +31,7 @@ if __name__ == "__main__":
     scan = db.get_scan(scan_id)
 
     fileset_masks = scan.get_fileset("masks")
+    fileset_images = scan.get_fileset("images")
     fileset_colmap = scan.get_fileset("colmap")
 
     points_str = fileset_colmap.get_file("points").read_text()
@@ -56,7 +61,10 @@ if __name__ == "__main__":
     center = [(x_max + x_min)/2, (y_max + y_min)/2, (z_max + z_min)/2]
     widths = [x_max - x_min, y_max - y_min, z_max - z_min]
 
-    fs=fileset.get_files()
+    print("bounds = ")
+    print("x = %.2f, %.2f"%(x_min, x_max))
+    print("y = %.2f, %.2f"%(y_min, y_max))
+    print("z = %.2f, %.2f"%(z_min, z_max))
 
     space_carving.init_opencl(0, 0)
 
@@ -74,12 +82,18 @@ if __name__ == "__main__":
     pcd = open3d.PointCloud()
 
     for im in images:
-        mask = fileset_masks.get_file(im["fname"]).read_image()
-        rot = sum(im["rotation"], [])
-        tvec = im["translation"]
+        id = None
+        for f in fileset_images.get_files():
+            if f.filename == im["filename"]:
+                id = f.id
+        mask = fileset_masks.get_file(id).read_image()
+        rot = sum(im["pose"]["rotation"], [])
+        tvec = im["pose"]["translation"]
         sc.process_view(intrinsics, rot, tvec, mask)
 
-    open3d.write_point_cloud("/tmp/pcd.ply")
+
+    pcd.points = open3d.Vector3dVector(sc.centers()[sc.labels() == 2])
+    open3d.write_point_cloud("/tmp/pcd.ply", pcd)
     fileset_pcd = scan.get_fileset("pointcloud")
     if fileset_pcd is None:
         fileset_pcd = scan.create_fileset("pointcloud")

@@ -10,10 +10,10 @@
     "gimbal_hardware": "brushless",
     "gimbal_firmware": "blgimbal",
     "gimbal_args": {
-        "port" : "/dev/ttyACM0",
+        "port" : "/dev/ttyACM1",
         "has_tilt" : false,
-        "steps_per_turn" : 50,
-        "zero_pan" : 25
+        "steps_per_turn" : 360,
+        "zero_pan" : 180
     },
     "camera_hardware": "Sony RX0",
     "camera_firmware": "sony_wifi",

@@ -3,6 +3,8 @@ from lettucethink import fsdb
 from optparse import OptionParser
 from scanner import localdirs
 import numpy as np
+
+from imageio import imwrite
 import subprocess
 import os
 import sys
@@ -33,27 +35,34 @@ if __name__ == "__main__":
 
     for i,file in enumerate(fs):
         p = file.get_metadata("pose")
-        s = "%s %d %d %d\n"%file.filename,p[0],p[1],p[2]
+        s = "%s %d %d %d\n"%(file.filename,p[0],p[1],p[2])
         posefile.write(s)
 
     posefile.close()
 
     colmap_script = os.path.join(os.getcwd(), "processing/run-colmap.sh")
-    scan_dir = os.path.join(db_dir, options.id)
 
-    x = subprocess.run([colmap_script, scan_dir, options.matcher], shell=True, check=True)
+    scan_dir = "/tmp/colmap_ws"
+    image_dir = os.path.join(scan_dir, "images")
+    os.makedirs(image_dir, exist_ok=True)
+
+    for f in fs:
+        im = f.read_image()
+        imwrite(os.path.join(image_dir, f.filename), im)
+
+    x = subprocess.run([colmap_script, scan_dir, options.matcher], check=True)
 
     images_path = os.path.join(scan_dir, "images.txt")
     cameras_path = os.path.join(scan_dir, "cameras.txt")
     points_path = os.path.join(scan_dir, "points3D.txt")
 
-    if not os.isfile(images_path):
+    if not os.path.isfile(images_path):
         raise Exception("Colmap has not produced images.txt file")
 
-    if not os.isfile(cameras_path):
+    if not os.path.isfile(cameras_path):
         raise Exception("Colmap has not produced cameras.txt file")
 
-    if not os.isfile(points_path):
+    if not os.path.isfile(points_path):
         raise Exception("Colmap has not produced points3D.txt file")
 
     fs_poses = scan.create_fileset("colmap")
