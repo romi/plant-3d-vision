@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 import space_carving
+from optparse import OptionParser
+from scanner import localdirs
+from lettucethink import fsdb
 import os
 import numpy as np
 import open3d
@@ -11,15 +14,11 @@ if __name__ == "__main__":
     usage = "usage: %prog [options] SCAN_ID"
     parser = OptionParser(usage=usage)
 
-    parser.add_option("-v", "--voxel-size",
-        dest="voxel_size",
-        help ="voxel size")
+    (options, args) = parser.parse_args()
 
     if len(args) < 1:
         print("Missing argument : SCAN_ID")
         parser.exit(1)
-
-    (options, args) = parser.parse_args()
     scan_id = args[0]
 
     db_dir = localdirs.db_dir
@@ -40,29 +39,29 @@ if __name__ == "__main__":
     # Convert to pcd
     vox2pcd = os.path.join(os.getcwd(), "processing/vox2pcd")
     pcd_path = "/tmp/pcd.ply"
-    subprocess.run([vox2pcd, "-w",  str(w), voxels_path, pcd_path], shell=True, check=True)
+    subprocess.run([vox2pcd, "-w",  str(w), voxels_path, pcd_path], check=True)
 
     # Convert to mesh
     pcd2mesh = os.path.join(os.getcwd(), "processing/pcd2mesh")
-    mesh_path = "/tmp/mesh.ply"
-    subprocess.run([pcd2mesh, pcd_path, mesh_path], shell=True, check=True)
+    mesh_path = "/tmp/mesh.off"
+    subprocess.run([pcd2mesh, pcd_path, mesh_path], check=True)
 
     # Skeletonize mesh
     mesh2skel = os.path.join(os.getcwd(), "processing/mesh2skel")
     edges_path = "/tmp/edges.txt"
     vertices_path = "/tmp/vertices.txt"
-    subprocess.run([mesh2skel, mesh_path, vertices_path, edges_path], shell=True, check=True)
+    subprocess.run([mesh2skel, mesh_path, vertices_path, edges_path], check=True)
 
     # Add everything to database
-    pcd_file = fileset_pcd.add_file("pcd")
+    pcd_file = fileset_pcd.create_file("pcd")
     pcd_file.import_file(pcd_path)
 
-    mesh_file = fileset_pcd.add_file("mesh")
+    mesh_file = fileset_pcd.create_file("mesh")
     mesh_file.import_file(mesh_path)
 
-    vertices_file = fileset_pcd.add_file("vertices")
+    vertices_file = fileset_pcd.create_file("vertices")
     vertices_file.import_file(vertices_path)
 
-    edges_file = fileset_pcd.add_file("edges")
+    edges_file = fileset_pcd.create_file("edges")
     edges_file.import_file(edges_path)
 

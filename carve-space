@@ -93,12 +93,12 @@ if __name__ == "__main__":
 
 
     pcd.points = open3d.Vector3dVector(sc.centers()[sc.labels() == 2])
-    open3d.write_point_cloud("/tmp/pcd.ply", pcd)
+    open3d.write_point_cloud("/tmp/voxels.ply", pcd)
     fileset_pcd = scan.get_fileset("pointcloud")
     if fileset_pcd is None:
         fileset_pcd = scan.create_fileset("pointcloud")
 
     vox = fileset_pcd.create_file("voxels")
-    vox.import_file("/tmp/pcd.ply")
+    vox.import_file("/tmp/voxels.ply")
     vox.set_metadata("width", options.voxel_size)
 
