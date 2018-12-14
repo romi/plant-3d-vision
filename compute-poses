@@ -23,6 +23,7 @@ if __name__ == "__main__":
         print("Missing argument : SCAN_ID")
         parser.exit(1)
 
+
     scan_id = args[0]
 
     db_dir = localdirs.db_dir
@@ -52,6 +53,10 @@ if __name__ == "__main__":
 
     x = subprocess.run([colmap_script, scan_dir, options.matcher], check=True)
 
+    fileset_colmap = scan.get_fileset("colmap")
+    if fileset_colmap is None:
+        fileset_colmap = scan.create_fileset("colmap")
+
     images_path = os.path.join(scan_dir, "images.txt")
     cameras_path = os.path.join(scan_dir, "cameras.txt")
     points_path = os.path.join(scan_dir, "points3D.txt")
@@ -65,13 +70,17 @@ if __name__ == "__main__":
     if not os.path.isfile(points_path):
         raise Exception("Colmap has not produced points3D.txt file")
 
-    fs_poses = scan.create_fileset("colmap")
-
-    images = fs_poses.create_file("images")
+    images = fileset_masks.get_file("images")
+    if images is None:
+        images = fileset_masks.create_file("images")
     images.import_file(images_path)
 
-    cameras = fs_poses.create_file("cameras")
+    cameras = fileset_masks.get_file("cameras")
+    if cameras is None:
+        cameras = fileset_masks.create_file("cameras")
     cameras.import_file(cameras_path)
 
-    points = fs_poses.create_file("points")
+    points = fileset_masks.get_file("points")
+    if points is None:
+        points = fileset_masks.create_file("points")
     points.import_file(points_path)

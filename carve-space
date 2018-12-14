@@ -18,6 +18,12 @@ if __name__ == "__main__":
         type="float",
         help ="voxel size")
 
+    parser.add_option("-o", "--override",
+        dest="o",
+        default=False,
+        type="bool",
+        help="Overwrite existing filesets without asking")
+
     (options, args) = parser.parse_args()
 
     if len(args) < 1:
@@ -97,8 +103,9 @@ if __name__ == "__main__":
     fileset_pcd = scan.get_fileset("pointcloud")
     if fileset_pcd is None:
         fileset_pcd = scan.create_fileset("pointcloud")
-
-    vox = fileset_pcd.create_file("voxels")
+    vox = fileset_pcd.get_file("voxels")
+    if vox is None:
+        vox = fileset_pcd.create_file("voxels")
     vox.import_file("/tmp/voxels.ply")
     vox.set_metadata("width", options.voxel_size)
 

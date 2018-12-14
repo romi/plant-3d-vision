@@ -15,7 +15,6 @@ if __name__ == "__main__":
         type="float",
         help ="threshold for segmentation")
 
-
     (options, args) = parser.parse_args()
     if len(args) < 1:
         print("Missing argument : SCAN_ID")

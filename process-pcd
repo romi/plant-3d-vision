@@ -53,15 +53,23 @@ if __name__ == "__main__":
     subprocess.run([mesh2skel, mesh_path, vertices_path, edges_path], check=True)
 
     # Add everything to database
-    pcd_file = fileset_pcd.create_file("pcd")
+    pcd_file = fileset_pcd.get_file("pcd")
+    if pcd_file is None:
+        pcd_file = fileset_pcd.create_file("pcd")
     pcd_file.import_file(pcd_path)
 
-    mesh_file = fileset_pcd.create_file("mesh")
+    mesh_file = fileset_pcd.get_file("mesh")
+    if mesh_file is None:
+        mesh_file = fileset_pcd.create_file("mesh")
     mesh_file.import_file(mesh_path)
 
-    vertices_file = fileset_pcd.create_file("vertices")
+    vertices_file = fileset_pcd.get_file("vertices")
+    if vertices_file is None:
+        vertices_file = fileset_pcd.create_file("vertices")
     vertices_file.import_file(vertices_path)
 
-    edges_file = fileset_pcd.create_file("edges")
+    edges_file = fileset_pcd.get_file("edges")
+    if edges_file is None:
+        edges_file = fileset_pcd.create_file("edges")
     edges_file.import_file(edges_path)
 
