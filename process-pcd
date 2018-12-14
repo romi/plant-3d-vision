@@ -11,19 +11,20 @@ if __name__ == "__main__":
     usage = "usage: %prog [options] SCAN_ID"
     parser = OptionParser(usage=usage)
 
-    parser.add_option("-i", "--id",
-        dest="id",
-        help ="scan id")
-
     parser.add_option("-v", "--voxel-size",
         dest="voxel_size",
         help ="voxel size")
 
+    if len(args) < 1:
+        print("Missing argument : SCAN_ID")
+        parser.exit(1)
+
     (options, args) = parser.parse_args()
+    scan_id = args[0]
 
     db_dir = localdirs.db_dir
     db = fsdb.DB(db_dir)
-    scan = db.get_scan(options.id)
+    scan = db.get_scan(scan_id)
 
     fileset_pcd = scan.get_fileset("pointcloud")
 
@@ -48,8 +49,9 @@ if __name__ == "__main__":
 
     # Skeletonize mesh
     mesh2skel = os.path.join(os.getcwd(), "processing/mesh2skel")
-    skel_path = "/tmp/skel.ply"
-    subprocess.run([mesh2skel, mesh_path, skel_path], shell=True, check=True)
+    edges_path = "/tmp/edges.txt"
+    vertices_path = "/tmp/vertices.txt"
+    subprocess.run([mesh2skel, mesh_path, vertices_path, edges_path], shell=True, check=True)
 
     # Add everything to database
     pcd_file = fileset_pcd.add_file("pcd")
@@ -58,6 +60,9 @@ if __name__ == "__main__":
     mesh_file = fileset_pcd.add_file("mesh")
     mesh_file.import_file(mesh_path)
 
-    skel_file = fileset_pcd.add_file("skel")
-    skel_file.import_file(skel_path)
+    vertices_file = fileset_pcd.add_file("vertices")
+    vertices_file.import_file(vertices_path)
+
+    edges_file = fileset_pcd.add_file("edges")
+    edges_file.import_file(edges_path)
 

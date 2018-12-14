@@ -10,19 +10,21 @@ if __name__ == "__main__":
     usage = "usage: %prog [options] SCAN_ID"
     parser = OptionParser(usage=usage)
 
-    parser.add_option("-i", "--id",
-        dest="id",
-        help ="scan id")
-
     parser.add_option("-v", "--voxel-size",
         dest="voxel_size",
         help ="voxel size")
 
     (options, args) = parser.parse_args()
 
+    if len(args) < 1:
+        print("Missing argument : SCAN_ID")
+        parser.exit(1)
+
+    scan_id = args[0]
+
     db_dir = localdirs.db_dir
     db = fsdb.DB(db_dir)
-    scan = db.get_scan(options.id)
+    scan = db.get_scan(scan_id)
 
     fileset_masks = scan.get_fileset("masks")
     fileset_colmap = scan.get_fileset("colmap")
