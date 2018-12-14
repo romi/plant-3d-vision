@@ -41,9 +41,7 @@ if __name__ == "__main__":
     colmap_script = os.path.join(os.getcwd(), "processing/run-colmap.sh")
     scan_dir = os.path.join(db_dir, options.id)
 
-    x = subprocess.run([colmap_script, scan_dir, options.matcher])
-    if x.returncode != 0
-        raise Exception("Colmap has not finished successfully")
+    x = subprocess.run([colmap_script, scan_dir, options.matcher], shell=True, check=True)
 
     images_path = os.path.join(scan_dir, "images.txt")
     cameras_path = os.path.join(scan_dir, "cameras.txt")
