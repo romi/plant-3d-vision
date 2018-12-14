@@ -33,7 +33,7 @@ if __name__ == "__main__":
 
     for i,file in enumerate(fs):
         p = file.get_metadata("pose")
-        s = "%s %d %d %d\n"%file.filename(),p[0],p[1],p[2]
+        s = "%s %d %d %d\n"%file.filename,p[0],p[1],p[2]
         posefile.write(s)
 
     posefile.close()
