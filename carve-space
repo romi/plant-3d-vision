@@ -86,7 +86,13 @@ if __name__ == "__main__":
         for f in fileset_images.get_files():
             if f.filename == im["filename"]:
                 id = f.id
+                break
+
+        if id is None:
+            continue
+
         mask = fileset_masks.get_file(id).read_image()
+        # mask[:] = 1
         rot = sum(im["pose"]["rotation"], [])
         tvec = im["pose"]["translation"]
         sc.process_view(intrinsics, rot, tvec, mask)

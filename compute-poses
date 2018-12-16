@@ -70,17 +70,17 @@ if __name__ == "__main__":
     if not os.path.isfile(points_path):
         raise Exception("Colmap has not produced points3D.txt file")
 
-    images = fileset_masks.get_file("images")
+    images = fileset_colmap.get_file("images")
     if images is None:
-        images = fileset_masks.create_file("images")
+        images = fileset_colmap.create_file("images")
     images.import_file(images_path)
 
-    cameras = fileset_masks.get_file("cameras")
+    cameras = fileset_colmap.get_file("cameras")
     if cameras is None:
-        cameras = fileset_masks.create_file("cameras")
+        cameras = fileset_colmap.create_file("cameras")
     cameras.import_file(cameras_path)
 
-    points = fileset_masks.get_file("points")
+    points = fileset_colmap.get_file("points")
     if points is None:
-        points = fileset_masks.create_file("points")
+        points = fileset_colmap.create_file("points")
     points.import_file(points_path)
