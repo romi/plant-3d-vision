@@ -31,8 +31,10 @@ width = options.width
 dist_threshold = options.dist
 
 data = np.asarray(pcd.points)
-for i in range(3): 
-    data[:,i] = data[:,i] - np.min(data[:, i])
+m = np.zeros(3)
+for i in range(3):
+    m[i] = np.min(data[:, i])
+    data[:,i] = data[:,i] - m[i]
 indices = np.array(np.round(data[:, 0:3] / width), dtype=np.int)
 shape = indices.max(axis=0)
  
@@ -75,7 +77,7 @@ for i in range(len(x)):
                                        grad_normalized[2]])])
 
 for i in range(3):
-    pts[:, i] = pts[:, i] + np.min(data[:, i])
+    pts[:, i] = pts[:, i] + m[i]
 
 pcd.points = open3d.Vector3dVector(pts)
 pcd.normals = open3d.Vector3dVector(normals)
