@@ -43,18 +43,51 @@ TODO: automate this/ assist creation of objects
 
 Run a scan using
 ```
-run-scan [options] OBJECT_ID SCANNER_ID PATH_ID
-
-Options:
-    -i ID, --id=ID    scan id, default to current time formatted as
-                        %Y-%m-%d_%H-%M-%S
+run-scan OBJECT_ID SCANNER_ID PATH_ID SCAN_ID
 ```
 
-For example, to use the supplied sample files:
+To get help on any command, you can use `CMD --help`.
+
+## Full pipeline example (with scan)
+
+Set the ID as the current timedate (if you are using bash/zsh...)
 ```
-run-scan GT1 lyon_1 circular_72
+ID=`date "+%Y-%m-%d_%H-%M-%S"`
 ```
 
+### Run the scan
+
+```
+./run-scan GT1 lyon_1 circular_72 $ID
+```
+
+### Process the data
+
+Compute masks
+```
+./compute-masks -c 0.0,1.0,0.0,0.3 -d 3 $ID
+```
+
+Compute poses using colmap
+```
+./compute-poses $ID
+```
+
+Compute voxel volumei with size 1mm
+```
+./carve-space -v 1.0 $ID
+```
+
+Process point cloud (compute pointcloud, mesh, skeleton from voxels)
+```
+./process-pcd $ID
+```
+
+Compute angles
+```
+./segment-skel $ID
+```
+ 
 ### Sync data with the dedicated server
 
 To sync data with the dedicated server:
