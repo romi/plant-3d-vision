@@ -5,7 +5,9 @@ import sys
 import os
 import operator
 import open3d
-import active_contours
+from lettucethink import fsdb
+from processing import active_contours
+from scanner import localdirs
 from optparse import OptionParser
 
 if __name__ == "__main__":
@@ -19,11 +21,19 @@ if __name__ == "__main__":
         parser.exit(1)
 
     scan_id = args[0]
+    db_dir = localdirs.db_dir
+    db = fsdb.DB(db_dir)
     scan = db.get_scan(scan_id)
     fileset_pcd = scan.get_fileset("pointcloud")
 
-    pts = np.fromstring(fileset_pcd.get_file("vertices").read_text())
-    edges = np.fromstring(fileset_pcd.get_file("edges").read_text(), dtype=int)
+    with open("/tmp/vertices.txt", "w") as f:
+        f.write(fileset_pcd.get_file("vertices").read_text())
+
+    with open("/tmp/edges.txt", "w") as f:
+        f.write(fileset_pcd.get_file("edges").read_text())
+
+    pts = np.loadtxt("/tmp/vertices.txt")
+    edges = np.loadtxt("/tmp/edges.txt", dtype=int)
 
     def get_main_stem_and_internodes(G, root_node):
         # Get main stem as shortest path to point furthest from root
@@ -78,7 +88,7 @@ if __name__ == "__main__":
                     weight=np.linalg.norm(pts[edges[i,0], :] - pts[edges[i,1], :]))
 
 
-    root_node = np.argmin(pts[:, 2])
+    root_node = np.argmax(pts[:, 2])
     main_stem, internodes = get_main_stem_and_internodes(G, root_node)
     T = compute_mst(G, main_stem, internodes)
 
@@ -108,10 +118,10 @@ if __name__ == "__main__":
     data = np.asarray(voxels.points)
     for i in range(3):
         data[:,i] = data[:,i] - np.min(data[:, i])
-    indices = np.array(np.round(data[:, 0:3] / options.width), dtype=np.int)
+    indices = np.array(np.round(data[:, 0:3] / width), dtype=np.int)
     shape = indices.max(axis=0)
 
-    ac = active_contours.TubularActiveContours(4, options.width, 5*options.width, lam=0.5)
+    ac = active_contours.TubularActiveContours(4, width, 5*width, lam=0.5)
     ac.load_data(data)
 
     def adjust_segment(nodes, num_per_step=1000, tol=1e-2, coef=1e-6, max_steps=10):
@@ -148,15 +158,15 @@ if __name__ == "__main__":
 
     geometries.append(lines)
 
-    for i,fruit in enumerate(fruits):
-        f = fruit["nodes"]
-        print("fruit number %d"%i)
-        adjusted_fruit = adjust_segment(f)
-        pts[f, :] = adjusted_fruit
-        pcd = open3d.PointCloud()
-        pcd.points = open3d.Vector3dVector(pts[f, :])
-        pcd.paint_uniform_color(np.random.rand(3))
-        geometries.append(pcd)
+    # for i,fruit in enumerate(fruits):
+    #     f = fruit["nodes"]
+    #     print("fruit number %d"%i)
+    #     adjusted_fruit = adjust_segment(f)
+    #     pts[f, :] = adjusted_fruit
+    #     pcd = open3d.PointCloud()
+    #     pcd.points = open3d.Vector3dVector(pts[f, :])
+    #     pcd.paint_uniform_color(np.random.rand(3))
+    #     geometries.append(pcd)
 
     def fit_plane(nodes):
         points = np.copy(pts[nodes,:])
@@ -165,14 +175,17 @@ if __name__ == "__main__":
         u,s,v = np.linalg.svd(points)
         return m,v[0,:],v[1,:]
 
+    plane_vectors = np.zeros((len(fruits), 3, 3))
     n_nodes_fruit = 5
     n_nodes_stem = 20
-    for fruit in fruits:
+    for i, fruit in enumerate(fruits):
         f = fruit["nodes"]
         nodes = f[0:n_nodes_fruit]
         idx = list(main_stem).index(fruit["internode"]) 
+        m = pts[nodes].mean(axis=0)
         nodes = np.hstack([nodes, main_stem[idx-n_nodes_stem//2:idx+n_nodes_stem//2]])
-        m,v1,v2 = fit_plane(nodes)
+        _,v1,v2 = fit_plane(nodes)
+        print("m = ", m)
         if np.dot(m - pts[main_stem[idx], :], v1) < 0:
             v1 = -v1
         if np.dot(m - pts[main_stem[idx], :], v2) < 0:
@@ -181,3 +194,29 @@ if __name__ == "__main__":
         l.points = open3d.Vector3dVector(np.vstack([m, m+10*width*v1, m+10*width*v2]))
         l.lines = open3d.Vector2iVector(np.vstack([[0,1], [0,2]]))
         geometries.append(l)
+
+        plane_vectors[i, 0, :] = m
+        plane_vectors[i, 1, :] = v1
+        plane_vectors[i, 2, :] = v2
+
+    angles = np.zeros(len(fruits) - 1)
+    for i in range(1, len(fruits)):
+        n1 = np.cross(plane_vectors[i-1, 1, :], plane_vectors[i-1, 2, :])
+        n2 = np.cross(plane_vectors[i, 1, :], plane_vectors[i, 2, :])
+        m1 = plane_vectors[i-1, 0,:]
+        m2 = plane_vectors[i, 0,:]
+        angle = np.arccos(np.dot(n1, n2) / np.linalg.norm(n1) / np.linalg.norm(n2))
+        if np.dot(np.cross(n1, n2), m2-m1) < 0:
+            angle = angle + np.pi
+        angles[i-1] = angle
+
+    fileset_angles = scan.get_fileset("angles")
+    if fileset_angles is None:
+        fileset_angles = scan.create_fileset("angles")
+
+    angles_file = fileset_angles.get_file("angles")
+    if angles_file is None:
+        angles_file = fileset_angles.create_file("angles")
+
+    np.savetxt("/tmp/angles.csv", angles)
+    angles_file.import_file("/tmp/angles.csv")
