@@ -5,6 +5,7 @@ from lettucethink import fsdb
 from scanner import localdirs
 from processing.masking import compute_mask_custom
 from scipy.ndimage.morphology import binary_dilation
+import numpy as np
 
 
 if __name__ == "__main__":
@@ -14,6 +15,11 @@ if __name__ == "__main__":
     parser.add_option("-c", "--coefs",
         dest="c",
         help ="coefs for segmentation, format: a,b,c,d")
+
+    parser.add_option("-d", "--dilation",
+        dest="dilate_size",
+        type="int",
+        help ="size of dilation filter")
 
     (options, args) = parser.parse_args()
 
@@ -37,6 +43,8 @@ if __name__ == "__main__":
     for f in fs:
         image = f.read_image()
         mask = compute_mask_custom(image, coefs)
+        mask = binary_dilation(mask, np.ones((options.dilate_size, options.dilate_size)))
+        mask = 255*np.asarray(mask, dtype=np.uint8)
         mask_file = fileset_masks.get_file(f.id)
         if mask_file is None:
             mask_file = fileset_masks.create_file(f.id)

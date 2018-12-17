@@ -35,8 +35,9 @@ colmap mapper \
    --database_path $DATASET_PATH/database.db \
    --image_path $DATASET_PATH/images \
    --output_path $DATASET_PATH/sparse \
-   --Mapper.ba_refine_focal_length 0 \
-   --Mapper.ba_refine_extra_params 0 \
+   --Mapper.ba_refine_focal_length 1 \
+   --Mapper.ba_refine_extra_params 1 \
+   --Mapper.filter_max_reproj_error 1 \
    >> log.txt 2>&1
 
 colmap model_aligner \

@@ -109,3 +109,4 @@ if __name__ == "__main__":
     vox.import_file("/tmp/voxels.ply")
     vox.set_metadata("width", options.voxel_size)
 
+    fileset_pcd.set_metadata("options", vars(options))

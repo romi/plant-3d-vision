@@ -41,11 +41,6 @@ A = np.zeros(shape+1, dtype=np.float)
 for i in range(data.shape[0]):
     A[indices[i,0], indices[i, 1], indices[i, 2]] = 1.
 
-A_opened = binary_opening(A, np.ones((5,5,5))) #Get "block" at plant bottom
-x,y,z = np.nonzero(A_opened)
-min_z = z.max()
-A[:,:,:min_z] = 0
-
 dist = distance_transform_edt(A)
 mdist = distance_transform_edt(1-A)
 dist = np.where(dist>0.5, dist - 0.5, -mdist + 0.5)

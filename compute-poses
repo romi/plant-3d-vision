@@ -43,7 +43,7 @@ if __name__ == "__main__":
 
     colmap_script = os.path.join(os.getcwd(), "processing/run-colmap.sh")
 
-    scan_dir = "/tmp/colmap_ws"
+    scan_dir = os.path.join("/tmp/colmap_ws", scan_id)
     image_dir = os.path.join(scan_dir, "images")
     os.makedirs(image_dir, exist_ok=True)
 
@@ -84,3 +84,5 @@ if __name__ == "__main__":
     if points is None:
         points = fileset_colmap.create_file("points")
     points.import_file(points_path)
+
+    fileset_colmap.set_metadata("options", vars(options))

@@ -30,6 +30,7 @@ if __name__ == "__main__":
     # DIRTY HACK INCOMING
     voxels = fileset_pcd.get_file("voxels")
     w = voxels.get_metadata("width")
+    print("width = ", w)
     voxels_bytes = voxels.read_bytes()
     voxels_path = os.path.join('/tmp/', voxels.filename)
     f = open(voxels_path, 'wb')
@@ -73,3 +74,4 @@ if __name__ == "__main__":
         edges_file = fileset_pcd.create_file("edges")
     edges_file.import_file(edges_path)
 
+    fileset_pcd.set_metadata("processing_options", vars(options))

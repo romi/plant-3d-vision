@@ -11,5 +11,5 @@ def compute_mask_custom(image, coefs):
     image = np.asarray(image, dtype=float)
     image = image / image.max()
     coefs = np.asarray(coefs, dtype=float)
-    return 255*np.asarray(coefs[0] * image[:,:,0] + coefs[1] * image[:,:,1] +
-                coefs[2] * image[:,:,2] > coefs[3], dtype=np.uint8)
+    return (coefs[0] * image[:,:,0] + coefs[1] * image[:,:,1] +
+                coefs[2] * image[:,:,2]) > coefs[3]
