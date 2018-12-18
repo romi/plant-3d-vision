@@ -190,6 +190,8 @@ if __name__ == "__main__":
             v1 = -v1
         if np.dot(m - pts[main_stem[idx], :], v2) < 0:
             v2 = -v2
+        if np.dot(m - pts[main_stem[idx], :], v1) < np.dot(m - pts[main_stem[idx], :], v2):
+            v1, v2 = v2, v1
         l = open3d.LineSet()
         l.points = open3d.Vector3dVector(np.vstack([m, m+10*width*v1, m+10*width*v2]))
         l.lines = open3d.Vector2iVector(np.vstack([[0,1], [0,2]]))
