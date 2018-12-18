@@ -142,9 +142,9 @@ if __name__ == "__main__":
         print("finished in %d iterations"%steps)
         return y
 
-    print("main stem")
-    pts_stem = adjust_segment(main_stem)
-    pts[main_stem, :] = pts_stem
+    # print("main stem")
+    # pts_stem = adjust_segment(main_stem)
+    # pts[main_stem, :] = pts_stem
 
     geometries = []
     pcd = open3d.PointCloud()
