@@ -182,10 +182,6 @@ def compute_angles(plane_vectors):
         angle = np.arccos(np.dot(n1, n2))
 
         # IF basis is direct, then angle is positive
-        # M = np.zeros((3,3))
-        # M[0, :] = v1
-        # M[1, :] = v2
-        # M[2, :
         if np.linalg.det([v1, v2, v3]) < 0:
             angle = 2*np.pi - angle
         angles[i-1] = angle
@@ -244,8 +240,6 @@ if __name__ == "__main__":
         geometries = draw_segmentation(main_stem, fruits, vertices, plane_vectors, 10)
 
     angles = compute_angles(plane_vectors)
-
-
 
     fileset_angles = scan.get_fileset("angles")
     if fileset_angles is None:
