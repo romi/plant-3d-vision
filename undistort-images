@@ -13,7 +13,6 @@ if __name__ == "__main__":
     parser = OptionParser(usage=usage)
     (options, args) = parser.parse_args()
 
-    coefs = [float(c) for c in options.c.split(',')]
     if len(args) < 1:
         print("Missing argument : SCAN_ID")
         parser.exit(1)
