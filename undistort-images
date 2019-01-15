@@ -36,12 +36,10 @@ if __name__ == "__main__":
             raise Exception("Could not find camera model")
         camtxt = fileset_colmap.get_file("cameras").read_text()
         camera_model = parse_colmap.parse_cameras_file(camtxt)
-        print("Found camera model in colmap dataset. Save in metadata? [Y/n]")
-        choice = input().lower()
-        if choice == '' or choice == 'y':
-            md = scan.get_metadata()
-            md['scanner']['camera_model'] = camera_model
-            scan.set_metadata(md)
+
+        md = scan.get_metadata()
+        md['scanner']['camera_model'] = camera_model
+        scan.set_metadata(md)
 
       
     camera_model = camera_model['parameters']
