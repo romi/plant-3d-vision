@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 from lettucethink import fsdb
 from optparse import OptionParser
+from processing import parse_colmap
 from scanner import localdirs
 import numpy as np
 
-from imageio import imwrite
+from imageio import imwrite, imread
+from skimage.util import crop, pad
 import subprocess
 import os
 import sys
@@ -63,13 +65,10 @@ if __name__ == "__main__":
     if fileset_colmap is None:
         fileset_colmap = scan.create_fileset("colmap")
 
-    # fileset_undistorted = scan.get_fileset("undistorted")
-    # if fileset_undistorted is None:
-    #     fileset_undistorted = scan.create_fileset("undistorted")
-
     images_path = os.path.join(scan_dir, "images.txt")
     cameras_path = os.path.join(scan_dir, "cameras.txt")
     points_path = os.path.join(scan_dir, "points3D.txt")
+    dense_path = os.path.join(scan_dir, "dense/dense.ply")
 
     if not os.path.isfile(images_path):
         raise Exception("Colmap has not produced images.txt file")
@@ -94,5 +93,11 @@ if __name__ == "__main__":
     if points is None:
         points = fileset_colmap.create_file("points")
     points.import_file(points_path)
+
+    if options.dense:
+        dense = fileset_colmap.get_file("dense")
+        if dense is None:
+            dense = fileset_colmap.create_file("dense")
+        dense.import_file(dense_path)
 
     fileset_colmap.set_metadata("options", vars(options))
