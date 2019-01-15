@@ -6,15 +6,39 @@ def parse_cameras_file(cameras_str):
         if line[0] == '#':
             continue
         sp = line.split()
-        if sp[0] == "1":
-            if sp[1] == "SIMPLE_RADIAL":
-                camera["width"] = int(sp[2])
-                camera["height"] = int(sp[3])
-                camera["focal_length"] = float(sp[4])
-                camera["principal_point"] = [float(sp[5]), float(sp[6])]
-                break
+        if sp[0] == '1':
+            camera['width'] = int(sp[2])
+            camera['height'] = int(sp[3])
+            if sp[1] == 'SIMPLE_RADIAL':
+                camera['parameters'] = {'fx' : float(sp[4]),
+                                        'fy' : float(sp[4]),
+                                        'cx' : float(sp[5]),
+                                        'cy': float(sp[6]),
+                                        'k1' : float(sp[7]),
+                                        'k2' : float(sp[7]),
+                                        'p1' : 0.,
+                                        'p2' : 0.}
+            if sp[1] == 'RADIAL':
+                camera['parameters'] = {'fx' : float(sp[4]),
+                                        'fy' : float(sp[4]),
+                                        'cx' : float(sp[5]),
+                                        'cy': float(sp[6]),
+                                        'k1' : float(sp[7]),
+                                        'k2' : float(sp[8]),
+                                        'p1' : 0.,
+                                        'p2' : 0.}
+            elif sp[1] == 'OPENCV':
+                 camera['parameters'] = {'fx' : float(sp[4]),
+                                         'fy' : float(sp[5]),
+                                        'cx' : float(sp[6]),
+                                        'cy': float(sp[7]),
+                                        'k1' : float(sp[8]),
+                                        'k2' : float(sp[9]),
+                                        'p1' : float(sp[10]),
+                                        'p2' : float(sp[11])}
             else:
-                raise Exception("Unsupported camera type")
+                raise Exception('Unsupported camera type')
+            break
         line = file_camera.readline()
         cnt += 1
     return camera
@@ -28,14 +52,14 @@ def parse_images_file(images_str):
             key = sp[0]
             fname = sp[-1]
             qw, qx, qy, qz, tx, ty, tz = [float(x) for x in sp[1:8]]
-            pose["rotation"] = [[1 - 2*qy*qy - 2*qz*qz, 2*qx*qy-2*qz*qw, 2*qx*qz + 2*qy*qw],
+            pose['rotation'] = [[1 - 2*qy*qy - 2*qz*qz, 2*qx*qy-2*qz*qw, 2*qx*qz + 2*qy*qw],
                    [2*qx*qy + 2*qz*qw,1 - 2*qx*qx - 2*qz*qz, 2*qy*qz - 2*qx*qw],
                    [2*qx*qz - 2*qy*qw, 2*qy*qz + 2*qx*qw, 1 - 2*qx*qx - 2*qy*qy]]
-            pose["translation"] = [tx, ty, tz]
-            pose["image_key"] = key
+            pose['translation'] = [tx, ty, tz]
+            pose['image_key'] = key
             images.append({
-                "filename" : fname,
-                "pose" : pose
+                'filename' : fname,
+                'pose' : pose
             })
     return images
 
