@@ -1,0 +1,63 @@
+#!/usr/bin/env python3
+from optparse import OptionParser
+from imageio import imread
+from lettucethink import fsdb
+from scanner import localdirs
+from processing import parse_colmap
+import cv2
+import numpy as np
+
+
+if __name__ == "__main__":
+    usage = "usage: %prog [options] SCAN_ID"
+    parser = OptionParser(usage=usage)
+    (options, args) = parser.parse_args()
+
+    coefs = [float(c) for c in options.c.split(',')]
+    if len(args) < 1:
+        print("Missing argument : SCAN_ID")
+        parser.exit(1)
+
+    scan_id = args[0]
+
+    db_dir = localdirs.db_dir
+    db = fsdb.DB(db_dir)
+    scan = db.get_scan(scan_id)
+    fileset = scan.get_fileset("images")
+    if fileset is None:
+        raise Exception("No images in dataset")
+
+    fileset_colmap = scan.get_fileset("colmap")
+    camera_model = None
+    if fileset is None:
+        md = scan.get_metadata("scanner")
+    else:
+        camtxt = fileset_colmap.get_file("cameras").read_text()
+        camera_model = parse_colmap.parse_cameras_file(camtxt)
+        print("Found camera model in colmap dataset. Save in metadata? [Y/n]")
+        choice = raw_input().lower()
+        if choice == '' or choice == 'y':
+            md['camera_model'] = camera_model
+            scan.set_metadata(md)
+
+        
+    if camera_model is None:
+        raise Exception("Could not find camera model")
+
+
+    fs=fileset.get_files()
+    fileset_undistorted  = scan.get_fileset("undistorted")
+    if fileset_undistorted is None:
+        fileset_undistorted = scan.create_fileset("undistorted")
+
+    for f in fs:
+        im = f.read_image()
+        mat = np.matrix([[camera_model['fx'], 0, camera_model['cx']],
+                         [0, camera_model['fy'], camera_model['cy']],
+                         [0, 0, 1]])
+        undistort_parameters = [camera_model['k1'], camera_model['k2'], camera_model['p1'],
+                                camera_model['p2']]
+        image_undistorted = cv2.undistort(im, mat, undistort_parameters)
+
+        newfile = fileset_undistorted.new_file(f.id)
+        newfile.write_image(image_undistorted)
