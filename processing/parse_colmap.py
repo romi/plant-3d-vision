@@ -18,7 +18,7 @@ def parse_cameras_file(cameras_str):
                                         'k2' : float(sp[7]),
                                         'p1' : 0.,
                                         'p2' : 0.}
-            if sp[1] == 'RADIAL':
+            elif sp[1] == 'RADIAL':
                 camera['parameters'] = {'fx' : float(sp[4]),
                                         'fy' : float(sp[4]),
                                         'cx' : float(sp[5]),

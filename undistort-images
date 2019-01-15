@@ -26,22 +26,25 @@ if __name__ == "__main__":
     if fileset is None:
         raise Exception("No images in dataset")
 
-    fileset_colmap = scan.get_fileset("colmap")
     camera_model = None
-    if fileset is None:
-        md = scan.get_metadata("scanner")
+    md = scan.get_metadata("scanner")
+    if 'camera_model' in md:
+        camera_model = md['camera_model']
     else:
+        fileset_colmap = scan.get_fileset("colmap")
+        if fileset_colmap is None:
+            raise Exception("Could not find camera model")
         camtxt = fileset_colmap.get_file("cameras").read_text()
         camera_model = parse_colmap.parse_cameras_file(camtxt)
         print("Found camera model in colmap dataset. Save in metadata? [Y/n]")
-        choice = raw_input().lower()
+        choice = input().lower()
         if choice == '' or choice == 'y':
-            md['camera_model'] = camera_model
+            md = scan.get_metadata()
+            md['scanner']['camera_model'] = camera_model
             scan.set_metadata(md)
 
-        
-    if camera_model is None:
-        raise Exception("Could not find camera model")
+      
+    camera_model = camera_model['parameters']
 
 
     fs=fileset.get_files()
@@ -54,9 +57,9 @@ if __name__ == "__main__":
         mat = np.matrix([[camera_model['fx'], 0, camera_model['cx']],
                          [0, camera_model['fy'], camera_model['cy']],
                          [0, 0, 1]])
-        undistort_parameters = [camera_model['k1'], camera_model['k2'], camera_model['p1'],
-                                camera_model['p2']]
+        undistort_parameters = np.array([camera_model['k1'], camera_model['k2'], camera_model['p1'],
+                                camera_model['p2']])
         image_undistorted = cv2.undistort(im, mat, undistort_parameters)
 
-        newfile = fileset_undistorted.new_file(f.id)
-        newfile.write_image(image_undistorted)
+        newfile = fileset_undistorted.create_file(f.id)
+        newfile.write_image('jpg', image_undistorted)
