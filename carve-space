@@ -31,18 +31,23 @@ if __name__ == "__main__":
     scan = db.get_scan(scan_id)
 
     fileset_masks = scan.get_fileset("masks")
-    fileset_images = scan.get_fileset("images")
+    if fileset_masks is None:
+        raise Exception("Compute masks first")
+    fileset_images = scan.get_fileset("undistorted")
+    if fileset_images is None:
+        raise Exception("Compute undistorted images first")
     fileset_colmap = scan.get_fileset("colmap")
+    if fileset_colmap is None:
+        raise Exception("Compute poses first")
 
     points_str = fileset_colmap.get_file("points").read_text()
     images_str = fileset_colmap.get_file("images").read_text()
-    cameras_str = fileset_colmap.get_file("cameras").read_text()
 
     points = parse_colmap.parse_points_file(points_str)
     images = parse_colmap.parse_images_file(images_str)
-    camera = parse_colmap.parse_cameras_file(cameras_str)
 
     scanner_metadata = scan.get_metadata("scanner")
+    camera = scanner_metadata["camera_model"]
 
     # Determine point cloud location by taking the bounds of the sparse
     # point cloud within the scanner workspace
@@ -73,11 +78,9 @@ if __name__ == "__main__":
 
     sc = space_carving.SpaceCarving(center, widths, options.voxel_size, width, height)
 
-    f_c = camera["focal_length"]
-    c_x = camera["principal_point"][0]
-    c_y = camera["principal_point"][1]
+    fx, fy, cx, cy = [camera["parameters"][x] for x in ["fx", "fy", "cx", "cy"]]
 
-    intrinsics = [f_c, c_x, c_y]
+    intrinsics = [fx, fy, cx, cy]
 
     pcd = open3d.PointCloud()
 

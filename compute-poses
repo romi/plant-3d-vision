@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 from lettucethink import fsdb
 from optparse import OptionParser
+from processing import parse_colmap
 from scanner import localdirs
 import numpy as np
 
-from imageio import imwrite
+from imageio import imwrite, imread
+from skimage.util import crop, pad
 import subprocess
 import os
 import sys
+
 
 if __name__ == "__main__":
     usage = "usage: %prog [options] SCAN_ID"
@@ -17,6 +20,10 @@ if __name__ == "__main__":
         dest="matcher",
         default="exhaustive",
         help ="matcher to use in colmap (exhaustive or sequential)")
+
+    parser.add_option("-d", "--dense",
+        dest="dense", default=False,
+        help="compute dense cloud with colmap")
 
     (options, args) = parser.parse_args()
     if len(args) < 1:
@@ -51,7 +58,8 @@ if __name__ == "__main__":
         im = f.read_image()
         imwrite(os.path.join(image_dir, f.filename), im)
 
-    x = subprocess.run([colmap_script, scan_dir, options.matcher], check=True)
+    x = subprocess.run([colmap_script, scan_dir,
+            options.matcher, str(int(options.dense))], check=True)
 
     fileset_colmap = scan.get_fileset("colmap")
     if fileset_colmap is None:
@@ -60,6 +68,7 @@ if __name__ == "__main__":
     images_path = os.path.join(scan_dir, "images.txt")
     cameras_path = os.path.join(scan_dir, "cameras.txt")
     points_path = os.path.join(scan_dir, "points3D.txt")
+    dense_path = os.path.join(scan_dir, "dense/dense.ply")
 
     if not os.path.isfile(images_path):
         raise Exception("Colmap has not produced images.txt file")
@@ -84,5 +93,11 @@ if __name__ == "__main__":
     if points is None:
         points = fileset_colmap.create_file("points")
     points.import_file(points_path)
+
+    if options.dense:
+        dense = fileset_colmap.get_file("dense")
+        if dense is None:
+            dense = fileset_colmap.create_file("dense")
+        dense.import_file(dense_path)
 
     fileset_colmap.set_metadata("options", vars(options))

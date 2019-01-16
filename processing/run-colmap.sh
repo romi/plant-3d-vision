@@ -2,6 +2,7 @@
 # The project folder must contain a folder "images" with all the images.
 DATASET_PATH=$1
 MATCHER=$2
+DENSE=$3
 USE_GPU=0
 
 if [ "x$MATCHER" == "x" ]; then
@@ -52,4 +53,38 @@ colmap model_converter \
        --output_type 'TXT' \
        --output_path $DATASET_PATH \
        >> log.txt 2>&1
+
+mkdir $DATASET_PATH/dense
+colmap image_undistorter \
+    --image_path $DATASET_PATH/images \
+    --input_path $DATASET_PATH/sparse/0 \
+    --output_path $DATASET_PATH/dense \
+    --output_type COLMAP \
+    --max_image_size 2000 \
+    >> log.txt 2>&1
+
        
+if [ $DENSE == 1 ]
+    colmap patch_match_stereo \
+        --workspace_path $DATASET_PATH/dense \
+        --workspace_format COLMAP \
+        --PatchMatchStereo.geom_consistency true \
+    >> log.txt 2>&1
+
+    colmap stereo_fusion \
+        --workspace_path $DATASET_PATH/dense \
+        --workspace_format COLMAP \
+        --input_type geometric \
+        --output_path $DATASET_PATH/dense/fused.ply \
+    >> log.txt 2>&1
+
+    colmap poisson_mesher \
+        --input_path $DATASET_PATH/dense/fused.ply \
+        --output_path $DATASET_PATH/dense/meshed-poisson.ply \
+    >> log.txt 2>&1
+
+    colmap delaunay_mesher \
+        --input_path $DATASET_PATH/dense/fused.ply \
+        --output_path $DATASET_PATH/dense/meshed-delaunay.ply \
+    >> log.txt 2>&1
+fi
