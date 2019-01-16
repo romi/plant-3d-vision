@@ -1,0 +1,126 @@
+#!/usr/bin/env python3
+import lettucethink
+import subprocess
+from lettucethink.fsdb import DB
+from lettucethink import scan
+import time, datetime
+import json
+import logging
+import sys
+import appdirs
+import os
+from optparse import OptionParser
+from scanner import localdirs
+
+if __name__ == "__main__":
+    logger = logging.getLogger(__name__)
+    usage = "usage: %prog [options] OBJECT_ID SCANNER_ID PATH_ID SCAN_ID"
+    parser = OptionParser(usage=usage)
+
+    parser.add_option("-d", "--remote-destination",
+        dest="dest",
+        help ="remote server to upload data to (optional)",
+        default=None)
+
+    (options, args) = parser.parse_args()
+
+    if len(args) != 4:
+        parser.error("Incorrect number of arguments")
+
+    localdirs.create_directories()
+    print("Loading object metadata...")
+    try:
+        object_metadata = json.load(open(os.path.join(localdirs.objects_dir,
+                                                args[0] + ".json")))
+    except Exception as e:
+        logger.error("Failed to read metadata with id "
+            + str(args[0]) + ". Either it does not exist or it's wrongly formatted.")
+        raise
+    print("...OK")
+
+    print("Loading scanner config...")
+    try:
+        scanner_config = json.load(open(os.path.join(localdirs.scanners_dir,
+                                                args[1] + ".json")))
+    except Exception as e:
+        logger.error("Failed to read scanner with id "
+            + str(args[1]) + ". Either it does not exist or it's wrongly formatted.")
+        raise
+
+    if scanner_config["cnc_firmware"].split("-")[0] == "grbl":
+        from lettucethink.grbl import CNC
+    elif scanner_config["cnc_firmware"].split("-")[0] == "cnccontroller":
+        from lettucethink.cnccontroller import CNC
+    else:
+        raise ValueError("Unknown CNC firmware parameter")
+
+    if scanner_config["gimbal_firmware"].split("-")[0] == "dynamixel":
+        from lettucethink.dynamixel import Gimbal
+    elif scanner_config["gimbal_firmware"].split("-")[0] == "blgimbal":
+        from lettucethink.blgimbal import Gimbal
+    else:
+        raise ValueError("Unknown Gimbal firmware parameter")
+
+    if scanner_config["camera_firmware"].split("-")[0] == "gphoto2":
+        from lettucethink.gp2 import Camera
+    elif scanner_config["camera_firmware"].split("-")[0] == "sony_wifi":
+        from lettucethink.sony import Camera
+    else:
+        raise ValueError("Unknown Camera firmware parameter")
+    print("...OK")
+
+    print("Loading path config...")
+    try:
+        path_config = json.load(open(os.path.join(localdirs.paths_dir,
+                                                args[2] + ".json")))
+    except Exception as e:
+        logger.error("Failed to read path with id "
+            + str(args[2]) + ". Either it does not exist or it's wrongly formatted.")
+        raise
+    print("...OK")
+
+    print("Initializing scanner...")
+
+    db = DB(localdirs.db_dir) 
+    db.connect()
+    scan_id = args[3]
+    db_scan = db.create_scan(scan_id)
+
+    # Init scanner
+    try:
+        cnc = CNC(**scanner_config["cnc_args"])
+        gimbal = Gimbal(**scanner_config["gimbal_args"])
+        camera = Camera(**scanner_config["camera_args"])
+        scanner = scan.Scanner(cnc, gimbal, camera, db_scan)
+    except Exception as e:
+        logger.error("Failed to initialize scanner")
+        raise
+
+    print("...OK")
+
+    metadata = {
+        "object" : object_metadata,
+        "scanner" : scanner_config,
+        "path" : path_config
+    }
+    db_scan.set_metadata(metadata)
+
+    print("Starting scan...")
+    try:
+        if path_config["type"] == "circular":
+            scan_files = scanner.do_circular_scan(**path_config["args"])
+        else:
+            raise ValueError("Unknown path type")
+    except Exception as e:
+        logger.error("Failed to finish scan.")
+        raise
+    print("...done")
+    db.disconnect()
+    if options.dest is not None:
+        print("Syncing data to remote destination : " + options.dest)
+        subprocess.run(["rsync", "-av",
+                                os.path.join(localdirs.db_dir, scan_id),
+                                options.dest])
+        print("...done")
+
+    print("...done. Goodbye!")

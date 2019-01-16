@@ -1,0 +1,253 @@
+#!/usr/bin/env python3
+import networkx as nx
+import numpy as np
+import sys
+import os
+import operator
+import open3d
+from lettucethink import fsdb
+from processing import active_contours
+from scanner import localdirs
+from optparse import OptionParser
+
+def get_main_stem_and_internodes(G, root_node):
+    # Get main stem as shortest path to point furthest from root
+    predecessors, distances_to_root = nx.dijkstra_predecessor_and_distance(G, root_node)
+    i = max(distances_to_root.items(), key=operator.itemgetter(1))[0]
+    main_stem = [i]
+    current_node = i
+    while current_node != root_node:
+        current_node = predecessors[current_node][0]
+        main_stem.append(current_node)
+    main_stem = np.array(main_stem, dtype=int)
+
+    # Get internodes, sorted from closest to furthest to the root
+    n_neighbors = np.array([len(list(nx.neighbors(G, g))) for g in main_stem], dtype=int)
+    internodes = main_stem[n_neighbors > 2]
+    internodes = internodes[::-1]
+    return main_stem[::-1], internodes
+
+def compute_mst(G, main_stem, internodes):
+    # Set weights proportional to distance to internode
+    # (for computing minimum spanning tree)
+    G = G.copy()
+    distances = {}
+    for i in internodes:
+        _, distances[i] = nx.dijkstra_predecessor_and_distance(G, i)
+
+    distance_to_internode = {}
+    for n in G.nodes():
+        distance_to_internode[n] = min(distances[i][n] for i in internodes)
+
+    def node_penalty(u, v):
+        if u in main_stem or v in main_stem:
+            return 0
+        if len(list(nx.neighbors(G, u))) > 2 or len(list(nx.neighbors(G,v))) > 2:
+            print(">2", u, v)
+            return 10000 + distance_to_internode[u] + distance_to_internode[v]
+        return (distance_to_internode[u] + distance_to_internode[v])
+
+    for u,v in G.edges():
+        G[u][v]['weight'] = node_penalty(u, v)
+
+
+    # Compute minimum spanning tree
+    T = nx.minimum_spanning_tree(G)
+    return T
+
+def build_graph(vertices, edges):
+    G = nx.Graph()
+    G.add_nodes_from(range(0, vertices.shape[0]))
+
+    for i in range(edges.shape[0]):
+        G.add_edge(edges[i, 0], edges[i, 1],
+                    weight=np.linalg.norm(vertices[edges[i,0], :] - vertices[edges[i,1], :]))
+    return G
+
+def compute_fruits(T, internodes):
+    fruits = []
+    for i in internodes:
+        ns = nx.neighbors(T, i)
+        for n in ns:
+            if n not in main_stem:
+                temp_tree = T.copy()
+                temp_tree.remove_edge(n, i)
+                fruit, _ = get_main_stem_and_internodes(temp_tree, n)
+                fruits.append({ "internode" : i, "nodes" : fruit})
+    fruits = fruits[:-1] # give up the last one because it could be the stem
+    return fruits
+
+def read_voxels(fileset_pcd):
+    voxels = fileset_pcd.get_file("voxels")
+    width = voxels.get_metadata("width")
+    w = voxels.get_metadata("width")
+    voxels_bytes = voxels.read_bytes()
+    voxels_path = os.path.join('/tmp/', voxels.filename)
+    f = open(voxels_path, 'wb')
+    f.write(voxels_bytes)
+    f.close()
+    voxels = open3d.read_point_cloud(voxels_path)
+    return voxels
+
+def fit_plane(points):
+    """
+    Fit a plane to a set of points. Points is Nx3
+    """
+    m = points.mean(axis=0)
+    points = points - m[np.newaxis,:]
+    u,s,v = np.linalg.svd(points)
+    return m, v[0,:], v[1,:]
+
+def fit_fruits(vertices, fruits, internodes, n_nodes_fruit=5, n_nodes_stem=5):
+    """
+    Fit a plane to each fruit. Each plane is defined by two vectors and a mean points.
+    The First vector is in the direction of the fruit (out from the stem)
+    and the second is upwards from the root.
+    """
+    plane_vectors = np.zeros((len(fruits), 3, 3))
+    for i, fruit in enumerate(fruits):
+        all_node_fruits = fruit["nodes"]
+        vertices_fruit_plane_est = vertices[all_node_fruits[0:n_nodes_fruit]]
+
+
+        idx = list(main_stem).index(fruit["internode"])
+        vertices_internode_plane_est =  vertices[main_stem[idx-n_nodes_stem//2:idx+n_nodes_stem//2]]
+        internode_point = vertices[main_stem[idx], :]
+        internode_next_point = vertices[main_stem[idx + 1], :]
+
+        points = np.vstack([vertices_fruit_plane_est, vertices_internode_plane_est])
+        _,v1,v2 = fit_plane(points)
+
+        fruit_mean = vertices[all_node_fruits].mean(axis=0)
+        new_v1 = fruit_mean - internode_point
+        new_v1 = new_v1.dot(v1) * v1 + new_v1.dot(v2) * v2
+        new_v1 /= np.linalg.norm(new_v1)
+
+        # Set v1 as the fruit direction and v2 as the stem direction
+        v1, v2 = new_v1, v2 - v2.dot(new_v1)*new_v1
+        if v2.dot(internode_next_point - internode_point) < 0:
+            v2 = - v2
+
+        plane_vectors[i, 0, :] = internode_point
+        plane_vectors[i, 1, :] = v1
+        plane_vectors[i, 2, :] = v2
+
+    return plane_vectors
+
+def draw_segmentation(main_stem, fruits, vertices, plane_vectors, axis_length):
+    geometries = []
+    lines = open3d.LineSet()
+    lines.points = open3d.Vector3dVector(vertices[main_stem, :])
+    lines.lines = open3d.Vector2iVector(np.vstack([i, i+1]
+            for i in range(len(main_stem) - 1)))
+
+    geometries.append(lines)
+    for i, fruit in enumerate(fruits):
+        lines = open3d.LineSet()
+        lines.points = open3d.Vector3dVector(vertices[fruit["nodes"], :])
+        lines.lines = open3d.Vector2iVector(np.vstack([i, i+1]
+            for i in range(len(fruit["nodes"]) - 1)))
+        c = np.zeros((len(fruit["nodes"]) - 1, 3))
+        c[:,:] = np.random.rand(3)[np.newaxis, :]
+        lines.colors = open3d.Vector3dVector(c)
+        geometries.append(lines)
+
+        vertices_basis = np.copy(plane_vectors[i])
+        vertices_basis[1, :] = vertices_basis[0, :] + vertices_basis[1, :]*axis_length
+        vertices_basis[2, :] = vertices_basis[0, :] + vertices_basis[2, :]*axis_length
+        basis = open3d.LineSet()
+        basis.points = open3d.Vector3dVector(vertices_basis)
+        basis.lines = open3d.Vector2iVector(np.vstack([[0, 1], [0, 2]]))
+        basis.colors = open3d.Vector3dVector(np.vstack([[1,0,0], [0,1,0]]))
+        geometries.append(basis)
+
+    open3d.draw_geometries(geometries)
+    return geometries
+
+def compute_angles(plane_vectors):
+    """
+    Given the plane fit of all fruits, compute angles between successive fruits
+    """
+    angles = np.zeros(len(plane_vectors)- 1)
+    for i in range(1, len(plane_vectors)):
+        n1 = np.cross(plane_vectors[i-1, 1, :], plane_vectors[i-1, 2, :])
+        n2 = np.cross(plane_vectors[i, 1, :], plane_vectors[i, 2, :])
+        p1 = plane_vectors[i-1, 0,:]
+        p2 = plane_vectors[i, 0,:]
+        v1 = plane_vectors[i-1, 1,:]
+        v2 = plane_vectors[i, 1,:]
+        v3 = plane_vectors[i, 0,: ] - plane_vectors[i-1, 0, :]
+
+        # Angle between the planes, between 0 and PI
+        angle = np.arccos(np.dot(n1, n2))
+
+        # IF basis is direct, then angle is positive
+        if np.linalg.det([v1, v2, v3]) < 0:
+            angle = 2*np.pi - angle
+        angles[i-1] = angle
+    return angles
+
+if __name__ == "__main__":
+    usage_str = "Usage: %prog SCAN_ID"
+
+    parser = OptionParser(usage=usage_str)
+
+    parser.add_option("-d", "--display",
+        dest="display",
+        help ="enable display")
+
+    (options, args) = parser.parse_args()
+    if len(args) < 1:
+        print("Missing argument : SCAN_ID")
+        parser.exit(1)
+
+    scan_id = args[0]
+    db_dir = localdirs.db_dir
+    db = fsdb.DB(db_dir)
+    scan = db.get_scan(scan_id)
+    fileset_pcd = scan.get_fileset("pointcloud")
+
+    with open("/tmp/vertices.txt", "w") as f:
+        f.write(fileset_pcd.get_file("vertices").read_text())
+
+    with open("/tmp/edges.txt", "w") as f:
+        f.write(fileset_pcd.get_file("edges").read_text())
+
+    vertices = np.loadtxt("/tmp/vertices.txt")
+    edges = np.loadtxt("/tmp/edges.txt", dtype=int)
+    voxels = read_voxels(fileset_pcd)
+
+    G = build_graph(vertices, edges)
+
+    # Get the root node
+    # In the scanner, z increasing means down
+    root_node = np.argmax(vertices[:, 2])
+
+    # Get the main stem and internode locations
+    main_stem, internodes = get_main_stem_and_internodes(G, root_node)
+
+    # Compute the minimum spanning tree
+    T = compute_mst(G, main_stem, internodes)
+
+    # Segment fruits
+    fruits = compute_fruits(T, internodes)
+
+    # Fit a plane to each fruit
+    plane_vectors = fit_fruits(vertices, fruits, internodes)
+
+    # Draw graph is display is enabled, each fruit with a random color
+    if options.display:
+        geometries = draw_segmentation(main_stem, fruits, vertices, plane_vectors, 10)
+
+    angles = compute_angles(plane_vectors)
+
+    fileset_angles = scan.get_fileset("angles")
+    if fileset_angles is None:
+        fileset_angles = scan.create_fileset("angles")
+
+    angles_file = fileset_angles.get_file("angles")
+    if angles_file is None:
+        angles_file = fileset_angles.create_file("angles")
+
+    np.savetxt("/tmp/angles.csv", angles)
+    angles_file.import_file("/tmp/angles.csv")

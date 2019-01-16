@@ -1,0 +1,115 @@
+#!/usr/bin/env python3
+from optparse import OptionParser
+import space_carving
+from lettucethink import fsdb
+import os
+from scanner import localdirs
+import numpy as np
+import open3d
+import json
+from processing import parse_colmap
+
+if __name__ == "__main__":
+    usage = "usage: %prog [options] SCAN_ID"
+    parser = OptionParser(usage=usage)
+
+    parser.add_option("-v", "--voxel-size",
+        dest="voxel_size",
+        type="float",
+        help ="voxel size")
+
+    (options, args) = parser.parse_args()
+
+    if len(args) < 1:
+        print("Missing argument : SCAN_ID")
+        parser.exit(1)
+
+    scan_id = args[0]
+
+    db_dir = localdirs.db_dir
+    db = fsdb.DB(db_dir)
+    scan = db.get_scan(scan_id)
+
+    fileset_masks = scan.get_fileset("masks")
+    if fileset_masks is None:
+        raise Exception("Compute masks first")
+    fileset_images = scan.get_fileset("undistorted")
+    if fileset_images is None:
+        raise Exception("Compute undistorted images first")
+    fileset_colmap = scan.get_fileset("colmap")
+    if fileset_colmap is None:
+        raise Exception("Compute poses first")
+
+    points_str = fileset_colmap.get_file("points").read_text()
+    images_str = fileset_colmap.get_file("images").read_text()
+
+    points = parse_colmap.parse_points_file(points_str)
+    images = parse_colmap.parse_images_file(images_str)
+
+    scanner_metadata = scan.get_metadata("scanner")
+    camera = scanner_metadata["camera_model"]
+
+    # Determine point cloud location by taking the bounds of the sparse
+    # point cloud within the scanner workspace
+    x_bounds = scanner_metadata["workspace"]["x"]
+    y_bounds = scanner_metadata["workspace"]["y"]
+    z_bounds = scanner_metadata["workspace"]["z"]
+
+    valid_index = ((points[:, 0] > x_bounds[0]) * (points[:, 0] < x_bounds[1]) *
+                    (points[:, 1] > y_bounds[0]) * (points[:, 1] < y_bounds[1]) *
+                    (points[:, 2] > z_bounds[0]) * (points[:, 2] < z_bounds[1]))
+
+    points = points[valid_index, :]
+    x_min, y_min, z_min = points.min(axis=0)
+    x_max, y_max, z_max = points.max(axis=0)
+
+    center = [(x_max + x_min)/2, (y_max + y_min)/2, (z_max + z_min)/2]
+    widths = [x_max - x_min, y_max - y_min, z_max - z_min]
+
+    print("bounds = ")
+    print("x = %.2f, %.2f"%(x_min, x_max))
+    print("y = %.2f, %.2f"%(y_min, y_max))
+    print("z = %.2f, %.2f"%(z_min, z_max))
+
+    space_carving.init_opencl(0, 0)
+
+    width = camera["width"]
+    height = camera["height"]
+
+    sc = space_carving.SpaceCarving(center, widths, options.voxel_size, width, height)
+
+    fx, fy, cx, cy = [camera["parameters"][x] for x in ["fx", "fy", "cx", "cy"]]
+
+    intrinsics = [fx, fy, cx, cy]
+
+    pcd = open3d.PointCloud()
+
+    for im in images:
+        id = None
+        for f in fileset_images.get_files():
+            if f.filename == im["filename"]:
+                id = f.id
+                break
+
+        if id is None:
+            continue
+
+        mask = fileset_masks.get_file(id).read_image()
+        # mask[:] = 1
+        rot = sum(im["pose"]["rotation"], [])
+        tvec = im["pose"]["translation"]
+        sc.process_view(intrinsics, rot, tvec, mask)
+
+
+    pcd.points = open3d.Vector3dVector(sc.centers()[sc.labels() == 2])
+    open3d.write_point_cloud("/tmp/voxels.ply", pcd)
+    fileset_pcd = scan.get_fileset("pointcloud")
+    if fileset_pcd is None:
+        fileset_pcd = scan.create_fileset("pointcloud")
+    vox = fileset_pcd.get_file("voxels")
+    if vox is None:
+        vox = fileset_pcd.create_file("voxels")
+    vox.import_file("/tmp/voxels.ply")
+    vox.set_metadata("width", options.voxel_size)
+
+    fileset_pcd.set_metadata("options", vars(options))
