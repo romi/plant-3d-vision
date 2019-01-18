@@ -84,14 +84,12 @@ if __name__ == "__main__":
     db = DB(localdirs.db_dir) 
     db.connect()
     scan_id = args[3]
-    db_scan = db.create_scan(scan_id)
-
     # Init scanner
     try:
         cnc = CNC(**scanner_config["cnc_args"])
         gimbal = Gimbal(**scanner_config["gimbal_args"])
         camera = Camera(**scanner_config["camera_args"])
-        scanner = scan.Scanner(cnc, gimbal, camera, db_scan)
+        scanner = scan.Scanner(cnc, gimbal, camera, db, scan_id=scan_id, inverted=False)
     except Exception as e:
         logger.error("Failed to initialize scanner")
         raise
@@ -103,12 +101,11 @@ if __name__ == "__main__":
         "scanner" : scanner_config,
         "path" : path_config
     }
-    db_scan.set_metadata(metadata)
 
     print("Starting scan...")
     try:
         if path_config["type"] == "circular":
-            scan_files = scanner.do_circular_scan(**path_config["args"])
+            scanner.do_circular_scan(**path_config["args"], metadata=metadata)
         else:
             raise ValueError("Unknown path type")
     except Exception as e:
