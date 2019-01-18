@@ -9,7 +9,7 @@ The following table list the different setting currently used by the different p
 Partner | 3D Scan hardware
 --------| -------------
 Lyon | Lyon.1
-Paris | Paris.1
+Paris | csl.1
 Valldaurua | Vall.x
 Uber | Uber.
 
