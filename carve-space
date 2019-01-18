@@ -33,7 +33,7 @@ if __name__ == "__main__":
     fileset_masks = scan.get_fileset("masks")
     if fileset_masks is None:
         raise Exception("Compute masks first")
-    fileset_images = scan.get_fileset("undisdorted")
+    fileset_images = scan.get_fileset("undistorted")
     if fileset_images is None:
         raise Exception("Compute undistorted images first")
     fileset_colmap = scan.get_fileset("colmap")
@@ -80,7 +80,7 @@ if __name__ == "__main__":
 
     fx, fy, cx, cy = [camera["parameters"][x] for x in ["fx", "fy", "cx", "cy"]]
 
-    intrinsics = [fx, dy, cx, cy]
+    intrinsics = [fx, fy, cx, cy]
 
     pcd = open3d.PointCloud()
 
