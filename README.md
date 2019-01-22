@@ -1,4 +1,4 @@
-# Scan3D
+# Scan3D v0.3
 
 This repo gather the elements used to run 3D scan of individual plants by ROMI partners
 More information and history record is available on the wiki
