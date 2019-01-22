@@ -3,7 +3,7 @@
 DATASET_PATH=$1
 MATCHER=$2
 DENSE=$3
-USE_GPU=0
+USE_GPU=1
 
 if [ "x$MATCHER" == "x" ]; then
     MATCHER="sequential"
@@ -64,7 +64,7 @@ colmap image_undistorter \
     >> log.txt 2>&1
 
        
-if [ $DENSE == 1 ]
+if [ $DENSE == 1 ]; then
     colmap patch_match_stereo \
         --workspace_path $DATASET_PATH/dense \
         --workspace_format COLMAP \
@@ -76,15 +76,5 @@ if [ $DENSE == 1 ]
         --workspace_format COLMAP \
         --input_type geometric \
         --output_path $DATASET_PATH/dense/fused.ply \
-    >> log.txt 2>&1
-
-    colmap poisson_mesher \
-        --input_path $DATASET_PATH/dense/fused.ply \
-        --output_path $DATASET_PATH/dense/meshed-poisson.ply \
-    >> log.txt 2>&1
-
-    colmap delaunay_mesher \
-        --input_path $DATASET_PATH/dense/fused.ply \
-        --output_path $DATASET_PATH/dense/meshed-delaunay.ply \
     >> log.txt 2>&1
 fi

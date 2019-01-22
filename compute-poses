@@ -68,7 +68,7 @@ if __name__ == "__main__":
     images_path = os.path.join(scan_dir, "images.txt")
     cameras_path = os.path.join(scan_dir, "cameras.txt")
     points_path = os.path.join(scan_dir, "points3D.txt")
-    dense_path = os.path.join(scan_dir, "dense/dense.ply")
+    dense_path = os.path.join(scan_dir, "dense/fused.ply")
 
     if not os.path.isfile(images_path):
         raise Exception("Colmap has not produced images.txt file")
@@ -94,7 +94,7 @@ if __name__ == "__main__":
         points = fileset_colmap.create_file("points")
     points.import_file(points_path)
 
-    if options.dense:
+    if options.dense == '1':
         dense = fileset_colmap.get_file("dense")
         if dense is None:
             dense = fileset_colmap.create_file("dense")
