@@ -33,7 +33,10 @@ if __name__ == "__main__":
     db_dir = localdirs.db_dir
     db = fsdb.DB(db_dir)
     scan = db.get_scan(scan_id)
-    fileset = scan.get_fileset("images")
+    fileset = scan.get_fileset("undistorted")
+    if fileset is None:
+        raise Exception("Compute undistorted images first")
+
     fs=fileset.get_files()
 
     fileset_masks = scan.get_fileset("masks")
