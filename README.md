@@ -63,14 +63,19 @@ ID=`date "+%Y-%m-%d_%H-%M-%S"`
 
 ### Process the data
 
-Compute masks
-```
-./compute-masks -c 0.0,1.0,0.0,0.3 -d 3 $ID
-```
-
 Compute poses using colmap
 ```
 ./compute-poses $ID
+```
+
+Compute masks
+```
+./undistort-images $ID
+```
+
+Compute masks
+```
+./compute-masks -c 0.0,1.0,0.0,0.3 -d 3 $ID
 ```
 
 Compute voxel volumei with size 1mm
