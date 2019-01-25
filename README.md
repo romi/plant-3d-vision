@@ -67,8 +67,7 @@ Compute poses using colmap
 ```
 ./compute-poses $ID
 ```
-
-Compute masks
+Undistort images using either colmap data or calibration values from metadata
 ```
 ./undistort-images $ID
 ```

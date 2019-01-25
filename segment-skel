@@ -10,7 +10,7 @@ from processing import active_contours
 from scanner import localdirs
 from optparse import OptionParser
 
-def get_main_stem_and_internodes(G, root_node):
+def get_main_stem_and_nodes(G, root_node):
     # Get main stem as shortest path to point furthest from root
     predecessors, distances_to_root = nx.dijkstra_predecessor_and_distance(G, root_node)
     i = max(distances_to_root.items(), key=operator.itemgetter(1))[0]
@@ -21,31 +21,31 @@ def get_main_stem_and_internodes(G, root_node):
         main_stem.append(current_node)
     main_stem = np.array(main_stem, dtype=int)
 
-    # Get internodes, sorted from closest to furthest to the root
+    # Get nodes, sorted from closest to furthest to the root
     n_neighbors = np.array([len(list(nx.neighbors(G, g))) for g in main_stem], dtype=int)
-    internodes = main_stem[n_neighbors > 2]
-    internodes = internodes[::-1]
-    return main_stem[::-1], internodes
+    nodes = main_stem[n_neighbors > 2]
+    nodes = nodes[::-1]
+    return main_stem[::-1], nodes
 
-def compute_mst(G, main_stem, internodes):
-    # Set weights proportional to distance to internode
+def compute_mst(G, main_stem, nodes):
+    # Set weights proportional to distance to node
     # (for computing minimum spanning tree)
     G = G.copy()
     distances = {}
-    for i in internodes:
+    for i in nodes:
         _, distances[i] = nx.dijkstra_predecessor_and_distance(G, i)
 
-    distance_to_internode = {}
+    distance_to_node = {}
     for n in G.nodes():
-        distance_to_internode[n] = min(distances[i][n] for i in internodes)
+        distance_to_node[n] = min(distances[i][n] for i in nodes)
 
     def node_penalty(u, v):
         if u in main_stem or v in main_stem:
             return 0
         if len(list(nx.neighbors(G, u))) > 2 or len(list(nx.neighbors(G,v))) > 2:
             print(">2", u, v)
-            return 10000 + distance_to_internode[u] + distance_to_internode[v]
-        return (distance_to_internode[u] + distance_to_internode[v])
+            return 10000 + distance_to_node[u] + distance_to_node[v]
+        return (distance_to_node[u] + distance_to_node[v])
 
     for u,v in G.edges():
         G[u][v]['weight'] = node_penalty(u, v)
@@ -64,16 +64,16 @@ def build_graph(vertices, edges):
                     weight=np.linalg.norm(vertices[edges[i,0], :] - vertices[edges[i,1], :]))
     return G
 
-def compute_fruits(T, internodes):
+def compute_fruits(T, nodes):
     fruits = []
-    for i in internodes:
+    for i in nodes:
         ns = nx.neighbors(T, i)
         for n in ns:
             if n not in main_stem:
                 temp_tree = T.copy()
                 temp_tree.remove_edge(n, i)
-                fruit, _ = get_main_stem_and_internodes(temp_tree, n)
-                fruits.append({ "internode" : i, "nodes" : fruit})
+                fruit, _ = get_main_stem_and_nodes(temp_tree, n)
+                fruits.append({ "node" : i, "nodes" : fruit})
     fruits = fruits[:-1] # give up the last one because it could be the stem
     return fruits
 
@@ -98,7 +98,7 @@ def fit_plane(points):
     u,s,v = np.linalg.svd(points)
     return m, v[0,:], v[1,:]
 
-def fit_fruits(vertices, fruits, internodes, n_nodes_fruit=5, n_nodes_stem=5):
+def fit_fruits(vertices, fruits, nodes, n_nodes_fruit=5, n_nodes_stem=5):
     """
     Fit a plane to each fruit. Each plane is defined by two vectors and a mean points.
     The First vector is in the direction of the fruit (out from the stem)
@@ -110,25 +110,25 @@ def fit_fruits(vertices, fruits, internodes, n_nodes_fruit=5, n_nodes_stem=5):
         vertices_fruit_plane_est = vertices[all_node_fruits[0:n_nodes_fruit]]
 
 
-        idx = list(main_stem).index(fruit["internode"])
-        vertices_internode_plane_est =  vertices[main_stem[idx-n_nodes_stem//2:idx+n_nodes_stem//2]]
-        internode_point = vertices[main_stem[idx], :]
-        internode_next_point = vertices[main_stem[idx + 1], :]
+        idx = list(main_stem).index(fruit["node"])
+        vertices_node_plane_est =  vertices[main_stem[idx-n_nodes_stem//2:idx+n_nodes_stem//2]]
+        node_point = vertices[main_stem[idx], :]
+        node_next_point = vertices[main_stem[idx + 1], :]
 
-        points = np.vstack([vertices_fruit_plane_est, vertices_internode_plane_est])
+        points = np.vstack([vertices_fruit_plane_est, vertices_node_plane_est])
         _,v1,v2 = fit_plane(points)
 
         fruit_mean = vertices[all_node_fruits].mean(axis=0)
-        new_v1 = fruit_mean - internode_point
+        new_v1 = fruit_mean - node_point
         new_v1 = new_v1.dot(v1) * v1 + new_v1.dot(v2) * v2
         new_v1 /= np.linalg.norm(new_v1)
 
         # Set v1 as the fruit direction and v2 as the stem direction
         v1, v2 = new_v1, v2 - v2.dot(new_v1)*new_v1
-        if v2.dot(internode_next_point - internode_point) < 0:
+        if v2.dot(node_next_point - node_point) < 0:
             v2 = - v2
 
-        plane_vectors[i, 0, :] = internode_point
+        plane_vectors[i, 0, :] = node_point
         plane_vectors[i, 1, :] = v1
         plane_vectors[i, 2, :] = v2
 
@@ -164,11 +164,12 @@ def draw_segmentation(main_stem, fruits, vertices, plane_vectors, axis_length):
     open3d.draw_geometries(geometries)
     return geometries
 
-def compute_angles(plane_vectors):
+def compute_angles_and_internodes(plane_vectors):
     """
     Given the plane fit of all fruits, compute angles between successive fruits
     """
     angles = np.zeros(len(plane_vectors)- 1)
+    internodes = np.zeros(len(plane_vectors)- 1)
     for i in range(1, len(plane_vectors)):
         n1 = np.cross(plane_vectors[i-1, 1, :], plane_vectors[i-1, 2, :])
         n2 = np.cross(plane_vectors[i, 1, :], plane_vectors[i, 2, :])
@@ -185,7 +186,8 @@ def compute_angles(plane_vectors):
         if np.linalg.det([v1, v2, v3]) < 0:
             angle = 2*np.pi - angle
         angles[i-1] = angle
-    return angles
+        internodes[i-1] = np.linalg.norm(p2 - p1)
+    return angles, internodes
 
 if __name__ == "__main__":
     usage_str = "Usage: %prog SCAN_ID"
@@ -223,23 +225,23 @@ if __name__ == "__main__":
     # In the scanner, z increasing means down
     root_node = np.argmax(vertices[:, 2])
 
-    # Get the main stem and internode locations
-    main_stem, internodes = get_main_stem_and_internodes(G, root_node)
+    # Get the main stem and node locations
+    main_stem, nodes = get_main_stem_and_nodes(G, root_node)
 
     # Compute the minimum spanning tree
-    T = compute_mst(G, main_stem, internodes)
+    T = compute_mst(G, main_stem, nodes)
 
     # Segment fruits
-    fruits = compute_fruits(T, internodes)
+    fruits = compute_fruits(T, nodes)
 
     # Fit a plane to each fruit
-    plane_vectors = fit_fruits(vertices, fruits, internodes)
+    plane_vectors = fit_fruits(vertices, fruits, nodes)
 
     # Draw graph is display is enabled, each fruit with a random color
     if options.display:
         geometries = draw_segmentation(main_stem, fruits, vertices, plane_vectors, 10)
 
-    angles = compute_angles(plane_vectors)
+    angles, internodes = compute_angles_and_internodes(plane_vectors)
 
     fileset_angles = scan.get_fileset("angles")
     if fileset_angles is None:
@@ -249,5 +251,12 @@ if __name__ == "__main__":
     if angles_file is None:
         angles_file = fileset_angles.create_file("angles")
 
+    internodes_file = fileset_angles.get_file("internodes")
+    if internodes_file is None:
+        internodes_file = fileset_angles.create_file("internodes")
+
     np.savetxt("/tmp/angles.csv", angles)
     angles_file.import_file("/tmp/angles.csv")
+
+    np.savetxt("/tmp/internodes.csv", internodes)
+    angles_file.import_file("/tmp/internodes.csv")
