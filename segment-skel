@@ -73,6 +73,7 @@ def compute_fruits(T, nodes):
                 temp_tree = T.copy()
                 temp_tree.remove_edge(n, i)
                 fruit, _ = get_main_stem_and_nodes(temp_tree, n)
+                fruit = np.hstack([i, fruit])
                 fruits.append({ "node" : i, "nodes" : fruit})
     fruits = fruits[:-1] # give up the last one because it could be the stem
     return fruits
@@ -138,15 +139,15 @@ def draw_segmentation(main_stem, fruits, vertices, plane_vectors, axis_length):
     geometries = []
     lines = open3d.LineSet()
     lines.points = open3d.Vector3dVector(vertices[main_stem, :])
-    lines.lines = open3d.Vector2iVector(np.vstack([i, i+1]
-            for i in range(len(main_stem) - 1)))
+    lines.lines = open3d.Vector2iVector(np.vstack([[i, i+1]
+            for i in range(len(main_stem) - 1)]))
 
     geometries.append(lines)
     for i, fruit in enumerate(fruits):
         lines = open3d.LineSet()
         lines.points = open3d.Vector3dVector(vertices[fruit["nodes"], :])
-        lines.lines = open3d.Vector2iVector(np.vstack([i, i+1]
-            for i in range(len(fruit["nodes"]) - 1)))
+        lines.lines = open3d.Vector2iVector(np.vstack([[i, i+1]
+            for i in range(len(fruit["nodes"]) - 1)]))
         c = np.zeros((len(fruit["nodes"]) - 1, 3))
         c[:,:] = np.random.rand(3)[np.newaxis, :]
         lines.colors = open3d.Vector3dVector(c)
@@ -259,4 +260,4 @@ if __name__ == "__main__":
     angles_file.import_file("/tmp/angles.csv")
 
     np.savetxt("/tmp/internodes.csv", internodes)
-    angles_file.import_file("/tmp/internodes.csv")
+    internodes_file.import_file("/tmp/internodes.csv")
