@@ -94,8 +94,7 @@ class Colmap(ProcessingBlock):
         posefile.close()
 
     def write_output(self, scan, endpoint):
-        fileset_id, file_id = endpoint.split('/')
-        fileset = scan.get_fileset(fileset_id, create=True)
+        fileset = scan.get_fileset(endpoint, create=True)
 
         # Write to DB
         pcd = colmap_points_to_pcd(points)
