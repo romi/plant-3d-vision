@@ -138,11 +138,6 @@ class Colmap(ProcessingBlock):
         f = fileset.get_file('points', create=True)
         f.write_text('json', points_json)
 
-        pcd = colmap_points_to_pcd(self.points)
-        f = fileset.get_file('sparse', create=True)
-        db_write_point_cloud(f, pcd)
-
-
         images_json = colmap_images_to_json(self.images)
         f = fileset.get_file('images', create=True)
         f.write_text('json', images_json)
