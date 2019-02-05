@@ -223,7 +223,7 @@ class AnglesAndInternodes(ProcessingBlock):
 
         f = fileset.get_file(file_id, create=True)
 
-        f.write_text(txt)
+        f.write_text('json', txt)
 
     def __init__(self):
         pass

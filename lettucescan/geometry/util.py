@@ -1,4 +1,7 @@
 import numpy as np
+import open3d
+from scipy.ndimage.morphology import distance_transform_edt
+from scipy.ndimage.filters import gaussian_filter
 
 
 def pcd2vol(pcd_points, voxel_width, zero_padding=0):
@@ -22,9 +25,9 @@ def pcd2vol(pcd_points, voxel_width, zero_padding=0):
     for i in range(pcd_points.shape[0]):
         A[indices[i, 0], indices[i, 1], indices[i, 2]] += 1.
 
-    return A
+    return (A, m)
 
-def vol2pcd(volume, width, dist_threshold=0, quiet=False):
+def vol2pcd(volume, origin, width, dist_threshold=0, quiet=False):
     """
     Converts a binary volume into a point cloud with normals.
     :param volume: NxMxP 3D binary numpy array
@@ -32,8 +35,8 @@ def vol2pcd(volume, width, dist_threshold=0, quiet=False):
     :param dist[=0]: distance of the level set on which the points are sampled
     :rtype: open3D point cloud with normals
     """
-    dist = distance_transform_edt(A)
-    mdist = distance_transform_edt(1-A)
+    dist = distance_transform_edt(volume)
+    mdist = distance_transform_edt(1-volume)
     dist = np.where(dist > 0.5, dist - 0.5, -mdist + 0.5)
 
     gx, gy, gz = np.gradient(dist)
@@ -67,8 +70,9 @@ def vol2pcd(volume, width, dist_threshold=0, quiet=False):
                                                      grad_normalized[2]])])
 
     for i in range(3):
-        pts[:, i] = pts[:, i] + m[i]
+        pts[:, i] = pts[:, i] + origin[i]
 
+    pcd = open3d.PointCloud()
     pcd.points = open3d.Vector3dVector(pts)
     pcd.normals = open3d.Vector3dVector(normals)
     pcd.normalize_normals()

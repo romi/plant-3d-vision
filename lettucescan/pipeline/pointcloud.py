@@ -60,7 +60,7 @@ class Voxel2PointCloud(ProcessingBlock):
         fileset_id, file_id = endpoint.split('/')
         fileset = scan.get_fileset(fileset_id)
         voxel_file = fileset.get_file(file_id)
-        self.voxels = db_read_point_cloud(input)
+        self.voxels = db_read_point_cloud(voxel_file)
         self.w = voxel_file.get_metadata('width')
 
     def write_output(self, scan, endpoint):
@@ -70,9 +70,9 @@ class Voxel2PointCloud(ProcessingBlock):
         db_write_point_cloud(point_cloud_file, self.pcd_with_normals)
 
     def process(self):
-        vol = util.pcd2vol(voxels, w, zero_padding=1)
+        vol, origin = util.pcd2vol(np.asarray(self.voxels.points), self.w, zero_padding=1)
         self.pcd_with_normals = util.vol2pcd(
-            vol, self.w, dist_threshold=self.params.dist_threshold)
+            vol, origin, self.w, dist_threshold=self.dist_threshold)
 
     def __init__(self, dist_threshold):
         self.dist_threshold = dist_threshold
@@ -92,11 +92,11 @@ class DelaunayTriangulation(ProcessingBlock):
         db_write_triangle_mesh(triangle_mesh_file, self.mesh)
 
     def process(self):
-        points, triangles = cgal.poisson_mesh(self.point_cloud.points,
-                                              self.point_cloud.normals)
+        points, triangles = cgal.poisson_mesh(np.asarray(self.point_cloud.points),
+                                              np.asarray(self.point_cloud.normals))
 
         mesh = open3d.TriangleMesh()
-        mesh.points = open3d.Vector3dVector(points)
+        mesh.vertices = open3d.Vector3dVector(points)
         mesh.triangles = open3d.Vector3iVector(triangles)
 
         self.mesh = mesh
@@ -116,17 +116,17 @@ class CurveSkeleton(ProcessingBlock):
         fileset_id, file_id = endpoint.split('/')
         fileset = scan.get_fileset(fileset_id, create=True)
 
-        val = {'points': points.tolist(),
-               'lines': lines.tolist()}
+        val = {'points': self.points.tolist(),
+               'lines': self.lines.tolist()}
         val_json = json.dumps(val)
 
         skeleton_file = fileset.get_file(file_id, create=True)
 
-        skeleton_file.write_text(val_json)
+        skeleton_file.write_text('json', val_json)
 
     def process(self):
         self.points, self.lines = cgal.skeletonize_mesh(
-            self.mesh.points, self.mesh.triangles)
+            np.asarray(self.mesh.vertices), np.asarray(self.mesh.triangles))
 
     def __init__(self):
         pass
