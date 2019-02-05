@@ -77,6 +77,7 @@ setup(
     name='lettucescan',
     version='v0.4',
     packages=find_packages(),
+    scripts=['bin/run-scan'],
     author='Timothée Wintz',
     author_email='timothee@timwin.fr',
     description='A plant scanner',
