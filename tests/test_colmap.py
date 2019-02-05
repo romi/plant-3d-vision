@@ -9,9 +9,11 @@ datab = db.DB(os.path.join(os.getcwd(), 'data'))
 
 scan = datab.get_scan('2019-01-22_15-57-34')
 colmap_block = colmap.Colmap(matcher='exhaustive',
-                              compute_dense=True,
+                              compute_dense=False,
+                              save_camera_model=True,
                               all_cli_args={
                                 'feature_extractor' : {
+                                    '--ImageReader.single_camera' : '1'
                                 },
                                 'exhaustive_matcher' : {
                                 },
