@@ -1,3 +1,4 @@
+import json
 import sys
 import os
 import operator
@@ -69,7 +70,7 @@ def build_graph(vertices, edges):
     return G
 
 
-def compute_fruits(T, nodes):
+def compute_fruits(T, main_stem, nodes):
     fruits = []
     for i in nodes:
         ns = nx.neighbors(T, i)
@@ -107,7 +108,7 @@ def fit_plane(points):
     return m, v[0, :], v[1, :]
 
 
-def fit_fruits(vertices, fruits, nodes, n_nodes_fruit=5, n_nodes_stem=5):
+def fit_fruits(vertices, main_stem, fruits, nodes, n_nodes_fruit=5, n_nodes_stem=5):
     """
     Fit a plane to each fruit. Each plane is defined by two vectors and a mean points.
     The First vector is in the direction of the fruit (out from the stem)
@@ -210,15 +211,15 @@ class AnglesAndInternodes(ProcessingBlock):
         f = fileset.get_file(file_id)
         txt = f.read_text()
         j = json.loads(txt)
-        self.points = j['points']
-        self.lines = j['lines']
+        self.points = np.array(j['points'])
+        self.lines = np.array(j['lines'])
 
     def write_output(self, scan, endpoint):
         fileset_id, file_id = endpoint.split('/')
         fileset = scan.get_fileset(fileset_id, create=True)
         txt = json.dumps({
-            'angles': self.angles,
-            'internodes': self.internodes
+            'angles': self.angles.tolist(),
+            'internodes': self.internodes.tolist()
         })
 
         f = fileset.get_file(file_id, create=True)
@@ -241,10 +242,10 @@ class AnglesAndInternodes(ProcessingBlock):
         T = compute_mst(G, main_stem, nodes)
 
         # Segment fruits
-        fruits = compute_fruits(T, nodes)
+        fruits = compute_fruits(T, main_stem, nodes)
 
         # Fit a plane to each fruit
-        plane_vectors = fit_fruits(vertices, fruits, nodes)
+        plane_vectors = fit_fruits(self.points, main_stem, fruits, nodes)
 
         self.angles, self.internodes = compute_angles_and_internodes(
             plane_vectors)
