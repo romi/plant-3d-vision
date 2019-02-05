@@ -76,27 +76,27 @@ def colmap_images_to_json(images):
 def cameras_model_to_opencv(cameras):
     for k in cameras.keys():
         cam = cameras[k]
-        if sp[1] == 'SIMPLE_RADIAL':
-            camera['model'] = 'OPENCV'
-            camera['params'] = [sp[4],
-                                sp[4],
-                                sp[5],
-                                sp[6],
-                                sp[7],
-                                sp[7],
+        if cam['model'] == 'SIMPLE_RADIAL':
+            cam['model'] = 'OPENCV'
+            cam['params'] = [cam['params'][0],
+                                cam['params'][0],
+                                cam['params'][1],
+                                cam['params'][2],
+                                cam['params'][3],
+                                cam['params'][3],
                                 0.,
                                 0.]
-        elif sp[1] == 'RADIAL':
-            camera['model'] = 'OPENCV'
-            camera['params'] = [sp[4],
-                                sp[4],
-                                sp[5],
-                                sp[6],
-                                sp[7],
-                                sp[8],
+        elif cam['model'] == 'RADIAL':
+            cam['model'] = 'OPENCV'
+            cam['params'] = [cam['params'][0],
+                                cam['params'][0],
+                                cam['params'][1],
+                                cam['params'][2],
+                                cam['params'][3],
+                                cam['params'][4],
                                 0.,
                                 0.]
-        elif sp[1] == 'OPENCV':
+        elif cam['model'] == 'OPENCV':
             pass
         else:
             raise Exception('Cannot convert cam model to opencv')
