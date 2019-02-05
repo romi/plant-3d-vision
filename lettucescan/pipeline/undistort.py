@@ -47,12 +47,11 @@ class Undistort(ProcessingBlock):
 
         for img in self.images:
             data = img['data']
-            mat = np.matrix([[camera_model['fx'], 0, camera_model['cx']],
-                             [0, camera_model['fy'], camera_model['cy']],
+            camera_params = camera_model['params']
+            mat = np.matrix([[camera_params[0], 0, camera_params[2]],
+                             [0, camera_params[1], camera_params[3]],
                              [0, 0, 1]])
-            undistort_parameters = np.array([camera_model['k1'], camera_model['k2'],
-                                             camera_model['p1'],
-                                             camera_model['p2']])
+            undistort_parameters = np.array(camera_params[4:])
             undistorted_data = cv2.undistort(im, mat, undistort_parameters)
             self.undistorted_images.append({
                 'id': img['id'],
