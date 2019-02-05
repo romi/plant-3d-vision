@@ -13,7 +13,7 @@ def db_read_point_cloud(file):
 
 def db_write_point_cloud(file, pcd):
     tmpdir = tempfile.TemporaryDirectory()
-    pcd_path = os.path.join(tmpdir.name, 'pcd.ply')
+    pcd_path = os.path.join(tmpdir.name, '%s.ply'%file.id)
     open3d.write_point_cloud(pcd_path, pcd)
     file.import_file(pcd_path)
 
@@ -25,6 +25,6 @@ def db_read_triangle_mesh(file):
 
 def db_write_triangle_mesh(file, mesh):
     tmpdir = tempfile.TemporaryDirectory()
-    mesh_path = os.path.join(tmpdir.name, 'mesh.ply')
+    mesh_path = os.path.join(tmpdir.name, '%s.ply'%file.id)
     open3d.write_triangle_mesh(mesh_path, mesh)
     file.import_file(mesh_path)

@@ -8,8 +8,8 @@ import open3d
 import numpy as np
 from imageio import imwrite
 
-from lettucescan.processing_block import ProcessingBlock
-from lettucescan.geometry import cgal, util, vox2pcd
+from lettucescan.pipeline.processing_block import ProcessingBlock
+from lettucescan.geometry import cgal, util
 from lettucescan.util import db_read_point_cloud, db_write_point_cloud
 from lettucescan.util import db_read_triangle_mesh, db_write_triangle_mesh
 
