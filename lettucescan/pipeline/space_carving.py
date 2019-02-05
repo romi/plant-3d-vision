@@ -1,10 +1,13 @@
 import json
+import os
 
 import numpy as np
+import open3d
 from scipy.ndimage import binary_opening, binary_closing
 
 from lettucescan.pipeline.processing_block import ProcessingBlock
 from lettucescan import space_carving
+from lettucescan.util import db_read_point_cloud, db_write_point_cloud
 
 
 class SpaceCarving(ProcessingBlock):
@@ -12,8 +15,8 @@ class SpaceCarving(ProcessingBlock):
         sparse_fileset_id, sparse_file_id = endpoints['sparse'].split('/')
         sparse_fileset = scan.get_fileset(sparse_fileset_id)
         sparse_file = sparse_fileset.get_file(sparse_file_id)
+        self.sparse = db_read_point_cloud(sparse_file)
 
-        self.sparse = json.loads(sparse_file.read_text())
 
         fileset_sparse = scan.get_fileset
         fileset_masks = scan.get_fileset(endpoints['masks'])
@@ -38,8 +41,6 @@ class SpaceCarving(ProcessingBlock):
         db_write_point_cloud(point_cloud_file, self.point_cloud)
         point_cloud_file.set_metadata('width', self.voxel_size)
 
-        fileset.set_metadata('options', vars(options))
-
     def __init__(self, voxel_size, cl_platform=0, cl_device=0):
         self.voxel_size = voxel_size
         self.cl_platform = cl_platform
@@ -50,13 +51,9 @@ class SpaceCarving(ProcessingBlock):
 
         width = self.camera['width']
         height = self.camera['height']
-        intrinsics = camera['params'][0:4]
+        intrinsics = self.camera['params'][0:4]
 
-        n_points = len(list(self.sparse.keys()))
-        points = np.zeros(n_points, 3)
-        for i, id in enumerate(self.sparse.keys()):
-            xyz = self.sparse[id]['xyz']
-            points[i, :] = xyz
+        points = np.asarray(self.sparse.points)
 
         x_min, y_min, z_min = points.min(axis=0)
         x_max, y_max, z_max = points.max(axis=0)
@@ -66,9 +63,10 @@ class SpaceCarving(ProcessingBlock):
 
 
         sc = space_carving.SpaceCarving(
-            center, widths, options.voxel_size, width, height)
+            center, widths, self.voxel_size, width, height)
         for k in self.poses.keys():
-            mask = self.masks[k]
+            mask_id = os.path.splitext(self.poses[k]['name'])[0]
+            mask = self.masks[mask_id]
             rot = sum(self.poses[k]['rotmat'], [])
             tvec = self.poses[k]['tvec']
             sc.process_view(intrinsics, rot, tvec, mask)
