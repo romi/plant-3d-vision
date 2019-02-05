@@ -1,20 +1,14 @@
 # TEMP
-import sys
-sys.path.append("..")
+import os
 
-from lettucescan import colmap
+from lettucescan.pipeline import colmap
 import lettucethink.fsdb as db
 
 
-datab = db.DB("../test-db/")
+datab = db.DB(os.path.join(os.getcwd(), 'data'))
 
-scan = datab.get_scan("2019-01-22_15-57-34")
-fileset_images = scan.get_fileset("images")
-fileset_colmap = scan.get_fileset("colmap")
-if fileset_colmap is None:
-    fileset_colmap = scan.create_fileset("colmap")
-
-params = colmap.ColmapBlockParameters(matcher="exhaustive",
+scan = datab.get_scan('2019-01-22_15-57-34')
+colmap_block = colmap.Colmap(matcher='exhaustive',
                               compute_dense=True,
                               all_cli_args={
                                 'feature_extractor' : {
@@ -34,11 +28,6 @@ params = colmap.ColmapBlockParameters(matcher="exhaustive",
                                 }
                               })
 
-input_filesets = {
-    'images' : fileset_images
-}
-output_filesets = {
-    'sfm' : fileset_colmap
-}
-colmap_block = colmap.ColmapBlock(input_filesets, output_filesets, params)
+colmap_block.read_input(scan, 'images')
 colmap_block.process()
+colmap_block.write_output(scan, 'colmap')

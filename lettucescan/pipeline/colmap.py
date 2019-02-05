@@ -1,6 +1,7 @@
 import os
 import json
 import subprocess
+import tempfile
 from random import randint
 
 import numpy as np
@@ -76,18 +77,9 @@ class ColmapError(Exception):
         self.message = message
 
 
-class ColmapParameters:
-    def __init__(self, matcher, compute_dense, all_cli_args, colmap_ws=None):
-        self.matcher = matcher
-        self.compute_dense = compute_dense
-        self.all_cli_args = all_cli_args
-        self.colmap_ws = colmap_ws
-
-
 class Colmap(ProcessingBlock):
     def read_input(self, scan, endpoint):
-        fileset_id, file_id = endpoint.split('/')
-        fileset = scan.get_fileset(fileset_id)
+        fileset = scan.get_fileset(endpoint)
 
         posefile = open('%s/poses.txt' % self.colmap_ws, mode='w')
 
