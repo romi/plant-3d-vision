@@ -1,4 +1,5 @@
 from lettucethink import fsdb
+import tempfile
 
 def db_read_point_cloud(file):
     path = fsdb._file_path(file, file.filename)
