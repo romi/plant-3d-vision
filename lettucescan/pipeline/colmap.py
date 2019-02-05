@@ -147,7 +147,7 @@ class Colmap(ProcessingBlock):
         if self.save_camera_model:
             cameras = cameras_model_to_opencv(json.loads(cameras_json))
             md = scan.get_metadata('scanner')
-            md['camera_model'] = cameras[cameras.keys()[0]]
+            md['camera_model'] = cameras[list(cameras.keys())[0]]
             scan.set_metadata('scanner', md)
 
         f = fileset.get_file('cameras', create=True)
