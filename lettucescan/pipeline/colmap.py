@@ -10,6 +10,7 @@ from imageio import imwrite
 
 from lettucescan.pipeline.processing_block import ProcessingBlock
 from lettucescan.thirdparty import read_model
+from lettucescan.util import db_read_point_cloud, db_write_point_cloud
 
 
 def colmap_cameras_to_json(cameras):
@@ -97,21 +98,21 @@ class Colmap(ProcessingBlock):
         fileset = scan.get_fileset(endpoint, create=True)
 
         # Write to DB
-        pcd = colmap_points_to_pcd(points)
+        pcd = colmap_points_to_pcd(self.points)
 
-        open3d.write_point_cloud('/tmp/sparse.ply', pcd)
         f = fileset.get_file('sparse', create=True)
+        db_write_point_cloud(f, pcd)
         f.import_file('/tmp/sparse.ply')
 
-        points_json = colmap_points_to_json(points)
+        points_json = colmap_points_to_json(self.points)
         f = fileset.get_file('points', create=True)
         f.write_text('json', points_json)
 
-        images_json = colmap_images_to_json(images)
+        images_json = colmap_images_to_json(self.images)
         f = fileset.get_file('images', create=True)
         f.write_text('json', images_json)
 
-        cameras_json = colmap_cameras_to_json(cameras)
+        cameras_json = colmap_cameras_to_json(self.cameras)
         f = fileset.get_file('cameras', create=True)
         f.write_text('json', cameras_json)
 
@@ -209,11 +210,11 @@ class Colmap(ProcessingBlock):
         self.colmap_model_aligner()
 
         # Import sparse model into python and save as json
-        cameras = read_model.read_cameras_binary(
+        self.cameras = read_model.read_cameras_binary(
             '%s/sparse/0/cameras.bin' % self.colmap_ws)
-        images = read_model.read_images_binary(
+        self.images = read_model.read_images_binary(
             '%s/sparse/0/images.bin' % self.colmap_ws)
-        points = read_model.read_points3d_binary(
+        self.points = read_model.read_points3d_binary(
             '%s/sparse/0/points3D.bin' % self.colmap_ws)
 
         if self.compute_dense:
