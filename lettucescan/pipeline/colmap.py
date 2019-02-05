@@ -73,6 +73,37 @@ def colmap_images_to_json(images):
     return json.dumps(res)
 
 
+def cameras_model_to_opencv(cameras):
+    for k in cameras.keys():
+        cam = cameras[k]
+        if sp[1] == 'SIMPLE_RADIAL':
+            camera['model'] = 'OPENCV'
+            camera['params'] = [sp[4],
+                                sp[4],
+                                sp[5],
+                                sp[6],
+                                sp[7],
+                                sp[7],
+                                0.,
+                                0.]
+        elif sp[1] == 'RADIAL':
+            camera['model'] = 'OPENCV'
+            camera['params'] = [sp[4],
+                                sp[4],
+                                sp[5],
+                                sp[6],
+                                sp[7],
+                                sp[8],
+                                0.,
+                                0.]
+        elif sp[1] == 'OPENCV':
+            pass
+        else:
+            raise Exception('Cannot convert cam model to opencv')
+        break
+    return cameras
+
+
 class ColmapError(Exception):
     def __init__(self, message):
         self.message = message
@@ -112,6 +143,13 @@ class Colmap(ProcessingBlock):
         f.write_text('json', images_json)
 
         cameras_json = colmap_cameras_to_json(self.cameras)
+
+        if self.save_camera_model:
+            cameras = cameras_model_to_opencv(json.loads(cameras_json))
+            md = scan.get_metadata('scanner')
+            md['camera_model'] = cameras[cameras.keys()[0]]
+            scan.set_metadata('scanner', md)
+
         f = fileset.get_file('cameras', create=True)
         f.write_text('json', cameras_json)
 
@@ -222,11 +260,14 @@ class Colmap(ProcessingBlock):
             self.colmap_patch_match_stereo()
             self.colmap_stereo_fusion()
 
-    def __init__(self, matcher, compute_dense, all_cli_args, colmap_ws=None):
+    def __init__(self, matcher, compute_dense, all_cli_args,
+                 colmap_ws=None,
+                 save_camera_model=False):
         self.matcher = matcher
         self.compute_dense = compute_dense
         self.all_cli_args = all_cli_args
         self.colmap_ws = colmap_ws
+        self.save_camera_model = save_camera_model
 
         if self.colmap_ws is None:
             self.tmpdir = tempfile.TemporaryDirectory()

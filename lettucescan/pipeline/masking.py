@@ -19,8 +19,11 @@ class Masking(ProcessingBlock):
     def read_input(self, scan, endpoint):
         fileset = scan.get_fileset(endpoint)
 
-        scanner_metadata = scan.get_metadata('scanner')
-        self.camera = scanner_metadata['camera_model']
+        if self.camera_model is None:
+            scanner_metadata = scan.get_metadata('scanner')
+            self.camera = scanner_metadata['camera_model']
+        else:
+            self.camera = camera_model
 
         self.images = []
         for f in fileset.get_files():
@@ -39,7 +42,8 @@ class Masking(ProcessingBlock):
             f.set_metadata(img['metadata'])
 
 
-    def __init__(self, f):
+    def __init__(self, f, camera_model=None):
+        self.camera_model = camera_model
         self.f = f
 
     def process(self):

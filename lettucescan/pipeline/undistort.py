@@ -15,8 +15,11 @@ class Undistort(ProcessingBlock):
     def read_input(self, scan, endpoint):
         fileset = scan.get_fileset(endpoint)
 
-        scanner_metadata = scan.get_metadata('scanner')
-        self.camera = scanner_metadata['camera_model']
+        if self.camera_model is None:
+            scanner_metadata = scan.get_metadata('scanner')
+            self.camera = scanner_metadata['camera_model']
+        else:
+            self.camera = camera_model
 
         self.images = []
         for f in fileset.get_files():
@@ -34,10 +37,8 @@ class Undistort(ProcessingBlock):
             f.write_image('jpg', img['data'])
             f.set_metadata(img['metadata'])
 
-    def __init__(self):
-        self.voxel_size = voxel_size
-        self.cl_platform = cl_platform
-        self.cl_device = cl_device
+    def __init__(self, camera_model=None):
+        self.camera_model = camera_model
 
     def process(self):
         camera_model = self.camera['parameters']
