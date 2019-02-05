@@ -215,15 +215,13 @@ class AnglesAndInternodes(ProcessingBlock):
 
     def write_output(self, scan, endpoint):
         fileset_id, file_id = endpoint.split('/')
-        fileset = scan.get_fileset(fileset_id)
+        fileset = scan.get_fileset(fileset_id, create=True)
         txt = json.dumps({
             'angles': self.angles,
             'internodes': self.internodes
         })
 
-        f = fileset.get_file(file_id)
-        if f is None:
-            f = fileset.create_file(file_id)
+        f = fileset.get_file(file_id, create=True)
 
         f.write_text(txt)
 

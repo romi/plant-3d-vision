@@ -23,10 +23,8 @@ class CropPointCloud(ProcessingBlock):
 
     def write_output(self, scan, endpoint):
         fileset_id, file_id = endpoint.split('/')
-        fileset = scan.get_fileset(fileset_id)
-        point_cloud_file = fileset.get_file(file_id)
-        if point_cloud_file is None:
-            point_cloud_file = fileset.create_file(file_id)
+        fileset = scan.get_fileset(fileset_id, create=True)
+        point_cloud_file = fileset.get_file(file_id, create=True)
         db_write_point_cloud(point_cloud_file, self.point_cloud)
 
     def process(self):
@@ -67,10 +65,8 @@ class Voxel2PointCloud(ProcessingBlock):
 
     def write_output(self, scan, endpoint):
         fileset_id, file_id = endpoint.split('/')
-        fileset = scan.get_fileset(fileset_id)
-        point_cloud_file = fileset.get_file(file_id)
-        if point_cloud_file is None:
-            point_cloud_file = fileset.create_file(file_id)
+        fileset = scan.get_fileset(fileset_id, create=True)
+        point_cloud_file = fileset.get_file(file_id, create=True)
         db_write_point_cloud(point_cloud_file, self.pcd_with_normals)
 
     def process(self):
@@ -91,10 +87,8 @@ class DelaunayTriangulation(ProcessingBlock):
 
     def write_output(self, scan, endpoint):
         fileset_id, file_id = endpoint.split('/')
-        fileset = scan.get_fileset(fileset_id)
-        triangle_mesh_file = fileset.get_file(file_id)
-        if triangle_mesh_file is None:
-            triangle_mesh_file = fileset.create_file(file_id)
+        fileset = scan.get_fileset(fileset_id, create=True)
+        triangle_mesh_file = fileset.get_file(file_id, create=True)
         db_write_triangle_mesh(triangle_mesh_file, self.mesh)
 
     def process(self):
@@ -120,15 +114,13 @@ class CurveSkeleton(ProcessingBlock):
 
     def write_output(self, scan, endpoint):
         fileset_id, file_id = endpoint.split('/')
-        fileset = scan.get_fileset(fileset_id)
+        fileset = scan.get_fileset(fileset_id, create=True)
 
         val = {'points': points.tolist(),
                'lines': lines.tolist()}
         val_json = json.dumps(val)
 
-        skeleton_file = fileset.get_file(file_id)
-        if skeleton_file is None:
-            skeleton_file = fileset.create_file(file_id)
+        skeleton_file = fileset.get_file(file_id, create=True)
 
         skeleton_file.write_text(val_json)
 

@@ -27,10 +27,8 @@ class SpaceCarving(ProcessingBlock):
 
     def write_output(self, scan, endpoint):
         fileset_id, file_id = endpoint.split('/')
-        fileset = scan.get_fileset(fileset_id)
-        point_cloud_file = fileset.get_file(file_id)
-        if point_cloud_file is None:
-            point_cloud_file = fileset.create_file(file_id)
+        fileset = scan.get_fileset(fileset_id, create=True)
+        point_cloud_file = fileset.get_file(file_id, create=True)
         db_write_point_cloud(point_cloud_file, self.point_cloud)
         point_cloud_file.set_metadata('width', self.voxel_size)
 

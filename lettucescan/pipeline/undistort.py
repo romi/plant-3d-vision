@@ -28,13 +28,11 @@ class Undistort(ProcessingBlock):
             })
 
     def write_output(self, scan, endpoint):
-        fileset = scan.get_fileset(endpoint)
+        fileset = scan.get_fileset(endpoint, create=True)
         for img in self.undistorted_images:
-            f = fileset.get_file(img['id'])
-            if f is None:
-                f = fileset.create_file(img['id'])
-                f.write_image('jpg', img['data'])
-                f.set_metadata(img['metadata'])
+            f = fileset.get_file(img['id'], create=True)
+            f.write_image('jpg', img['data'])
+            f.set_metadata(img['metadata'])
 
     def __init__(self):
         self.voxel_size = voxel_size

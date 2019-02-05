@@ -32,16 +32,14 @@ class Masking(ProcessingBlock):
             })
 
     def write_output(self, scan, endpoint):
-        fileset = scan.get_fileset(endpoint)
+        fileset = scan.get_fileset(endpoint, create=True)
         for img in self.masks:
-            f = fileset.get_file(img['id'])
-            if f is None:
-                f = fileset.create_file(img['id'])
-                f.write_image('png', img['data'])
-                f.set_metadata(img['metadata'])
+            f = fileset.get_file(img['id'], create=True)
+            f.write_image('png', img['data'])
+            f.set_metadata(img['metadata'])
 
 
-    def __init__(self, input_fileset, output_fileset, f):
+    def __init__(self, f):
         self.f = f
 
     def process(self):
@@ -50,7 +48,7 @@ class Masking(ProcessingBlock):
             im = img['data']
             im = np.asarray(im, dtype=float) / 255.0
             mask_data = np.asarray((self.f(im) * 255), dtype=np.uint8)
-            self.undistorted_images.append({
+            self.masks.append({
                 'id': img['id'],
                 'data': mask_data,
                 'metadata': img['metadata']

@@ -95,25 +95,25 @@ class Colmap(ProcessingBlock):
 
     def write_output(self, scan, endpoint):
         fileset_id, file_id = endpoint.split('/')
-        fileset = scan.get_fileset(fileset_id)
+        fileset = scan.get_fileset(fileset_id, create=True)
 
         # Write to DB
         pcd = colmap_points_to_pcd(points)
 
         open3d.write_point_cloud('/tmp/sparse.ply', pcd)
-        f = fileset.create_file('sparse')
+        f = fileset.get_file('sparse', create=True)
         f.import_file('/tmp/sparse.ply')
 
         points_json = colmap_points_to_json(points)
-        f = fileset.create_file('points')
+        f = fileset.get_file('points', create=True)
         f.write_text('json', points_json)
 
         images_json = colmap_images_to_json(images)
-        f = fileset.create_file('images')
+        f = fileset.get_file('images', create=True)
         f.write_text('json', images_json)
 
         cameras_json = colmap_cameras_to_json(cameras)
-        f = fileset.create_file('cameras')
+        f = fileset.get_file('cameras', create=True)
         f.write_text('json', cameras_json)
 
         if self.compute_dense:
