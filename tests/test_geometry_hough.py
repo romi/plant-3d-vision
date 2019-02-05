@@ -4,7 +4,7 @@ import open3d
 import os
 import numpy as np
 
-pcd = open3d.read_point_cloud(os.path.join(os.getcwd(),
+pcd = open3d.read_point_cloud(os.path.join(os.path.dirname(__file__),
                 "../data/2019-01-22_15-57-34/pointcloud/voxels.ply"))
 pts = np.asarray(pcd.points)
 

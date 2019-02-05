@@ -4,8 +4,7 @@ import os
 from lettucescan.pipeline import colmap
 import lettucethink.fsdb as db
 
-
-datab = db.DB(os.path.join(os.getcwd(), 'data'))
+datab = db.DB(os.path.join(os.path.dirname(__file__), '../data/'))
 
 scan = datab.get_scan('2019-01-22_15-57-34')
 colmap_block = colmap.Colmap(matcher='exhaustive',
