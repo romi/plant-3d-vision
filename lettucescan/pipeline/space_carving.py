@@ -44,8 +44,7 @@ class SpaceCarving(ProcessingBlock):
 
         width = self.camera['width']
         height = self.camera['height']
-        intrinsics = [camera['parameters'][x]
-                      for x in ['fx', 'fy', 'cx', 'cy']]
+        intrinsics = camera['params'][0:4]
 
         sc = space_carving.SpaceCarving(
             center, widths, options.voxel_size, width, height)
