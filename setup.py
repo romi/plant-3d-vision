@@ -84,7 +84,7 @@ setup(
     # add extension module
     ext_modules=[CMakeExtension('lettucescan.geometry.hough'),
                  CMakeExtension('lettucescan.geometry.cgal'),
-                 CMakeExtension('lettucescan.spacecarving')],
+                 CMakeExtension('lettucescan.space_carving')],
     # add custom build_ext command
     cmdclass=dict(build_ext=CMakeBuild),
     zip_safe=False,
