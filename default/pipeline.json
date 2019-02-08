@@ -23,7 +23,7 @@
             "inputs" : "test_undist_1",
             "outputs" : "test_undist_2",
             "args" : { },
-            "requires" : ["undist"]
+            "requires" : []
         }
         ]
 }
