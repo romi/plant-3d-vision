@@ -1,0 +1,29 @@
+{
+    "name" : "sample pipe",
+    "desc" : "This is a sample pipeline",
+    "imports" : {
+        "lettucescan.pipeline.colmap" : "Colmap",
+        "lettucescan.pipeline.undistort" : "Undistort"
+    },
+    "blocks" :
+        [
+        {
+            "id" : "undist",
+            "module" : "lettucescan.pipeline.undistort",
+            "class" : "Undistort",
+            "inputs" : "images",
+            "outputs" : "test_undist_1",
+            "args" : { },
+            "requires" : []
+        },
+        {
+            "id" : "undist2",
+            "module" : "lettucescan.pipeline.undistort",
+            "class" : "Undistort",
+            "inputs" : "test_undist_1",
+            "outputs" : "test_undist_2",
+            "args" : { },
+            "requires" : ["undist"]
+        }
+        ]
+}

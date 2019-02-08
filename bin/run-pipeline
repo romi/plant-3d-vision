@@ -1,0 +1,71 @@
+#!/usr/bin/env python3
+import json
+import sys
+import time
+import importlib
+from multiprocessing import Process
+
+from lettucethink import fsdb
+
+N_WORKERS = 2
+
+def process_block(block, scan, inputs, outputs):
+    block.read_input(scan, inputs)
+    block.process()
+    block.write_output(scan, outputs)
+
+def find_id(l, id):
+    for x in l:
+        if x['id'] == id:
+            return x
+    return None
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        raise Exception('Wrong number of arguments')
+
+    scan = sys.argv[1]
+    scan = scan.split('/')
+    db = '/'.join(scan[:-1])
+    scan = scan[-1]
+    print('DB location = %s'%db)
+    print('scan = %s'%scan)
+
+    db = fsdb.DB(db)
+    scan = db.get_scan(scan)
+
+    pipeline = json.load(open(sys.argv[2]))
+    tasks = []
+
+    remaining_tasks = [ b['id'] for b in pipeline['blocks'] ]
+    current_tasks = {}
+    finished_tasks = []
+
+    while True:
+        if len(remaining_tasks) == 0 and len(list(current_tasks.keys())) == 0:
+            break
+        for k in list(current_tasks.keys()):
+            # current_tasks[k].join(timeout=0)
+            if not current_tasks[k].is_alive():
+                exitcode = current_tasks[k].exitcode
+                if exitcode != 0:
+                    raise Exception("Failed task %s"%k)
+                print("Finished task %s"%k)
+                finished_tasks.append(k)
+                current_tasks.pop(k)
+        if len(current_tasks) < N_WORKERS:
+            for id in remaining_tasks:
+                b = find_id(pipeline['blocks'], id)
+                if all(x in finished_tasks for x in b['requires']):
+                    module = importlib.import_module(b['module'])
+                    block = eval('module.%s'%b['class'])(**b["args"])
+                    new_task = Process(target=process_block, args=(block, scan, b['inputs'], b['outputs']))
+                    new_task.start()
+                    remaining_tasks.remove(id)
+                    current_tasks[b['id']] = new_task
+                    print("Starting task %s"%b['id'])
+                    break
+        time.sleep(0.1)
+
+
+
