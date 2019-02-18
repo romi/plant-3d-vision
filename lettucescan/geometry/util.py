@@ -1,5 +1,6 @@
 import numpy as np
 import open3d
+from open3d.geometry import PointCloud
 from scipy.ndimage.morphology import distance_transform_edt
 from scipy.ndimage.filters import gaussian_filter
 
@@ -72,7 +73,7 @@ def vol2pcd(volume, origin, width, dist_threshold=0, quiet=False):
     for i in range(3):
         pts[:, i] = pts[:, i] + origin[i]
 
-    pcd = open3d.PointCloud()
+    pcd = PointCloud()
     pcd.points = open3d.Vector3dVector(pts)
     pcd.normals = open3d.Vector3dVector(normals)
     pcd.normalize_normals()

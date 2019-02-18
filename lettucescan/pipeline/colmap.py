@@ -6,6 +6,7 @@ from random import randint
 
 import numpy as np
 import open3d
+from open3d.geometry import PointCloud
 from imageio import imwrite
 
 from lettucescan.pipeline.processing_block import ProcessingBlock
@@ -50,7 +51,7 @@ def colmap_points_to_pcd(points):
         points_array[i, :] = points[key].xyz
         colors_array[i, :] = points[key].rgb
     pass
-    pcd = open3d.PointCloud()
+    pcd = PointCloud()
     pcd.points = open3d.Vector3dVector(points_array)
     pcd.colors = open3d.Vector3dVector(colors_array / 255.0)
     return pcd

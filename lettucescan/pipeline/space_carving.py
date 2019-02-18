@@ -3,6 +3,7 @@ import os
 
 import numpy as np
 import open3d
+from open3d.geometry import PointCloud
 from scipy.ndimage import binary_opening, binary_closing
 
 from lettucescan.pipeline.processing_block import ProcessingBlock
@@ -71,6 +72,6 @@ class SpaceCarving(ProcessingBlock):
             tvec = self.poses[k]['tvec']
             sc.process_view(intrinsics, rot, tvec, mask)
 
-        self.point_cloud = open3d.PointCloud()
+        self.point_cloud = PointCloud()
         self.point_cloud.points = open3d.Vector3dVector(
             sc.centers()[sc.labels() == 2])
