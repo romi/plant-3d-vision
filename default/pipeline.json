@@ -8,22 +8,119 @@
     "blocks" :
         [
         {
+            "id" : "colmap",
+            "module" : "lettucescan.pipeline.colmap",
+            "class" : "Colmap",
+            "inputs" : "images",
+            "outputs" : "colmap",
+            "args" : { "matcher" : "exhaustive",
+                      "compute_dense" : false,
+                              "save_camera_model" : true,
+                              "all_cli_args" : {
+                                "feature_extractor" : {
+                                    "--ImageReader.single_camera" : "1"
+                                },
+                                "exhaustive_matcher" : {
+                                },
+                                "mapper" : {
+                                },
+                                "model_aligner" : {
+                                    "--robust_alignment_max_error" : "10"
+                                },
+                                "image_undistorter" : {
+                                },
+                                "patch_match_stereo" : {
+                                },
+                                "stereo_fusion" : {
+                                }
+                              }},
+            "requires" : []
+        },
+        {
             "id" : "undist",
             "module" : "lettucescan.pipeline.undistort",
             "class" : "Undistort",
             "inputs" : "images",
-            "outputs" : "test_undist_1",
+            "outputs" : "undist",
             "args" : { },
-            "requires" : []
+            "requires" : ["colmap"]
         },
         {
-            "id" : "undist2",
-            "module" : "lettucescan.pipeline.undistort",
-            "class" : "Undistort",
-            "inputs" : "test_undist_1",
-            "outputs" : "test_undist_2",
+            "id" : "crop",
+            "module" : "lettucescan.pipeline.pointcloud",
+            "class" : "CropPointCloud",
+            "inputs" : "colmap/sparse",
+            "outputs" : "colmap/sparse_cropped",
+            "args" : { "bounding_box" : {
+                "x" : [200, 600],
+                "y" : [200, 600],
+                "z" : [-100, 240]
+            }},
+            "requires" : ["colmap"]
+        },
+        {
+            "id" : "masking",
+            "module" : "lettucescan.pipeline.masking",
+            "class" : "LinearMasking",
+            "inputs" : "undist",
+            "outputs" : "masks",
+            "args" : { "coefs" : [1.0,0.0,0.0,0.2] , "dilation" : 8},
+            "requires" : ["undist"]
+        },
+        {
+            "id" : "space_carving",
+            "module" : "lettucescan.pipeline.space_carving",
+            "class" : "SpaceCarving",
+            "inputs" : {
+                "sparse" : "colmap/sparse_cropped",
+                "masks" : "masks",
+                "pose" : "colmap/images"
+            },
+            "outputs" : "3d/voxels",
+            "args" : {
+                "voxel_size" : 1.0,
+                "cl_platform" : 0,
+                "cl_device" : 0
+            },
+            "requires" : ["masks", "colmap", "crop"]
+        },
+        {
+            "id" : "voxel2pointcloud",
+            "module" : "lettucescan.pipeline.pointcloud",
+            "class" : "Voxel2PointCloud",
+            "inputs" : "3d/voxels",
+            "outputs" : "3d/point_cloud",
+            "args" : {
+                "dist_threshold" : 2.0
+            },
+            "requires" : ["space_carving"]
+        },
+        {
+            "id" : "pointcloud2mesh",
+            "module" : "lettucescan.pipeline.pointcloud",
+            "class" : "DelaunayTriangulation",
+            "inputs" : "3d/point_cloud",
+            "outputs" : "3d/mesh",
             "args" : { },
-            "requires" : []
+            "requires" : ["voxel2pointcloud"]
+        },
+        {
+            "id" : "skeletonize",
+            "module" : "lettucescan.pipeline.pointcloud",
+            "class" : "CurveSkeleton",
+            "inputs" : "3d/mesh",
+            "outputs" : "3d/skeleton",
+            "args" : { },
+            "requires" : ["pointcloud2mesh"]
+        },
+        {
+            "id" : "angles",
+            "module" : "lettucescan.pipeline.arabidopsis",
+            "class" : "AnglesAndInternodes",
+            "inputs" : "3d/skeleton",
+            "outputs" : "3d/angles",
+            "args" : { },
+            "requires" : ["skeletonize"]
         }
         ]
 }
