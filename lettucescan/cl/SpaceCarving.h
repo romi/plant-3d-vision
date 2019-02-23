@@ -16,7 +16,7 @@ using Vec4f = std::array<float, 4>;
 using Vec3s = std::array<size_t, 3>;
 using Mat3f = std::array<float, 9>;
 
-namespace space_carving {
+namespace romi {
 
 void init_opencl(int platform_id, int device_id);
 void build_kernels();
@@ -26,6 +26,8 @@ class SpaceCarving {
     size_t n_voxels;
     size_t width;
     size_t height;
+
+    cl::Kernel kernel;
 
     cl::Buffer centers_device;
     cl::Buffer labels_device;
@@ -45,7 +47,7 @@ class SpaceCarving {
                  size_t mask_width, size_t mask_height);
     void reset_labels();
     void process_view(const Vec4f &intrinsics, const Mat3f &rot,
-                      const Vec3f &tvec, const uint8_t* mask);
+                      const Vec3f &tvec, const uint8_t *mask);
 
     std::vector<float> centers;
     std::vector<uint8_t> labels;
