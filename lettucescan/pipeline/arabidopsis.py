@@ -4,6 +4,7 @@ import os
 import operator
 
 import open3d
+from open3d.geometry import LineSet, read_point_cloud
 import networkx as nx
 import numpy as np
 
@@ -85,19 +86,6 @@ def compute_fruits(T, main_stem, nodes):
     return fruits
 
 
-def read_voxels(fileset_pcd):
-    voxels = fileset_pcd.get_file("voxels")
-    width = voxels.get_metadata("width")
-    w = voxels.get_metadata("width")
-    voxels_bytes = voxels.read_bytes()
-    voxels_path = os.path.join('/tmp/', voxels.filename)
-    f = open(voxels_path, 'wb')
-    f.write(voxels_bytes)
-    f.close()
-    voxels = open3d.read_point_cloud(voxels_path)
-    return voxels
-
-
 def fit_plane(points):
     """
     Fit a plane to a set of points. Points is Nx3
@@ -147,14 +135,14 @@ def fit_fruits(vertices, main_stem, fruits, nodes, n_nodes_fruit=5, n_nodes_stem
 
 def draw_segmentation(main_stem, fruits, vertices, plane_vectors, axis_length):
     geometries = []
-    lines = open3d.LineSet()
+    lines = LineSet()
     lines.points = open3d.Vector3dVector(vertices[main_stem, :])
     lines.lines = open3d.Vector2iVector(np.vstack([[i, i+1]
                                                    for i in range(len(main_stem) - 1)]))
 
     geometries.append(lines)
     for i, fruit in enumerate(fruits):
-        lines = open3d.LineSet()
+        lines = LineSet()
         lines.points = open3d.Vector3dVector(vertices[fruit["nodes"], :])
         lines.lines = open3d.Vector2iVector(np.vstack([[i, i+1]
                                                        for i in range(len(fruit["nodes"]) - 1)]))
@@ -168,7 +156,7 @@ def draw_segmentation(main_stem, fruits, vertices, plane_vectors, axis_length):
             vertices_basis[1, :]*axis_length
         vertices_basis[2, :] = vertices_basis[0, :] + \
             vertices_basis[2, :]*axis_length
-        basis = open3d.LineSet()
+        basis = LineSet()
         basis.points = open3d.Vector3dVector(vertices_basis)
         basis.lines = open3d.Vector2iVector(np.vstack([[0, 1], [0, 2]]))
         basis.colors = open3d.Vector3dVector(np.vstack([[1, 0, 0], [0, 1, 0]]))

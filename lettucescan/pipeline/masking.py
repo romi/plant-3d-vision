@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.ndimage import binary_opening, binary_closing
+from scipy.ndimage import binary_opening, binary_closing, binary_dilation
 
 from lettucescan.pipeline.processing_block import ProcessingBlock
 
@@ -58,15 +58,25 @@ class Masking(ProcessingBlock):
                 'metadata': img['metadata']
             })
 
+      
+
 
 class ExcessGreenMasking(Masking):
-    def __init__(self, threshold):
-        def f(x): return excess_green(x) > threshold
+    def __init__(self, threshold, dilation=0):
+        def f(x):
+            img = excess_green(x) > threshold
+            if dilation > 0:
+                img = binary_dilation(img, dilation)
+            return img
         super().__init__(f)
 
 
 class LinearMasking(Masking):
-    def __init__(self, coefs):
-        def f(x): return (coefs[0] * x[:, :, 0] + coefs[1] * x[:, :, 1] +
+    def __init__(self, coefs, dilation=0):
+        def f(x):
+            img = (coefs[0] * x[:, :, 0] + coefs[1] * x[:, :, 1] +
                           coefs[2] * x[:, :, 2]) > coefs[3]
+            for i in range(dilation):
+                img = binary_dilation(img)
+            return img
         super().__init__(f)

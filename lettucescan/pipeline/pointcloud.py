@@ -5,6 +5,7 @@ from random import randint
 import tempfile
 
 import open3d
+from open3d.geometry import TriangleMesh
 import numpy as np
 from imageio import imwrite
 
@@ -95,7 +96,7 @@ class DelaunayTriangulation(ProcessingBlock):
         points, triangles = cgal.poisson_mesh(np.asarray(self.point_cloud.points),
                                               np.asarray(self.point_cloud.normals))
 
-        mesh = open3d.TriangleMesh()
+        mesh = TriangleMesh()
         mesh.vertices = open3d.Vector3dVector(points)
         mesh.triangles = open3d.Vector3iVector(triangles)
 
