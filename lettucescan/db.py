@@ -2,6 +2,8 @@ import numpy as np
 import open3d
 from open3d.geometry import read_point_cloud, write_point_cloud, write_triangle_mesh, read_triangle_mesh
 from lettucethink import fsdb
+import tempfile
+import os
 
 
 def db_read_point_cloud(file):

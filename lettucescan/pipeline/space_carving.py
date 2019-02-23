@@ -9,6 +9,7 @@ from scipy.ndimage import binary_opening, binary_closing
 from lettucescan.pipeline.processing_block import ProcessingBlock
 import lettucescan.cl as cl
 from lettucescan.db import db_read_point_cloud, db_write_point_cloud
+from lettucescan import pcd
 
 
 class SpaceCarving(ProcessingBlock):
@@ -63,9 +64,11 @@ class SpaceCarving(ProcessingBlock):
         widths = [x_max - x_min, y_max - y_min, z_max - z_min]
 
 
-        nx = (x_max-x_min) // self.voxel_size+ 1
-        ny = (y_max-y_min) // self.voxel_size+ 1
-        nz = (z_max-z_min) // self.voxel_size+ 1
+        nx = int ((x_max-x_min) // self.voxel_size)+ 1
+        ny = int ((y_max-y_min) // self.voxel_size)+ 1
+        nz = int ((z_max-z_min) // self.voxel_size)+ 1
+
+        origin = np.array([x_min, y_min, z_min])
 
         sc = cl.SpaceCarving([nx, ny, nz], [x_min, y_min, z_min], self.voxel_size)
         for k in self.poses.keys():
@@ -75,6 +78,11 @@ class SpaceCarving(ProcessingBlock):
             tvec = self.poses[k]['tvec']
             sc.process_view(intrinsics, rot, tvec, mask)
 
-        # self.point_cloud = PointCloud()
-        # self.point_cloud.points = open3d.Vector3dVector(
-        #     sc.centers()[sc.labels() == 2])
+        labels = sc.get_labels()
+        idx = np.argwhere(labels == 2)
+        print("sum = %i"%(labels==2).sum())
+        pts = pcd.index2point(idx, origin, self.voxel_size)
+
+        self.point_cloud = PointCloud()
+        self.point_cloud.points = open3d.Vector3dVector(pts)
+        open3d.visualization.draw_geometries([self.point_cloud])
