@@ -92,14 +92,15 @@ setup(
     description='A plant scanner',
     long_description='',
     # add extension module
-    ext_modules=[CMakeExtension('lettucescan.cgal'),
-                 CMakeExtension('lettucescan.cl')],
+    ext_modules=[CMakeExtension('lettucescan.cgal')],
+                 # CMakeExtension('lettucescan.cl')],
     # add custom build_ext command
     cmdclass=dict(build_ext=CMakeBuild),
     zip_safe=False,
     install_requires=[
         'numpy',
         'scikit-image==0.14',
-    ]
+    ],
+    include_package_data=True
 )
 

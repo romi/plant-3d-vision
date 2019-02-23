@@ -1,8 +1,16 @@
 import numpy as np
 import open3d
-from open3d.geometry import PointCloud
 from scipy.ndimage.morphology import distance_transform_edt
 from scipy.ndimage.filters import gaussian_filter
+from open3d.geometry import read_point_cloud, write_point_cloud, write_triangle_mesh, read_triangle_mesh
+
+
+def index2point(indexes, origin, width):
+    return indexes/width + origin[np.newaxis, :]
+
+
+def point2index(points, origin, width):
+    return np.array(np.round((points - origin[np.newaxis, :]) / width), dtype=int)
 
 
 def pcd2vol(pcd_points, voxel_width, zero_padding=0):
@@ -15,18 +23,18 @@ def pcd2vol(pcd_points, voxel_width, zero_padding=0):
     :param zero_padding: Space to leave around the volume
     :rtype: 3D numpy array
     """
-    m = np.min(pcd_points, axis=0)
-    pcd_points = pcd_points - m[np.newaxis, :]
-    indices = np.array(np.round(pcd_points / voxel_width), dtype=np.int)
+    origin = np.min(pcd_points, axis=0)
+    indices = point2index(pcd_points, origin, voxel_width)
     shape = indices.max(axis=0)
 
-    A = np.zeros(shape + 2*zero_padding + 1, dtype=np.float)
+    vol = np.zeros(shape + 2*zero_padding + 1, dtype=np.float)
     indices = indices + zero_padding
 
     for i in range(pcd_points.shape[0]):
-        A[indices[i, 0], indices[i, 1], indices[i, 2]] += 1.
+        vol[indices[i, 0], indices[i, 1], indices[i, 2]] += 1.
 
-    return (A, m)
+    return vol, origin
+
 
 def vol2pcd(volume, origin, width, dist_threshold=0, quiet=False):
     """
@@ -50,11 +58,8 @@ def vol2pcd(volume, origin, width, dist_threshold=0, quiet=False):
 
     if not quiet:
         print("number of points = %d" % len(x))
-  
-
     pts = np.zeros((0, 3))
-    normals = np.zeros((0, 3))
-
+    normals = np.zeros((0,3))
     for i in range(len(x)):
         grad = np.array([gx[x[i], y[i], z[i]],
                          gy[x[i], y[i], z[i]],
@@ -63,18 +68,17 @@ def vol2pcd(volume, origin, width, dist_threshold=0, quiet=False):
         if grad_norm > 0:
             grad_normalized = grad / grad_norm
             val = dist[x[i], y[i], z[i]] + dist_threshold - np.sqrt(3)/2
-            pts = np.vstack([pts, width*np.array([x[i] - grad_normalized[0] * val,
-                                                  y[i] - grad_normalized[1] * val,
-                                                  z[i] - grad_normalized[2] * val])])
+            pts = np.vstack([pts, np.array([x[i] - grad_normalized[0] * val,
+                                      y[i] - grad_normalized[1] * val,
+                                      z[i] - grad_normalized[2] * val])])
             normals = np.vstack([normals, -np.array([grad_normalized[0],
                                                      grad_normalized[1],
                                                      grad_normalized[2]])])
 
-    for i in range(3):
-        pts[:, i] = pts[:, i] + origin[i]
-
-    pcd = PointCloud()
+    pts = index2point(pts, origin, width)
+    pcd = open3d.PointCloud()
     pcd.points = open3d.Vector3dVector(pts)
     pcd.normals = open3d.Vector3dVector(normals)
     pcd.normalize_normals()
     return pcd
+

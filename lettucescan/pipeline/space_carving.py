@@ -7,8 +7,8 @@ from open3d.geometry import PointCloud
 from scipy.ndimage import binary_opening, binary_closing
 
 from lettucescan.pipeline.processing_block import ProcessingBlock
-from lettucescan import space_carving
-from lettucescan.util import db_read_point_cloud, db_write_point_cloud
+import lettucescan.cl as cl
+from lettucescan.db import db_read_point_cloud, db_write_point_cloud
 
 
 class SpaceCarving(ProcessingBlock):
@@ -48,7 +48,7 @@ class SpaceCarving(ProcessingBlock):
         self.cl_device = cl_device
 
     def process(self):
-        space_carving.init_opencl(self.cl_platform, self.cl_device)
+        # space_carving.init_opencl(self.cl_platform, self.cl_device)
 
         width = self.camera['width']
         height = self.camera['height']
@@ -63,8 +63,11 @@ class SpaceCarving(ProcessingBlock):
         widths = [x_max - x_min, y_max - y_min, z_max - z_min]
 
 
-        sc = space_carving.SpaceCarving(
-            center, widths, self.voxel_size, width, height)
+        nx = (x_max-x_min) // self.voxel_size+ 1
+        ny = (y_max-y_min) // self.voxel_size+ 1
+        nz = (z_max-z_min) // self.voxel_size+ 1
+
+        sc = cl.SpaceCarving([nx, ny, nz], [x_min, y_min, z_min], self.voxel_size)
         for k in self.poses.keys():
             mask_id = os.path.splitext(self.poses[k]['name'])[0]
             mask = self.masks[mask_id]
@@ -72,6 +75,6 @@ class SpaceCarving(ProcessingBlock):
             tvec = self.poses[k]['tvec']
             sc.process_view(intrinsics, rot, tvec, mask)
 
-        self.point_cloud = PointCloud()
-        self.point_cloud.points = open3d.Vector3dVector(
-            sc.centers()[sc.labels() == 2])
+        # self.point_cloud = PointCloud()
+        # self.point_cloud.points = open3d.Vector3dVector(
+        #     sc.centers()[sc.labels() == 2])
