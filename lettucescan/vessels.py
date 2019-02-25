@@ -5,11 +5,12 @@ from lettucescan.pcd import *
 from open3d.geometry import *
 from skimage.feature import hessian_matrix, hessian_matrix_eigvals
 from scipy.special import betainc
+from lettucescan.cl import *
 
 model = "Isotropic3"
 FileHFM_executable = "FileHFM_"+model
 FileHFM_binary_dir = "/home/twintz/.local/bin"
-eps = 1
+eps = 1e-3
 
 
 def get_roots(pts, tol=0, axis=2, inverted=True):
@@ -23,30 +24,22 @@ def get_roots(pts, tol=0, axis=2, inverted=True):
 
 
 def hessian_eigvals_abs_sorted(volume):
+    N = volume.ndim
     H = hessian_matrix(volume)
     L = hessian_matrix_eigvals(H)
 
     sorting = np.argsort(np.abs(L), axis=0)
 
-    L1 = np.zeros_like(L[0])
-    L1[sorting[0, :] == 0] = L[0, sorting[0, :] == 0]
-    L1[sorting[0, :] == 1] = L[1, sorting[0, :] == 1]
-    L1[sorting[0, :] == 2] = L[2, sorting[0, :] == 2]
-
-    L2 = np.zeros_like(L[0])
-    L2[sorting[1, :] == 0] = L[0, sorting[1, :] == 0]
-    L2[sorting[1, :] == 1] = L[1, sorting[1, :] == 1]
-    L2[sorting[1, :] == 2] = L[2, sorting[1, :] == 2]
-
-    L3 = np.zeros_like(L[0])
-    L3[sorting[2, :] == 0] = L[0, sorting[2, :] == 0]
-    L3[sorting[2, :] == 1] = L[1, sorting[2, :] == 1]
-    L3[sorting[2, :] == 2] = L[2, sorting[2, :] == 2]
-
-    return L1, L2, L3
+    res = []
+    for i in range(N):
+        newL = np.zeros_like(L[0])
+        for j in range(N):
+            newL[sorting[i, :] == j] = L[j, sorting[i, :] == j]
+        res.append(newL)
+    return res
 
 
-def vesselness_filter(volume, scale):
+def vesselness_3D(volume, scale):
     volume = gaussian(volume, scale)
     L1, L2, L3 = hessian_eigvals_abs_sorted(volume)
     S = np.sqrt(L1**2 + L2**2 + L3**2)
@@ -58,6 +51,14 @@ def vesselness_filter(volume, scale):
     res = res + 0.2
     return res
 
+def vesselness_2D(image, scale):
+    image = image.astype(float)
+    image = gaussian(image, scale)
+    L1,L2 = hessian_eigvals_abs_sorted(image)
+    res = (1 - betainc(4, 4, np.abs(L1)/(np.abs(L2) + eps)))
+    res = np.abs(L2)/np.abs(L2).max()*np.exp(np.abs(L1)/(np.abs(L2) + eps))
+    return res
+
 
 def hfm_compute_flow(speed, seeds, origin, voxel_size):
     input = {
@@ -66,7 +67,7 @@ def hfm_compute_flow(speed, seeds, origin, voxel_size):
         "model": model,
         "dims": np.array(speed.shape),
         "gridScale": voxel_size,
-        "origin" : origin,
+        "origin": origin,
         "seeds": seeds,
         "speed": speed,
         "exportValues": 1,
@@ -85,5 +86,16 @@ if __name__ == "__main__":
     pts = np.asarray(pcd.points)
     voxel_size = 1.0
     volume, origin = pcd2vol(pts, voxel_size)
+    maxval = np.max(pts, axis=0)
     seeds = get_roots(pts, 2*voxel_size)
-    speed = vesselness_filter(volume, 1)
+    speed = vesselness_3D(volume, 1)
+    values, flow = hfm_compute_flow(speed, seeds, origin, voxel_size)
+
+    x = Geodesics()
+
+    N_geodesics = 100000
+    tips = origin[np.newaxis, :] + np.random.rand(N_geodesics, 3) * (
+        maxval - origin)[np.newaxis, :]
+    votes = x.compute_geodesics(values, origin, voxel_size, flow, tips, 10000, 0.25)
+
+    tipsidx = point2index(tips, origin, voxel_size) 
