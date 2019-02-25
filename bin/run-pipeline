@@ -58,8 +58,6 @@ if __name__ == "__main__":
     scan = db.get_scan(scan)
 
     for i,b in enumerate(pipeline['blocks']):
-        if i < 2:
-            continue
         print("Starting task %s (%i/%i)"%(b['id'], i+1, len(pipeline['blocks'])))
         module = importlib.import_module(b['module'])
         block = eval('module.%s'%b['class'])(**b["args"])

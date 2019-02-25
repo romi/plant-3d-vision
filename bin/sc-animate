@@ -85,7 +85,7 @@ origin = np.array([x_min, y_min, z_min])
 
 sc = cl.SpaceCarving([nx, ny, nz], [x_min, y_min, z_min], voxel_size)
 pcd = PointCloud()
-pcd.points = index2point(np.argwhere(sc.get_labels() > -1))
+pcd.points = open3d.Vector3dVector(index2point(np.argwhere(sc.get_labels()!=-1), origin, voxel_size))
 i = 0
 def callback(vis):
     global i
