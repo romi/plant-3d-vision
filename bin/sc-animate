@@ -84,15 +84,12 @@ nz = int ((z_max-z_min) // voxel_size)+ 1
 origin = np.array([x_min, y_min, z_min])
 
 sc = cl.SpaceCarving([nx, ny, nz], [x_min, y_min, z_min], voxel_size)
-vis = Visualizer()
-vis.create_window()
 pcd = PointCloud()
-vis.add_geometry(pcd)
-
+pcd.points = index2point(np.argwhere(sc.get_labels() > -1))
 i = 0
 def callback(vis):
     global i
-    k = list(masks.keys())[i]
+    k = list(poses.keys())[i]
     mask_id = os.path.splitext(poses[k]['name'])[0]
     mask = masks[mask_id]
     rot = sum(poses[k]['rotmat'], [])
