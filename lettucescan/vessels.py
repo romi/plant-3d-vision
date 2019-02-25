@@ -48,7 +48,7 @@ def vesselness_3D(volume, scale):
     res[np.isnan(res)] = 0
 
     res = res / res.max()
-    res = res + 0.2
+    res = res + 0.01
     return res
 
 def vesselness_2D(image, scale):
