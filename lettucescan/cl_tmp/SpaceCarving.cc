@@ -4,11 +4,9 @@
 #include <iostream>
 #include <stdexcept>
 
-namespace space_carving {
-cl::Context context;
-cl::CommandQueue queue;
-std::vector<cl::Device> devices;
-cl::Kernel check_kernel;
+#include "cl.h"
+
+namespace romi {
 
 std::string kernel_check_source = {R"CLC(
 __kernel void check(__read_only image2d_t mask,
@@ -67,77 +65,28 @@ if (read_imageui(mask, samplerA, image_coord).x == 0) {
 }
 )CLC"};
 
-bool cl_is_init = false;
-
-
-void init_opencl(int platform_id, int device_id) {
-    std::vector<cl::Platform> platforms;
-    // Init OpenCL
-    try {
-        cl::Platform::get(&platforms);
-        platforms[platform_id].getDevices(CL_DEVICE_TYPE_GPU |
-                                              CL_DEVICE_TYPE_CPU,
-                                          &devices); // Select the platform.
-        context = cl::Context(devices);
-        queue = cl::CommandQueue(context, devices[device_id]);
-    } catch (cl::Error err) {
-        std::cout << "Error initizalizing OpenCL devices: " << err.what() << "("
-                  << err.err() << ")" << std::endl;
-        throw err;
-    } // catch
-    build_kernels();
-    cl_is_init = true;
-}
-
-void build_kernels() {
-    cl::Program::Sources source(1,
-                                std::make_pair(kernel_check_source.c_str(),
-                                               kernel_check_source.length()));
-    cl::Program program(context, source);
-    try {
-        program.build(devices);
-        check_kernel = cl::Kernel(program, "check");
-    } catch (cl::Error err) {
-        if (err.err() == CL_BUILD_PROGRAM_FAILURE) {
-            for (cl::Device dev : devices) {
-                // Check the build status
-                cl_build_status status =
-                    program.getBuildInfo<CL_PROGRAM_BUILD_STATUS>(dev);
-                if (status != CL_BUILD_ERROR)
-                    continue;
-
-                // Get the build log
-                std::string name = dev.getInfo<CL_DEVICE_NAME>();
-                std::string buildlog =
-                    program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(dev);
-                std::cerr << "Build log for " << name << ":" << std::endl
-                          << buildlog << std::endl;
-            }
-        }
-        std::cout << "Error: " << err.what() << "(" << err.err() << ")"
-                  << std::endl;
-        throw err;
-    } // catch
-}
 SpaceCarving::SpaceCarving(const Vec3f &center, const Vec3f &width,
                            float voxel_size, size_t mask_width,
                            size_t mask_height)
     : width(mask_width), height(mask_height), voxel_size(voxel_size) {
+
+    build_kernel(kernel_check_source, "check", kernel);
+
     int half_n_subdiv_x = (int)(0.5f * width[0] / voxel_size);
     int half_n_subdiv_y = (int)(0.5f * width[1] / voxel_size);
     int half_n_subdiv_z = (int)(0.5f * width[2] / voxel_size);
 
     n_voxels = (2 * half_n_subdiv_x + 1) * (2 * half_n_subdiv_y + 1) *
-                   (2 * half_n_subdiv_z + 1);
+               (2 * half_n_subdiv_z + 1);
 
-    centers = std::vector<float>(3*n_voxels);
+    centers = std::vector<float>(3 * n_voxels);
     size_t l = 0;
     for (int i = -half_n_subdiv_x; i <= half_n_subdiv_x; i++) {
         for (int j = -half_n_subdiv_y; j <= half_n_subdiv_y; j++) {
             for (int k = -half_n_subdiv_z; k <= half_n_subdiv_z; k++) {
                 centers[l] = center[0] + i * voxel_size;
-                centers[l+1] = center[1] + j * voxel_size;
-                centers[l+2] = center[2] + k * voxel_size;
+                centers[l + 1] = center[1] + j * voxel_size;
+                centers[l + 2] = center[2] + k * voxel_size;
                 l += 3;
             }
         }
@@ -145,11 +94,6 @@ SpaceCarving::SpaceCarving(const Vec3f &center, const Vec3f &width,
 
     labels = std::vector<uint8_t>(n_voxels);
     std::fill(labels.begin(), labels.end(), 0);
-
-    if (!cl_is_init)
-        std::runtime_error("Init OpenCL device first by calling "
-                           "init_opencl(platform_id, device_id)");
-
     init_cl_buffers();
 }
 
@@ -194,35 +138,34 @@ void SpaceCarving::reset_labels() {
 
 void SpaceCarving::process_view(const Vec4f &intrinsics, const Mat3f &rot,
                                 const Vec3f &tvec, const uint8_t *mask_pixels) {
-    try{
-    queue.enqueueWriteBuffer(intrinsics_device, CL_TRUE, 0, 4 * sizeof(float),
-                             &intrinsics.at(0));
-    queue.enqueueWriteBuffer(rot_device, CL_TRUE, 0, 9 * sizeof(float),
-                             &rot.at(0));
-    queue.enqueueWriteBuffer(tvec_device, CL_TRUE, 0, 3 * sizeof(float),
-                             &tvec.at(0));
-    cl::size_t<3> origin;
-    origin[0] = 0;
-    origin[1] = 0;
-    origin[2] = 0;
-    cl::size_t<3> region;
-    region[0] = width;
-    region[1] = height;
-    region[2] = 1;
+    try {
+        queue.enqueueWriteBuffer(intrinsics_device, CL_TRUE, 0,
+                                 4 * sizeof(float), &intrinsics.at(0));
+        queue.enqueueWriteBuffer(rot_device, CL_TRUE, 0, 9 * sizeof(float),
+                                 &rot.at(0));
+        queue.enqueueWriteBuffer(tvec_device, CL_TRUE, 0, 3 * sizeof(float),
+                                 &tvec.at(0));
+        cl::size_t<3> origin;
+        origin[0] = 0;
+        origin[1] = 0;
+        origin[2] = 0;
+        cl::size_t<3> region;
+        region[0] = width;
+        region[1] = height;
+        region[2] = 1;
 
-    queue.enqueueWriteImage(mask_device, CL_TRUE, origin, region, width, 0,
-                            (void*) &mask_pixels[0]);
+        queue.enqueueWriteImage(mask_device, CL_TRUE, origin, region, width, 0,
+                                (void *)&mask_pixels[0]);
 
-    check_kernel.setArg(0, mask_device);
-    check_kernel.setArg(1, labels_device);
-    check_kernel.setArg(2, centers_device);
-    check_kernel.setArg(3, intrinsics_device);
-    check_kernel.setArg(4, rot_device);
-    check_kernel.setArg(5, tvec_device);
-    queue.enqueueNDRangeKernel(check_kernel, cl::NullRange,
-                               cl::NDRange(n_voxels));
-    }
-    catch (cl::Error err) {
+        kernel.setArg(0, mask_device);
+        kernel.setArg(1, labels_device);
+        kernel.setArg(2, centers_device);
+        kernel.setArg(3, intrinsics_device);
+        kernel.setArg(4, rot_device);
+        kernel.setArg(5, tvec_device);
+        queue.enqueueNDRangeKernel(kernel, cl::NullRange,
+                                   cl::NDRange(n_voxels));
+    } catch (cl::Error err) {
         std::cout << "Error: " << err.what() << "(" << err.err() << ")"
                   << std::endl;
         throw err;
@@ -230,4 +173,4 @@ void SpaceCarving::process_view(const Vec4f &intrinsics, const Mat3f &rot,
     sync_to_host();
 }
 
-} // namespace space_carving
+} // namespace romi

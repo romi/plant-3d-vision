@@ -10,8 +10,9 @@ from setuptools import setup, Extension, find_packages
 from setuptools.command.build_ext import build_ext
 
 import lettucescan
-import lettucescan.geometry
-import lettucescan.geometry.util
+# import lettucescan.geometry
+# import lettucescan.geometry.util
+
 
 class CMakeExtension(Extension):
     def __init__(self, name):
@@ -73,6 +74,14 @@ class CMakeBuild(build_ext):
         subprocess.check_call(['cmake', '--build', '.'] + build_args,
                               cwd=tempdir)
         print()  # Add an empty line for cleaner output
+
+try:
+    import open3d
+    from open3d.geometry import read_point_cloud
+
+except:
+    raise Exception("Please install Open3D (https://www.open3d.org) v0.5")
+
 setup(
     name='lettucescan',
     version='v0.4',
@@ -83,11 +92,15 @@ setup(
     description='A plant scanner',
     long_description='',
     # add extension module
-    ext_modules=[CMakeExtension('lettucescan.geometry.hough'),
-                 CMakeExtension('lettucescan.geometry.cgal'),
-                 CMakeExtension('lettucescan.space_carving')],
+    ext_modules=[CMakeExtension('lettucescan.cgal')],
+                 # CMakeExtension('lettucescan.cl')],
     # add custom build_ext command
     cmdclass=dict(build_ext=CMakeBuild),
     zip_safe=False,
+    install_requires=[
+        'numpy',
+        'scikit-image==0.14',
+    ],
+    include_package_data=True
 )
 

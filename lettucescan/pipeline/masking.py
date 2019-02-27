@@ -2,6 +2,7 @@ import numpy as np
 from scipy.ndimage import binary_opening, binary_closing, binary_dilation
 
 from lettucescan.pipeline.processing_block import ProcessingBlock
+from lettucescan.vessels import vesselness_2D
 
 
 eps = 1e-9
@@ -76,6 +77,15 @@ class LinearMasking(Masking):
         def f(x):
             img = (coefs[0] * x[:, :, 0] + coefs[1] * x[:, :, 1] +
                           coefs[2] * x[:, :, 2]) > coefs[3]
+            for i in range(dilation):
+                img = binary_dilation(img)
+            return img
+        super().__init__(f)
+
+class VesselMasking(Masking):
+    def __init__(self, threshold, scale, dilation=0):
+        def f(x):
+            img = vesselness_2D(x.astype(float).sum(2), scale) > threshold
             for i in range(dilation):
                 img = binary_dilation(img)
             return img

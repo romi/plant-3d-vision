@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+import lettucethink.fsdb as db
+from lettucescan.pipeline import space_carving
+from imageio import imsave
+import json
+from lettucescan import cl
+from lettucescan.pcd import *
+from lettucescan.db import *
+import sys
+import os
+from open3d.visualization import Visualizer
+import open3d
+from open3d.geometry import PointCloud
+
+def pcd_save_image(pcd, fname):
+    # The following code achieves the same effect as:
+    # draw_geometries([pcd])
+    vis.update_geometry()
+    vis.update_renderer()
+    ctr = vis.get_view_control()
+    ctr.rotate(500.0, 0.0)
+    # vis.run()
+    img = vis.capture_depth_float_buffer(False)
+    imsave(fname, img)
+    vis.destroy_window()
+
+sys.path.append("..")
+datab = db.DB(os.path.join(os.path.dirname(__file__), '../data/'))
+scan = datab.get_scan("2019-02-01_11-16-35")
+
+endpoints = {
+    'sparse' : 'colmap/sparse_cropped',
+    'pose' : 'colmap/images',
+    'masks' : 'masks',
+    'images' : 'undist'
+}
+
+
+sparse_fileset_id, sparse_file_id = endpoints['sparse'].split('/')
+sparse_fileset = scan.get_fileset(sparse_fileset_id)
+sparse_file = sparse_fileset.get_file(sparse_file_id)
+sparse = db_read_point_cloud(sparse_file)
+
+fileset_sparse = scan.get_fileset
+fileset_masks = scan.get_fileset(endpoints['masks'])
+fileset_images = scan.get_fileset(endpoints['images'])
+
+pose_fileset_id, pose_file_id = endpoints['pose'].split('/')
+pose_file = scan.get_fileset(pose_fileset_id).get_file(pose_file_id)
+
+poses = json.loads(pose_file.read_text())
+
+scanner_metadata = scan.get_metadata('scanner')
+camera = scanner_metadata['camera_model']
+
+masks = {}
+for f in fileset_masks.get_files():
+    mask = f.read_image()
+    masks[f.id] = mask
+
+images = {}
+for f in fileset_images.get_files():
+    mask = f.read_image()
+    images[f.id] = mask
+
+width = camera['width']
+height = camera['height']
+intrinsics = camera['params'][0:4]
+
+points = np.asarray(sparse.points)
+
+x_min, y_min, z_min = points.min(axis=0)
+x_max, y_max, z_max = points.max(axis=0)
+
+center = [(x_max + x_min)/2, (y_max + y_min)/2, (z_max + z_min)/2]
+widths = [x_max - x_min, y_max - y_min, z_max - z_min]
+
+voxel_size = 1
+
+nx = int ((x_max-x_min) // voxel_size)+ 1
+ny = int ((y_max-y_min) // voxel_size)+ 1
+nz = int ((z_max-z_min) // voxel_size)+ 1
+
+origin = np.array([x_min, y_min, z_min])
+
+sc = cl.SpaceCarving([nx, ny, nz], [x_min, y_min, z_min], voxel_size)
+pcd = PointCloud()
+pcd.points = open3d.Vector3dVector(index2point(np.argwhere(sc.get_labels()!=-1), origin, voxel_size))
+i = 0
+def callback(vis):
+    global i
+    k = list(poses.keys())[i]
+    mask_id = os.path.splitext(poses[k]['name'])[0]
+    mask = masks[mask_id]
+    rot = sum(poses[k]['rotmat'], [])
+    tvec = poses[k]['tvec']
+    sc.process_view(intrinsics, rot, tvec, mask)
+    labels = sc.get_labels()
+    idx = np.argwhere(labels == 2)
+    print("sum = %i"%(labels==2).sum())
+    pts = index2point(idx, origin, voxel_size)
+    pcd.points = open3d.Vector3dVector(pts)
+    imsave("animation/mask%i.png"%i, mask)
+    imsave("animation/rgb%i.png"%i, images[mask_id])
+    vis.update_geometry()
+    ctr = vis.get_view_control()
+    ctr.rotate(10.0, 0.0)
+    x = vis.capture_depth_float_buffer(False)
+    imsave("animation/depth%i.png"%i, x)
+    i += 1
+
+open3d.visualization.draw_geometries_with_animation_callback([pcd], callback)
+
