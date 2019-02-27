@@ -161,10 +161,10 @@ def compute_angles_and_internodes(points, lines):
     """
     Get angle and internodes from graph
     """
-    G = build_graph(self.points, self.lines)
+    G = build_graph(points, lines)
     # Get the root node
     # In the scanner, z increasing means down
-    root_node = np.argmax(self.points[:, 2])
+    root_node = np.argmax(points[:, 2])
 
     # Get the main stem and node locations
     main_stem, nodes = get_main_stem_and_nodes(G, root_node)
@@ -176,7 +176,7 @@ def compute_angles_and_internodes(points, lines):
     fruits = compute_fruits(T, main_stem, nodes)
 
     # Fit a plane to each fruit
-    plane_vectors = fit_fruits(self.points, main_stem, fruits, nodes)
+    plane_vectors = fit_fruits(points, main_stem, fruits, nodes)
 
     angles = np.zeros(len(plane_vectors) - 1)
     internodes = np.zeros(len(plane_vectors) - 1)

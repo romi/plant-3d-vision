@@ -5,14 +5,15 @@ import cv2
 from imageio import imwrite
 from scipy.ndimage import binary_dilation
 import open3d
-from open3d.geometry import PointCloud
+from open3d.geometry import PointCloud, TriangleMesh
 
 from romiscan.plantseg import *
 from romiscan.colmap import *
 from romiscan.db import *
 from romiscan.pcd import *
 from romiscan.masking import *
-import romiscan.cl as cl
+from romiscan import cgal
+from romiscan import cl
 
 
 class ProcessingBlock(ABC):
