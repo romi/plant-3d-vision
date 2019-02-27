@@ -29,13 +29,19 @@ if __name__ == "__main__":
         type=int,
         help ="skip the first s tasks")
 
+    parser.add_option("-p", "--pipeline",
+        dest="pipeline",
+        default="",
+        type=str,
+        help ="skip the first s tasks")
+
     (options, args) = parser.parse_args()
 
     if '-n' in sys.argv:
         i = find('-n')
 
-    if len(args) != 2:
-        raise Exception('Wrong number of arguments. Usage: ')
+    if len(args) != 1:
+        raise Exception('Wrong number of arguments. Type %prog --help for more.')
 
     scan = args[0]
     scan = scan.split('/')
@@ -44,18 +50,29 @@ if __name__ == "__main__":
     print('DB location = %s'%db)
     print('scan = %s'%scan)
 
+    db = fsdb.DB(db)
+    db.connect()
 
-    pipeline = json.load(open(args[1]))
+    scan = db.get_scan(scan)
+
+    x = scan.get_fileset("pipeline", create=True)
+
+    if options.pipeline:
+        assert(os.path.splitext(options.pipeline)[-1] == ".json")
+        f = x.get_file("pipeline", create=True)
+        f.import_file(options.pipeline)
+
+    f = x.get_file("pipeline", create=False)
+    if f is None:
+        raise Exception('No pipeline provided.')
+
+    pipeline = json.loads(f.read_text())
     tasks = []
 
     remaining_tasks = [ b['id'] for b in pipeline['blocks'] ]
     current_tasks = {}
     finished_tasks = []
 
-    db = fsdb.DB(db)
-    db.connect()
-
-    scan = db.get_scan(scan)
 
     for i,b in enumerate(pipeline['blocks']):
         if i < options.skip:
