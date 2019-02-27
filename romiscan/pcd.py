@@ -5,26 +5,26 @@ from scipy.ndimage.filters import gaussian_filter
 from open3d.geometry import read_point_cloud, write_point_cloud, write_triangle_mesh, read_triangle_mesh
 
 
-def index2point(indexes, origin, width):
-    return indexes/width + origin[np.newaxis, :]
+def index2point(indexes, origin, voxel_size):
+    return indexes/voxel_size + origin[np.newaxis, :]
 
 
-def point2index(points, origin, width):
-    return np.array(np.round((points - origin[np.newaxis, :]) / width), dtype=int)
+def point2index(points, origin, voxel_size):
+    return np.array(np.round((points - origin[np.newaxis, :]) / voxel_size), dtype=int)
 
 
-def pcd2vol(pcd_points, voxel_width, zero_padding=0):
+def pcd2vol(pcd_points, voxel_voxel_size, zero_padding=0):
     """
     Voxelize a point cloud. Every voxel value is equal to the number
     of points in the corresponding cube.
 
     :param pcd_points: Nx3 array of the 3D points
-    :param voxel_width: Width of voxels (float)
+    :param voxel_voxel_size: Width of voxels (float)
     :param zero_padding: Space to leave around the volume
     :rtype: 3D numpy array
     """
     origin = np.min(pcd_points, axis=0)
-    indices = point2index(pcd_points, origin, voxel_width)
+    indices = point2index(pcd_points, origin, voxel_voxel_size)
     shape = indices.max(axis=0)
 
     vol = np.zeros(shape + 2*zero_padding + 1, dtype=np.float)
@@ -36,11 +36,11 @@ def pcd2vol(pcd_points, voxel_width, zero_padding=0):
     return vol, origin
 
 
-def vol2pcd(volume, origin, width, dist_threshold=0, quiet=False):
+def vol2pcd(volume, origin, voxel_size, dist_threshold=0, quiet=False):
     """
     Converts a binary volume into a point cloud with normals.
     :param volume: NxMxP 3D binary numpy array
-    :param width: voxel width
+    :param voxel_size: voxel size
     :param dist[=0]: distance of the level set on which the points are sampled
     :rtype: open3D point cloud with normals
     """
@@ -75,10 +75,35 @@ def vol2pcd(volume, origin, width, dist_threshold=0, quiet=False):
                                                      grad_normalized[1],
                                                      grad_normalized[2]])])
 
-    pts = index2point(pts, origin, width)
+    pts = index2point(pts, origin, voxel_size)
     pcd = open3d.PointCloud()
     pcd.points = open3d.Vector3dVector(pts)
     pcd.normals = open3d.Vector3dVector(normals)
     pcd.normalize_normals()
     return pcd
 
+def crop_point_cloud(point_cloud, bounding_box):
+    """
+    Crops a point cloud by keeping only points inside bouding box.
+    """
+    x_bounds = bounding_box['x']
+    y_bounds = bounding_box['y']
+    z_bounds = bounding_box['z']
+
+    points = np.asarray(point_cloud.points)
+    valid_index = ((points[:, 0] > x_bounds[0]) * (points[:, 0] < x_bounds[1]) *
+                   (points[:, 1] > y_bounds[0]) * (points[:, 1] < y_bounds[1]) *
+                   (points[:, 2] > z_bounds[0]) * (points[:, 2] < z_bounds[1]))
+
+    points = points[valid_index, :]
+    cropped_point_cloud = open3d.PointCloud()
+    cropped_point_cloud.points = open3d.Vector3dVector(points)
+
+    if point_cloud.has_normals():
+        cropped_point_cloud.normals = open3d.Vector3dVector(
+            np.asarray(point_cloud.normals)[valid_index, :])
+
+    if point_cloud.has_colors():
+        cropped_point_cloud.colors = open3d.Vector3dVector(
+            np.asarray(point_cloud.colors)[valid_index, :])
+    return cropped_point_cloud

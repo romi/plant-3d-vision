@@ -157,10 +157,27 @@ def draw_segmentation(main_stem, fruits, vertices, plane_vectors, axis_length):
     return geometries
 
 
-def compute_angles_and_internodes(plane_vectors):
+def compute_angles_and_internodes(points, lines):
     """
-    Given the plane fit of all fruits, compute angles between successive fruits
+    Get angle and internodes from graph
     """
+    G = build_graph(self.points, self.lines)
+    # Get the root node
+    # In the scanner, z increasing means down
+    root_node = np.argmax(self.points[:, 2])
+
+    # Get the main stem and node locations
+    main_stem, nodes = get_main_stem_and_nodes(G, root_node)
+
+    # Compute the minimum spanning tree
+    T = compute_mst(G, main_stem, nodes)
+
+    # Segment fruits
+    fruits = compute_fruits(T, main_stem, nodes)
+
+    # Fit a plane to each fruit
+    plane_vectors = fit_fruits(self.points, main_stem, fruits, nodes)
+
     angles = np.zeros(len(plane_vectors) - 1)
     internodes = np.zeros(len(plane_vectors) - 1)
     for i in range(1, len(plane_vectors)):
