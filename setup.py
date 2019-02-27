@@ -9,10 +9,8 @@ from distutils.version import LooseVersion
 from setuptools import setup, Extension, find_packages
 from setuptools.command.build_ext import build_ext
 
-import lettucescan
-# import lettucescan.geometry
-# import lettucescan.geometry.util
-
+import shlex
+from subprocess import check_output
 
 class CMakeExtension(Extension):
     def __init__(self, name):
@@ -82,24 +80,23 @@ try:
 except:
     raise Exception("Please install Open3D (https://www.open3d.org) v0.5")
 
+GIT_HEAD_REV = check_output(shlex.split('git rev-parse --short HEAD')).strip()
+
 setup(
-    name='lettucescan',
-    version='v0.4',
+    name='romiscan',
+    version='v0.4dev_' + GIT_HEAD_REV,
     packages=find_packages(),
     scripts=['bin/run-scan'],
     author='Timothée Wintz',
     author_email='timothee@timwin.fr',
     description='A plant scanner',
     long_description='',
-    # add extension module
     ext_modules=[CMakeExtension('lettucescan.cgal')],
-                 # CMakeExtension('lettucescan.cl')],
-    # add custom build_ext command
     cmdclass=dict(build_ext=CMakeBuild),
     zip_safe=False,
     install_requires=[
         'numpy',
-        'scikit-image==0.14',
+        'scikit-image'
     ],
     include_package_data=True
 )
