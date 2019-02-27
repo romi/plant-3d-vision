@@ -1,7 +1,13 @@
+import os
+import subprocess
+
 import numpy as np
 import json
+from open3d.geometry import PointCloud
+import open3d
 
 from romiscan.thirdparty import read_model
+
 
 def colmap_cameras_to_json(cameras):
     res = {}
@@ -93,9 +99,11 @@ def cameras_model_to_opencv(cameras):
         break
     return cameras
 
+
 class ColmapRunner():
-    def __init__(self,compute_dense, all_cli_args, colmap_ws):
+    def __init__(self, matcher, compute_dense, all_cli_args, colmap_ws):
         self.colmap_ws = colmap_ws
+        self.matcher = matcher
         self.compute_dense = compute_dense
         self.all_cli_args = all_cli_args
 
@@ -182,4 +190,22 @@ class ColmapRunner():
         subprocess.run(process, check=True)
 
     def run(self):
+        self.colmap_feature_extractor()
+        self.colmap_matcher()
+        os.makedirs(os.path.join(self.colmap_ws, 'sparse'))
+        self.colmap_mapper()
+        self.colmap_model_aligner()
 
+        # Import sparse model into python and save as json
+        self.cameras = read_model.read_cameras_binary(
+            '%s/sparse/0/cameras.bin' % self.colmap_ws)
+        self.images = read_model.read_images_binary(
+            '%s/sparse/0/images.bin' % self.colmap_ws)
+        self.points = read_model.read_points3d_binary(
+            '%s/sparse/0/points3D.bin' % self.colmap_ws)
+
+        if self.compute_dense:
+            os.makedirs(os.path.join(self.colmap_ws, 'dense'))
+            self.colmap_image_undistorter()
+            self.colmap_patch_match_stereo()
+            self.colmap_stereo_fusion()

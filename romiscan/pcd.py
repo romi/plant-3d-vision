@@ -76,7 +76,7 @@ def vol2pcd(volume, origin, voxel_size, dist_threshold=0, quiet=False):
                                                      grad_normalized[2]])])
 
     pts = index2point(pts, origin, voxel_size)
-    pcd = open3d.PointCloud()
+    pcd = open3d.geometry.PointCloud()
     pcd.points = open3d.Vector3dVector(pts)
     pcd.normals = open3d.Vector3dVector(normals)
     pcd.normalize_normals()
@@ -96,7 +96,7 @@ def crop_point_cloud(point_cloud, bounding_box):
                    (points[:, 2] > z_bounds[0]) * (points[:, 2] < z_bounds[1]))
 
     points = points[valid_index, :]
-    cropped_point_cloud = open3d.PointCloud()
+    cropped_point_cloud = open3d.geometry.PointCloud()
     cropped_point_cloud.points = open3d.Vector3dVector(points)
 
     if point_cloud.has_normals():

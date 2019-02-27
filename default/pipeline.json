@@ -9,7 +9,7 @@
         [
         {
             "id" : "colmap",
-            "module" : "lettucescan.pipeline.colmap",
+            "module" : "romiscan.pipeline",
             "class" : "Colmap",
             "inputs" : "images",
             "outputs" : "colmap",
@@ -38,7 +38,7 @@
         },
         {
             "id" : "undist",
-            "module" : "lettucescan.pipeline.undistort",
+            "module" : "romiscan.pipeline",
             "class" : "Undistort",
             "inputs" : "images",
             "outputs" : "undist",
@@ -47,20 +47,20 @@
         },
         {
             "id" : "crop",
-            "module" : "lettucescan.pipeline.pointcloud",
+            "module" : "romiscan.pipeline",
             "class" : "CropPointCloud",
             "inputs" : "colmap/sparse",
             "outputs" : "colmap/sparse_cropped",
             "args" : { "bounding_box" : {
                 "x" : [200, 600],
                 "y" : [200, 600],
-                "z" : [-100, 260]
+                "z" : [-100, 200]
             }},
             "requires" : ["colmap"]
         },
         {
             "id" : "masking",
-            "module" : "lettucescan.pipeline.masking",
+            "module" : "romiscan.pipeline",
             "class" : "LinearMasking",
             "inputs" : "undist",
             "outputs" : "masks",
@@ -69,7 +69,7 @@
         },
         {
             "id" : "space_carving",
-            "module" : "lettucescan.pipeline.space_carving",
+            "module" : "romiscan.pipeline",
             "class" : "SpaceCarving",
             "inputs" : {
                 "sparse" : "colmap/sparse_cropped",
@@ -78,7 +78,7 @@
             },
             "outputs" : "3d/voxels",
             "args" : {
-                "voxel_size" : 0.5,
+                "voxel_size" : 1.0,
                 "cl_platform" : 0,
                 "cl_device" : 0
             },
@@ -86,7 +86,7 @@
         },
         {
             "id" : "voxel2pointcloud",
-            "module" : "lettucescan.pipeline.pointcloud",
+            "module" : "romiscan.pipeline",
             "class" : "Voxel2PointCloud",
             "inputs" : "3d/voxels",
             "outputs" : "3d/point_cloud",
@@ -97,7 +97,7 @@
         },
         {
             "id" : "pointcloud2mesh",
-            "module" : "lettucescan.pipeline.pointcloud",
+            "module" : "romiscan.pipeline",
             "class" : "DelaunayTriangulation",
             "inputs" : "3d/point_cloud",
             "outputs" : "3d/mesh",
@@ -106,7 +106,7 @@
         },
         {
             "id" : "skeletonize",
-            "module" : "lettucescan.pipeline.pointcloud",
+            "module" : "romiscan.pipeline",
             "class" : "CurveSkeleton",
             "inputs" : "3d/mesh",
             "outputs" : "3d/skeleton",
@@ -115,7 +115,7 @@
         },
         {
             "id" : "angles",
-            "module" : "lettucescan.pipeline.arabidopsis",
+            "module" : "romiscan.pipeline",
             "class" : "AnglesAndInternodes",
             "inputs" : "3d/skeleton",
             "outputs" : "3d/angles",

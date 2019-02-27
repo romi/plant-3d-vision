@@ -3,15 +3,16 @@ import tempfile
 
 import cv2
 from imageio import imwrite
-from lettucethink import ProcessingBlock
 from scipy.ndimage import binary_dilation
 import open3d
+from open3d.geometry import PointCloud
 
 from romiscan.plantseg import *
 from romiscan.colmap import *
 from romiscan.db import *
 from romiscan.pcd import *
 from romiscan.masking import *
+import romiscan.cl as cl
 
 
 class ProcessingBlock(ABC):
@@ -107,23 +108,27 @@ class Colmap(ProcessingBlock):
         f = fileset.get_file('cameras', create=True)
         f.write_text('json', cameras_json)
 
-        if self.compute_dense:
+        if self.colmap_runner.compute_dense:
             f = fs.create_file('dense')
             f.import_file('%s/dense/fused.ply' % self.colmap_ws)
 
     def process(self):
         self.colmap_runner.run()
+        self.points = self.colmap_runner.points
+        self.images = self.colmap_runner.images
+        self.cameras = self.colmap_runner.cameras
 
     def __init__(self, matcher, compute_dense, all_cli_args,
                  colmap_ws=None,
                  save_camera_model=False):
         self.save_camera_model = save_camera_model
+        self.colmap_ws = colmap_ws
 
         if self.colmap_ws is None:
             self.tmpdir = tempfile.TemporaryDirectory()
             self.colmap_ws = self.tmpdir.name
 
-        self.colmap_runner = ColmapRunner(compute_dense, all_cli_args, colmap_ws)
+        self.colmap_runner = ColmapRunner(matcher, compute_dense, all_cli_args, self.colmap_ws)
         os.makedirs(os.path.join(self.colmap_ws, 'images'))
 
 
@@ -343,7 +348,7 @@ class SpaceCarving(ProcessingBlock):
 
         origin = np.array([x_min, y_min, z_min])
 
-        sc = cl.SpaceCarving(
+        sc = cl.Backprojection(
             [nx, ny, nz], [x_min, y_min, z_min], self.voxel_size)
         for k in self.poses.keys():
             mask_id = os.path.splitext(self.poses[k]['name'])[0]
@@ -352,10 +357,10 @@ class SpaceCarving(ProcessingBlock):
             tvec = self.poses[k]['tvec']
             sc.process_view(intrinsics, rot, tvec, mask)
 
-        labels = sc.get_labels()
+        labels = sc.values()
         idx = np.argwhere(labels == 2)
         print("sum = %i" % (labels == 2).sum())
-        pts = pcd.index2point(idx, origin, self.voxel_size)
+        pts = index2point(idx, origin, self.voxel_size)
 
         self.point_cloud = PointCloud()
         self.point_cloud.points = open3d.Vector3dVector(pts)

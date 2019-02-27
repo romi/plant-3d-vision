@@ -80,18 +80,18 @@ try:
 except:
     raise Exception("Please install Open3D (https://www.open3d.org) v0.5")
 
-GIT_HEAD_REV = check_output(shlex.split('git rev-parse --short HEAD')).strip()
+GIT_HEAD_REV = check_output(shlex.split('git rev-parse --short HEAD')).strip().decode()
 
 setup(
     name='romiscan',
-    version='v0.4dev_' + GIT_HEAD_REV,
+    version='0.4.dev0+' + GIT_HEAD_REV,
     packages=find_packages(),
     scripts=['bin/run-scan'],
     author='Timothée Wintz',
     author_email='timothee@timwin.fr',
     description='A plant scanner',
     long_description='',
-    ext_modules=[CMakeExtension('lettucescan.cgal')],
+    ext_modules=[CMakeExtension('romiscan.cgal')],
     cmdclass=dict(build_ext=CMakeBuild),
     zip_safe=False,
     install_requires=[

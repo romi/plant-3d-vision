@@ -10,13 +10,13 @@ queue = cl.CommandQueue(ctx)
 mf = cl.mem_flags
 
 with open(os.path.join(os.path.dirname(__file__), 'kernels/backprojection.c')) as f:
-    space_carving_program = cl.Program(ctx, f.read()).build()
+    backprojection_kernels = cl.Program(ctx, f.read()).build()
 
 with open(os.path.join(os.path.dirname(__file__), 'kernels/geodesics.c')) as f:
     geodesics_program = cl.Program(ctx, f.read()).build()
 
 class Backprojection():
-    def __init__(self, shape, origin, voxel_size, type="space_carving", default_value=0):
+    def __init__(self, shape, origin, voxel_size, type="carving", default_value=0):
         self.shape = shape
         self.origin = origin
         self.voxel_size = voxel_size
@@ -37,22 +37,22 @@ class Backprojection():
         self.values_h = self.default_value * np.ones(self.shape).astype(self.dtype)
 
         self.values_d = cl.Buffer(
-            ocl_ctx, ocl_mf.READ_WRITE | ocl_mf.COPY_HOST_PTR, hostbuf=self.values_h)
+            ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=self.values_h)
 
         self.intrinsics_d = cl.Buffer(
-            ocl_ctx, ocl_mf.READ_ONLY, np.zeros(4).astype(np.float32).nbytes)
+            ctx, mf.READ_ONLY, np.zeros(4).astype(np.float32).nbytes)
         self.rot_d = cl.Buffer(
-            ocl_ctx, ocl_mf.READ_ONLY, np.zeros(9).astype(np.float32).nbytes)
+            ctx, mf.READ_ONLY, np.zeros(9).astype(np.float32).nbytes)
         self.tvec_d = cl.Buffer(
-            ocl_ctx, ocl_mf.READ_ONLY, np.zeros(3).astype(np.float32).nbytes)
+            ctx, mf.READ_ONLY, np.zeros(3).astype(np.float32).nbytes)
 
         self.volinfo_d = cl.Buffer(
-            ocl_ctx, ocl_mf.READ_WRITE | ocl_mf.COPY_HOST_PTR, hostbuf=np.array(
+            ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=np.array(
                 [*self.origin, self.voxel_size], dtype=np.float32)
         )
 
         self.shape_d = cl.Buffer(
-            ocl_ctx, ocl_mf.READ_WRITE | ocl_mf.COPY_HOST_PTR, hostbuf=np.array(
+            ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=np.array(
                 self.shape, dtype=np.int32)
         )
 
@@ -62,19 +62,19 @@ class Backprojection():
         tvec_h = np.ascontiguousarray(tvec).astype(np.float32)
         mask_h = np.ascontiguousarray(mask).astype(self.dtype)
 
-        mask_d = cl.image_from_array(ocl_ctx, mask_h, 1)
+        mask_d = cl.image_from_array(ctx, mask_h, 1)
 
-        cl.enqueue_copy(ocl_queue, self.intrinsics_d, intrinsics_h)
-        cl.enqueue_copy(ocl_queue, self.rot_d, rot_h)
-        cl.enqueue_copy(ocl_queue, self.tvec_d, tvec_h)
+        cl.enqueue_copy(queue, self.intrinsics_d, intrinsics_h)
+        cl.enqueue_copy(queue, self.rot_d, rot_h)
+        cl.enqueue_copy(queue, self.tvec_d, tvec_h)
 
-        self.kernel(ocl_queue, [np.prod(self.shape)], None, mask_d, self.values_d,
+        self.kernel(queue, [np.prod(self.shape)], None, mask_d, self.values_d,
             self.intrinsics_d, self.rot_d,
             self.tvec_d, self.volinfo_d, self.shape_d)
-        ocl_queue.finish()
+        queue.finish()
 
     def values(self):
-        cl.enqueue_copy(ocl_queue, self.values_h, self.values_d)
+        cl.enqueue_copy(queue, self.values_h, self.values_d)
         return self.values_h
 
 
