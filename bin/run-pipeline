@@ -23,11 +23,11 @@ if __name__ == "__main__":
     usage = "usage: %prog [options] db/scan pipeline"
     parser = OptionParser(usage=usage)
 
-    parser.add_option("-p", "--nprocs",
-        dest="nprocs",
-        default=1,
+    parser.add_option("-s", "--skip",
+        dest="skip",
+        default=0,
         type=int,
-        help ="number of workers to use for processing (default = 1)")
+        help ="skip the first s tasks")
 
     (options, args) = parser.parse_args()
 
@@ -58,7 +58,7 @@ if __name__ == "__main__":
     scan = db.get_scan(scan)
 
     for i,b in enumerate(pipeline['blocks']):
-        if i < 2:
+        if i < options.skip:
             continue
         print("Starting task %s (%i/%i)"%(b['id'], i+1, len(pipeline['blocks'])))
         module = importlib.import_module(b['module'])

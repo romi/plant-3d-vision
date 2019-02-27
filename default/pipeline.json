@@ -54,7 +54,7 @@
             "args" : { "bounding_box" : {
                 "x" : [200, 600],
                 "y" : [200, 600],
-                "z" : [-100, 240]
+                "z" : [-100, 260]
             }},
             "requires" : ["colmap"]
         },
@@ -64,7 +64,7 @@
             "class" : "LinearMasking",
             "inputs" : "undist",
             "outputs" : "masks",
-            "args" : { "coefs" : [1.0,0.0,0.0,0.2] , "dilation" : 8},
+            "args" : { "coefs" : [1.0,0.0,0.0,0.3] , "dilation" : 2},
             "requires" : ["undist"]
         },
         {
@@ -78,7 +78,7 @@
             },
             "outputs" : "3d/voxels",
             "args" : {
-                "voxel_size" : 1.0,
+                "voxel_size" : 0.5,
                 "cl_platform" : 0,
                 "cl_device" : 0
             },
