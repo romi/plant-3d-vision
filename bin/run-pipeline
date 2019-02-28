@@ -4,7 +4,6 @@ import sys
 from optparse import OptionParser
 import time
 import importlib
-from multiprocessing import Process
 
 from lettucethink import fsdb
 
@@ -57,57 +56,31 @@ if __name__ == "__main__":
 
     x = scan.get_fileset("pipeline", create=True)
 
-    if options.pipeline:
-        assert(os.path.splitext(options.pipeline)[-1] == ".json")
-        f = x.get_file("pipeline", create=True)
-        f.import_file(options.pipeline)
-
-    f = x.get_file("pipeline", create=False)
-    if f is None:
+    pipeline = scan.get_metadata('target_pipeline')
+    if pipeline is None:
         raise Exception('No pipeline provided.')
 
-    pipeline = json.loads(f.read_text())
+
+    processed_pipeline = scan.get_metadata('processed_pipeline')
+    if processed_pipeline is None:
+        processed_pipeline = []
+
     tasks = []
 
-    remaining_tasks = [ b['id'] for b in pipeline['blocks'] ]
-    current_tasks = {}
-    finished_tasks = []
-
-
-    for i,b in enumerate(pipeline['blocks']):
-        if i < options.skip:
-            continue
-        print("Starting task %s (%i/%i)"%(b['id'], i+1, len(pipeline['blocks'])))
+    skip = True
+    for i,b in enumerate(pipeline):
+        if skip:
+            if len(processed_pipeline) >= i+1 and processed_pipeline[i] == b:
+                continue
+            else:
+                skip = False
+        print("Starting task %s (%i/%i)"%(b['id'], i+1, len(pipeline)))
         module = importlib.import_module(b['module'])
         block = eval('module.%s'%b['class'])(**b["args"])
         process_block(block, scan, b['inputs'], b['outputs'])
         print("done task %s"%b['id'])
-
-    # while True:
-    #     if len(remaining_tasks) == 0 and len(list(current_tasks.keys())) == 0:
-    #         break
-    #     for k in list(current_tasks.keys()):
-    #         # current_tasks[k].join(timeout=0)
-    #         if not current_tasks[k].is_alive():
-    #             exitcode = current_tasks[k].exitcode
-    #             if exitcode != 0:
-    #                 raise Exception("Failed task %s"%k)
-    #             print("Finished task %s"%k)
-    #             finished_tasks.append(k)
-    #             current_tasks.pop(k)
-    #     if len(current_tasks) < options.nprocs:
-    #         for id in remaining_tasks:
-    #             b = find_id(pipeline['blocks'], id)
-    #             if all(x in finished_tasks for x in b['requires']):
-    #                 module = importlib.import_module(b['module'])
-    #                 block = eval('module.%s'%b['class'])(**b["args"])
-    #                 new_task = Process(target=process_block, args=(block, scan, b['inputs'], b['outputs']))
-    #                 new_task.start()
-    #                 remaining_tasks.remove(id)
-    #                 current_tasks[b['id']] = new_task
-    #                 print("Starting task %s"%b['id'])
-    #                 break
-    #     time.sleep(0.1)
-
-
-
+        if len(processed_pipeline) == i:
+            processed_pipeline.append(b)
+        else:
+            processed_pipeline[i] = b
+        scan.set_metadata('processed_pipeline', processed_pipeline)
