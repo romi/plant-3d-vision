@@ -44,8 +44,9 @@ class AnglesAndInternodes(ProcessingBlock):
         fileset_id, file_id = endpoint.split('/')
         fileset = scan.get_fileset(fileset_id, create=True)
         txt = json.dumps({
-            'angles': self.angles.tolist(),
-            'internodes': self.internodes.tolist()
+            'fruit_points': self.fruits,
+            'angles': self.angles,
+            'internodes': self.internodes
         })
 
         f = fileset.get_file(file_id, create=True)
@@ -56,7 +57,7 @@ class AnglesAndInternodes(ProcessingBlock):
         pass
 
     def process(self):
-        self.angles, self.internodes = compute_angles_and_internodes(
+        self.fruits, self.angles, self.internodes = compute_angles_and_internodes(
             self.points, self.lines)
 
 
@@ -129,7 +130,8 @@ class Colmap(ProcessingBlock):
             self.tmpdir = tempfile.TemporaryDirectory()
             self.colmap_ws = self.tmpdir.name
 
-        self.colmap_runner = ColmapRunner(matcher, compute_dense, all_cli_args, self.colmap_ws)
+        self.colmap_runner = ColmapRunner(
+            matcher, compute_dense, all_cli_args, self.colmap_ws)
         os.makedirs(os.path.join(self.colmap_ws, 'images'))
 
 
@@ -180,8 +182,8 @@ class ExcessGreenMasking(Masking):
     def __init__(self, threshold, dilation=0):
         def f(x):
             img = excess_green(x) > threshold
-            if dilation > 0:
-                img = binary_dilation(img, dilation)
+            for i in range(dilation):
+                img = binary_dilation(img)
             return img
         super().__init__(f)
 
@@ -203,6 +205,8 @@ class CropPointCloud(ProcessingBlock):
         fileset = scan.get_fileset(fileset_id)
         point_cloud_file = fileset.get_file(file_id)
         self.point_cloud = db_read_point_cloud(point_cloud_file)
+        if self.bounding_box is None:
+            self.bounding_box = scan.get_metadata('scanner')['workspace']
 
     def write_output(self, scan, endpoint):
         fileset_id, file_id = endpoint.split('/')
@@ -211,9 +215,10 @@ class CropPointCloud(ProcessingBlock):
         db_write_point_cloud(point_cloud_file, self.point_cloud)
 
     def process(self):
-        self.point_cloud = crop_point_cloud(self.point_cloud, self.bounding_box)
+        self.point_cloud = crop_point_cloud(
+            self.point_cloud, self.bounding_box)
 
-    def __init__(self, bounding_box):
+    def __init__(self, bounding_box=None):
         self.bounding_box = bounding_box
 
 
@@ -381,6 +386,7 @@ class Undistort(ProcessingBlock):
         self.images = []
         for f in fileset.get_files():
             data = f.read_image()
+            data = data[:, :, :3]  # discard alpha
             self.images.append({
                 'id': f.id,
                 'data': data,
@@ -413,3 +419,4 @@ class Undistort(ProcessingBlock):
                 'data': undistorted_data,
                 'metadata': img['metadata']
             })
+

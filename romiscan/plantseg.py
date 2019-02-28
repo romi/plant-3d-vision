@@ -197,4 +197,4 @@ def compute_angles_and_internodes(points, lines):
             angle = 2*np.pi - angle
         angles[i-1] = angle
         internodes[i-1] = np.linalg.norm(p2 - p1)
-    return angles, internodes
+    return [points[fruit["nodes"], :].tolist() for fruit in fruits], angles.tolist(), internodes.tolist()
