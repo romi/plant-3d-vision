@@ -1,3 +1,5 @@
+#include "common.h"
+
 __kernel void geodesic(__read_only image3d_t gx,
                     __read_only image3d_t gy,
                     __read_only image3d_t gz,
@@ -63,10 +65,6 @@ __kernel void geodesic(__read_only image3d_t gx,
     int zi = z;
     if(xi >= 0 && xi < nx && yi >= 0 && yi < ny && zi >= 0 && zi < nz) {
         int idx = xi * ny * nz + yi * nz + zi;
-        //votes[3*i] = xi;
-        //votes[3*i+1] = yi;
-        //votes[3*i+2] = z;
-        //votes[4*i+3] = idx;
         atomic_add(&votes[idx], 1);
     }
     return;

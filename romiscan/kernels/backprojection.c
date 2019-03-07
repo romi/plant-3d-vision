@@ -1,13 +1,4 @@
-int3 unravel_index(int idx, __global int *shape) {
-    int nx = shape[0];
-    int ny = shape[1];
-    int nz = shape[2];
-
-    int i = idx / (ny * nz);
-    int j = (idx - i * ny * nz) / nz;
-    int k = idx - i * ny * nz - j * nz;
-    return (int3){i, j, k};
-}
+#include "common.h"
 
 bool backproject_point(float3 pt, __global float *intrinsics,
                        __global float *rot, __global float *tvec,
