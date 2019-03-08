@@ -75,7 +75,7 @@ class CMakeBuild(build_ext):
 
 try:
     import open3d
-    from open3d.geometry import read_point_cloud
+    from open3d.io import read_point_cloud
 
 except:
     raise Exception("Please install Open3D (https://www.open3d.org) v0.5")
