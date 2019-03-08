@@ -1,5 +1,6 @@
 import open3d
-from open3d.geometry import LineSet, read_point_cloud
+from open3d.geometry import LineSet
+from open3d.io import read_point_cloud
 import networkx as nx
 import numpy as np
 import operator
