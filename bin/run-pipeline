@@ -28,11 +28,10 @@ if __name__ == "__main__":
         type=int,
         help ="skip the first s tasks")
 
-    parser.add_option("-p", "--pipeline",
-        dest="pipeline",
-        default="",
-        type=str,
-        help ="skip the first s tasks")
+    parser.add_option("-v", "--viz",
+        dest="viz",
+        default=False,
+        help ="save for visualization")
 
     (options, args) = parser.parse_args()
 
@@ -61,9 +60,23 @@ if __name__ == "__main__":
         raise Exception('No pipeline provided.')
 
 
+
     processed_pipeline = scan.get_metadata('processed_pipeline')
     if processed_pipeline is None:
         processed_pipeline = []
+
+    if options.viz:
+        pipeline.append({
+            'id' : 'zip',
+            'module' : 'romiscan.pipeline',
+            'class' : 'VisualizationFiles',
+            'inputs' : ['images'],
+            'outputs' : 'visualization',
+            'args' : {
+                'lowres_size' : [1616, 1080],
+                'thumbnail_size' : [256, 171]
+            }
+        })
 
     tasks = []
 

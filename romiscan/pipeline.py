@@ -1,11 +1,13 @@
 from abc import ABC, abstractmethod
 import tempfile
+import shutil
 
 import cv2
 from imageio import imwrite
 from scipy.ndimage import binary_dilation
 import open3d
 from open3d.geometry import PointCloud, TriangleMesh
+from skimage.transform import resize
 
 from romiscan.plantseg import *
 from romiscan.colmap import *
@@ -420,3 +422,58 @@ class Undistort(ProcessingBlock):
                 'metadata': img['metadata']
             })
 
+
+class VisualizationFiles(ProcessingBlock):
+    def read_input(self, scan, endpoints):
+        self.basedir = os.path.join(scan.db.basedir, scan.id)
+        self.input_files = []
+        for endpoint in endpoints:
+            fileset = scan.get_fileset(endpoint)
+            for img in fileset.get_files():
+                data = img.read_image()
+                self.input_files.append({
+                    'id' : fileset.id + "_" + img.id,
+                    'fname': fileset.id + "_" + img.filename,
+                    'data': data
+                })
+
+    def write_output(self, scan, endpoint):
+        fileset = scan.get_fileset(endpoint, create=True)
+        for im in self.output_files:
+            ext = os.path.splitext(im['fname'])[-1][1:]
+            f = fileset.get_file(im['id'], create=True)
+            f.write_image(ext, im['data'])
+
+        f = fileset.get_file('scan', create=True)
+        f.import_file(os.path.join(self.tmpdir.name, 'scan.zip'))
+
+    def process(self):
+        self.output_files = []
+        for im in self.input_files:
+            resized = resize(im['data'], self.thumbnail_size[::-1])
+            self.output_files.append(
+                {
+                    'id': 'thumbnail_' + im['id'],
+                    'fname': 'thumbnail_' + im['fname'],
+                    'data': resized
+                }
+            )
+            resized = resize(im['data'], self.lowres_size[::-1])
+            self.output_files.append(
+                {
+                    'id': 'lowres_' + im['id'],
+                    'fname': 'lowres_' + im['fname'],
+                    'data': resized
+                }
+            )
+
+        shutil.make_archive(os.path.join(self.tmpdir.name, "scan"), "zip",
+                            self.basedir)
+
+    def __init__(self, thumbnail_size, lowres_size):
+        self.thumbnail_size = thumbnail_size
+        self.lowres_size = lowres_size
+        self.tmpdir = tempfile.TemporaryDirectory()
+
+def compute_hashes(pipeline):
+    pass

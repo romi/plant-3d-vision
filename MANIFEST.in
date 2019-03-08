@@ -1,1 +1,2 @@
 include romiscan/kernels/*.c
+include romiscan/kernels/*.h
