@@ -3,6 +3,7 @@ import open3d
 from scipy.ndimage.morphology import distance_transform_edt
 from scipy.ndimage.filters import gaussian_filter
 from open3d.io import read_point_cloud, write_point_cloud, write_triangle_mesh, read_triangle_mesh
+from open3d.utility import Vector3dVector
 
 
 def index2point(indexes, origin, voxel_size):
@@ -77,8 +78,8 @@ def vol2pcd(volume, origin, voxel_size, dist_threshold=0, quiet=False):
 
     pts = index2point(pts, origin, voxel_size)
     pcd = open3d.geometry.PointCloud()
-    pcd.points = open3d.Vector3dVector(pts)
-    pcd.normals = open3d.Vector3dVector(normals)
+    pcd.points = Vector3dVector(pts)
+    pcd.normals = Vector3dVector(normals)
     pcd.normalize_normals()
     return pcd
 
@@ -97,13 +98,13 @@ def crop_point_cloud(point_cloud, bounding_box):
 
     points = points[valid_index, :]
     cropped_point_cloud = open3d.geometry.PointCloud()
-    cropped_point_cloud.points = open3d.Vector3dVector(points)
+    cropped_point_cloud.points = Vector3dVector(points)
 
     if point_cloud.has_normals():
-        cropped_point_cloud.normals = open3d.Vector3dVector(
+        cropped_point_cloud.normals = Vector3dVector(
             np.asarray(point_cloud.normals)[valid_index, :])
 
     if point_cloud.has_colors():
-        cropped_point_cloud.colors = open3d.Vector3dVector(
+        cropped_point_cloud.colors = Vector3dVector(
             np.asarray(point_cloud.colors)[valid_index, :])
     return cropped_point_cloud

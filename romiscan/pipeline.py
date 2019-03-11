@@ -7,6 +7,7 @@ from imageio import imwrite
 from scipy.ndimage import binary_dilation
 import open3d
 from open3d.geometry import PointCloud, TriangleMesh
+from open3d.utility import Vector3dVector, Vector3iVector
 from skimage.transform import resize
 
 from romiscan.plantseg import *
@@ -266,8 +267,8 @@ class DelaunayTriangulation(ProcessingBlock):
                                               np.asarray(self.point_cloud.normals))
 
         mesh = TriangleMesh()
-        mesh.vertices = open3d.Vector3dVector(points)
-        mesh.triangles = open3d.Vector3iVector(triangles)
+        mesh.vertices = Vector3dVector(points)
+        mesh.triangles = Vector3iVector(triangles)
 
         self.mesh = mesh
 
@@ -371,7 +372,7 @@ class SpaceCarving(ProcessingBlock):
         pts = index2point(idx, origin, self.voxel_size)
 
         self.point_cloud = PointCloud()
-        self.point_cloud.points = open3d.Vector3dVector(pts)
+        self.point_cloud.points = Vector3dVector(pts)
         open3d.visualization.draw_geometries([self.point_cloud])
 
 

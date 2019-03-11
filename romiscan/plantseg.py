@@ -1,6 +1,7 @@
 import open3d
 from open3d.geometry import LineSet
 from open3d.io import read_point_cloud
+from open3d.utility import Vector3dVector, Vector2iVector
 import networkx as nx
 import numpy as np
 import operator
@@ -128,19 +129,19 @@ def fit_fruits(vertices, main_stem, fruits, nodes, n_nodes_fruit=5, n_nodes_stem
 def draw_segmentation(main_stem, fruits, vertices, plane_vectors, axis_length):
     geometries = []
     lines = LineSet()
-    lines.points = open3d.Vector3dVector(vertices[main_stem, :])
-    lines.lines = open3d.Vector2iVector(np.vstack([[i, i+1]
+    lines.points = Vector3dVector(vertices[main_stem, :])
+    lines.lines = Vector2iVector(np.vstack([[i, i+1]
                                                    for i in range(len(main_stem) - 1)]))
 
     geometries.append(lines)
     for i, fruit in enumerate(fruits):
         lines = LineSet()
-        lines.points = open3d.Vector3dVector(vertices[fruit["nodes"], :])
-        lines.lines = open3d.Vector2iVector(np.vstack([[i, i+1]
+        lines.points = Vector3dVector(vertices[fruit["nodes"], :])
+        lines.lines = Vector2iVector(np.vstack([[i, i+1]
                                                        for i in range(len(fruit["nodes"]) - 1)]))
         c = np.zeros((len(fruit["nodes"]) - 1, 3))
         c[:, :] = np.random.rand(3)[np.newaxis, :]
-        lines.colors = open3d.Vector3dVector(c)
+        lines.colors = Vector3dVector(c)
         geometries.append(lines)
 
         vertices_basis = np.copy(plane_vectors[i])
@@ -149,9 +150,9 @@ def draw_segmentation(main_stem, fruits, vertices, plane_vectors, axis_length):
         vertices_basis[2, :] = vertices_basis[0, :] + \
             vertices_basis[2, :]*axis_length
         basis = LineSet()
-        basis.points = open3d.Vector3dVector(vertices_basis)
-        basis.lines = open3d.Vector2iVector(np.vstack([[0, 1], [0, 2]]))
-        basis.colors = open3d.Vector3dVector(np.vstack([[1, 0, 0], [0, 1, 0]]))
+        basis.points = Vector3dVector(vertices_basis)
+        basis.lines = Vector2iVector(np.vstack([[0, 1], [0, 2]]))
+        basis.colors = Vector3dVector(np.vstack([[1, 0, 0], [0, 1, 0]]))
         geometries.append(basis)
 
     open3d.draw_geometries(geometries)
