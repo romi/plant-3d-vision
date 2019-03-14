@@ -19,7 +19,7 @@ def find_id(l, id):
     return None
 
 if __name__ == "__main__":
-    usage = "usage: %prog [options] db/scan pipeline"
+    usage = "usage: %prog [options] db/scan"
     parser = OptionParser(usage=usage)
 
     parser.add_option("-s", "--skip",

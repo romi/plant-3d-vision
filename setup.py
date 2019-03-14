@@ -4,13 +4,12 @@ import sys
 import sysconfig
 import platform
 import subprocess
+import romiscan
 
 from distutils.version import LooseVersion
 from setuptools import setup, Extension, find_packages
 from setuptools.command.build_ext import build_ext
 
-import shlex
-from subprocess import check_output
 
 class CMakeExtension(Extension):
     def __init__(self, name):
@@ -80,11 +79,10 @@ try:
 except:
     raise Exception("Please install Open3D (https://www.open3d.org) v0.5")
 
-GIT_HEAD_REV = check_output(shlex.split('git rev-parse --short HEAD')).strip().decode()
 
 setup(
     name='romiscan',
-    version='0.4.dev0+' + GIT_HEAD_REV,
+    version=romiscan.__version__,
     packages=find_packages(),
     scripts=['bin/run-scan'],
     author='Timothée Wintz',
