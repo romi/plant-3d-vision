@@ -109,7 +109,10 @@ class ColmapRunner():
         self.all_cli_args = all_cli_args
 
     def colmap_feature_extractor(self):
-        cli_args = self.all_cli_args['feature_extractor']
+        if 'feature_extractor' in self.all_cli_args:
+            cli_args = self.all_cli_args['feature_extractor']
+        else:
+            cli_args = {}
         process = ['colmap', 'feature_extractor',
                    '--database_path', '%s/database.db' % self.colmap_ws,
                    '--image_path', '%s/images' % self.colmap_ws]
@@ -120,7 +123,10 @@ class ColmapRunner():
 
     def colmap_matcher(self):
         if self.matcher == 'exhaustive':
-            cli_args = self.all_cli_args['exhaustive_matcher']
+            if 'exhaustive_matcher' in self.all_cli_args:
+                cli_args = self.all_cli_args['exhaustive_matcher']
+            else:
+                cli_args = {}
             process = ['colmap', 'exhaustive_matcher',
                        '--database_path', '%s/database.db' % self.colmap_ws]
             for x in cli_args.keys():
@@ -128,7 +134,10 @@ class ColmapRunner():
             print(' '.join(process))
             subprocess.run(process, check=True)
         elif self.matcher == 'sequential':
-            cli_args = self.all_cli_args['sequential_matcher']
+            if 'sequential_matcher' in self.all_cli_args:
+                cli_args = self.all_cli_args['sequential_matcher']
+            else:
+                cli_args = {}
             process = ['colmap', 'sequential_matcher',
                        '--database_path', '%s/database.db' % self.colmap_ws]
             for x in cli_args.keys():
@@ -139,7 +148,10 @@ class ColmapRunner():
             raise ColmapError('Unknown matcher type')
 
     def colmap_mapper(self):
-        cli_args = self.all_cli_args['mapper']
+        if 'mapper' in self.all_cli_args:
+            cli_args = self.all_cli_args['mapper']
+        else:
+            cli_args = {}
         process = ['colmap', 'mapper',
                    '--database_path', '%s/database.db' % self.colmap_ws,
                    '--image_path', '%s/images' % self.colmap_ws,
@@ -150,7 +162,10 @@ class ColmapRunner():
         subprocess.run(process, check=True)
 
     def colmap_model_aligner(self):
-        cli_args = self.all_cli_args['model_aligner']
+        if 'model_aligner' in self.all_cli_args:
+            cli_args = self.all_cli_args['model_aligner']
+        else:
+            cli_args = {}
         process = ['colmap', 'model_aligner',
                    '--ref_images_path', '%s/poses.txt' % self.colmap_ws,
                    '--input_path', '%s/sparse/0' % self.colmap_ws,
@@ -161,7 +176,10 @@ class ColmapRunner():
         subprocess.run(process, check=True)
 
     def colmap_image_undistorter(self):
-        cli_args = self.all_cli_args['image_undistorter']
+        if 'image_undistorter' in self.all_cli_args:
+            cli_args = self.all_cli_args['image_undistorter']
+        else:
+            cli_args = {}
         process = ['colmap', 'image_undistorter',
                    '--input_path', '%s/sparse/0' % self.colmap_ws,
                    '--image_path', '%s/images' % self.colmap_ws,
@@ -172,7 +190,10 @@ class ColmapRunner():
         subprocess.run(process, check=True)
 
     def colmap_patch_match_stereo(self):
-        cli_args = self.all_cli_args['patch_match_stereo']
+        if 'patch_match_stereo' in self.all_cli_args:
+            cli_args = self.all_cli_args['patch_match_stereo']
+        else:
+            cli_args = {}
         process = ['colmap', 'patch_match_stereo',
                    '--workspace_path', '%s/dense' % self.colmap_ws]
         for x in cli_args.keys():
@@ -181,7 +202,10 @@ class ColmapRunner():
         subprocess.run(process, check=True)
 
     def colmap_stereo_fusion(self):
-        cli_args = self.all_cli_args['stereo_fusion']
+        if 'stereo_fusion' in self.all_cli_args:
+            cli_args = self.all_cli_args['stereo_fusion']
+        else:
+            cli_args = {}
         process = ['colmap', 'stereo_fusion',
                    '--workspace_path', '%s/dense' % self.colmap_ws,
                    '--output_path', '%s/dense/fused.ply' % self.colmap_ws]

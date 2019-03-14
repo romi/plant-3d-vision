@@ -46,19 +46,44 @@ class FilesetTarget(luigi.Target):
         return self.scan.create_fileset(self.fileset_id)
 
     def exists(self):
-        return self.scan.get_fileset(self.fileset_id) is not None
+        fs = self.scan.get_fileset(self.fileset_id) 
+        return fs is not None and len(fs.get_files()) > 0
 
     def get(self, create=True):
         return self.scan.get_fileset(self.fileset_id, create=create)
 
-
-class AnglesAndInternodes(luigi.Task):
-    def requires(self):
-        return Skeleton()
-
+class RomiTask(luigi.Task):
     def output(self):
         fileset_id = self.task_id
         return FilesetTarget(DatabaseConfig().db_location, DatabaseConfig().scan_id, fileset_id)
+
+    def complete(self):
+        outs = self.output()
+        if isinstance(outs, dict):
+            outs = [outs[k] for k in outs.keys()]
+        elif isinstance(outs, list):
+            pass
+        else:
+            outs = [outs]
+
+        if not all(map(lambda output: output.exists(), outs)):
+            return False
+
+        req = self.requires()
+        if isinstance(req, dict):
+            req = [req[k] for k in req.keys()]
+        elif isinstance(req, list):
+            pass
+        else:
+            req = [req]
+        for task in req:
+            if not task.complete():
+                return False
+        return True
+
+class AnglesAndInternodes(RomiTask):
+    def requires(self):
+        return Skeleton()
 
     def run(self):
         f = self.input().get_file(SKELETON_FILE).read_text()
@@ -79,18 +104,13 @@ class ColmapError(Exception):
         self.message = message
 
 
-class Colmap(luigi.Task):
+class Colmap(RomiTask):
     matcher = luigi.Parameter()
     compute_dense = luigi.BoolParameter()
-    all_cli_args = luigi.DictParameter()
+    cli_args = luigi.DictParameter()
 
     def requires(self):
         return []
-
-    def output(self):
-        fileset_id = self.task_id
-        print(DatabaseConfig().db_location)
-        return FilesetTarget(DatabaseConfig().db_location, DatabaseConfig().scan_id, fileset_id)
 
     def run(self):
         input_fileset = FilesetTarget(
@@ -99,7 +119,7 @@ class Colmap(luigi.Task):
         with tempfile.TemporaryDirectory() as colmap_ws:
 
             colmap_runner = ColmapRunner(
-                self.matcher, self.compute_dense, self.all_cli_args, colmap_ws)
+                self.matcher, self.compute_dense, self.cli_args, colmap_ws)
 
             os.makedirs(os.path.join(colmap_ws, 'images'))
 
@@ -154,21 +174,18 @@ class Colmap(luigi.Task):
                 db_write_point_cloud(f, pcd)
 
 
-class Masking(luigi.Task):
+class Masking(RomiTask):
     type = luigi.Parameter()
-    masking_params = luigi.ListParameter()
+    params = luigi.DictParameter()
 
     def requires(self):
         return Undistort()
 
-    def output(self):
-        fileset_id = self.task_id
-        return FilesetTarget(DatabaseConfig().db_location, DatabaseConfig().scan_id, fileset_id)
-
     def run(self):
-        if type == "linear":
-            coefs = self.masking_params["coefs"]
-            dilation = self.masking_params["dilation"]
+        if self.type == "linear":
+            coefs = self.params["coefs"]
+            dilation = self.params["dilation"]
+            print("coefs = %s"%str(coefs))
 
             def f(x):
                 img = (coefs[0] * x[:, :, 0] + coefs[1] * x[:, :, 1] +
@@ -176,11 +193,12 @@ class Masking(luigi.Task):
                 for i in range(dilation):
                     img = binary_dilation(img)
                 return img
-        elif type == "excess_green":
+        elif self.type == "excess_green":
+            threshold = self.params["threshold"]
             dilation = self.masking_params["dilation"]
 
             def f(x):
-                img = excess_green(x) > self.masking_params["threshold"]
+                img = excess_green(x) > threshold
                 for i in range(dilation):
                     img = binary_dilation(img)
                 return img
@@ -188,23 +206,20 @@ class Masking(luigi.Task):
             raise Exception("Unknown masking type")
 
         output_fileset = self.output().get()
-        for fi in self.input().get_files():
+        for fi in self.input().get().get_files():
             data = fi.read_image()
+            data = np.asarray(data, float)/255
             mask = f(data)
-            newf = output_files.get_file(fi.id, create=True)
-            newf.write_image(mask)
+            mask = 255*np.asarray(mask, dtype=np.uint8)
+            newf = output_fileset.get_file(fi.id, create=True)
+            newf.write_image('png', mask)
 
 
-class SpaceCarving(luigi.Task):
-    voxel_size = luigi.Parameter()
-    use_colmap_camera_model = luigi.BoolParameter()
+class SpaceCarving(RomiTask):
+    voxel_size = luigi.FloatParameter()
 
-    def requires():
+    def requires(self):
         return {'masks': Masking(), 'colmap': Colmap()}
-
-    def output(self):
-        fileset_id = self.task_id
-        return FilesetTarget(DatabaseConfig().db_location, DatabaseConfig().scan_id, fileset_id)
 
     def run(self):
         fileset_masks = self.input()['masks'].get()
@@ -212,7 +227,7 @@ class SpaceCarving(luigi.Task):
         scan = self.input()['colmap'].scan
 
         pcd = db_read_point_cloud(fileset_colmap.get_file('sparse'))
-        poses = fileset_colmap.get_file('images').read_text()
+        poses = json.loads(fileset_colmap.get_file('images').read_text())
 
         try:
             camera = scan.get_metadata()['computed']['camera_model']
@@ -234,9 +249,9 @@ class SpaceCarving(luigi.Task):
         center = [(x_max + x_min)/2, (y_max + y_min)/2, (z_max + z_min)/2]
         widths = [x_max - x_min, y_max - y_min, z_max - z_min]
 
-        nx = int((x_max-x_min) // self.voxel_size) + 1
-        ny = int((y_max-y_min) // self.voxel_size) + 1
-        nz = int((z_max-z_min) // self.voxel_size) + 1
+        nx = int((x_max-x_min) / self.voxel_size) + 1
+        ny = int((y_max-y_min) / self.voxel_size) + 1
+        nz = int((z_max-z_min) / self.voxel_size) + 1
 
         origin = np.array([x_min, y_min, z_min])
 
@@ -245,33 +260,34 @@ class SpaceCarving(luigi.Task):
 
         for fi in fileset_masks.get_files():
             mask = fi.read_image()
-            for k in range(len(poses)):
-                if poses[k]['name'] == fi.filename:
+            key = None
+            for k in poses.keys():
+                if os.path.splitext(poses[k]['name'])[0] == fi.id:
+                    key = k
                     break
-            rot = sum(poses[k]['rotmat'], [])
-            tvec = poses[k]['tvec']
-            sc.process_view(intrinsics, rot, tvec, mask)
+
+            if key is not None:
+                rot = sum(poses[key]['rotmat'], [])
+                tvec = poses[key]['tvec']
+                sc.process_view(intrinsics, rot, tvec, mask)
 
         labels = sc.values()
         idx = np.argwhere(labels == 2)
         pts = index2point(idx, origin, self.voxel_size)
 
         output = PointCloud()
-        output = Vector3dVector(pts)
+        output.points = Vector3dVector(pts)
 
-        ouput_fileset = self.output().get()
+        output_fileset = self.output().get()
         output_file = output_fileset.get_file('voxels', create=True)
         db_write_point_cloud(output_file, output)
 
-class Undistort(luigi.Task):
+class Undistort(RomiTask):
     def requires(self):
-        return [Colmap()]
-
-    def output(self):
-        fileset_id = self.task_id
-        return FilesetTarget(DatabaseConfig().db_location, DatabaseConfig().scan_id, fileset_id)
+        return Colmap()
 
     def run(self):
+        scan = self.output().scan
         try:
             camera = scan.get_metadata()['computed']['camera_model']
         except:
@@ -284,19 +300,21 @@ class Undistort(luigi.Task):
             DatabaseConfig().db_location, DatabaseConfig().scan_id, IMAGES_DIRECTORY).get()
 
         output_fileset = self.output().get()
+        try:
+            for fi in input_fileset.get_files():
+                img = fi.read_image()
+                ext = os.path.splitext(fi.filename)[-1][1:]
+                camera_params = camera['params']
+                mat = np.matrix([[camera_params[0], 0, camera_params[2]],
+                                 [0, camera_params[1], camera_params[3]],
+                                 [0, 0, 1]])
+                undistort_parameters = np.array(camera_params[4:])
+                undistorted_data = cv2.undistort(img, mat, undistort_parameters)
 
-        for fi in input_fileset.get_files():
-            img = fi.read_image()
-            ext = os.path.splitext(fi.filename)[-1][1:]
-            camera_params = self.camera['params']
-            mat = np.matrix([[camera_params[0], 0, camera_params[2]],
-                             [0, camera_params[1], camera_params[3]],
-                             [0, 0, 1]])
-            undistort_parameters = np.array(camera_params[4:])
-            undistorted_data = cv2.undistort(data, mat, undistort_parameters)
-
-            newfi = output_fileset.create_file(fi.id)
-            newfi.write_image(ext, undistorted_data)
+                newfi = output_fileset.create_file(fi.id)
+                newfi.write_image(ext, undistorted_data)
+        except:
+            scan.delete_fileset(output_fileset.id)
 
 
 # class VisualizationFiles(ProcessingBlock):
@@ -351,7 +369,7 @@ class Undistort(luigi.Task):
 #         self.lowres_size = lowres_size
 #         self.tmpdir = tempfile.TemporaryDirectory()
 
-# class CropSparse(luigi.Task()):
+# class CropSparse(RomiTask()):
 #     def requires(self):
 #         return []
 #     def read_input(self, scan, endpoint):
