@@ -185,7 +185,6 @@ class Masking(RomiTask):
         if self.type == "linear":
             coefs = self.params["coefs"]
             dilation = self.params["dilation"]
-            print("coefs = %s"%str(coefs))
 
             def f(x):
                 img = (coefs[0] * x[:, :, 0] + coefs[1] * x[:, :, 1] +
