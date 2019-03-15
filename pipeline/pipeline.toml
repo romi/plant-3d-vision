@@ -1,6 +1,6 @@
 [Colmap]
 matcher = "exhaustive"
-compute_dense = true
+compute_dense = false
 
 [Colmap.cli_args.feature_extractor]
 "--ImageReader.single_camera" = "1"

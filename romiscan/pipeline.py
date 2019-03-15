@@ -21,6 +21,7 @@ from romiscan.masking import *
 from romiscan import cgal
 from romiscan import cl
 from romiscan.vessels import *
+import romiscan.pcd
 
 import luigi
 
@@ -152,8 +153,7 @@ class Colmap(RomiTask):
                 bounding_box = scan.get_metadata()['scanner']['workspace']
             except:
                 bounding_box = None
-            if bounding_box is not None:
-                pcd = crop_point_cloud(pcd, bounding_box)
+            pcd = romiscan.pcd.crop_point_cloud(pcd, bounding_box)
 
             f = output_fileset.get_file('sparse', create=True)
             db_write_point_cloud(f, pcd)
@@ -178,8 +178,7 @@ class Colmap(RomiTask):
 
             if colmap_runner.compute_dense:
                 pcd = read_point_cloud('%s/dense/fused.ply' % colmap_ws)
-                if bounding_box is not None:
-                    pcd = crop_point_cloud(pcd, bounding_box)
+                pcd = romiscan.pcd.crop_point_cloud(pcd, bounding_box)
                 f = fs.create_file('dense')
                 db_write_point_cloud(f, pcd)
 
