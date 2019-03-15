@@ -1,0 +1,7 @@
+{
+    "module" : "romiscan.pipeline",
+    "class" : "CropPointCloud",
+    "inputs" : "colmap/sparse",
+    "outputs" : "colmap/sparse_cropped",
+    "args" : { },
+}

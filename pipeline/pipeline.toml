@@ -1,0 +1,22 @@
+[Colmap]
+matcher = "exhaustive"
+
+[Colmap.cli_args.feature_extractor]
+"--ImageReader.single_camera" = "1"
+
+[Colmap.cli_args.model_aligner]
+"--robust_alignment_max_error" = "10"
+
+[Masking]
+type = "linear"
+
+[Masking.params]
+dilation = 5
+coefs = [0.0, 1.0, 0.0, 0.3]
+
+[SpaceCarving]
+voxel_size = 1.0
+
+[Voxel2PointCloud]
+dist = 1.0
+

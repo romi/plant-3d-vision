@@ -1,0 +1,7 @@
+{
+    "module" : "romiscan.pipeline",
+    "class" : "SpaceCarving",
+    "args" : {
+        "voxel_size" : 1.0,
+    },
+}
