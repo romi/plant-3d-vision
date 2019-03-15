@@ -9,6 +9,7 @@ import open3d
 from open3d.geometry import PointCloud, TriangleMesh
 from open3d.utility import Vector3dVector, Vector3iVector
 from skimage.transform import resize
+from scipy.ndimage.filters import gaussian_filter
 
 from lettucethink.fsdb import DB
 
@@ -19,6 +20,7 @@ from romiscan.pcd import *
 from romiscan.masking import *
 from romiscan import cgal
 from romiscan import cl
+from romiscan.vessels import *
 
 import luigi
 
@@ -146,8 +148,12 @@ class Colmap(RomiTask):
 
             pcd = colmap_points_to_pcd(points)
 
-            bounding_box = scan.get_metadata()['scanner']['workspace']
-            pcd = crop_point_cloud(pcd, bounding_box)
+            try:
+                bounding_box = scan.get_metadata()['scanner']['workspace']
+            except:
+                bounding_box = None
+            if bounding_box is not None:
+                pcd = crop_point_cloud(pcd, bounding_box)
 
             f = output_fileset.get_file('sparse', create=True)
             db_write_point_cloud(f, pcd)
@@ -172,7 +178,8 @@ class Colmap(RomiTask):
 
             if colmap_runner.compute_dense:
                 pcd = read_point_cloud('%s/dense/fused.ply' % colmap_ws)
-                pcd = crop_point_cloud(pcd, bounding_box)
+                if bounding_box is not None:
+                    pcd = crop_point_cloud(pcd, bounding_box)
                 f = fs.create_file('dense')
                 db_write_point_cloud(f, pcd)
 
@@ -197,7 +204,7 @@ class Masking(RomiTask):
                 return img
         elif self.type == "excess_green":
             threshold = self.params["threshold"]
-            dilation = self.masking_params["dilation"]
+            dilation = self.params["dilation"]
 
             def f(x):
                 img = excess_green(x) > threshold
@@ -216,6 +223,46 @@ class Masking(RomiTask):
             newf = output_fileset.get_file(fi.id, create=True)
             newf.write_image('png', mask)
 
+class SoftMasking(RomiTask):
+    type = luigi.Parameter()
+    params = luigi.DictParameter(default=None)
+
+    def requires(self):
+        return Undistort()
+
+    def run(self):
+        if self.type == "linear":
+            coefs = self.params["coefs"]
+            scale = self.params["scale"]
+
+            def f(x):
+                x = gaussian_filter(x, scale)
+                img = (coefs[0] * x[:, :, 0] + coefs[1] * x[:, :, 1] +
+                       coefs[2] * x[:, :, 2])
+                return img
+        elif self.type == "excess_green":
+            scale = self.params["scale"]
+
+            def f(x):
+                img = gaussian_filter(x, scale)
+                img = excess_green(img)
+                for i in range(dilation):
+                    img = binary_dilation(img)
+                return img
+        elif self.type == "vesselness":
+            scale = self.params["scale"]
+            f = lambda x: vesselness_2D(x[:,:,1], scale)
+        else:
+            raise Exception("Unknown masking type")
+
+        output_fileset = self.output().get()
+        for fi in self.input().get().get_files():
+            data = fi.read_image()
+            data = np.asarray(data, float)/255
+            mask = f(data)
+            mask = np.asarray(255*mask, dtype=np.uint8)
+            newf = output_fileset.get_file(fi.id, create=True)
+            newf.write_image('png', mask)
 
 
 class SpaceCarving(RomiTask):

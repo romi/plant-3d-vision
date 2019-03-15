@@ -1,5 +1,6 @@
 [Colmap]
 matcher = "exhaustive"
+compute_dense = true
 
 [Colmap.cli_args.feature_extractor]
 "--ImageReader.single_camera" = "1"
@@ -13,6 +14,12 @@ type = "linear"
 [Masking.params]
 dilation = 5
 coefs = [0.0, 1.0, 0.0, 0.3]
+
+[SoftMasking]
+type = "vesselness"
+
+[SoftMasking.params]
+scale = 4
 
 [SpaceCarving]
 voxel_size = 1.0

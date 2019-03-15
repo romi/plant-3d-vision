@@ -1,11 +1,11 @@
 import FileIO
 from skimage.filters import gaussian
 import open3d
-from lettucescan.pcd import *
+from romiscan.pcd import *
 from open3d.geometry import *
 from skimage.feature import hessian_matrix, hessian_matrix_eigvals
 from scipy.special import betainc
-from lettucescan.cl import *
+from romiscan.cl import *
 
 model = "Isotropic3"
 FileHFM_executable = "FileHFM_"+model
@@ -20,6 +20,7 @@ def get_roots(pts, tol=0, axis=2, inverted=True):
     else:
         val = np.min(pts[:, axis])
         res = pts[pts[:, axis] <= val + tol, :]
+    print(res)
     return res
 
 
