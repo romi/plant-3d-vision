@@ -83,19 +83,22 @@ class RomiTask(luigi.Task):
 
 class AnglesAndInternodes(RomiTask):
     def requires(self):
-        return Skeleton()
+        return CurveSkeleton()
 
     def run(self):
-        f = self.input().get_file(SKELETON_FILE).read_text()
-        self.fruits, self.angles, self.internodes = compute_angles_and_internodes(
-            self.points, self.lines)
+        f = self.input().get().get_file(SKELETON_FILE).read_text()
+        j = json.loads(f)
+        points = np.asarray(j['points'])
+        lines = np.asarray(j['lines'])
+        fruits, angles, internodes = compute_angles_and_internodes(
+            points, lines)
         o = self.output().get()
         txt = json.dumps({
-            'fruit_points': self.fruits,
-            'angles': self.angles,
-            'internodes': self.internodes
+            'fruit_points': fruits,
+            'angles': angles,
+            'internodes': internodes
         })
-        f = fileset.get_file(ANGLES_FILE, create=True)
+        f = self.output().get().get_file(ANGLES_FILE, create=True)
         f.write_text('json', txt)
 
 
@@ -393,79 +396,62 @@ class Undistort(RomiTask):
 #         self.bounding_box = bounding_box
 
 
-# class Voxel2PointCloud(ProcessingBlock):
-#     def read_input(self, scan, endpoint):
-#         fileset_id, file_id = endpoint.split('/')
-#         fileset = scan.get_fileset(fileset_id)
-#         voxel_file = fileset.get_file(file_id)
-#         self.voxels = db_read_point_cloud(voxel_file)
-#         self.w = voxel_file.get_metadata('width')
+class Voxel2PointCloud(RomiTask):
+    dist = luigi.FloatParameter()
+    def requires(self):
+        return SpaceCarving()
 
-#     def write_output(self, scan, endpoint):
-#         fileset_id, file_id = endpoint.split('/')
-#         fileset = scan.get_fileset(fileset_id, create=True)
-#         point_cloud_file = fileset.get_file(file_id, create=True)
-#         db_write_point_cloud(point_cloud_file, self.pcd_with_normals)
+    def run(self):
+        input_fileset = self.input().get()
+        voxel_file = input_fileset.get_file("voxels")
+        voxels = db_read_point_cloud(voxel_file)
+        voxel_size = self.requires().voxel_size
 
-#     def process(self):
-#         vol, origin = pcd2vol(np.asarray(
-#             self.voxels.points), self.w, zero_padding=1)
-#         self.pcd_with_normals = vol2pcd(
-#             vol, origin, self.w, dist_threshold=self.dist_threshold)
+        vol, origin = pcd2vol(np.asarray(
+            voxels.points), voxel_size, zero_padding=1)
+        pcd_with_normals = vol2pcd(
+            vol, origin, voxel_size, dist_threshold=self.dist)
 
-#     def __init__(self, dist_threshold):
-#         self.dist_threshold = dist_threshold
+        output_fileset = self.output().get()
+        point_cloud_file = output_fileset.get_file("pointcloud", create=True)
+        db_write_point_cloud(point_cloud_file, pcd_with_normals)
 
+class DelaunayTriangulation(RomiTask):
+    def requires(self):
+        return Voxel2PointCloud()
 
-# class DelaunayTriangulation(ProcessingBlock):
-#     def read_input(self, scan, endpoint):
-#         fileset_id, file_id = endpoint.split('/')
-#         fileset = scan.get_fileset(fileset_id)
-#         point_cloud_file = fileset.get_file(file_id)
-#         self.point_cloud = db_read_point_cloud(point_cloud_file)
+    def run(self):
+        input_fileset = self.input().get()
+        point_cloud_file = input_fileset.get_file("pointcloud")
+        point_cloud = db_read_point_cloud(point_cloud_file)
 
-#     def write_output(self, scan, endpoint):
-#         fileset_id, file_id = endpoint.split('/')
-#         fileset = scan.get_fileset(fileset_id, create=True)
-#         triangle_mesh_file = fileset.get_file(file_id, create=True)
-#         db_write_triangle_mesh(triangle_mesh_file, self.mesh)
+        points, triangles = cgal.poisson_mesh(np.asarray(point_cloud.points),
+                                              np.asarray(point_cloud.normals))
 
-#     def process(self):
-#         points, triangles = cgal.poisson_mesh(np.asarray(self.point_cloud.points),
-#                                               np.asarray(self.point_cloud.normals))
+        mesh = TriangleMesh()
+        mesh.vertices = Vector3dVector(points)
+        mesh.triangles = Vector3iVector(triangles)
 
-#         mesh = TriangleMesh()
-#         mesh.vertices = Vector3dVector(points)
-#         mesh.triangles = Vector3iVector(triangles)
-
-#         self.mesh = mesh
-
-#     def __init__(self):
-#         pass
+        output_fileset = self.output().get()
+        triangle_mesh_file = output_fileset.get_file("mesh", create=True)
+        db_write_triangle_mesh(triangle_mesh_file, mesh)
 
 
-# class CurveSkeleton(ProcessingBlock):
-#     def read_input(self, scan, endpoint):
-#         fileset_id, file_id = endpoint.split('/')
-#         fileset = scan.get_fileset(fileset_id)
-#         mesh_file = fileset.get_file(file_id)
-#         self.mesh = db_read_triangle_mesh(mesh_file)
+class CurveSkeleton(RomiTask):
+    def requires(self):
+        return DelaunayTriangulation()
 
-#     def write_output(self, scan, endpoint):
-#         fileset_id, file_id = endpoint.split('/')
-#         fileset = scan.get_fileset(fileset_id, create=True)
+    def run(self):
+        input_fileset = self.input().get()
+        mesh_file = input_fileset.get_file("mesh")
+        mesh = db_read_triangle_mesh(mesh_file)
+        points, lines = cgal.skeletonize_mesh(
+            np.asarray(mesh.vertices), np.asarray(mesh.triangles))
 
-#         val = {'points': self.points.tolist(),
-#                'lines': self.lines.tolist()}
-#         val_json = json.dumps(val)
+        output_fileset = self.output().get()
+        val = {'points': points.tolist(),
+               'lines': lines.tolist()}
+        val_json = json.dumps(val)
 
-#         skeleton_file = fileset.get_file(file_id, create=True)
-
-#         skeleton_file.write_text('json', val_json)
-
-#     def process(self):
-#         self.points, self.lines = cgal.skeletonize_mesh(
-#             np.asarray(self.mesh.vertices), np.asarray(self.mesh.triangles))
-
-#     def __init__(self):
-#         pass
+        skeleton_file = output_fileset.get_file("skeleton", create=True)
+        skeleton_file.write_text('json', val_json)
