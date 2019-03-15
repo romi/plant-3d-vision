@@ -1,7 +1,7 @@
 import pyopencl as cl
 import os
 import numpy as np
-from lettucescan.pcd import point2index
+from romiscan.pcd import point2index
 from skimage.morphology import binary_dilation
 
 

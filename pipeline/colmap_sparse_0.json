@@ -1,0 +1,25 @@
+{
+    "module" : "romiscan.pipeline",
+    "class" : "Colmap",
+    "args" : { "matcher" : "exhaustive",
+          "compute_dense" : false,
+          "save_camera_model" : true,
+          "all_cli_args" : {
+            "feature_extractor" : {
+                "--ImageReader.single_camera" : "1"
+            },
+            "exhaustive_matcher" : {
+            },
+            "mapper" : {
+            },
+            "model_aligner" : {
+                "--robust_alignment_max_error" : "10"
+            },
+            "image_undistorter" : {
+            },
+            "patch_match_stereo" : {
+            },
+            "stereo_fusion" : {
+            }
+          }},
+}

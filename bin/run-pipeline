@@ -1,37 +1,24 @@
 #!/usr/bin/env python3
-import json
+import luigi
+from romiscan import pipeline
+import tempfile
 import sys
+import os
+from lettucethink.fsdb import DB
 from optparse import OptionParser
-import time
-import importlib
-
-from lettucethink import fsdb
-
-def process_block(block, scan, inputs, outputs):
-    block.read_input(scan, inputs)
-    block.process()
-    block.write_output(scan, outputs)
-
-def find_id(l, id):
-    for x in l:
-        if x['id'] == id:
-            return x
-    return None
+import json
 
 if __name__ == "__main__":
-    usage = "usage: %prog [options] db/scan pipeline"
+    usage = "usage: %prog [options] db/scan"
     parser = OptionParser(usage=usage)
 
-    parser.add_option("-s", "--skip",
-        dest="skip",
-        default=0,
-        type=int,
-        help ="skip the first s tasks")
+    parser.add_option("-t", "--task",
+                      dest="task",
+                      default=None)
 
-    parser.add_option("-v", "--viz",
-        dest="viz",
-        default=False,
-        help ="save for visualization")
+    parser.add_option("-c", "--config",
+                      dest="config",
+                      default=None)
 
     (options, args) = parser.parse_args()
 
@@ -39,61 +26,54 @@ if __name__ == "__main__":
         i = find('-n')
 
     if len(args) != 1:
-        raise Exception('Wrong number of arguments. Type %prog --help for more.')
+        raise Exception(
+            'Wrong number of arguments. Type %prog --help for more.')
 
     scan = args[0]
     scan = scan.split('/')
     db = '/'.join(scan[:-1])
     scan = scan[-1]
-    print('DB location = %s'%db)
-    print('scan = %s'%scan)
+    print('DB location = %s' % db)
+    print('scan = %s' % scan)
 
-    db = fsdb.DB(db)
-    db.connect()
+    # test = DB(db)
 
-    scan = db.get_scan(scan)
+    if os.path.splitext(options.config)[-1] == ".toml":
+        import toml
+        config = toml.load(open(options.config))
+    elif os.path.splitext(options.config)[-1] == ".json":
+        config = json.load(open(options.config))
+    else:
+        raise Exception('Unknown pipeline config type')
 
-    x = scan.get_fileset("pipeline", create=True)
+    config['DatabaseConfig'] = {
+        'db_location' : db,
+        'scan_id' : scan
+    }
 
-    pipeline = scan.get_metadata('target_pipeline')
-    if pipeline is None:
-        raise Exception('No pipeline provided.')
+    # Dirty hack
+    with tempfile.NamedTemporaryFile() as tmp:
+        tmp = tmp.name
+        print(tmp)
+        x = open(tmp, 'w')
+        for k1 in config.keys():
+            x.write('[%s]\n'%k1)
+            for k2 in config[k1].keys():
+                val = config[k1][k2]
+                if isinstance(val, dict):
+                    val=json.dumps(val)
+                else:
+                    val=str(val)
+                x.write('%s=%s\n'%(k2,val))
+        x.close()
+        luigi_config = luigi.configuration.get_config()
+        luigi_config.read(tmp)
 
+    # db_config = pipeline.DatabaseConfig(scan_id=scan, db_location=db)
+    # cli_args = []
+    # config_env = {}
 
+    # print(cli_args)
 
-    processed_pipeline = scan.get_metadata('processed_pipeline')
-    if processed_pipeline is None:
-        processed_pipeline = []
-
-    if options.viz:
-        pipeline.append({
-            'id' : 'zip',
-            'module' : 'romiscan.pipeline',
-            'class' : 'VisualizationFiles',
-            'inputs' : ['images'],
-            'outputs' : 'visualization',
-            'args' : {
-                'lowres_size' : [1616, 1080],
-                'thumbnail_size' : [256, 171]
-            }
-        })
-
-    tasks = []
-
-    skip = True
-    for i,b in enumerate(pipeline):
-        if skip:
-            if len(processed_pipeline) >= i+1 and processed_pipeline[i] == b:
-                continue
-            else:
-                skip = False
-        print("Starting task %s (%i/%i)"%(b['id'], i+1, len(pipeline)))
-        module = importlib.import_module(b['module'])
-        block = eval('module.%s'%b['class'])(**b["args"])
-        process_block(block, scan, b['inputs'], b['outputs'])
-        print("done task %s"%b['id'])
-        if len(processed_pipeline) == i:
-            processed_pipeline.append(b)
-        else:
-            processed_pipeline[i] = b
-        scan.set_metadata('processed_pipeline', processed_pipeline)
+    luigi.build(tasks=[eval("pipeline.%s()" % options.task)],
+                local_scheduler=True)

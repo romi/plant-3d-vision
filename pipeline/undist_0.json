@@ -1,0 +1,5 @@
+{
+    "module" : "romiscan.pipeline",
+    "class" : "Undist",
+    "args" : { }
+}

@@ -10,6 +10,8 @@ from open3d.geometry import PointCloud, TriangleMesh
 from open3d.utility import Vector3dVector, Vector3iVector
 from skimage.transform import resize
 
+from lettucethink.fsdb import DB
+
 from romiscan.plantseg import *
 from romiscan.colmap import *
 from romiscan.db import *
@@ -18,50 +20,86 @@ from romiscan.masking import *
 from romiscan import cgal
 from romiscan import cl
 
+import luigi
 
-class ProcessingBlock(ABC):
-    @abstractmethod
-    def read_input(self, scan, endpoint):
-        pass
-
-    @abstractmethod
-    def write_output(self, scan, endpoint):
-        pass
-
-    @abstractmethod
-    def process(self):
-        pass
+SKELETON_FILE = "skeleton"
+ANGLES_FILE = "values"
+IMAGES_DIRECTORY = "images"
 
 
-class AnglesAndInternodes(ProcessingBlock):
-    def read_input(self, scan, endpoint):
-        fileset_id, file_id = endpoint.split('/')
-        fileset = scan.get_fileset(fileset_id)
-        f = fileset.get_file(file_id)
-        txt = f.read_text()
-        j = json.loads(txt)
-        self.points = np.array(j['points'])
-        self.lines = np.array(j['lines'])
+class DatabaseConfig(luigi.Config):
+    db_location = luigi.Parameter()
+    scan_id = luigi.Parameter()
 
-    def write_output(self, scan, endpoint):
-        fileset_id, file_id = endpoint.split('/')
-        fileset = scan.get_fileset(fileset_id, create=True)
+
+class FilesetTarget(luigi.Target):
+    def __init__(self, db_location, scan_id, fileset_id):
+        db = DB(db_location)
+        db.connect()
+        scan = db.get_scan(scan_id)
+        if scan is None:
+            raise Exception("Scan does not exist")
+        self.scan = scan
+        self.fileset_id = fileset_id
+
+    def create(self):
+        return self.scan.create_fileset(self.fileset_id)
+
+    def exists(self):
+        fs = self.scan.get_fileset(self.fileset_id) 
+        return fs is not None and len(fs.get_files()) > 0
+
+    def get(self, create=True):
+        return self.scan.get_fileset(self.fileset_id, create=create)
+
+class RomiTask(luigi.Task):
+    def output(self):
+        fileset_id = self.task_id
+        return FilesetTarget(DatabaseConfig().db_location, DatabaseConfig().scan_id, fileset_id)
+
+    def complete(self):
+        outs = self.output()
+        if isinstance(outs, dict):
+            outs = [outs[k] for k in outs.keys()]
+        elif isinstance(outs, list):
+            pass
+        else:
+            outs = [outs]
+
+        if not all(map(lambda output: output.exists(), outs)):
+            return False
+
+        req = self.requires()
+        if isinstance(req, dict):
+            req = [req[k] for k in req.keys()]
+        elif isinstance(req, list):
+            pass
+        else:
+            req = [req]
+        for task in req:
+            if not task.complete():
+                return False
+        return True
+
+class AnglesAndInternodes(RomiTask):
+    def requires(self):
+        return CurveSkeleton()
+
+    def run(self):
+        f = self.input().get().get_file(SKELETON_FILE).read_text()
+        j = json.loads(f)
+        points = np.asarray(j['points'])
+        lines = np.asarray(j['lines'])
+        fruits, angles, internodes = compute_angles_and_internodes(
+            points, lines)
+        o = self.output().get()
         txt = json.dumps({
-            'fruit_points': self.fruits,
-            'angles': self.angles,
-            'internodes': self.internodes
+            'fruit_points': fruits,
+            'angles': angles,
+            'internodes': internodes
         })
-
-        f = fileset.get_file(file_id, create=True)
-
+        f = self.output().get().get_file(ANGLES_FILE, create=True)
         f.write_text('json', txt)
-
-    def __init__(self):
-        pass
-
-    def process(self):
-        self.fruits, self.angles, self.internodes = compute_angles_and_internodes(
-            self.points, self.lines)
 
 
 class ColmapError(Exception):
@@ -69,281 +107,144 @@ class ColmapError(Exception):
         self.message = message
 
 
-class Colmap(ProcessingBlock):
-    def read_input(self, scan, endpoint):
-        fileset = scan.get_fileset(endpoint)
+class Colmap(RomiTask):
+    matcher = luigi.Parameter()
+    compute_dense = luigi.BoolParameter()
+    cli_args = luigi.DictParameter()
 
-        posefile = open('%s/poses.txt' % self.colmap_ws, mode='w')
+    def requires(self):
+        return []
 
-        for i, file in enumerate(fileset.get_files()):
-            p = file.get_metadata('pose')
-            s = '%s %d %d %d\n' % (file.filename, p[0], p[1], p[2])
-            im = file.read_image()
-            imwrite(os.path.join(os.path.join(
-                self.colmap_ws, 'images'), file.filename), im)
-            posefile.write(s)
+    def run(self):
+        input_fileset = FilesetTarget(
+            DatabaseConfig().db_location, DatabaseConfig().scan_id, IMAGES_DIRECTORY).get()
 
-        posefile.close()
+        with tempfile.TemporaryDirectory() as colmap_ws:
 
-    def write_output(self, scan, endpoint):
-        fileset = scan.get_fileset(endpoint, create=True)
+            colmap_runner = ColmapRunner(
+                self.matcher, self.compute_dense, self.cli_args, colmap_ws)
 
-        # Write to DB
-        pcd = colmap_points_to_pcd(self.points)
+            os.makedirs(os.path.join(colmap_ws, 'images'))
 
-        f = fileset.get_file('sparse', create=True)
-        db_write_point_cloud(f, pcd)
+            posefile = open('%s/poses.txt' % colmap_ws, mode='w')
+            for i, file in enumerate(input_fileset.get_files()):
+                p = file.get_metadata('pose')
+                s = '%s %d %d %d\n' % (file.filename, p[0], p[1], p[2])
+                im = file.read_image()
+                imwrite(os.path.join(os.path.join(
+                    colmap_ws, 'images'), file.filename), im)
+                posefile.write(s)
+            posefile.close()
 
-        points_json = colmap_points_to_json(self.points)
-        f = fileset.get_file('points', create=True)
-        f.write_text('json', points_json)
+            colmap_runner.run()
+            points = colmap_runner.points
+            images = colmap_runner.images
+            cameras = colmap_runner.cameras
 
-        images_json = colmap_images_to_json(self.images)
-        f = fileset.get_file('images', create=True)
-        f.write_text('json', images_json)
+            output_fileset = self.output().get()
+            scan = self.output().scan
 
-        cameras_json = colmap_cameras_to_json(self.cameras)
+            pcd = colmap_points_to_pcd(points)
 
-        if self.save_camera_model:
+            bounding_box = scan.get_metadata()['scanner']['workspace']
+            pcd = crop_point_cloud(pcd, bounding_box)
+
+            f = output_fileset.get_file('sparse', create=True)
+            db_write_point_cloud(f, pcd)
+
+            points_json = colmap_points_to_json(points)
+            f = output_fileset.get_file('points', create=True)
+            f.write_text('json', points_json)
+
+            images_json = colmap_images_to_json(images)
+            f = output_fileset.get_file('images', create=True)
+            f.write_text('json', images_json)
+
+            cameras_json = colmap_cameras_to_json(cameras)
+
             cameras = cameras_model_to_opencv(json.loads(cameras_json))
-            md = scan.get_metadata('scanner')
+            md = {}
             md['camera_model'] = cameras[list(cameras.keys())[0]]
-            scan.set_metadata('scanner', md)
+            scan.set_metadata('computed', md)
 
-        f = fileset.get_file('cameras', create=True)
-        f.write_text('json', cameras_json)
+            f = output_fileset.get_file('cameras', create=True)
+            f.write_text('json', cameras_json)
 
-        if self.colmap_runner.compute_dense:
-            f = fs.create_file('dense')
-            f.import_file('%s/dense/fused.ply' % self.colmap_ws)
-
-    def process(self):
-        self.colmap_runner.run()
-        self.points = self.colmap_runner.points
-        self.images = self.colmap_runner.images
-        self.cameras = self.colmap_runner.cameras
-
-    def __init__(self, matcher, compute_dense, all_cli_args,
-                 colmap_ws=None,
-                 save_camera_model=False):
-        self.save_camera_model = save_camera_model
-        self.colmap_ws = colmap_ws
-
-        if self.colmap_ws is None:
-            self.tmpdir = tempfile.TemporaryDirectory()
-            self.colmap_ws = self.tmpdir.name
-
-        self.colmap_runner = ColmapRunner(
-            matcher, compute_dense, all_cli_args, self.colmap_ws)
-        os.makedirs(os.path.join(self.colmap_ws, 'images'))
+            if colmap_runner.compute_dense:
+                pcd = read_point_cloud('%s/dense/fused.ply' % colmap_ws)
+                pcd = crop_point_cloud(pcd, bounding_box)
+                f = fs.create_file('dense')
+                db_write_point_cloud(f, pcd)
 
 
-class Masking(ProcessingBlock):
-    def read_input(self, scan, endpoint):
-        fileset = scan.get_fileset(endpoint)
+class Masking(RomiTask):
+    type = luigi.Parameter()
+    params = luigi.DictParameter()
 
-        if self.camera_model is None:
-            scanner_metadata = scan.get_metadata('scanner')
-            self.camera = scanner_metadata['camera_model']
+    def requires(self):
+        return Undistort()
+
+    def run(self):
+        if self.type == "linear":
+            coefs = self.params["coefs"]
+            dilation = self.params["dilation"]
+
+            def f(x):
+                img = (coefs[0] * x[:, :, 0] + coefs[1] * x[:, :, 1] +
+                       coefs[2] * x[:, :, 2]) > coefs[3]
+                for i in range(dilation):
+                    img = binary_dilation(img)
+                return img
+        elif self.type == "excess_green":
+            threshold = self.params["threshold"]
+            dilation = self.masking_params["dilation"]
+
+            def f(x):
+                img = excess_green(x) > threshold
+                for i in range(dilation):
+                    img = binary_dilation(img)
+                return img
         else:
-            self.camera = camera_model
+            raise Exception("Unknown masking type")
 
-        self.images = []
-        for f in fileset.get_files():
-            data = f.read_image()
-            self.images.append({
-                'id': f.id,
-                'data': data,
-                'metadata': f.get_metadata()
-            })
-
-    def write_output(self, scan, endpoint):
-        fileset = scan.get_fileset(endpoint, create=True)
-        for img in self.masks:
-            f = fileset.get_file(img['id'], create=True)
-            f.write_image('png', img['data'])
-            f.set_metadata(img['metadata'])
-
-    def __init__(self, f, camera_model=None):
-        self.camera_model = camera_model
-        self.f = f
-
-    def process(self):
-        self.masks = []
-        for img in self.images:
-            im = img['data']
-            im = np.asarray(im, dtype=float) / 255.0
-            mask_data = np.asarray((self.f(im) * 255), dtype=np.uint8)
-            self.masks.append({
-                'id': img['id'],
-                'data': mask_data,
-                'metadata': img['metadata']
-            })
+        output_fileset = self.output().get()
+        for fi in self.input().get().get_files():
+            data = fi.read_image()
+            data = np.asarray(data, float)/255
+            mask = f(data)
+            mask = 255*np.asarray(mask, dtype=np.uint8)
+            newf = output_fileset.get_file(fi.id, create=True)
+            newf.write_image('png', mask)
 
 
-class ExcessGreenMasking(Masking):
-    def __init__(self, threshold, dilation=0):
-        def f(x):
-            img = excess_green(x) > threshold
-            for i in range(dilation):
-                img = binary_dilation(img)
-            return img
-        super().__init__(f)
 
+class SpaceCarving(RomiTask):
+    voxel_size = luigi.FloatParameter()
 
-class LinearMasking(Masking):
-    def __init__(self, coefs, dilation=0):
-        def f(x):
-            img = (coefs[0] * x[:, :, 0] + coefs[1] * x[:, :, 1] +
-                   coefs[2] * x[:, :, 2]) > coefs[3]
-            for i in range(dilation):
-                img = binary_dilation(img)
-            return img
-        super().__init__(f)
+    def requires(self):
+        return {'masks': Masking(), 'colmap': Colmap()}
 
+    def run(self):
+        fileset_masks = self.input()['masks'].get()
+        fileset_colmap = self.input()['colmap'].get()
+        scan = self.input()['colmap'].scan
 
-class CropPointCloud(ProcessingBlock):
-    def read_input(self, scan, endpoint):
-        fileset_id, file_id = endpoint.split('/')
-        fileset = scan.get_fileset(fileset_id)
-        point_cloud_file = fileset.get_file(file_id)
-        self.point_cloud = db_read_point_cloud(point_cloud_file)
-        if self.bounding_box is None:
-            self.bounding_box = scan.get_metadata('scanner')['workspace']
+        pcd = db_read_point_cloud(fileset_colmap.get_file('sparse'))
+        poses = json.loads(fileset_colmap.get_file('images').read_text())
 
-    def write_output(self, scan, endpoint):
-        fileset_id, file_id = endpoint.split('/')
-        fileset = scan.get_fileset(fileset_id, create=True)
-        point_cloud_file = fileset.get_file(file_id, create=True)
-        db_write_point_cloud(point_cloud_file, self.point_cloud)
+        try:
+            camera = scan.get_metadata()['computed']['camera_model']
+        except:
+            camera = scan.get_metadata()['scanner']['camera_model']
 
-    def process(self):
-        self.point_cloud = crop_point_cloud(
-            self.point_cloud, self.bounding_box)
+        if camera is None:
+            raise Exception("Could not find camera model for space carving")
 
-    def __init__(self, bounding_box=None):
-        self.bounding_box = bounding_box
+        width = camera['width']
+        height = camera['height']
+        intrinsics = camera['params'][0:4]
 
-
-class Voxel2PointCloud(ProcessingBlock):
-    def read_input(self, scan, endpoint):
-        fileset_id, file_id = endpoint.split('/')
-        fileset = scan.get_fileset(fileset_id)
-        voxel_file = fileset.get_file(file_id)
-        self.voxels = db_read_point_cloud(voxel_file)
-        self.w = voxel_file.get_metadata('width')
-
-    def write_output(self, scan, endpoint):
-        fileset_id, file_id = endpoint.split('/')
-        fileset = scan.get_fileset(fileset_id, create=True)
-        point_cloud_file = fileset.get_file(file_id, create=True)
-        db_write_point_cloud(point_cloud_file, self.pcd_with_normals)
-
-    def process(self):
-        vol, origin = pcd2vol(np.asarray(
-            self.voxels.points), self.w, zero_padding=1)
-        self.pcd_with_normals = vol2pcd(
-            vol, origin, self.w, dist_threshold=self.dist_threshold)
-
-    def __init__(self, dist_threshold):
-        self.dist_threshold = dist_threshold
-
-
-class DelaunayTriangulation(ProcessingBlock):
-    def read_input(self, scan, endpoint):
-        fileset_id, file_id = endpoint.split('/')
-        fileset = scan.get_fileset(fileset_id)
-        point_cloud_file = fileset.get_file(file_id)
-        self.point_cloud = db_read_point_cloud(point_cloud_file)
-
-    def write_output(self, scan, endpoint):
-        fileset_id, file_id = endpoint.split('/')
-        fileset = scan.get_fileset(fileset_id, create=True)
-        triangle_mesh_file = fileset.get_file(file_id, create=True)
-        db_write_triangle_mesh(triangle_mesh_file, self.mesh)
-
-    def process(self):
-        points, triangles = cgal.poisson_mesh(np.asarray(self.point_cloud.points),
-                                              np.asarray(self.point_cloud.normals))
-
-        mesh = TriangleMesh()
-        mesh.vertices = Vector3dVector(points)
-        mesh.triangles = Vector3iVector(triangles)
-
-        self.mesh = mesh
-
-    def __init__(self):
-        pass
-
-
-class CurveSkeleton(ProcessingBlock):
-    def read_input(self, scan, endpoint):
-        fileset_id, file_id = endpoint.split('/')
-        fileset = scan.get_fileset(fileset_id)
-        mesh_file = fileset.get_file(file_id)
-        self.mesh = db_read_triangle_mesh(mesh_file)
-
-    def write_output(self, scan, endpoint):
-        fileset_id, file_id = endpoint.split('/')
-        fileset = scan.get_fileset(fileset_id, create=True)
-
-        val = {'points': self.points.tolist(),
-               'lines': self.lines.tolist()}
-        val_json = json.dumps(val)
-
-        skeleton_file = fileset.get_file(file_id, create=True)
-
-        skeleton_file.write_text('json', val_json)
-
-    def process(self):
-        self.points, self.lines = cgal.skeletonize_mesh(
-            np.asarray(self.mesh.vertices), np.asarray(self.mesh.triangles))
-
-    def __init__(self):
-        pass
-
-
-class SpaceCarving(ProcessingBlock):
-    def read_input(self, scan, endpoints):
-        sparse_fileset_id, sparse_file_id = endpoints['sparse'].split('/')
-        sparse_fileset = scan.get_fileset(sparse_fileset_id)
-        sparse_file = sparse_fileset.get_file(sparse_file_id)
-        self.sparse = db_read_point_cloud(sparse_file)
-
-        fileset_sparse = scan.get_fileset
-        fileset_masks = scan.get_fileset(endpoints['masks'])
-
-        pose_fileset_id, pose_file_id = endpoints['pose'].split('/')
-        pose_file = scan.get_fileset(pose_fileset_id).get_file(pose_file_id)
-
-        self.poses = json.loads(pose_file.read_text())
-
-        scanner_metadata = scan.get_metadata('scanner')
-        self.camera = scanner_metadata['camera_model']
-
-        self.masks = {}
-        for f in fileset_masks.get_files():
-            mask = f.read_image()
-            self.masks[f.id] = mask
-
-    def write_output(self, scan, endpoint):
-        fileset_id, file_id = endpoint.split('/')
-        fileset = scan.get_fileset(fileset_id, create=True)
-        point_cloud_file = fileset.get_file(file_id, create=True)
-        db_write_point_cloud(point_cloud_file, self.point_cloud)
-        point_cloud_file.set_metadata('width', self.voxel_size)
-
-    def __init__(self, voxel_size, cl_platform=0, cl_device=0):
-        self.voxel_size = voxel_size
-        self.cl_platform = cl_platform
-        self.cl_device = cl_device
-
-    def process(self):
-        width = self.camera['width']
-        height = self.camera['height']
-        intrinsics = self.camera['params'][0:4]
-
-        points = np.asarray(self.sparse.points)
+        points = np.asarray(pcd.points)
 
         x_min, y_min, z_min = points.min(axis=0)
         x_max, y_max, z_max = points.max(axis=0)
@@ -351,130 +252,206 @@ class SpaceCarving(ProcessingBlock):
         center = [(x_max + x_min)/2, (y_max + y_min)/2, (z_max + z_min)/2]
         widths = [x_max - x_min, y_max - y_min, z_max - z_min]
 
-        nx = int((x_max-x_min) // self.voxel_size) + 1
-        ny = int((y_max-y_min) // self.voxel_size) + 1
-        nz = int((z_max-z_min) // self.voxel_size) + 1
+        nx = int((x_max-x_min) / self.voxel_size) + 1
+        ny = int((y_max-y_min) / self.voxel_size) + 1
+        nz = int((z_max-z_min) / self.voxel_size) + 1
 
         origin = np.array([x_min, y_min, z_min])
 
         sc = cl.Backprojection(
             [nx, ny, nz], [x_min, y_min, z_min], self.voxel_size)
-        for k in self.poses.keys():
-            mask_id = os.path.splitext(self.poses[k]['name'])[0]
-            mask = self.masks[mask_id]
-            rot = sum(self.poses[k]['rotmat'], [])
-            tvec = self.poses[k]['tvec']
-            sc.process_view(intrinsics, rot, tvec, mask)
+
+        for fi in fileset_masks.get_files():
+            mask = fi.read_image()
+            key = None
+            for k in poses.keys():
+                if os.path.splitext(poses[k]['name'])[0] == fi.id:
+                    key = k
+                    break
+
+            if key is not None:
+                rot = sum(poses[key]['rotmat'], [])
+                tvec = poses[key]['tvec']
+                sc.process_view(intrinsics, rot, tvec, mask)
 
         labels = sc.values()
         idx = np.argwhere(labels == 2)
-        print("sum = %i" % (labels == 2).sum())
         pts = index2point(idx, origin, self.voxel_size)
 
-        self.point_cloud = PointCloud()
-        self.point_cloud.points = Vector3dVector(pts)
-        open3d.visualization.draw_geometries([self.point_cloud])
+        output = PointCloud()
+        output.points = Vector3dVector(pts)
+
+        output_fileset = self.output().get()
+        output_file = output_fileset.get_file('voxels', create=True)
+        db_write_point_cloud(output_file, output)
+
+class Undistort(RomiTask):
+    def requires(self):
+        return Colmap()
+
+    def run(self):
+        scan = self.output().scan
+        try:
+            camera = scan.get_metadata()['computed']['camera_model']
+        except:
+            camera = scan.get_metadata()['scanner']['camera_model']
+
+        if camera is None:
+            raise Exception("Could not find camera model for space carving")
+
+        input_fileset = FilesetTarget(
+            DatabaseConfig().db_location, DatabaseConfig().scan_id, IMAGES_DIRECTORY).get()
+
+        output_fileset = self.output().get()
+        try:
+            for fi in input_fileset.get_files():
+                img = fi.read_image()
+                ext = os.path.splitext(fi.filename)[-1][1:]
+                camera_params = camera['params']
+                mat = np.matrix([[camera_params[0], 0, camera_params[2]],
+                                 [0, camera_params[1], camera_params[3]],
+                                 [0, 0, 1]])
+                undistort_parameters = np.array(camera_params[4:])
+                undistorted_data = cv2.undistort(img, mat, undistort_parameters)
+
+                newfi = output_fileset.create_file(fi.id)
+                newfi.write_image(ext, undistorted_data)
+        except:
+            scan.delete_fileset(output_fileset.id)
 
 
-class Undistort(ProcessingBlock):
-    def read_input(self, scan, endpoint):
-        fileset = scan.get_fileset(endpoint)
+class Voxel2PointCloud(RomiTask):
+    dist = luigi.FloatParameter()
+    def requires(self):
+        return SpaceCarving()
 
-        if self.camera is None:
-            scanner_metadata = scan.get_metadata('scanner')
-            self.camera = scanner_metadata['camera_model']
-        else:
-            self.camera = self.camera
+    def run(self):
+        input_fileset = self.input().get()
+        voxel_file = input_fileset.get_file("voxels")
+        voxels = db_read_point_cloud(voxel_file)
+        voxel_size = self.requires().voxel_size
 
-        self.images = []
-        for f in fileset.get_files():
-            data = f.read_image()
-            data = data[:, :, :3]  # discard alpha
-            self.images.append({
-                'id': f.id,
-                'data': data,
-                'metadata': f.get_metadata()
-            })
+        vol, origin = pcd2vol(np.asarray(
+            voxels.points), voxel_size, zero_padding=1)
+        pcd_with_normals = vol2pcd(
+            vol, origin, voxel_size, dist_threshold=self.dist)
 
-    def write_output(self, scan, endpoint):
-        fileset = scan.get_fileset(endpoint, create=True)
-        for img in self.undistorted_images:
-            f = fileset.get_file(img['id'], create=True)
-            f.write_image('jpg', img['data'])
-            f.set_metadata(img['metadata'])
+        output_fileset = self.output().get()
+        point_cloud_file = output_fileset.get_file("pointcloud", create=True)
+        db_write_point_cloud(point_cloud_file, pcd_with_normals)
 
-    def __init__(self, camera=None):
-        self.camera = camera
+class DelaunayTriangulation(RomiTask):
+    def requires(self):
+        return Voxel2PointCloud()
 
-    def process(self):
-        self.undistorted_images = []
+    def run(self):
+        input_fileset = self.input().get()
+        point_cloud_file = input_fileset.get_file("pointcloud")
+        point_cloud = db_read_point_cloud(point_cloud_file)
 
-        for img in self.images:
-            data = img['data']
-            camera_params = self.camera['params']
-            mat = np.matrix([[camera_params[0], 0, camera_params[2]],
-                             [0, camera_params[1], camera_params[3]],
-                             [0, 0, 1]])
-            undistort_parameters = np.array(camera_params[4:])
-            undistorted_data = cv2.undistort(data, mat, undistort_parameters)
-            self.undistorted_images.append({
-                'id': img['id'],
-                'data': undistorted_data,
-                'metadata': img['metadata']
-            })
+        points, triangles = cgal.poisson_mesh(np.asarray(point_cloud.points),
+                                              np.asarray(point_cloud.normals))
+
+        mesh = TriangleMesh()
+        mesh.vertices = Vector3dVector(points)
+        mesh.triangles = Vector3iVector(triangles)
+
+        output_fileset = self.output().get()
+        triangle_mesh_file = output_fileset.get_file("mesh", create=True)
+        db_write_triangle_mesh(triangle_mesh_file, mesh)
 
 
-class VisualizationFiles(ProcessingBlock):
-    def read_input(self, scan, endpoints):
-        self.basedir = os.path.join(scan.db.basedir, scan.id)
-        self.input_files = []
-        for endpoint in endpoints:
-            fileset = scan.get_fileset(endpoint)
-            for img in fileset.get_files():
-                data = img.read_image()
-                self.input_files.append({
-                    'id' : fileset.id + "_" + img.id,
-                    'fname': fileset.id + "_" + img.filename,
-                    'data': data
-                })
+class CurveSkeleton(RomiTask):
+    def requires(self):
+        return DelaunayTriangulation()
 
-    def write_output(self, scan, endpoint):
-        fileset = scan.get_fileset(endpoint, create=True)
-        for im in self.output_files:
-            ext = os.path.splitext(im['fname'])[-1][1:]
-            f = fileset.get_file(im['id'], create=True)
-            f.write_image(ext, im['data'])
+    def run(self):
+        input_fileset = self.input().get()
+        mesh_file = input_fileset.get_file("mesh")
+        mesh = db_read_triangle_mesh(mesh_file)
+        points, lines = cgal.skeletonize_mesh(
+            np.asarray(mesh.vertices), np.asarray(mesh.triangles))
 
-        f = fileset.get_file('scan', create=True)
-        f.import_file(os.path.join(self.tmpdir.name, 'scan.zip'))
+        output_fileset = self.output().get()
+        val = {'points': points.tolist(),
+               'lines': lines.tolist()}
+        val_json = json.dumps(val)
 
-    def process(self):
-        self.output_files = []
-        for im in self.input_files:
-            resized = resize(im['data'], self.thumbnail_size[::-1])
-            self.output_files.append(
-                {
-                    'id': 'thumbnail_' + im['id'],
-                    'fname': 'thumbnail_' + im['fname'],
-                    'data': resized
-                }
-            )
-            resized = resize(im['data'], self.lowres_size[::-1])
-            self.output_files.append(
-                {
-                    'id': 'lowres_' + im['id'],
-                    'fname': 'lowres_' + im['fname'],
-                    'data': resized
-                }
-            )
+        skeleton_file = output_fileset.get_file("skeleton", create=True)
+        skeleton_file.write_text('json', val_json)
 
-        shutil.make_archive(os.path.join(self.tmpdir.name, "scan"), "zip",
-                            self.basedir)
+# class VisualizationFiles(ProcessingBlock):
+#     def read_input(self, scan, endpoints):
+#         self.basedir = os.path.join(scan.db.basedir, scan.id)
+#         self.input_files = []
+#         for endpoint in endpoints:
+#             fileset = scan.get_fileset(endpoint)
+#             for img in fileset.get_files():
+#                 data = img.read_image()
+#                 self.input_files.append({
+#                     'id': fileset.id + "_" + img.id,
+#                     'fname': fileset.id + "_" + img.filename,
+#                     'data': data
+#                 })
 
-    def __init__(self, thumbnail_size, lowres_size):
-        self.thumbnail_size = thumbnail_size
-        self.lowres_size = lowres_size
-        self.tmpdir = tempfile.TemporaryDirectory()
+#     def write_output(self, scan, endpoint):
+#         fileset = scan.get_fileset(endpoint, create=True)
+#         for im in self.output_files:
+#             ext = os.path.splitext(im['fname'])[-1][1:]
+#             f = fileset.get_file(im['id'], create=True)
+#             f.write_image(ext, im['data'])
 
-def compute_hashes(pipeline):
-    pass
+#         f = fileset.get_file('scan', create=True)
+#         f.import_file(os.path.join(self.tmpdir.name, 'scan.zip'))
+
+#     def process(self):
+#         self.output_files = []
+#         for im in self.input_files:
+#             resized = resize(im['data'], self.thumbnail_size[::-1])
+#             self.output_files.append(
+#                 {
+#                     'id': 'thumbnail_' + im['id'],
+#                     'fname': 'thumbnail_' + im['fname'],
+#                     'data': resized
+#                 }
+#             )
+#             resized = resize(im['data'], self.lowres_size[::-1])
+#             self.output_files.append(
+#                 {
+#                     'id': 'lowres_' + im['id'],
+#                     'fname': 'lowres_' + im['fname'],
+#                     'data': resized
+#                 }
+#             )
+
+#         shutil.make_archive(os.path.join(self.tmpdir.name, "scan"), "zip",
+#                             self.basedir)
+
+#     def __init__(self, thumbnail_size, lowres_size):
+#         self.thumbnail_size = thumbnail_size
+#         self.lowres_size = lowres_size
+#         self.tmpdir = tempfile.TemporaryDirectory()
+
+# class CropSparse(RomiTask()):
+#     def requires(self):
+#         return []
+#     def read_input(self, scan, endpoint):
+#         fileset_id, file_id = endpoint.split('/')
+#         fileset = scan.get_fileset(fileset_id)
+#         point_cloud_file = fileset.get_file(file_id)
+#         self.point_cloud = db_read_point_cloud(point_cloud_file)
+#         if self.bounding_box is None:
+#             self.bounding_box = scan.get_metadata('scanner')['workspace']
+
+#     def write_output(self, scan, endpoint):
+#         fileset_id, file_id = endpoint.split('/')
+#         fileset = scan.get_fileset(fileset_id, create=True)
+#         point_cloud_file = fileset.get_file(file_id, create=True)
+#         db_write_point_cloud(point_cloud_file, self.point_cloud)
+
+#     def process(self):
+#         self.point_cloud = crop_point_cloud(
+#             self.point_cloud, self.bounding_box)
+
+#     def __init__(self, bounding_box=None):
+#         self.bounding_box = bounding_box
