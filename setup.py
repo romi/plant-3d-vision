@@ -84,7 +84,7 @@ setup(
     name='romiscan',
     version=romiscan.__version__,
     packages=find_packages(),
-    scripts=['bin/run-scan'],
+    scripts=['bin/run-scan', 'bin/run-pipeline'],
     author='Timothée Wintz',
     author_email='timothee@timwin.fr',
     description='A plant scanner',
