@@ -21,7 +21,9 @@ from romiscan.masking import *
 from romiscan import cgal
 from romiscan import cl
 from romiscan.vessels import *
+
 import romiscan.pcd
+import romiscan.cl
 
 import luigi
 
@@ -304,7 +306,7 @@ class SpaceCarving(RomiTask):
 
         origin = np.array([x_min, y_min, z_min])
 
-        sc = cl.Backprojection(
+        sc = romiscan.cl.Backprojection(
             [nx, ny, nz], [x_min, y_min, z_min], self.voxel_size)
 
         for fi in fileset_masks.get_files():
