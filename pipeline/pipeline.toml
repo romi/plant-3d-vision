@@ -31,3 +31,7 @@ voxel_size = 1.0
 [Voxel2PointCloud]
 dist = 1.0
 
+[Animate]
+rot_speed_x = 10.0
+rot_speed_y = 10.0
+n_img = 100

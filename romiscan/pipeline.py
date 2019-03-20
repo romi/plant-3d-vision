@@ -155,7 +155,8 @@ class Colmap(RomiTask):
                 bounding_box = scan.get_metadata()['scanner']['workspace']
             except:
                 bounding_box = None
-            pcd = romiscan.pcd.crop_point_cloud(pcd, bounding_box)
+            if bounding_box is not None:
+                pcd = romiscan.pcd.crop_point_cloud(pcd, bounding_box)
 
             f = output_fileset.get_file('sparse', create=True)
             db_write_point_cloud(f, pcd)
@@ -180,7 +181,8 @@ class Colmap(RomiTask):
 
             if colmap_runner.compute_dense:
                 pcd = read_point_cloud('%s/dense/fused.ply' % colmap_ws)
-                pcd = romiscan.pcd.crop_point_cloud(pcd, bounding_box)
+                if bounding_box is not None:
+                    pcd = romiscan.pcd.crop_point_cloud(pcd, bounding_box)
                 f = output_fileset.create_file('dense')
                 db_write_point_cloud(f, pcd)
 
@@ -268,6 +270,7 @@ class SoftMasking(RomiTask):
 
 class SpaceCarving(RomiTask):
     voxel_size = luigi.FloatParameter()
+    animate = luigi.BoolParameter(default=False)
 
     def requires(self):
         return {'masks': Masking(), 'colmap': Colmap()}
@@ -427,6 +430,53 @@ class CurveSkeleton(RomiTask):
 
         skeleton_file = output_fileset.get_file("skeleton", create=True)
         skeleton_file.write_text('json', val_json)
+
+class Animate(RomiTask):
+    rot_speed_x = luigi.FloatParameter()
+    rot_speed_y = luigi.FloatParameter()
+    n_img = luigi.Parameter()
+    def requires(self):
+        return SpaceCarving()
+
+    def run(self):
+        input_fileset = self.input().get()
+        output_fileset = self.output().get()
+        pcd_file = input_fileset.get_file("voxels")
+        pcd = db_read_point_cloud(pcd_file)
+
+        def custom_draw_geometry_with_rotation(pcd):
+            global i
+            i = 0
+            def capture_depth(vis):
+                depth = vis.capture_depth_float_buffer()
+                data = np.asarray(depth)
+                f = output_fileset.create_file("depth-%i"%i)
+                f.write_image("jpg", data)
+
+            def capture_image(vis):
+                image = vis.capture_screen_float_buffer()
+                data = np.asarray(image)
+                f = output_fileset.create_file("rgb-%i"%i)
+                f.write_image("jpg", data)
+
+            def rotate_view(vis):
+                global i
+                ctr = vis.get_view_control()
+                ctr.rotate(self.rot_speed_x, self.rot_speed_y)
+                capture_depth(vis)
+                capture_image(vis)
+                i += 1
+                if i == self.n_img:
+                    return True
+                return False
+
+            open3d.visualization.draw_geometries_with_animation_callback([pcd], rotate_view)
+        custom_draw_geometry_with_rotation(pcd)
+
+
+class Visualization(RomiTask):
+    pass
+
 
 # class VisualizationFiles(ProcessingBlock):
 #     def read_input(self, scan, endpoints):
