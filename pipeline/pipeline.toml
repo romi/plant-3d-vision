@@ -4,6 +4,10 @@ compute_dense = false
 
 [Colmap.cli_args.feature_extractor]
 "--ImageReader.single_camera" = "1"
+"--SiftExtraction.use_gpu" = "0"
+
+[Colmap.cli_args.exhaustive_matcher]
+"--SiftMatching.use_gpu" = "0"
 
 [Colmap.cli_args.model_aligner]
 "--robust_alignment_max_error" = "10"

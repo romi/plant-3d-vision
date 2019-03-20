@@ -181,7 +181,7 @@ class Colmap(RomiTask):
             if colmap_runner.compute_dense:
                 pcd = read_point_cloud('%s/dense/fused.ply' % colmap_ws)
                 pcd = romiscan.pcd.crop_point_cloud(pcd, bounding_box)
-                f = fs.create_file('dense')
+                f = output_fileset.create_file('dense')
                 db_write_point_cloud(f, pcd)
 
 
