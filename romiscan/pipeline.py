@@ -133,12 +133,13 @@ class Colmap(RomiTask):
 
             posefile = open('%s/poses.txt' % colmap_ws, mode='w')
             for i, file in enumerate(input_fileset.get_files()):
-                p = file.get_metadata('pose')
-                s = '%s %d %d %d\n' % (file.filename, p[0], p[1], p[2])
                 im = file.read_image()
                 imwrite(os.path.join(os.path.join(
                     colmap_ws, 'images'), file.filename), im)
-                posefile.write(s)
+                p = file.get_metadata('pose')
+                if p is not None:
+                    s = '%s %d %d %d\n' % (file.filename, p[0], p[1], p[2])
+                    posefile.write(s)
             posefile.close()
 
             colmap_runner.run()
@@ -528,6 +529,12 @@ class Visualization(RomiTask):
                                 basedir)
             f = output_fileset.get_file('scan', create=True)
             f.import_file(os.path.join(tmpdir, 'scan.zip'))
+
+        # SKELETON
+        if CurveSkeleton().complete():
+            skeleton_file = CurveSkeleton().output().get().get_file("skeleton")
+            f = output_fileset.create_file('skeleton')
+            f.write_text('json', skeleton_file.read_text())
 
         # MESH
         if 'mesh' in self.requires():
