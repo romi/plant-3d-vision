@@ -35,3 +35,10 @@ dist = 1.0
 rot_speed_x = 10.0
 rot_speed_y = 10.0
 n_img = 100
+
+[Visualization]
+max_image_size = 1500
+max_pcd_size = 10000
+thumbnail_size = 150
+
+pcd_source = "space_carving"

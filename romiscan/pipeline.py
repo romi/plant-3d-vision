@@ -475,7 +475,7 @@ class Animate(RomiTask):
 
 
 class Visualization(RomiTask):
-    max_im_size = luigi.IntParameter()
+    max_image_size = luigi.IntParameter()
     max_pcd_size = luigi.IntParameter()
     thumbnail_size = luigi.IntParameter()
 
@@ -484,20 +484,27 @@ class Visualization(RomiTask):
 
     def requires(self):
         requires = {}
-        if pcd_source is not None:
-            if pcd_source == "colmap_sparse":
+        if self.pcd_source is not None:
+            if self.pcd_source == "colmap_sparse":
                 requires['pcd'] = Colmap()
-            elif pcd_source == "colmap_dense":
+                self.pcd_file_id = "sparse"
+            elif self.pcd_source == "colmap_dense":
                 requires['pcd'] = Colmap()
-            elif pcd_source == "space_carving":
+                self.pcd_file_id = "dense"
+            elif self.pcd_source == "space_carving":
                 requires['pcd'] = SpaceCarving()
+                self.pcd_file_id = "voxels"
+            elif self.pcd_source == "vox2pcd":
+                requires['pcd'] = Voxel2PointCloud()
+                self.pcd_file_id = "pointcloud"
             else:
                 raise Exception("Unknown PCD source")
 
-        if mesh_source is not None:
-            if mesh_source == "delaunay":
-                requires['pcd'] = DelaunayTriangulation()
-            else
+        if self.mesh_source is not None:
+            if self.mesh_source == "delaunay":
+                requires['mesh'] = DelaunayTriangulation()
+                self.mesh_file_id = "mesh"
+            else:
                 raise Exception("Unknown mesh source")
         return requires
 
@@ -507,29 +514,53 @@ class Visualization(RomiTask):
             if img.shape[i] <= max_size:
                 return img
             if i == 0:
-                new_shape = [max_size, max_size * img.shape[1]/img.shape[0]]
+                new_shape = [max_size, int(max_size * img.shape[1]/img.shape[0])]
             else:
-                new_shape = [max_size * img.shape[0]/img.shape[1], max_size]
+                new_shape = [int(max_size * img.shape[0]/img.shape[1]), max_size]
             return resize(img, new_shape)
 
         output_fileset = self.output().get()
 
+        # ZIP
+        basedir = self.output().scan.db.basedir
+        with tempfile.TemporaryDirectory() as tmpdir:
+            shutil.make_archive(os.path.join(tmpdir, "scan"), "zip",
+                                basedir)
+            f = output_fileset.get_file('scan', create=True)
+            f.import_file(os.path.join(tmpdir, 'scan.zip'))
+
+        # MESH
+        if 'mesh' in self.requires():
+            pcd_file = self.input()['mesh'].get().get_file(self.mesh_file_id)
+            mesh = db_read_triangle_mesh(mesh_file)
+            f = output_fileset.create_file('mesh')
+            db_write_triangle_mesh(f, mesh)
+
+        # PCD
+        if 'pcd' in self.requires():
+            pcd_file = self.input()['pcd'].get().get_file(self.pcd_file_id)
+            pcd = db_read_point_cloud(pcd_file)
+            if len(pcd.points) < self.max_pcd_size:
+                pcd_lowres = pcd
+            else:
+                pcd_lowres = open3d.geometry.uniform_down_sample(pcd, self.max_pcd_size // len(pcd.points) + 1)
+
+            f_pcd = output_fileset.create_file("pointcloud")
+            db_write_point_cloud(f_pcd, pcd_lowres)
+
         # IMAGES
         images_fileset = FilesetTarget(
             DatabaseConfig().db_location, DatabaseConfig().scan_id, IMAGES_DIRECTORY).get()
-        for img in fileset.get_files():
+        for img in images_fileset.get_files():
             data = img.read_image()
-            lowres = resize_to_max(data, self.max_im_size)
+            lowres = resize_to_max(data, self.max_image_size)
             thumbnail = resize_to_max(data, self.thumbnail_size)
             f = output_fileset.create_file("lowres_%s"%img.id)
             f.write_image("jpg", lowres)
             f = output_fileset.create_file("thumbnail_%s"%img.id)
             f.write_image("jpg", thumbnail)
 
-        # PCD
-        if pcd_source == "Col
-        pcd_fileset = C
-        # ZIP
+
 
 
 # class VisualizationFiles(ProcessingBlock):
