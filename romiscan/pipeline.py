@@ -434,7 +434,7 @@ class CurveSkeleton(RomiTask):
 class Animate(RomiTask):
     rot_speed_x = luigi.FloatParameter()
     rot_speed_y = luigi.FloatParameter()
-    n_img = luigi.Parameter()
+    n_img = luigi.IntParameter()
     def requires(self):
         return SpaceCarving()
 
@@ -475,7 +475,61 @@ class Animate(RomiTask):
 
 
 class Visualization(RomiTask):
-    pass
+    max_im_size = luigi.IntParameter()
+    max_pcd_size = luigi.IntParameter()
+    thumbnail_size = luigi.IntParameter()
+
+    pcd_source = luigi.Parameter(default=None)
+    mesh_source = luigi.Parameter(default=None)
+
+    def requires(self):
+        requires = {}
+        if pcd_source is not None:
+            if pcd_source == "colmap_sparse":
+                requires['pcd'] = Colmap()
+            elif pcd_source == "colmap_dense":
+                requires['pcd'] = Colmap()
+            elif pcd_source == "space_carving":
+                requires['pcd'] = SpaceCarving()
+            else:
+                raise Exception("Unknown PCD source")
+
+        if mesh_source is not None:
+            if mesh_source == "delaunay":
+                requires['pcd'] = DelaunayTriangulation()
+            else
+                raise Exception("Unknown mesh source")
+        return requires
+
+    def run(self):
+        def resize_to_max(img, max_size):
+            i = np.argmax(img.shape[0:2])
+            if img.shape[i] <= max_size:
+                return img
+            if i == 0:
+                new_shape = [max_size, max_size * img.shape[1]/img.shape[0]]
+            else:
+                new_shape = [max_size * img.shape[0]/img.shape[1], max_size]
+            return resize(img, new_shape)
+
+        output_fileset = self.output().get()
+
+        # IMAGES
+        images_fileset = FilesetTarget(
+            DatabaseConfig().db_location, DatabaseConfig().scan_id, IMAGES_DIRECTORY).get()
+        for img in fileset.get_files():
+            data = img.read_image()
+            lowres = resize_to_max(data, self.max_im_size)
+            thumbnail = resize_to_max(data, self.thumbnail_size)
+            f = output_fileset.create_file("lowres_%s"%img.id)
+            f.write_image("jpg", lowres)
+            f = output_fileset.create_file("thumbnail_%s"%img.id)
+            f.write_image("jpg", thumbnail)
+
+        # PCD
+        if pcd_source == "Col
+        pcd_fileset = C
+        # ZIP
 
 
 # class VisualizationFiles(ProcessingBlock):
