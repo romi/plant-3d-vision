@@ -532,7 +532,7 @@ class Visualization(RomiTask):
 
         # ANGLES
         if AnglesAndInternodes().complete():
-            angles_file = AnglesAndInternodes().output().get().get_file("angles")
+            angles_file = AnglesAndInternodes().output().get().get_file("values")
             f = output_fileset.create_file('angles')
             f.write_text('json', angles_file.read_text())
 
