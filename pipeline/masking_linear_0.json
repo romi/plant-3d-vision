@@ -1,5 +1,0 @@
-{
-"module" : "romiscan.pipeline",
-"class" : "LinearMasking",
-"args" : { "coefs" : [1.0,0.0,0.0,0.3] , "dilation" : 2},
-}

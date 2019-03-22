@@ -1,0 +1,6 @@
+[submodule "thirdparty/Open3D"]
+	path = thirdparty/Open3D
+	url = https://github.com/IntelVCL/Open3D
+[submodule "thirdparty/pyopencl"]
+	path = thirdparty/pyopencl
+	url = https://github.com/inducer/pyopencl
