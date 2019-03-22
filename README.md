@@ -8,7 +8,7 @@ Arabidopsis Thaliana at the moment.
 
 This software is compatible with Python 3 only.
 
-This software makes use of *Colmap* as a Structure from Motion tool. You can download
+This software makes use of *Colmap* 3.6 as a Structure from Motion tool. You can download
 it [here](https://colmap.github.io/). It uses OpenCL (>= 1.2) for accelerated 3D volume
 processing, so you should have at least one OpenCL implementation available.
 
