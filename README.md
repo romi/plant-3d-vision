@@ -1,101 +1,89 @@
-# Scan3D v0.3
+# Scan3D v0.4
 
-This repo gather the elements used to run 3D scan of individual plants by ROMI partners.
+This is the code for the 3D scanner, part of the ROMI project. It contains
+various function for 3D reconstruction and analysis of plants, mainly
+Arabidopsis Thaliana at the moment.
 
-More information and history record is available on the wiki
+## Installation
 
-## Hardware
-The following table list the different setting currently used by the different partners. The specs of each setting is detailed in the wiki.
+This software is compatible with Python 3 only.
 
-Partner | 3D Scan hardware
---------| -------------
-Lyon | Lyon.1
-Paris | csl.1
-Valldaurua | Vall.x
-Uber | Uber.
+This software makes use of \emph{Colmap} as a Structure from Motion tool. You can download
+it [here](https://colmap.github.io/). It uses OpenCL (>= 1.2) for accelerated 3D volume
+processing, so you should have at least one OpenCL implementation available.
 
-## Acquisition
+Other dependencies should be processed automatically.
 
-## Software
+The software has only been tested for Linux systems. Other platforms might or might not work.
 
-### Configuration files
-* `LOCAL_APP_DATA/lettucethink/scanner/objects/` contains scanned object metadata files
-* `LOCAL_APP_DATA/lettucethink/scanner/scanners/` contains scanner configuration files
-* `LOCAL_APP_DATA/lettucethink/scanner/paths/` contains scanning path description files
-
-In general, on linux systems, `LOCAL_APP_DATA` is `$HOME/.local/share`, on windows it's
-`C:/Users/UserName/AppData/Local` or in the environment variable `%LOCALAPPDATA%`. On
-MacOS, it should be `~/Library/Application Support`.
-
-### Install default configuration and sample objects (on linux):
+First clone the repository and get all third party dependencies:
 
 ```
-mkdir -p ~/.local/share/lettucethink/scanner/objects
-cp default/objects/* ~/.local/share/lettucethink/scanner/objects/
-mkdir -p ~/.local/share/lettucethink/scanner/scanners
-cp default/scanners/* ~/.local/share/lettucethink/scanner/scanners/
-mkdir -p ~/.local/share/lettucethink/scanner/paths
-cp default/paths/* ~/.local/share/lettucethink/scanner/paths/
+git clone https://github.com/romi/Scan3D.git
+cd Scan3D
+git submodule update --init
 ```
 
-TODO: automate this/ assist creation of objects
-
-### Run a scan
-
-Run a scan using
-```
-run-scan OBJECT_ID SCANNER_ID PATH_ID SCAN_ID
-```
-
-To get help on any command, you can use `CMD --help`.
-
-## Full pipeline example (with scan)
-
-Set the ID as the current timedate (if you are using bash/zsh...)
-```
-ID=`date "+%Y-%m-%d_%H-%M-%S"`
-```
-
-### Run the scan
+To install, run (I would advise to do it in a virtual environment):
 
 ```
-./run-scan GT1 lyon_1 circular_72 $ID
+python setup.py install
 ```
 
-### Process the data
+In the following, `db` is a lettucethink `fsdb` database root location.
 
-Compute poses using colmap
+The following commands are then available
 ```
-./compute-poses $ID
+run-scan object.json scanner.json path.json db[/scan_id]
 ```
-Undistort images using either colmap data or calibration values from metadata
-```
-./undistort-images $ID
-```
+If you do not provide a scan ID, it will automatically be set to the current datetime.
+The json files are metadata of the scan.
 
-Compute masks
-```
-./compute-masks -c 0.0,1.0,0.0,0.3 -d 3 $ID
-```
+To run a processing pipeline, use the command:
 
-Compute voxel volumei with size 1mm
 ```
-./carve-space -v 1.0 $ID
+run-pipeline db/scan_id -c pipeline.toml -t TASK
 ```
 
-Process point cloud (compute pointcloud, mesh, skeleton from voxels)
+`pipeline.toml` is the file describing the process configuration. See for example
+the provided `pipeline/pipeline.toml`.
+TASK can be any `RomiTask` subclass defined in `romiscan.pipeline`.
+
+For example, if you want to compute internode and angles, run:
+All necessary computation will be computed automatically.
+
 ```
-./process-pcd $ID
+run-pipeline db/scan_id -c pipeline.toml -t Angles
 ```
 
-Compute angles
-```
-./segment-skel $ID
-```
+## Metadata structure
+
+Here, we describe the metadata specification for v0.4 of the software
+
+### Scanner metadata
+
+You can find a sample `scanner.json` in the `default` folder.
+
+Necessary key-value pairs are the following:
+
+* `camera_firmware` : `gphoto2` or `sony_wifi`
+* `camera_args` : `kwargs` for the `Camera` class (see lettucethink-python)
+* `cnc_firmware` : `grbl` or `cnccontroller`
+* `cnc_args` : `kwargs` for the `CNC` class (see lettucethink-python)
+* `gimbal_firmware` : `dynamixel` or `blgimbal`
+* `gimbal_args` : `kwargs` for the `Gimbal` class (see lettucethink-python)
+* `workspace` : description of a 3D volume enclosing the scanned object.
+ 	It's a dictionnary, with `x`, `y` and `z` as keys and lists of extremal values as values.
  
-### Sync data with the dedicated server
+### Object metadata
 
-To sync data with the dedicated server:
-```
-rsync -av ~/.local/share/lettucethink/scanner/data/ db.romi-project.eu:/data/
-```
+You can find a sample `object.json` in the `default` folder.
+
+The only keys used in the software are `species`, `environment` and `plant_id` in the REST API.
+
+### Path metadata
+
+You can find a sample `path.json` in the `default` folder.
+For now, `type` can only be `circular` and the corresponding arguments are found
+in lettucethink-python.
+
