@@ -530,6 +530,12 @@ class Visualization(RomiTask):
             f = output_fileset.get_file('scan', create=True)
             f.import_file(os.path.join(tmpdir, 'scan.zip'))
 
+        # ANGLES
+        if AnglesAndInternodes().complete():
+            angles_file = AnglesAndInternodes().output().get().get_file("angles")
+            f = output_fileset.create_file('angles')
+            f.write_text('json', angles_file.read_text())
+
         # SKELETON
         if CurveSkeleton().complete():
             skeleton_file = CurveSkeleton().output().get().get_file("skeleton")
