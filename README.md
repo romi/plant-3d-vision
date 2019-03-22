@@ -53,7 +53,7 @@ For example, if you want to compute internode and angles, run:
 All necessary computation will be computed automatically.
 
 ```
-run-pipeline db/scan_id -c pipeline.toml -t Angles
+run-pipeline db/scan_id -c pipeline.toml -t AnglesAndInternodes
 ```
 
 ## Metadata structure
