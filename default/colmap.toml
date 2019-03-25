@@ -7,7 +7,7 @@ compute_dense = true
 "--ImageReader.camera_model" = "SIMPLE_RADIAL"
 "--ImageReader.camera_params" = "1379.78039550781, 978.726440429688, 529.610412597656, 0"
 
-[Colmap.cli_arg.mapper]
+[Colmap.cli_args.mapper]
 "--Mapper.ba_refine_focal_length" = "false"
 "--Mapper.ba_refine_principal_point" = "false"
 "--Mapper.ba_refine_extra_params" = "false"
