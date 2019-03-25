@@ -523,10 +523,12 @@ class Visualization(RomiTask):
         output_fileset = self.output().get()
 
         # ZIP
-        basedir = self.output().scan.db.basedir
+        scan = self.output().scan
+        basedir = scan.db.basedir
+        print("basedir = %s"%basedir)
         with tempfile.TemporaryDirectory() as tmpdir:
             shutil.make_archive(os.path.join(tmpdir, "scan"), "zip",
-                                basedir)
+                                os.path.join(basedir, scan.id))
             f = output_fileset.get_file('scan', create=True)
             f.import_file(os.path.join(tmpdir, 'scan.zip'))
 
