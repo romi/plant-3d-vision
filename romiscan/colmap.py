@@ -119,7 +119,7 @@ class ColmapRunner():
         for x in cli_args.keys():
             process.extend([x, cli_args[x]])
         print(' '.join(process))
-        subprocess.run(process, check=True)
+        subprocess.run(process, check=True, stdout=subprocess.PIPE)
 
     def colmap_matcher(self):
         if self.matcher == 'exhaustive':
@@ -132,7 +132,7 @@ class ColmapRunner():
             for x in cli_args.keys():
                 process.extend([x, cli_args[x]])
             print(' '.join(process))
-            subprocess.run(process, check=True)
+            subprocess.run(process, check=True, stdout=subprocess.PIPE)
         elif self.matcher == 'sequential':
             if 'sequential_matcher' in self.all_cli_args:
                 cli_args = self.all_cli_args['sequential_matcher']
@@ -143,7 +143,7 @@ class ColmapRunner():
             for x in cli_args.keys():
                 process.extend([x, cli_args[x]])
             print(' '.join(process))
-            subprocess.run(process, check=True)
+            subprocess.run(process, check=True, stdout=subprocess.PIPE)
         else:
             raise ColmapError('Unknown matcher type')
 
@@ -159,7 +159,7 @@ class ColmapRunner():
         for x in cli_args.keys():
             process.extend([x, cli_args[x]])
         print(' '.join(process))
-        subprocess.run(process, check=True)
+        subprocess.run(process, check=True, stdout=subprocess.PIPE)
 
     def colmap_model_aligner(self):
         if 'model_aligner' in self.all_cli_args:
@@ -173,7 +173,7 @@ class ColmapRunner():
         for x in cli_args.keys():
             process.extend([x, cli_args[x]])
         print(' '.join(process))
-        subprocess.run(process, check=True)
+        subprocess.run(process, check=True, stdout=subprocess.PIPE)
 
     def colmap_image_undistorter(self):
         if 'image_undistorter' in self.all_cli_args:
@@ -187,7 +187,7 @@ class ColmapRunner():
         for x in cli_args.keys():
             process.extend([x, cli_args[x]])
         print(' '.join(process))
-        subprocess.run(process, check=True)
+        subprocess.run(process, check=True, stdout=subprocess.PIPE)
 
     def colmap_patch_match_stereo(self):
         if 'patch_match_stereo' in self.all_cli_args:
@@ -199,7 +199,7 @@ class ColmapRunner():
         for x in cli_args.keys():
             process.extend([x, cli_args[x]])
         print(' '.join(process))
-        subprocess.run(process, check=True)
+        subprocess.run(process, check=True, stdout=subprocess.PIPE)
 
     def colmap_stereo_fusion(self):
         if 'stereo_fusion' in self.all_cli_args:
@@ -212,7 +212,7 @@ class ColmapRunner():
         for x in cli_args.keys():
             process.extend([x, cli_args[x]])
         print(' '.join(process))
-        subprocess.run(process, check=True)
+        subprocess.run(process, check=True, stdout=subprocess.PIPE)
 
     def run(self):
         self.colmap_feature_extractor()

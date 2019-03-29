@@ -523,10 +523,12 @@ class Visualization(RomiTask):
         output_fileset = self.output().get()
 
         # ZIP
-        basedir = self.output().scan.db.basedir
+        scan = self.output().scan
+        basedir = scan.db.basedir
+        print("basedir = %s"%basedir)
         with tempfile.TemporaryDirectory() as tmpdir:
             shutil.make_archive(os.path.join(tmpdir, "scan"), "zip",
-                                basedir)
+                                os.path.join(basedir, scan.id))
             f = output_fileset.get_file('scan', create=True)
             f.import_file(os.path.join(tmpdir, 'scan.zip'))
 
@@ -556,7 +558,7 @@ class Visualization(RomiTask):
             if len(pcd.points) < self.max_pcd_size:
                 pcd_lowres = pcd
             else:
-                pcd_lowres = open3d.geometry.uniform_down_sample(pcd, self.max_pcd_size // len(pcd.points) + 1)
+                pcd_lowres = open3d.geometry.uniform_down_sample(pcd, len(pcd.points) // self.max_pcd_size + 1)
 
             f_pcd = output_fileset.create_file("pointcloud")
             db_write_point_cloud(f_pcd, pcd_lowres)
