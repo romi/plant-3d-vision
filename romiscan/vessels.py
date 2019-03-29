@@ -1,4 +1,3 @@
-import FileIO
 from skimage.filters import gaussian
 import open3d
 from romiscan.pcd import *
@@ -7,9 +6,6 @@ from skimage.feature import hessian_matrix, hessian_matrix_eigvals
 from scipy.special import betainc
 from romiscan.cl import *
 
-model = "Isotropic3"
-FileHFM_executable = "FileHFM_"+model
-FileHFM_binary_dir = "/home/twintz/.local/bin"
 eps = 1e-3
 
 
@@ -59,44 +55,3 @@ def vesselness_2D(image, scale):
     res = (1 - betainc(4, 4, np.abs(L1)/(np.abs(L2) + eps)))
     res = np.abs(L2)/np.abs(L2).max()*np.exp(np.abs(L1)/(np.abs(L2) + eps))
     return res
-
-
-def hfm_compute_flow(speed, seeds, origin, voxel_size):
-    input = {
-        "arrayOrdering": "RowMajor",
-        "order": 2,
-        "model": model,
-        "dims": np.array(speed.shape),
-        "gridScale": voxel_size,
-        "origin": origin,
-        "seeds": seeds,
-        "speed": speed,
-        "exportValues": 1,
-        "exportGeodesicFlow": 1
-    }
-    result = FileIO.WriteCallRead(input,
-                                  FileHFM_executable,
-                                  binary_dir=FileHFM_binary_dir,
-                                  logFile=None)  # Display output directly
-
-    return result['values'], result['geodesicFlow']
-
-
-if __name__ == "__main__":
-    pcd = read_point_cloud("../data/2019-02-01_11-16-35/3d/voxels.ply")
-    pts = np.asarray(pcd.points)
-    voxel_size = 1.0
-    volume, origin = pcd2vol(pts, voxel_size)
-    maxval = np.max(pts, axis=0)
-    seeds = get_roots(pts, 2*voxel_size)
-    speed = vesselness_3D(volume, 1)
-    values, flow = hfm_compute_flow(speed, seeds, origin, voxel_size)
-
-    x = Geodesics()
-
-    N_geodesics = 100000
-    tips = origin[np.newaxis, :] + np.random.rand(N_geodesics, 3) * (
-        maxval - origin)[np.newaxis, :]
-    votes = x.compute_geodesics(values, origin, voxel_size, flow, tips, 10000, 0.25)
-
-    tipsidx = point2index(tips, origin, voxel_size) 
