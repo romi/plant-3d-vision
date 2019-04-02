@@ -115,12 +115,12 @@ def fmt_scan(scan, filesets_matches):
 
     res["camera"] = {}
 
-    if 'camera_model' in metadata['scanner']:
-        res["camera"]["model"] = metadata["scanner"]["camera_model"]
-        res["camera"]["poses"] = []
-    else:
-        res["camera"]["model"] = metadata["computed"]["camera_model"]
-        res["camera"]["poses"] = []
+    # if 'camera_model' in metadata['scanner']:
+    #     res["camera"]["model"] = metadata["scanner"]["camera_model"]
+    #     res["camera"]["poses"] = []
+    # else:
+    res["camera"]["model"] = metadata["computed"]["camera_model"]
+    res["camera"]["poses"] = []
 
     poses = json.loads(scan.get_fileset(
         filesets_matches['Colmap']).get_file('images').read_text())
