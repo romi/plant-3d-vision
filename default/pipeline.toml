@@ -4,10 +4,10 @@ compute_dense = false
 
 [Colmap.cli_args.feature_extractor]
 "--ImageReader.single_camera" = "1"
-"--SiftExtraction.use_gpu" = "0"
+"--SiftExtraction.use_gpu" = "1"
 
 [Colmap.cli_args.exhaustive_matcher]
-"--SiftMatching.use_gpu" = "0"
+"--SiftMatching.use_gpu" = "1"
 
 [Colmap.cli_args.model_aligner]
 "--robust_alignment_max_error" = "10"
@@ -40,5 +40,5 @@ n_img = 100
 max_image_size = 1500
 max_pcd_size = 10000
 thumbnail_size = 150
-pcd_source = "space_carving"
+pcd_source = "vox2pcd"
 mesh_source = "delaunay"
