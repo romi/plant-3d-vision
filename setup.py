@@ -81,7 +81,7 @@ s = setup(
     name='romiscan',
     version=romiscan.__version__,
     packages=find_packages(),
-    scripts=['bin/run-scan', 'bin/run-pipeline'],
+    scripts=['bin/run-scan', 'bin/run-pipeline', 'bin/sync-scans'],
     author='Timothée Wintz',
     author_email='timothee@timwin.fr',
     description='A plant scanner',
@@ -98,7 +98,8 @@ s = setup(
         'imageio',
         'luigi',
         'pybind11',
-        'lettucethink'
+        'lettucethink',
+        'requests'
     ],
     dependency_links = ['https://github.com/romi/lettucethink-python/tarball/dev#egg=lettucethink'],
     include_package_data=True

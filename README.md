@@ -56,6 +56,17 @@ All necessary computation will be computed automatically.
 run-pipeline db/scan_id -c pipeline.toml -t AnglesAndInternodes
 ```
 
+## Scans synchronization
+
+To prepare files for vizualization and sync the files to the vizualization server, run
+
+```
+sync-scans local_db remote_db [http(s)://api_url(:api_port)]
+```
+
+This will process the `Visualization` fileset and rsync to remote_db.
+api_url is used to refresh the database in the vizualizer.
+
 ## Metadata structure
 
 Here, we describe the metadata specification for v0.4 of the software
