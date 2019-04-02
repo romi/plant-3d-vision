@@ -67,6 +67,12 @@ sync-scans local_db remote_db [http(s)://api_url(:api_port)]
 This will process the `Visualization` fileset and rsync to remote_db.
 api_url is used to refresh the database in the vizualizer.
 
+For example, for ROMI people:
+
+```
+sync-scans ~/Data/scanner/processed db.romi-project.eu:/data/v0.4 https://db.romi-project.eu/
+```
+
 ## Metadata structure
 
 Here, we describe the metadata specification for v0.4 of the software
