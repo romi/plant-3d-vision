@@ -485,31 +485,34 @@ class Visualization(RomiTask):
 
     def requires(self):
         requires = {}
+        return []
+
+    def run(self):
+        inputs = {}
+
         if self.pcd_source is not None:
             if self.pcd_source == "colmap_sparse":
-                requires['pcd'] = Colmap()
+                inputs['pcd'] = Colmap()
                 self.pcd_file_id = "sparse"
             elif self.pcd_source == "colmap_dense":
-                requires['pcd'] = Colmap()
+                inputs['pcd'] = Colmap()
                 self.pcd_file_id = "dense"
             elif self.pcd_source == "space_carving":
-                requires['pcd'] = SpaceCarving()
+                inputs['pcd'] = SpaceCarving()
                 self.pcd_file_id = "voxels"
             elif self.pcd_source == "vox2pcd":
-                requires['pcd'] = Voxel2PointCloud()
+                inputs['pcd'] = Voxel2PointCloud()
                 self.pcd_file_id = "pointcloud"
             else:
                 raise Exception("Unknown PCD source")
 
         if self.mesh_source is not None:
             if self.mesh_source == "delaunay":
-                requires['mesh'] = DelaunayTriangulation()
+                inputs['mesh'] = DelaunayTriangulation()
                 self.mesh_file_id = "mesh"
             else:
                 raise Exception("Unknown mesh source")
-        return requires
 
-    def run(self):
         def resize_to_max(img, max_size):
             i = np.argmax(img.shape[0:2])
             if img.shape[i] <= max_size:
@@ -545,15 +548,15 @@ class Visualization(RomiTask):
             f.write_text('json', skeleton_file.read_text())
 
         # MESH
-        if 'mesh' in self.requires():
-            pcd_file = self.input()['mesh'].get().get_file(self.mesh_file_id)
+        if 'mesh' in inputs:
+            mesh_file = inputs['mesh'].output().get().get_file(self.mesh_file_id)
             mesh = db_read_triangle_mesh(mesh_file)
             f = output_fileset.create_file('mesh')
             db_write_triangle_mesh(f, mesh)
 
         # PCD
-        if 'pcd' in self.requires():
-            pcd_file = self.input()['pcd'].get().get_file(self.pcd_file_id)
+        if 'pcd' in inputs:
+            pcd_file = inputs['pcd'].output().get().get_file(self.pcd_file_id)
             pcd = db_read_point_cloud(pcd_file)
             if len(pcd.points) < self.max_pcd_size:
                 pcd_lowres = pcd

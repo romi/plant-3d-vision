@@ -1,5 +1,6 @@
 from flask import Flask, send_file
-from flask import request
+from flask import request, send_from_directory
+from flask_cors import CORS
 import json
 from flask_restful import Resource, Api
 from lettucethink.fsdb import DB
@@ -7,10 +8,12 @@ import os
 import io
 
 app = Flask(__name__)
+CORS(app)
 api = Api(app)
 
+db_location =  '/home/twintz/Data/scanner/processed'
 # db = DB('/home/twintz/dataviz/processed')
-db = DB('/home/twintz/Data/scanner/processed')
+db = DB(db_location)
 db.connect()
 
 db_prefix = "/files"
@@ -152,9 +155,15 @@ class Scan(Resource):
         filesets_matches = compute_fileset_matches(scan)
         return fmt_scan(scan, filesets_matches)
 
+class File(Resource):
+    def get(self, path):
+        return send_from_directory(db_location, path)
+
+
 
 api.add_resource(ScanList, '/scans')
 api.add_resource(Scan, '/scans/<scan_id>')
+api.add_resource(File, '/files/<path:path>')
 
 if __name__ == '__main__':
     app.run(debug=True)
