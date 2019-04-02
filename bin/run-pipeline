@@ -83,5 +83,5 @@ if __name__ == "__main__":
     luigi.build(tasks=[eval("pipeline.%s()" % options.task)],
                 local_scheduler=True)
 
-    toml.save(open(scan_pipeline, 'w'))
+    toml.dump(config, open(scan_pipeline, 'w'))
 
