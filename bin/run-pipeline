@@ -5,6 +5,7 @@ import tempfile
 import sys
 import os
 from lettucethink.fsdb import DB
+from shutil import copyfile
 from optparse import OptionParser
 import json
 
@@ -37,6 +38,10 @@ if __name__ == "__main__":
     print('scan = %s' % scan)
 
     # test = DB(db)
+    scan_pipeline = os.path.join(db, scan, "pipeline.toml")
+
+    if options.config is None: # By default, take pipeline.toml in the scan directory
+        options.config = scan_pipeline
 
     if os.path.splitext(options.config)[-1] == ".toml":
         import toml
@@ -77,3 +82,6 @@ if __name__ == "__main__":
 
     luigi.build(tasks=[eval("pipeline.%s()" % options.task)],
                 local_scheduler=True)
+
+    toml.save(open(scan_pipeline, 'w'))
+
