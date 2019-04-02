@@ -159,11 +159,19 @@ class File(Resource):
     def get(self, path):
         return send_from_directory(db_location, path)
 
+class Refresh(Resource):
+    def get(self):
+        global db
+        db = DB(db_location)
+        db.connect()
+        return 200
+
 
 
 api.add_resource(ScanList, '/scans')
 api.add_resource(Scan, '/scans/<scan_id>')
 api.add_resource(File, '/files/<path:path>')
+api.add_resource(Refresh, '/refresh')
 
 if __name__ == '__main__':
     app.run(debug=True, host="0.0.0.0")
