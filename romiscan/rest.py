@@ -36,9 +36,18 @@ def compute_fileset_matches(scan):
 
 def fmt_scan_minimal(scan, filesets_matches):
     metadata = scan.get_metadata()
-    species = metadata['object']['species']
-    environment = metadata['object']['environment']
-    plant = metadata['object']['plant_id']
+    try:
+        species = metadata['object']['species']
+    except:
+        species = "N/A"
+    try:
+        environment = metadata['object']['environment']
+    except:
+        environment = "N/A"
+    try:
+        plant = metadata['object']['plant_id']
+    except:
+        plant = "N/A"
 
     n_photos = len(scan.get_fileset('images').get_files())
 
