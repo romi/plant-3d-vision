@@ -116,6 +116,7 @@ class Colmap(RomiTask):
     matcher = luigi.Parameter()
     compute_dense = luigi.BoolParameter()
     cli_args = luigi.DictParameter()
+    align_pcd = luigi.BoolParameter(default=True)
 
     def requires(self):
         return []
@@ -127,7 +128,8 @@ class Colmap(RomiTask):
         with tempfile.TemporaryDirectory() as colmap_ws:
 
             colmap_runner = ColmapRunner(
-                self.matcher, self.compute_dense, self.cli_args, colmap_ws)
+                self.matcher, self.compute_dense, self.cli_args, self.align_pcd,
+                colmap_ws)
 
             os.makedirs(os.path.join(colmap_ws, 'images'))
 

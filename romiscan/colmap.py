@@ -102,11 +102,13 @@ def cameras_model_to_opencv(cameras):
 
 
 class ColmapRunner():
-    def __init__(self, matcher, compute_dense, all_cli_args, colmap_ws):
+    def __init__(self, matcher, compute_dense, all_cli_args, align_pcd,
+                    colmap_ws):
         self.colmap_ws = colmap_ws
         self.matcher = matcher
         self.compute_dense = compute_dense
         self.all_cli_args = all_cli_args
+        self.align_pcd = align_pcd
 
     def colmap_feature_extractor(self):
         if 'feature_extractor' in self.all_cli_args:
@@ -219,7 +221,9 @@ class ColmapRunner():
         self.colmap_matcher()
         os.makedirs(os.path.join(self.colmap_ws, 'sparse'))
         self.colmap_mapper()
-        self.colmap_model_aligner()
+
+        if self.align_pcd:
+            self.colmap_model_aligner()
 
         # Import sparse model into python and save as json
         self.cameras = read_model.read_cameras_binary(
