@@ -28,6 +28,9 @@ scale = 4
 [SpaceCarving]
 voxel_size = 1.0
 
+[BackProjection]
+voxel_size = 1.0
+
 [Voxel2PointCloud]
 dist = 1.0
 
