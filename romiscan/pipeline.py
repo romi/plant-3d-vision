@@ -328,15 +328,13 @@ class BackProjection(RomiTask):
                 sc.process_view(intrinsics, rot, tvec, mask)
 
         labels = sc.values()
-        idx = np.argwhere(labels == 2)
-        pts = index2point(idx, origin, self.voxel_size)
-
-        output = PointCloud()
-        output.points = Vector3dVector(pts)
+        output = np.zeros(nx, ny, nz)
+        output[:] = labels
 
         output_fileset = self.output().get()
         output_file = output_fileset.get_file('voxels', create=True)
-        db_write_point_cloud(output_file, output)
+        db_write_numpy_array(output_file, output)
+        output_file.set_metadata({"origin" : [x_min, y_min, z_min], "voxel_size" : self.voxel_size })
 
 class SpaceCarving(RomiTask):
     voxel_size = luigi.FloatParameter()

@@ -28,3 +28,15 @@ def db_write_triangle_mesh(file, mesh):
     mesh_path = os.path.join(tmpdir.name, '%s.ply' % file.id)
     write_triangle_mesh(mesh_path, mesh)
     file.import_file(mesh_path)
+
+
+def db_read_numpy_array(file):
+    path = fsdb._file_path(file, file.filename)
+    return np.load(path)
+
+
+def db_write_numpy_array(file, array):
+    tmpdir = tempfile.TemporaryDirectory()
+    mesh_path = os.path.join(tmpdir.name, '%s.np' % file.id)
+    np.save(mesh_path, array)
+    file.import_file(mesh_path)
