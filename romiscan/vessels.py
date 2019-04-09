@@ -1,7 +1,6 @@
 from skimage.filters import gaussian
-import open3d
 from romiscan.pcd import *
-from open3d.geometry import *
+from open3d.open3d.geometry import *
 from skimage.feature import hessian_matrix, hessian_matrix_eigvals
 from scipy.special import betainc
 from romiscan.cl import *

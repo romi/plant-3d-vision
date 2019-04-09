@@ -1,9 +1,8 @@
 import numpy as np
-import open3d
 from scipy.ndimage.morphology import distance_transform_edt
 from scipy.ndimage.filters import gaussian_filter
-from open3d.io import read_point_cloud, write_point_cloud, write_triangle_mesh, read_triangle_mesh
-from open3d.utility import Vector3dVector
+from open3d.open3d.io import read_point_cloud, write_point_cloud, write_triangle_mesh, read_triangle_mesh
+from open3d.open3d.utility import Vector3dVector
 
 
 def index2point(indexes, origin, voxel_size):

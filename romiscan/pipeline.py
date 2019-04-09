@@ -5,9 +5,9 @@ import shutil
 import cv2
 from imageio import imwrite
 from scipy.ndimage import binary_dilation
-import open3d
-from open3d.geometry import PointCloud, TriangleMesh
-from open3d.utility import Vector3dVector, Vector3iVector
+
+from open3d.open3d.geometry import PointCloud, TriangleMesh
+from open3d.open3d.utility import Vector3dVector, Vector3iVector
 from skimage.transform import resize
 from scipy.ndimage.filters import gaussian_filter
 
@@ -51,7 +51,7 @@ class FilesetTarget(luigi.Target):
         return self.scan.create_fileset(self.fileset_id)
 
     def exists(self):
-        fs = self.scan.get_fileset(self.fileset_id) 
+        fs = self.scan.get_fileset(self.fileset_id)
         return fs is not None and len(fs.get_files()) > 0
 
     def get(self, create=True):

@@ -1,0 +1,45 @@
+package:
+  name: Scan3D
+  version: {{ environ.get('GIT_DESCRIBE_TAG', 'default') }}
+
+source:
+  path: ..
+
+build:
+  number: {{ GIT_DESCRIBE_NUMBER }}
+  preserve_egg_dir: True
+  script: python setup.py install
+
+requirements:
+  build:
+    - {{ compiler('c') }}
+    - setuptools
+  host:
+    - python=3.7
+    - numpy
+  run:
+    - python=3.7
+    - eigen
+    - cmake
+    - pybind11
+    - flask
+    - networkx
+    - scikit-image
+    - urllib3
+    - chardet
+    - opencv
+    - toml
+    - python-dateutil=2.7.5
+    - python-daemon=2.1.2
+    - tornado=4.5.3
+    - aniso8601  # conda-forge channel
+    - pocl  # conda-forge channel
+    - pyopencl  # conda-forge channel
+    - cgal  # conda-forge channel
+    - open3d  # open3d-admin channel
+
+about:
+  home: https://github.com/romi/Scan3D
+  license: None
+  license_file: LICENSE
+  summary: 3D reconstruction and plant phylotaxis quantification.
