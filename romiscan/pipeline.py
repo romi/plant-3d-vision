@@ -95,11 +95,12 @@ class AnglesAndInternodes(RomiTask):
         j = json.loads(f)
         points = np.asarray(j['points'])
         lines = np.asarray(j['lines'])
-        fruits, angles, internodes = compute_angles_and_internodes(
+        stem, fruits, angles, internodes = compute_angles_and_internodes(
             points, lines)
         o = self.output().get()
         txt = json.dumps({
             'fruit_points': fruits,
+            'stem_points' : stem,
             'angles': angles,
             'internodes': internodes
         })
