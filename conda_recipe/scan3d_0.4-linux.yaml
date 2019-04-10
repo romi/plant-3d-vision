@@ -21,5 +21,6 @@ dependencies:
 - aniso8601  # conda-forge channel
 - pocl  # conda-forge channel
 - pyopencl  # conda-forge channel
-- cgal  # conda-forge channel
+#- cgal  # conda-forge channel
 - open3d  # open3d-admin channel
+- luigi
