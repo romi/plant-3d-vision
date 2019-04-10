@@ -1,9 +1,13 @@
 import numpy as np
 from scipy.ndimage.morphology import distance_transform_edt
 from scipy.ndimage.filters import gaussian_filter
-from open3d.open3d.io import read_point_cloud, write_point_cloud, write_triangle_mesh, read_triangle_mesh
-from open3d.open3d.utility import Vector3dVector
 
+try:
+    from open3d.geometry import PointCloud
+    from open3d.open3d.utility import Vector3dVector
+except ImportError:
+    from open3d.open3d.geometry import PointCloud
+    from open3d.open3d.utility import Vector3dVector
 
 def index2point(indexes, origin, voxel_size):
     return indexes/voxel_size + origin[np.newaxis, :]
@@ -76,7 +80,7 @@ def vol2pcd(volume, origin, voxel_size, dist_threshold=0, quiet=False):
                                                      grad_normalized[2]])])
 
     pts = index2point(pts, origin, voxel_size)
-    pcd = open3d.geometry.PointCloud()
+    pcd = PointCloud()
     pcd.points = Vector3dVector(pts)
     pcd.normals = Vector3dVector(normals)
     pcd.normalize_normals()
@@ -96,7 +100,7 @@ def crop_point_cloud(point_cloud, bounding_box):
                    (points[:, 2] > z_bounds[0]) * (points[:, 2] < z_bounds[1]))
 
     points = points[valid_index, :]
-    cropped_point_cloud = open3d.geometry.PointCloud()
+    cropped_point_cloud = PointCloud()
     cropped_point_cloud.points = Vector3dVector(points)
 
     if point_cloud.has_normals():

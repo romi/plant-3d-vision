@@ -1,9 +1,16 @@
-from open3d.open3d.geometry import LineSet
-from open3d.open3d.io import read_point_cloud
-from open3d.open3d.utility import Vector3dVector, Vector2iVector
-import networkx as nx
-import numpy as np
 import operator
+import numpy as np
+import networkx as nx
+
+try:
+    from open3d.open3d.geometry import LineSet
+    from open3d.open3d.io import read_point_cloud
+    from open3d.open3d.utility import Vector3dVector, Vector2iVector
+except ImportError:
+    from open3d.open3d.geometry import LineSet
+    from open3d.open3d.io import read_point_cloud
+    from open3d.open3d.utility import Vector3dVector, Vector2iVector
+
 
 def get_main_stem_and_nodes(G, root_node):
     # Get main stem as shortest path to point furthest from root

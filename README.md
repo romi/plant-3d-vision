@@ -38,28 +38,28 @@ python setup.py install
 git clone https://github.com/romi/Scan3D.git
 ```
 
-2. Get all third party dependencies:
-```bash
-cd Scan3D
-git submodule update --init
-```
+<!--2. Get all third party dependencies:-->
+<!--```bash-->
+<!--cd Scan3D-->
+<!--git submodule update --init-->
+<!--```-->
 
-3. To create a conda environment and install all dependencies, in a shell run:
+2. To create a conda environment and install all dependencies, in a shell run:
 ```bash
 conda env create -f conda_recipe/scan3d_0.4-linux.yaml
 ```
 
-4. Activate the conda environment:
+3. Activate the conda environment:
 ```bash
 conda activate scan3d_0.4
 ```
 
-5. Then set the following **compilitation flags** for `CGAL`:
+4. Then set the following **compilitation flags** for `CGAL`:
 ```bash
 cmake romiscan/cgal/. -DCGAL_DIR="$CONDA_PREFIX/lib/cmake/CGAL" -DEIGEN3_INCLUDE_DIR="$CONDA_PREFIX/include/eigen3" -DCMAKE_BUILD_TYPE=Release
 ```
 
-6. Finally run:
+5. Finally run:
 ```bash
 python setup.py install
 ```

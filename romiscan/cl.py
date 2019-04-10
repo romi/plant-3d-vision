@@ -1,6 +1,7 @@
-import pyopencl as cl
 import os
 import numpy as np
+import pyopencl as cl
+
 from romiscan.pcd import point2index
 from skimage.morphology import binary_dilation
 

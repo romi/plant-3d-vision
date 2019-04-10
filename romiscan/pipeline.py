@@ -6,8 +6,13 @@ import cv2
 from imageio import imwrite
 from scipy.ndimage import binary_dilation
 
-from open3d.open3d.geometry import PointCloud, TriangleMesh
-from open3d.open3d.utility import Vector3dVector, Vector3iVector
+try:
+    from open3d.geometry import PointCloud, TriangleMesh
+    from open3d.utility import Vector3dVector, Vector3iVector
+except ImportError:
+    from open3d.open3d.geometry import PointCloud, TriangleMesh
+    from open3d.open3d.utility import Vector3dVector, Vector3iVector
+
 from skimage.transform import resize
 from scipy.ndimage.filters import gaussian_filter
 

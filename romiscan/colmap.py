@@ -3,8 +3,13 @@ import subprocess
 
 import numpy as np
 import json
-from open3d.open3d.geometry import PointCloud
-from open3d.open3d.utility import Vector3dVector
+
+try:
+    from open3d.geometry import PointCloud
+    from open3d.utility import Vector3dVector
+except:
+    from open3d.open3d.geometry import PointCloud
+    from open3d.open3d.utility import Vector3dVector
 
 from romiscan.thirdparty import read_model
 
