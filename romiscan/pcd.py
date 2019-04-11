@@ -3,11 +3,11 @@ from scipy.ndimage.morphology import distance_transform_edt
 from scipy.ndimage.filters import gaussian_filter
 
 try:
-    from open3d.geometry import PointCloud
-    from open3d.open3d.utility import Vector3dVector
+   from open3d.geometry import PointCloud
+   from open3d.utility import Vector3dVector
 except ImportError:
-    from open3d.open3d.geometry import PointCloud
-    from open3d.open3d.utility import Vector3dVector
+   from open3d import PointCloud
+   from open3d import Vector3dVector
 
 def index2point(indexes, origin, voxel_size):
     return indexes/voxel_size + origin[np.newaxis, :]

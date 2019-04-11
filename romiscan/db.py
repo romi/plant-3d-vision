@@ -4,7 +4,7 @@ import tempfile
 try:
     from open3d.io import read_point_cloud, write_point_cloud, write_triangle_mesh, read_triangle_mesh
 except ImportError:
-    from open3d.open3d.io import read_point_cloud, write_point_cloud, write_triangle_mesh, read_triangle_mesh
+    from open3d import read_point_cloud, write_point_cloud, write_triangle_mesh, read_triangle_mesh
 
 from lettucethink import fsdb
 

@@ -2,14 +2,6 @@ import numpy as np
 from scipy.special import betainc
 from skimage.filters import gaussian
 from skimage.feature import hessian_matrix, hessian_matrix_eigvals
-from romiscan.cl import *
-from romiscan.pcd import *
-
-try:
-    from open3d.geometry import *
-except ImportError:
-    from open3d.open3d.geometry import *
-
 
 EPS = 1e-3
 
