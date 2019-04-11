@@ -164,7 +164,7 @@ class Colmap(RomiTask):
                 bounding_box = scan.get_metadata()['scanner']['workspace']
             except:
                 bounding_box = None
-            if bounding_box is not None:
+            if bounding_box is not None and self.align_pcd:
                 pcd = romiscan.pcd.crop_point_cloud(pcd, bounding_box)
 
             f = output_fileset.get_file('sparse', create=True)
