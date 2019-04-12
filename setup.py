@@ -1,14 +1,12 @@
 import os
 import re
 import sys
-import sysconfig
-from shutil import copyfile
 import platform
 import subprocess
-import romiscan
 import glob
+import romiscan
 
-
+from shutil import copyfile
 from distutils.version import LooseVersion
 from setuptools import setup, Extension, find_packages
 from setuptools.command.build_ext import build_ext
@@ -33,7 +31,7 @@ class CMakeBuild(build_ext):
 
         if platform.system() == "Windows":
             cmake_version = LooseVersion(re.search(r'version\s*([\d.]+)',
-                                         out.decode()).group(1))
+                                                   out.decode()).group(1))
             if cmake_version < '3.1.0':
                 raise RuntimeError("CMake >= 3.1.0 is required on Windows")
 
@@ -55,7 +53,7 @@ class CMakeBuild(build_ext):
             cmake_args += ['-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{}={}'.format(
                 cfg.upper(),
                 extdir)]
-            if sys.maxsize > 2**32:
+            if sys.maxsize > 2 ** 32:
                 cmake_args += ['-A', 'x64']
             build_args += ['--', '/m']
         else:
@@ -74,7 +72,6 @@ class CMakeBuild(build_ext):
         subprocess.check_call(['cmake', '--build', '.'] + build_args,
                               cwd=tempdir)
         print()  # Add an empty line for cleaner output
-
 
 
 s = setup(
@@ -101,26 +98,29 @@ s = setup(
         'lettucethink',
         'requests'
     ],
-    dependency_links = ['https://github.com/romi/lettucethink-python/tarball/dev#egg=lettucethink'],
+    dependency_links=[
+        'https://github.com/romi/lettucethink-python/tarball/dev#egg=lettucethink'],
     include_package_data=True
 )
-
 
 if "install" in sys.argv:
     try:
         import pyopencl
+
         print("pyopencl is installed, skipping install...")
     except:
         print("pyopencl is not installed, running install...")
         curdir = os.curdir
         os.chdir("thirdparty/pyopencl/")
-        subprocess.run([sys.executable, "configure.py", "--cl-pretend-version=1.2"])
+        subprocess.run(
+            [sys.executable, "configure.py", "--cl-pretend-version=1.2"])
         subprocess.run(["git", "submodule", "update", "--init"])
         subprocess.run([sys.executable, "setup.py", *sys.argv[1:]])
         os.chdir(curdir)
 
     try:
         import open3d
+
         print("open3d is installed, skipping install...")
     except:
         print("open3d is not installed, running install...")
@@ -132,11 +132,10 @@ if "install" in sys.argv:
         os.chdir("..")
         os.makedirs("build", exist_ok=True)
         os.chdir("build")
-        subprocess.run(["cmake",  ".."], check=True)
-        subprocess.run(["make",  "-j"], check=True)
+        subprocess.run(["cmake", ".."], check=True)
+        subprocess.run(["make", "-j"], check=True)
         os.chdir(curdir)
         installation_path = s.command_obj['install'].install_lib
         for f in glob.glob("lib/Python/*"):
             copyfile(f, os.path.join(installation_path, os.path.basename(f)))
-        print("installation path = %s"%installation_path)
-
+        print("installation path = %s" % installation_path)
