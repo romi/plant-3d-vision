@@ -7,11 +7,11 @@ from imageio import imwrite
 from scipy.ndimage import binary_dilation
 
 try:
-    from open3d.geometry import PointCloud, TriangleMesh
-    from open3d.utility import Vector3dVector, Vector3iVector
+   from open3d.geometry import TriangleMesh
+   from open3d.utility import Vector3dVector, Vector3iVector
 except ImportError:
-    from open3d.open3d.geometry import PointCloud, TriangleMesh
-    from open3d.open3d.utility import Vector3dVector, Vector3iVector
+   from open3d import TriangleMeshLineSet
+   from open3d import Vector3dVector, Vector3iVector
 
 from skimage.transform import resize
 from scipy.ndimage.filters import gaussian_filter
@@ -164,7 +164,7 @@ class Colmap(RomiTask):
                 bounding_box = scan.get_metadata()['scanner']['workspace']
             except:
                 bounding_box = None
-            if bounding_box is not None:
+            if bounding_box is not None and self.align_pcd:
                 pcd = romiscan.pcd.crop_point_cloud(pcd, bounding_box)
 
             f = output_fileset.get_file('sparse', create=True)
