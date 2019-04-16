@@ -84,10 +84,8 @@ class CMakeBuild(build_ext):
 try:
     import open3d
 except:
-    s_open3d = setup(
-        name='open3d',
-        ext_modules=[CMakeExtension('open3d', sourcedir='thirdparty/Open3D')]
-        )
+    raise Exception("Please install open3D before running this. You can
+                     use the script utils/install_open3d.py")
 
 s = setup(
     name='romiscan',
