@@ -79,11 +79,6 @@ class CMakeBuild(build_ext):
                               cwd=tempdir)
         print()  # Add an empty line for cleaner output
 
-try:
-    import open3d
-except:
-    raise Exception("Please install open3D before running this. You can
-                     use the script utils/install_open3d.py")
 s = setup(
     name='romiscan',
     version=romiscan.__version__,
