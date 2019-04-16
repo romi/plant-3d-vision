@@ -7,11 +7,16 @@ import platform
 import subprocess
 import romiscan
 import glob
+import pathlib
 
 
 from distutils.version import LooseVersion
 from setuptools import setup, Extension, find_packages
 from setuptools.command.build_ext import build_ext
+
+dir_path = os.path.abspath(os.path.dirname(os.path.realpath(__file__)))
+thirdparty_deps = pathlib.Path(os.path.join(dir_path, "thirdparty")).as_uri()
+print(thirdparty_deps)
 
 
 class CMakeExtension(Extension):
@@ -76,7 +81,13 @@ class CMakeBuild(build_ext):
                               cwd=tempdir)
         print()  # Add an empty line for cleaner output
 
-
+try:
+    import open3d
+except:
+    s_open3d = setup(
+        name='open3d',
+        ext_modules=[CMakeExtension('open3d', sourcedir='thirdparty/Open3D')]
+        )
 
 s = setup(
     name='romiscan',
@@ -87,8 +98,7 @@ s = setup(
     author_email='timothee@timwin.fr',
     description='A plant scanner',
     long_description='',
-    ext_modules=[CMakeExtension('romiscan.cgal'),
-                CMakeExtension('open3d', sourcedir='thirdparty/Open3D')],
+    ext_modules=[CMakeExtension('romiscan.cgal')],
     cmdclass=dict(build_ext=CMakeBuild),
     zip_safe=False,
     install_requires=[
