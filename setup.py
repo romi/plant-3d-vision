@@ -5,17 +5,23 @@ import platform
 import subprocess
 import glob
 import romiscan
+import pathlib
 
 from shutil import copyfile
 from distutils.version import LooseVersion
 from setuptools import setup, Extension, find_packages
 from setuptools.command.build_ext import build_ext
 
+dir_path = os.path.abspath(os.path.dirname(os.path.realpath(__file__)))
+thirdparty_deps = pathlib.Path(os.path.join(dir_path, "thirdparty")).as_uri()
+print(thirdparty_deps)
+
 
 class CMakeExtension(Extension):
-    def __init__(self, name):
+    def __init__(self, name, sourcedir=None):
         Extension.__init__(self, name, sources=[])
-        sourcedir = name.replace('.', '/')
+        if sourcedir is None:
+            sourcedir = name.replace('.', '/')
         self.reldir = sourcedir
         self.sourcedir = os.path.abspath(sourcedir)
 
@@ -73,7 +79,11 @@ class CMakeBuild(build_ext):
                               cwd=tempdir)
         print()  # Add an empty line for cleaner output
 
-
+try:
+    import open3d
+except:
+    raise Exception("Please install open3D before running this. You can
+                     use the script utils/install_open3d.py")
 s = setup(
     name='romiscan',
     version=romiscan.__version__,
@@ -88,6 +98,7 @@ s = setup(
     zip_safe=False,
     install_requires=[
         'numpy',
+        'pyopencl',
         'scikit-image',
         'networkx',
         'Flask',
@@ -95,47 +106,9 @@ s = setup(
         'imageio',
         'luigi',
         'pybind11',
-        'lettucethink',
-        'requests'
+        'lettucethink @ https://github.com/romi/lettucethink-python/tarball/dev',
+        'requests',
+        'mako'
     ],
-    dependency_links=[
-        'https://github.com/romi/lettucethink-python/tarball/dev#egg=lettucethink'],
     include_package_data=True
 )
-
-if "install" in sys.argv:
-    try:
-        import pyopencl
-
-        print("pyopencl is installed, skipping install...")
-    except:
-        print("pyopencl is not installed, running install...")
-        curdir = os.curdir
-        os.chdir("thirdparty/pyopencl/")
-        subprocess.run(
-            [sys.executable, "configure.py", "--cl-pretend-version=1.2"])
-        subprocess.run(["git", "submodule", "update", "--init"])
-        subprocess.run([sys.executable, "setup.py", *sys.argv[1:]])
-        os.chdir(curdir)
-
-    try:
-        import open3d
-
-        print("open3d is installed, skipping install...")
-    except:
-        print("open3d is not installed, running install...")
-        curdir = os.curdir
-        os.chdir("thirdparty/Open3D/")
-        subprocess.run(["git", "submodule", "update", "--init"])
-        os.chdir("3rdparty")
-        subprocess.run(["git", "submodule", "update", "--init"])
-        os.chdir("..")
-        os.makedirs("build", exist_ok=True)
-        os.chdir("build")
-        subprocess.run(["cmake", ".."], check=True)
-        subprocess.run(["make", "-j"], check=True)
-        os.chdir(curdir)
-        installation_path = s.command_obj['install'].install_lib
-        for f in glob.glob("lib/Python/*"):
-            copyfile(f, os.path.join(installation_path, os.path.basename(f)))
-        print("installation path = %s" % installation_path)
