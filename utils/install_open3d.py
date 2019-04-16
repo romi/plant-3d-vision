@@ -25,7 +25,7 @@ try:
             if site.ENABLE_USER_SITE:
                 copyfile(x, os.path.join(site.getuserbase(), fname))
             else:
-                copyfile(x, python_lib_path)
+                copyfile(x, os.path.join(python_lib_path, fname))
 
 except Exception as e:
     raise e
