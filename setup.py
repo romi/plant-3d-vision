@@ -98,10 +98,9 @@ s = setup(
         'imageio',
         'luigi',
         'pybind11',
-        'lettucethink',
+        'lettucethink @ https://github.com/romi/lettucethink-python/tarball/dev',
         'requests'
     ],
-    dependency_links = ['https://github.com/romi/lettucethink-python/tarball/dev#egg=lettucethink'],
     include_package_data=True
 )
 
