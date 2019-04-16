@@ -21,8 +21,9 @@ try:
         python_lib_path = get_python_lib()
         for x in glob.glob('lib/Python/*.so'):
             print("Installing %s"%x)
+            fname = os.path.basename(x)
             if site.ENABLE_USER_SITE:
-                copyfile(site.getuserbase())
+                copyfile(x, os.path.join(site.getuserbase(), fname))
             else:
                 copyfile(x, python_lib_path)
 
