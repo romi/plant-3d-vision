@@ -14,20 +14,31 @@ This software makes use of *Colmap* 3.6 as a Structure from Motion tool. You can
 it [here](https://colmap.github.io/). It uses OpenCL (>= 1.2) for accelerated 3D volume
 processing, so you should have at least one OpenCL implementation available.
 
+It depends on the CGAL library version 4.14. If you use Ubuntu,
+the cgal in the official repositories are too old, and you have to compile
+CGAL from [source](https://github.com/CGAL/cgal)
+
+On Arch Linux, you can install cgal from the repositories.
+
 Other dependencies should be processed automatically.
 
 The software has only been tested for Linux systems. Other platforms might or might not work.
 
-First clone the repository and get all third party dependencies:
+First clone the repository:
 ```
 git clone https://github.com/romi/Scan3D.git
 cd Scan3D
-git submodule update --init
 ```
 
-To install, run (I would advise to do it in a virtual environment):
+If you need to install Open3D, there is a helper you can run to install it:
+
 ```
-python setup.py install
+./utils/install_open3d.py
+```
+
+Then, proceed to the installation using pip:
+```
+pip install .
 ```
 
 ### Source install in a conda environment:
