@@ -15,9 +15,10 @@ from setuptools.command.build_ext import build_ext
 
 
 class CMakeExtension(Extension):
-    def __init__(self, name):
+    def __init__(self, name, sourcedir=None):
         Extension.__init__(self, name, sources=[])
-        sourcedir = name.replace('.', '/')
+        if sourcedir is None:
+            sourcedir = name.replace('.', '/')
         self.reldir = sourcedir
         self.sourcedir = os.path.abspath(sourcedir)
 
@@ -86,11 +87,13 @@ s = setup(
     author_email='timothee@timwin.fr',
     description='A plant scanner',
     long_description='',
-    ext_modules=[CMakeExtension('romiscan.cgal')],
+    ext_modules=[CMakeExtension('romiscan.cgal'),
+                CMakeExtension('open3d', sourcedir='thirdparty/Open3D')],
     cmdclass=dict(build_ext=CMakeBuild),
     zip_safe=False,
     install_requires=[
         'numpy',
+        'pyopencl',
         'scikit-image',
         'networkx',
         'Flask',
@@ -99,43 +102,8 @@ s = setup(
         'luigi',
         'pybind11',
         'lettucethink @ https://github.com/romi/lettucethink-python/tarball/dev',
-        'requests'
+        'requests',
+        'mako'
     ],
     include_package_data=True
 )
-
-
-if "install" in sys.argv:
-    try:
-        import pyopencl
-        print("pyopencl is installed, skipping install...")
-    except:
-        print("pyopencl is not installed, running install...")
-        curdir = os.curdir
-        os.chdir("thirdparty/pyopencl/")
-        subprocess.run([sys.executable, "configure.py", "--cl-pretend-version=1.2"])
-        subprocess.run(["git", "submodule", "update", "--init"])
-        subprocess.run([sys.executable, "setup.py", *sys.argv[1:]])
-        os.chdir(curdir)
-
-    try:
-        import open3d
-        print("open3d is installed, skipping install...")
-    except:
-        print("open3d is not installed, running install...")
-        curdir = os.curdir
-        os.chdir("thirdparty/Open3D/")
-        subprocess.run(["git", "submodule", "update", "--init"])
-        os.chdir("3rdparty")
-        subprocess.run(["git", "submodule", "update", "--init"])
-        os.chdir("..")
-        os.makedirs("build", exist_ok=True)
-        os.chdir("build")
-        subprocess.run(["cmake",  ".."], check=True)
-        subprocess.run(["make",  "-j"], check=True)
-        os.chdir(curdir)
-        installation_path = s.command_obj['install'].install_lib
-        for f in glob.glob("lib/Python/*"):
-            copyfile(f, os.path.join(installation_path, os.path.basename(f)))
-        print("installation path = %s"%installation_path)
-
