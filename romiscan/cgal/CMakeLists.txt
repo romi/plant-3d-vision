@@ -27,7 +27,7 @@ if ( NOT Boost_FOUND )
 
 endif()
 
-find_package(pybind11 REQUIRED)
+# find_package(pybind11 REQUIRED)
 
 # include for local directory
 
@@ -43,7 +43,10 @@ add_definitions(-DCGAL_EIGEN3_ENABLED)
 
 
 # create_single_source_cgal_program( "python_cgal_interface.cc" )
-pybind11_add_module(cgal SHARED cgal.cc)
+#pybind11_add_module(cgal SHARED cgal.cc)
+
+add_library(cgal SHARED cgal.cc)
+set_target_properties(cgal PROPERTIES PREFIX "")
 target_link_libraries(cgal ${CGAL_LIBRARIES})
-target_include_directories(cgal PUBLIC ${CGAL_INCLUDE_DIRS})
+target_include_directories(cgal PUBLIC ${CGAL_INCLUDE_DIRS} ${PYBIND11_INCLUDE_DIR} ${PYTHON_INCLUDE_DIR})
 
