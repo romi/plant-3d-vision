@@ -173,7 +173,7 @@ def compute_angles_and_internodes(points, lines, z_orientation="down"):
     # Get the root node
     if z_orientation == "down":
         root_node = np.argmax(points[:, 2])
-    else if z_orientation == "up":
+    elif z_orientation == "up":
         root_node = np.argmin(points[:, 2])
     else:
         raise ValueError("Unknown z orientation %s"%z_orientation)
