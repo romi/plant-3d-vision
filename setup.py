@@ -49,8 +49,10 @@ class CMakeBuild(build_ext):
         print(self.get_ext_fullpath(ext.name))
         extdir = os.path.abspath(
             os.path.dirname(self.get_ext_fullpath(ext.name)))
+        import pybind11
         cmake_args = ['-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=' + extdir,
-                      '-DPYTHON_EXECUTABLE=' + sys.executable]
+                      '-DPYTHON_EXECUTABLE=' + sys.executable,
+                          '-DCMAKE_CXX_FLAGS=-isystem\ ' + pybind11.get_include()]
 
         cfg = 'Debug' if self.debug else 'Release'
         build_args = ['--config', cfg]
