@@ -165,14 +165,18 @@ def draw_segmentation(main_stem, fruits, vertices, plane_vectors, axis_length):
     return geometries
 
 
-def compute_angles_and_internodes(points, lines):
+def compute_angles_and_internodes(points, lines, z_orientation="down"):
     """
     Get angle and internodes from graph
     """
     G = build_graph(points, lines)
     # Get the root node
-    # In the scanner, z increasing means down
-    root_node = np.argmax(points[:, 2])
+    if z_orientation == "down":
+        root_node = np.argmax(points[:, 2])
+    else if z_orientation == "up":
+        root_node = np.argmin(points[:, 2])
+    else:
+        raise ValueError("Unknown z orientation %s"%z_orientation)
 
     # Get the main stem and node locations
     main_stem, nodes = get_main_stem_and_nodes(G, root_node)

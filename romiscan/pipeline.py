@@ -92,6 +92,7 @@ class RomiTask(luigi.Task):
         return True
 
 class AnglesAndInternodes(RomiTask):
+    z_orientation = luigi.Parameter(default="down")
     def requires(self):
         return CurveSkeleton()
 
@@ -101,7 +102,7 @@ class AnglesAndInternodes(RomiTask):
         points = np.asarray(j['points'])
         lines = np.asarray(j['lines'])
         stem, fruits, angles, internodes = compute_angles_and_internodes(
-            points, lines)
+            points, lines, self.z_orientation)
         o = self.output().get()
         txt = json.dumps({
             'fruit_points': fruits,
