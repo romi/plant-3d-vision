@@ -4,7 +4,7 @@ from romiscan import pipeline
 import tempfile
 import sys
 import os
-from lettucethink.fsdb import DB
+from lettucethink.db.fsdb import DB
 from shutil import copyfile
 from optparse import OptionParser
 import json
