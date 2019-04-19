@@ -13,6 +13,8 @@ except ImportError:
    from open3d import TriangleMeshLineSet
    from open3d import Vector3dVector, Vector3iVector
 
+import open3d
+
 from skimage.transform import resize
 from scipy.ndimage.filters import gaussian_filter
 
@@ -580,6 +582,9 @@ class Visualization(RomiTask):
             DatabaseConfig().db_location, DatabaseConfig().scan_id, IMAGES_DIRECTORY).get()
         for img in images_fileset.get_files():
             data = img.read_image()
+            # remove alpha channel
+            if data.shape[2] == 4:
+                data = data[:,:,:3]
             lowres = resize_to_max(data, self.max_image_size)
             thumbnail = resize_to_max(data, self.thumbnail_size)
             f = output_fileset.create_file("lowres_%s"%img.id)

@@ -11,7 +11,7 @@ app = Flask(__name__)
 CORS(app)
 api = Api(app)
 
-db_location =  '/home/twintz/Data/scanner/processed'
+db_location = '/home/twintz/Data/scanner/processed'
 # db = DB('/home/twintz/dataviz/processed')
 db = DB(db_location)
 db.connect()
@@ -56,9 +56,9 @@ def fmt_scan_minimal(scan, filesets_matches):
 
     fileset_visu = scan.get_fileset(filesets_matches['Visualization'])
 
-    first_image = scan.get_fileset('images').get_files()[0].filename
+    first_image = scan.get_fileset('images').get_files()[0].id
     thumbnail = os.path.join(
-        db_prefix, scan.id, "%s/thumbnail_%s" % (filesets_matches['Visualization'], first_image))
+        db_prefix, scan.id, "%s/thumbnail_%s.jpg" % (filesets_matches['Visualization'], first_image))
 
     has_mesh = fileset_visu.get_file('mesh') is not None
     has_point_cloud = fileset_visu.get_file('pointcloud') is not None
@@ -145,10 +145,10 @@ def fmt_scan(scan, filesets_matches):
                     'id': f.id,
                     'tvec': poses[k]['tvec'],
                     'rotmat': poses[k]['rotmat'],
-                    'photoUri': os.path.join(db_prefix, scan.id, filesets_matches['Undistort'],
-                                             f.filename),
+                    'photoUri': os.path.join(db_prefix, scan.id, "%s/lowres_%s.jpg" % (filesets_matches['Visualization'],
+                                             f.id),
                     'thumbnailUri': os.path.join(db_prefix, scan.id,
-                                                 "%s/thumbnail_images_%s" % (filesets_matches['Visualization'], f.filename))})
+                                                 "%s/thumbnail_%s.jpg" % (filesets_matches['Visualization'], f.id))})
                 break
 
     return res
@@ -156,15 +156,15 @@ def fmt_scan(scan, filesets_matches):
 
 class ScanList(Resource):
     def get(self):
-        query = request.args.get('filterQuery')
-        scans = fmt_scans(db.get_scans(), query=query)
+        query=request.args.get('filterQuery')
+        scans=fmt_scans(db.get_scans(), query=query)
         return scans
 
 
 class Scan(Resource):
     def get(self, scan_id):
-        scan = db.get_scan(scan_id)
-        filesets_matches = compute_fileset_matches(scan)
+        scan=db.get_scan(scan_id)
+        filesets_matches=compute_fileset_matches(scan)
         return fmt_scan(scan, filesets_matches)
 
 class File(Resource):
@@ -174,7 +174,7 @@ class File(Resource):
 class Refresh(Resource):
     def get(self):
         global db
-        db = DB(db_location)
+        db=DB(db_location)
         db.connect()
         return 200
 
