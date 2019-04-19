@@ -3,7 +3,7 @@ from flask import request, send_from_directory
 from flask_cors import CORS
 import json
 from flask_restful import Resource, Api
-from lettucethink.fsdb import DB
+from lettucethink.db.fsdb import DB
 import os
 import io
 
@@ -20,9 +20,12 @@ db_prefix = "/files"
 
 
 def fmt_date(scan):
-    x = scan.id
-    date, time = x.split('_')
-    time = time.replace('-', ':')
+    try:
+        x = scan.id
+        date, time = x.split('_')
+        time = time.replace('-', ':')
+    except:
+        date, time = "01-01-00 00:00:00"
     return "%s %s" % (date, time)
 
 
