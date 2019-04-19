@@ -6,7 +6,7 @@ try:
 except ImportError:
     from open3d import read_point_cloud, write_point_cloud, write_triangle_mesh, read_triangle_mesh
 
-from lettucethink import fsdb
+from lettucethink.db import fsdb
 
 
 def db_read_point_cloud(file):

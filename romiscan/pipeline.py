@@ -16,7 +16,7 @@ except ImportError:
 from skimage.transform import resize
 from scipy.ndimage.filters import gaussian_filter
 
-from lettucethink.fsdb import DB
+from lettucethink.db.fsdb import DB
 
 from romiscan.plantseg import *
 from romiscan.colmap import *
