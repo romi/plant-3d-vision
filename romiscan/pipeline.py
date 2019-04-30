@@ -93,6 +93,13 @@ class RomiTask(luigi.Task):
                 return False
         return True
 
+
+@RomiTask.event_handler(luigi.Event.FAILURE)
+def mourn_failure(task, exception):
+    output_fileset = task.output().get()
+    scan = task.output().get().scan
+    scan.delete_fileset(output_fileset.id)
+
 class AnglesAndInternodes(RomiTask):
     z_orientation = luigi.Parameter(default="down")
     def requires(self):
