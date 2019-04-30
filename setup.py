@@ -5,6 +5,7 @@ import platform
 import subprocess
 import glob
 import romiscan
+import site
 import pathlib
 from distutils.sysconfig import get_python_inc
 
@@ -55,7 +56,7 @@ class CMakeBuild(build_ext):
         cmake_args = ['-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=' + extdir,
                       '-DPYTHON_EXECUTABLE=' + sys.executable,
                       '-DPYTHON_INCLUDE_DIR=' + get_python_inc(),
-                      '-DPYBIND11_INCLUDE_DIR=' + pybind11.get_include()]
+                      '-DPYBIND11_INCLUDE_DIR=' + pybind11.get_include(user=site.ENABLE_USER_SITE)]
 
         cfg = 'Debug' if self.debug else 'Release'
         build_args = ['--config', cfg]
@@ -84,6 +85,28 @@ class CMakeBuild(build_ext):
                               cwd=tempdir)
         print()  # Add an empty line for cleaner output
 
+lt_link = "https://github.com/romi/lettucethink-python/tarball/dev"
+install_requires=[
+        'numpy',
+        'pyopencl',
+        'scikit-image',
+        'networkx',
+        'Flask',
+        'flask-restful',
+        'imageio',
+        'luigi',
+        'pybind11',
+        'requests',
+        'mako'
+    ]
+
+version_minor = sys.version_info.minor
+
+if version_minor >= 7:
+    install_requires.append('lettucethink @ %s'%lt_link)
+else:
+    install_requires.append('lettucethink')
+
 s = setup(
     name='romiscan',
     version=romiscan.__version__,
@@ -96,19 +119,7 @@ s = setup(
     ext_modules=[CMakeExtension('romiscan.cgal')],
     cmdclass=dict(build_ext=CMakeBuild),
     zip_safe=False,
-    install_requires=[
-        'numpy',
-        'pyopencl',
-        'scikit-image',
-        'networkx',
-        'Flask',
-        'flask-restful',
-        'imageio',
-        'luigi',
-        'pybind11',
-        'lettucethink @ https://github.com/romi/lettucethink-python/tarball/dev',
-        'requests',
-        'mako'
-    ],
-    include_package_data=True
+    install_requires=install_requires,
+    include_package_data=True,
+    dependency_links = ['%s#egg=lettucethink-0'%lt_link]
 )
