@@ -73,7 +73,7 @@ class CMakeBuild(build_ext):
             build_args += ['--', '-j2']
 
         env = os.environ.copy()
-        env['CXXFLAGS'] = '{} -DVERSION_INFO=\\"{}\\"'.format(
+        env['CXXFLAGS'] = '{} -DVERSION_INFO=\\"{}\\" -std=c++11'.format(
             env.get('CXXFLAGS', ''),
             self.distribution.get_version())
         tempdir = os.path.join(self.build_temp, ext.reldir)
