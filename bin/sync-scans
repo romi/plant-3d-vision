@@ -2,7 +2,7 @@
 import tempfile
 import sys
 import os
-from lettucethink.fsdb import DB
+from lettucethink.db.fsdb import DB
 from optparse import OptionParser
 import subprocess
 import json
