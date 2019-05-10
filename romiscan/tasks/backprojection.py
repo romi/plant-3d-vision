@@ -8,10 +8,11 @@ import numpy as np
 
 from romiscan.tasks import RomiTask
 from romiscan.tasks.colmap import Colmap
-from romiscan.tasks.improc import Masking
-from romiscan.db import db_read_point_cloud, db_write_point_cloud
-from romiscan.cl import Backprojection
+from romiscan.tasks.improc import Masking, SoftMasking
+from romiscan.db import db_read_point_cloud, db_write_point_cloud, db_write_numpy_array
+from romiscan.cl import Backprojection as ClBackprojection
 from romiscan.pcd import *
+from romiscan.vessels import *
 
 
 class SpaceCarving(RomiTask):
@@ -55,7 +56,7 @@ class SpaceCarving(RomiTask):
 
         origin = np.array([x_min, y_min, z_min])
 
-        sc = Backprojection(
+        sc = ClBackprojection(
             [nx, ny, nz], [x_min, y_min, z_min], self.voxel_size)
 
         for fi in fileset_masks.get_files():
@@ -125,7 +126,7 @@ class BackProjection(RomiTask):
 
         origin = np.array([x_min, y_min, z_min])
 
-        sc = Backprojection(
+        sc = ClBackprojection(
             [nx, ny, nz], [x_min, y_min, z_min], self.voxel_size, type="averaging")
 
         for fi in fileset_masks.get_files():
@@ -142,7 +143,7 @@ class BackProjection(RomiTask):
                 sc.process_view(intrinsics, rot, tvec, mask)
 
         labels = sc.values()
-        output = np.zeros(nx, ny, nz)
+        output = np.zeros((nx, ny, nz))
         output[:] = labels
 
         output_fileset = self.output().get()

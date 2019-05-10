@@ -2,11 +2,14 @@ import cv2
 import luigi
 import numpy as np
 import os
+from skimage.filters import gaussian as gaussian_filter
+from skimage.exposure import rescale_intensity
 
 
 from romiscan.tasks import RomiTask, DatabaseConfig, FilesetTarget
 from romiscan.tasks.colmap import Colmap
 from romiscan.masking import *
+from romiscan.vessels import *
 
 class Undistort(RomiTask):
     """
@@ -106,7 +109,7 @@ class SoftMasking(RomiTask):
             scale = self.params["scale"]
 
             def f(x):
-                x = gaussian_filter(x, scale)
+                x = gaussian_filter(x, scale, multichannel=True)
                 img = (coefs[0] * x[:, :, 0] + coefs[1] * x[:, :, 1] +
                        coefs[2] * x[:, :, 2])
                 return img
@@ -114,10 +117,9 @@ class SoftMasking(RomiTask):
             scale = self.params["scale"]
 
             def f(x):
-                img = gaussian_filter(x, scale)
+                img = gaussian_filter(x, scale, multichannel=True)
                 img = excess_green(img)
-                for i in range(dilation):
-                    img = binary_dilation(img)
+                img = rescale_intensity(img, out_range=(0,1))
                 return img
         elif self.type == "vesselness":
             scale = self.params["scale"]

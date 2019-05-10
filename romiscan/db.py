@@ -1,5 +1,6 @@
 import os
 import tempfile
+import numpy as np
 
 try:
     from open3d.io import read_point_cloud, write_point_cloud, write_triangle_mesh, read_triangle_mesh
@@ -40,6 +41,6 @@ def db_read_numpy_array(file):
 
 def db_write_numpy_array(file, array):
     tmpdir = tempfile.TemporaryDirectory()
-    mesh_path = os.path.join(tmpdir.name, '%s.np' % file.id)
+    mesh_path = os.path.join(tmpdir.name, '%s.npy' % file.id)
     np.save(mesh_path, array)
     file.import_file(mesh_path)
