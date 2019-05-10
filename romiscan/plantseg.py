@@ -1,10 +1,16 @@
-import open3d
-from open3d.geometry import LineSet
-from open3d.io import read_point_cloud
-from open3d.utility import Vector3dVector, Vector2iVector
-import networkx as nx
-import numpy as np
 import operator
+import numpy as np
+import networkx as nx
+
+try:
+    from open3d.geometry import LineSet
+    from open3d.io import read_point_cloud
+    from open3d.utility import Vector3dVector, Vector2iVector
+except ImportError:
+    from open3d.geometry import LineSet
+    from open3d.io import read_point_cloud
+    from open3d.utility import Vector3dVector, Vector2iVector
+
 
 def get_main_stem_and_nodes(G, root_node):
     # Get main stem as shortest path to point furthest from root
@@ -159,14 +165,18 @@ def draw_segmentation(main_stem, fruits, vertices, plane_vectors, axis_length):
     return geometries
 
 
-def compute_angles_and_internodes(points, lines):
+def compute_angles_and_internodes(points, lines, z_orientation="down"):
     """
     Get angle and internodes from graph
     """
     G = build_graph(points, lines)
     # Get the root node
-    # In the scanner, z increasing means down
-    root_node = np.argmax(points[:, 2])
+    if z_orientation == "down":
+        root_node = np.argmax(points[:, 2])
+    elif z_orientation == "up":
+        root_node = np.argmin(points[:, 2])
+    else:
+        raise ValueError("Unknown z orientation %s"%z_orientation)
 
     # Get the main stem and node locations
     main_stem, nodes = get_main_stem_and_nodes(G, root_node)

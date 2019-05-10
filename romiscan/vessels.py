@@ -1,12 +1,9 @@
-from skimage.filters import gaussian
-import open3d
-from romiscan.pcd import *
-from open3d.geometry import *
-from skimage.feature import hessian_matrix, hessian_matrix_eigvals
+import numpy as np
 from scipy.special import betainc
-from romiscan.cl import *
+from skimage.filters import gaussian
+from skimage.feature import hessian_matrix, hessian_matrix_eigvals
 
-eps = 1e-3
+EPS = 1e-3
 
 
 def get_roots(pts, tol=0, axis=2, inverted=True):
@@ -39,19 +36,21 @@ def hessian_eigvals_abs_sorted(volume):
 def vesselness_3D(volume, scale):
     volume = gaussian(volume, scale)
     L1, L2, L3 = hessian_eigvals_abs_sorted(volume)
-    S = np.sqrt(L1**2 + L2**2 + L3**2)
-    # res = betainc(5, 8, L2 / (L3 + eps)) * (1 - betainc(4, 4, np.abs(L1/(L2 + eps))))
-    res = np.sqrt(L3**2 - (L3-L2)**2 - L1**2)  # / (1+S + eps)
+    S = np.sqrt(L1 ** 2 + L2 ** 2 + L3 ** 2)
+    # res = betainc(5, 8, L2 / (L3 + EPS)) * (1 - betainc(4, 4, np.abs(L1/(L2 + EPS))))
+    res = np.sqrt(L3 ** 2 - (L3 - L2) ** 2 - L1 ** 2)  # / (1+S + EPS)
     res[np.isnan(res)] = 0
 
     res = res / res.max()
     res = res + 0.01
     return res
 
+
 def vesselness_2D(image, scale):
     image = image.astype(float)
     image = gaussian(image, scale)
-    L1,L2 = hessian_eigvals_abs_sorted(image)
-    res = (1 - betainc(4, 4, np.abs(L1)/(np.abs(L2) + eps)))
-    res = np.abs(L2)/np.abs(L2).max()*np.exp(np.abs(L1)/(np.abs(L2) + eps))
+    L1, L2 = hessian_eigvals_abs_sorted(image)
+    res = (1 - betainc(4, 4, np.abs(L1) / (np.abs(L2) + EPS)))
+    res = np.abs(L2) / np.abs(L2).max() * np.exp(
+        np.abs(L1) / (np.abs(L2) + EPS))
     return res

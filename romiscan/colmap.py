@@ -1,13 +1,17 @@
 import os
 import subprocess
-
 import numpy as np
 import json
-from open3d.geometry import PointCloud
-from open3d.utility import Vector3dVector
-import open3d
+
+try:
+   from open3d.geometry import PointCloud
+   from open3d.utility import Vector3dVector
+except ImportError:
+   from open3d import PointCloud
+   from open3d import Vector3dVector
 
 from romiscan.thirdparty import read_model
+colmap_log_file = open("colmap_log.txt", "w")
 
 
 def colmap_cameras_to_json(cameras):
@@ -121,7 +125,7 @@ class ColmapRunner():
         for x in cli_args.keys():
             process.extend([x, cli_args[x]])
         print(' '.join(process))
-        subprocess.run(process, check=True, stdout=subprocess.PIPE)
+        subprocess.run(process, check=True, stdout=colmap_log_file)
 
     def colmap_matcher(self):
         if self.matcher == 'exhaustive':
@@ -134,7 +138,7 @@ class ColmapRunner():
             for x in cli_args.keys():
                 process.extend([x, cli_args[x]])
             print(' '.join(process))
-            subprocess.run(process, check=True, stdout=subprocess.PIPE)
+            subprocess.run(process, check=True, stdout=colmap_log_file)
         elif self.matcher == 'sequential':
             if 'sequential_matcher' in self.all_cli_args:
                 cli_args = self.all_cli_args['sequential_matcher']
@@ -145,7 +149,7 @@ class ColmapRunner():
             for x in cli_args.keys():
                 process.extend([x, cli_args[x]])
             print(' '.join(process))
-            subprocess.run(process, check=True, stdout=subprocess.PIPE)
+            subprocess.run(process, check=True, stdout=colmap_log_file)
         else:
             raise ColmapError('Unknown matcher type')
 
@@ -161,7 +165,7 @@ class ColmapRunner():
         for x in cli_args.keys():
             process.extend([x, cli_args[x]])
         print(' '.join(process))
-        subprocess.run(process, check=True, stdout=subprocess.PIPE)
+        subprocess.run(process, check=True, stdout=colmap_log_file)
 
     def colmap_model_aligner(self):
         if 'model_aligner' in self.all_cli_args:
@@ -175,7 +179,7 @@ class ColmapRunner():
         for x in cli_args.keys():
             process.extend([x, cli_args[x]])
         print(' '.join(process))
-        subprocess.run(process, check=True, stdout=subprocess.PIPE)
+        subprocess.run(process, check=True, stdout=colmap_log_file)
 
     def colmap_image_undistorter(self):
         if 'image_undistorter' in self.all_cli_args:
@@ -189,7 +193,7 @@ class ColmapRunner():
         for x in cli_args.keys():
             process.extend([x, cli_args[x]])
         print(' '.join(process))
-        subprocess.run(process, check=True, stdout=subprocess.PIPE)
+        subprocess.run(process, check=True, stdout=colmap_log_file)
 
     def colmap_patch_match_stereo(self):
         if 'patch_match_stereo' in self.all_cli_args:
@@ -201,7 +205,7 @@ class ColmapRunner():
         for x in cli_args.keys():
             process.extend([x, cli_args[x]])
         print(' '.join(process))
-        subprocess.run(process, check=True, stdout=subprocess.PIPE)
+        subprocess.run(process, check=True, stdout=colmap_log_file)
 
     def colmap_stereo_fusion(self):
         if 'stereo_fusion' in self.all_cli_args:
@@ -214,12 +218,12 @@ class ColmapRunner():
         for x in cli_args.keys():
             process.extend([x, cli_args[x]])
         print(' '.join(process))
-        subprocess.run(process, check=True, stdout=subprocess.PIPE)
+        subprocess.run(process, check=True, stdout=colmap_log_file)
 
     def run(self):
         self.colmap_feature_extractor()
         self.colmap_matcher()
-        os.makedirs(os.path.join(self.colmap_ws, 'sparse'))
+        os.makedirs(os.path.join(self.colmap_ws, 'sparse'), exist_ok=True)
         self.colmap_mapper()
 
         if self.align_pcd:
@@ -234,7 +238,7 @@ class ColmapRunner():
             '%s/sparse/0/points3D.bin' % self.colmap_ws)
 
         if self.compute_dense:
-            os.makedirs(os.path.join(self.colmap_ws, 'dense'))
+            os.makedirs(os.path.join(self.colmap_ws, 'dense'), exist_ok=True)
             self.colmap_image_undistorter()
             self.colmap_patch_match_stereo()
             self.colmap_stereo_fusion()

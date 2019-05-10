@@ -1,23 +1,29 @@
 import os
 import re
 import sys
-import sysconfig
-from shutil import copyfile
 import platform
 import subprocess
-import romiscan
 import glob
+import romiscan
+import site
+import pathlib
+from distutils.sysconfig import get_python_inc
 
-
+from shutil import copyfile
 from distutils.version import LooseVersion
 from setuptools import setup, Extension, find_packages
 from setuptools.command.build_ext import build_ext
 
+dir_path = os.path.abspath(os.path.dirname(os.path.realpath(__file__)))
+thirdparty_deps = pathlib.Path(os.path.join(dir_path, "thirdparty")).as_uri()
+print(thirdparty_deps)
+
 
 class CMakeExtension(Extension):
-    def __init__(self, name):
+    def __init__(self, name, sourcedir=None):
         Extension.__init__(self, name, sources=[])
-        sourcedir = name.replace('.', '/')
+        if sourcedir is None:
+            sourcedir = name.replace('.', '/')
         self.reldir = sourcedir
         self.sourcedir = os.path.abspath(sourcedir)
 
@@ -33,7 +39,7 @@ class CMakeBuild(build_ext):
 
         if platform.system() == "Windows":
             cmake_version = LooseVersion(re.search(r'version\s*([\d.]+)',
-                                         out.decode()).group(1))
+                                                   out.decode()).group(1))
             if cmake_version < '3.1.0':
                 raise RuntimeError("CMake >= 3.1.0 is required on Windows")
 
@@ -45,8 +51,12 @@ class CMakeBuild(build_ext):
         print(self.get_ext_fullpath(ext.name))
         extdir = os.path.abspath(
             os.path.dirname(self.get_ext_fullpath(ext.name)))
+        import pybind11
+        print("pybind11 = %s"%pybind11.get_include())
         cmake_args = ['-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=' + extdir,
-                      '-DPYTHON_EXECUTABLE=' + sys.executable]
+                      '-DPYTHON_EXECUTABLE=' + sys.executable,
+                      '-DPYTHON_INCLUDE_DIR=' + get_python_inc(),
+                      '-DPYBIND11_INCLUDE_DIR=' + pybind11.get_include(user=site.ENABLE_USER_SITE)]
 
         cfg = 'Debug' if self.debug else 'Release'
         build_args = ['--config', cfg]
@@ -55,7 +65,7 @@ class CMakeBuild(build_ext):
             cmake_args += ['-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{}={}'.format(
                 cfg.upper(),
                 extdir)]
-            if sys.maxsize > 2**32:
+            if sys.maxsize > 2 ** 32:
                 cmake_args += ['-A', 'x64']
             build_args += ['--', '/m']
         else:
@@ -63,7 +73,7 @@ class CMakeBuild(build_ext):
             build_args += ['--', '-j2']
 
         env = os.environ.copy()
-        env['CXXFLAGS'] = '{} -DVERSION_INFO=\\"{}\\"'.format(
+        env['CXXFLAGS'] = '{} -DVERSION_INFO=\\"{}\\" -std=c++11'.format(
             env.get('CXXFLAGS', ''),
             self.distribution.get_version())
         tempdir = os.path.join(self.build_temp, ext.reldir)
@@ -75,7 +85,27 @@ class CMakeBuild(build_ext):
                               cwd=tempdir)
         print()  # Add an empty line for cleaner output
 
+lt_link = "https://github.com/romi/lettucethink-python/tarball/dev"
+install_requires=[
+        'numpy',
+        'pyopencl',
+        'scikit-image',
+        'networkx',
+        'Flask',
+        'flask-restful',
+        'imageio',
+        'luigi',
+        'pybind11',
+        'requests',
+        'mako'
+    ]
 
+version_minor = sys.version_info.minor
+
+if version_minor >= 7:
+    install_requires.append('lettucethink @ %s'%lt_link)
+else:
+    install_requires.append('lettucethink')
 
 s = setup(
     name='romiscan',
@@ -89,54 +119,7 @@ s = setup(
     ext_modules=[CMakeExtension('romiscan.cgal')],
     cmdclass=dict(build_ext=CMakeBuild),
     zip_safe=False,
-    install_requires=[
-        'numpy',
-        'scikit-image',
-        'networkx',
-        'Flask',
-        'flask-restful',
-        'imageio',
-        'luigi',
-        'pybind11',
-        'lettucethink',
-        'requests'
-    ],
-    dependency_links = ['https://github.com/romi/lettucethink-python/tarball/dev#egg=lettucethink'],
-    include_package_data=True
+    install_requires=install_requires,
+    include_package_data=True,
+    dependency_links = ['%s#egg=lettucethink-0'%lt_link]
 )
-
-
-if "install" in sys.argv:
-    try:
-        import pyopencl
-        print("pyopencl is installed, skipping install...")
-    except:
-        print("pyopencl is not installed, running install...")
-        curdir = os.curdir
-        os.chdir("thirdparty/pyopencl/")
-        subprocess.run([sys.executable, "configure.py", "--cl-pretend-version=1.2"])
-        subprocess.run(["git", "submodule", "update", "--init"])
-        subprocess.run([sys.executable, "setup.py", *sys.argv[1:]])
-        os.chdir(curdir)
-
-    try:
-        import open3d
-        print("open3d is installed, skipping install...")
-    except:
-        print("open3d is not installed, running install...")
-        curdir = os.curdir
-        os.chdir("thirdparty/Open3D/")
-        subprocess.run(["git", "submodule", "update", "--init"])
-        os.chdir("3rdparty")
-        subprocess.run(["git", "submodule", "update", "--init"])
-        os.chdir("..")
-        os.makedirs("build", exist_ok=True)
-        os.chdir("build")
-        subprocess.run(["cmake",  ".."], check=True)
-        subprocess.run(["make",  "-j"], check=True)
-        os.chdir(curdir)
-        installation_path = s.command_obj['install'].install_lib
-        for f in glob.glob("lib/Python/*"):
-            copyfile(f, os.path.join(installation_path, os.path.basename(f)))
-        print("installation path = %s"%installation_path)
-
