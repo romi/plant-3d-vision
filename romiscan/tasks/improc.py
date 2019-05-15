@@ -119,6 +119,7 @@ class SoftMasking(RomiTask):
             def f(x):
                 img = gaussian_filter(x, scale, multichannel=True)
                 img = excess_green(img)
+                img[img<0] = 0
                 img = rescale_intensity(img, out_range=(0,1))
                 return img
         elif self.type == "vesselness":
