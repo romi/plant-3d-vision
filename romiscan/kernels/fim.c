@@ -60,7 +60,8 @@ void __kernel update(__global float *sol, __global int *shape,
         F = 1.f / spd[point_flat_idx];
     }
     else {
-        F = INF;
+        atomic_xchg(&point_status[point_flat_idx], CONVERGED);
+        return;
     }
 
     a = INF;

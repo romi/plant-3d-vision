@@ -192,7 +192,7 @@ class FIM():
         for i in range(n_active):
             x = np.zeros(1, dtype=np.int32)
             cl.enqueue_copy(queue, self.sol[flat_idx[i]*x.nbytes:(flat_idx[i]+1)*x.nbytes],
-                            np.zeros(n_active, dtype=np.int32))
+                            np.zeros(1, dtype=np.int32))
 
         queue.finish()
 
@@ -242,6 +242,7 @@ class FIM():
                 if (has_converged_h[0] > 0):
                     break
                 n_iter_update += 1
+
             n_iter += 1
 
     def get_distance_map(self):
