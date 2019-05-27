@@ -32,21 +32,18 @@ class Undistort(RomiTask):
             DatabaseConfig().db_location, DatabaseConfig().scan_id, "images").get()
 
         output_fileset = self.output().get()
-        try:
-            for fi in input_fileset.get_files():
-                img = fi.read_image()
-                ext = os.path.splitext(fi.filename)[-1][1:]
-                camera_params = camera['params']
-                mat = np.matrix([[camera_params[0], 0, camera_params[2]],
-                                 [0, camera_params[1], camera_params[3]],
-                                 [0, 0, 1]])
-                undistort_parameters = np.array(camera_params[4:])
-                undistorted_data = cv2.undistort(img, mat, undistort_parameters)
+        for fi in input_fileset.get_files():
+            img = fi.read_image()
+            ext = os.path.splitext(fi.filename)[-1][1:]
+            camera_params = camera['params']
+            mat = np.matrix([[camera_params[0], 0, camera_params[2]],
+                             [0, camera_params[1], camera_params[3]],
+                             [0, 0, 1]])
+            undistort_parameters = np.array(camera_params[4:])
+            undistorted_data = cv2.undistort(img, mat, undistort_parameters)
 
-                newfi = output_fileset.create_file(fi.id)
-                newfi.write_image(ext, undistorted_data)
-        except:
-            scan.delete_fileset(output_fileset.id)
+            newfi = output_fileset.create_file(fi.id)
+            newfi.write_image(ext, undistorted_data)
 
 
 class Masking(RomiTask):

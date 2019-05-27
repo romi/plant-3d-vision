@@ -1,0 +1,2 @@
+MEASURES_FILENAME = "measures"
+SKELETON_FILENAME = "skeleton"
