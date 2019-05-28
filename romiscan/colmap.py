@@ -9,6 +9,7 @@ from open3d.geometry import PointCloud
 from open3d.utility import Vector3dVector
 
 from romiscan.thirdparty import read_model
+from romiscan import proc3d
 colmap_log_file = open("colmap_log.txt", "w")
 
 
@@ -298,12 +299,12 @@ class ColmapRunner():
             self.colmap_stereo_fusion()
             dense_pcd = read_point_cloud('%s/dense/fused.ply' % colmap_ws)
 
-        sparse_pcd = colmap_points_to_pcd(points)
+        sparse_pcd = colmap_points_to_pcd(self.points)
         if self.bounding_box is not None:
             sparse_pcd = proc3d.crop_point_cloud(sparse_pcd, self.bounding_box)
             if self.compute_dense:
                 dense_pcd = proc3d.crop_point_cloud(dense_pcd, self.bounding_box)
-        return points, images, cameras, sparse_pcd, dense_pcd
+        return self.points, self.images, self.cameras, sparse_pcd, dense_pcd
 
 
 

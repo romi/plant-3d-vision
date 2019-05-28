@@ -8,7 +8,7 @@ from romidata.testing import DBTestCase
 class TestColmap(DBTestCase):
     def test_colmap(self):
         matcher = "exhaustive"
-        compute_dense = True
+        compute_dense = False
         align_pcd = True
         all_cli_args = {
             "feature_extractor" : {
