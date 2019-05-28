@@ -2,32 +2,62 @@ import numpy as np
 from scipy.ndimage.morphology import distance_transform_edt
 from scipy.ndimage.filters import gaussian_filter
 
-try:
-   from open3d.geometry import PointCloud
-   from open3d.utility import Vector3dVector
-except ImportError:
-   from open3d import PointCloud
-   from open3d import Vector3dVector
+# from romiscan import cgal
+
+from open3d.geometry import PointCloud, TriangleMesh
+from open3d.utility import Vector3dVector, Vector3iVector
 
 def index2point(indexes, origin, voxel_size):
     return indexes/voxel_size + origin[np.newaxis, :]
 
-
 def point2index(points, origin, voxel_size):
     return np.array(np.round((points - origin[np.newaxis, :]) / voxel_size), dtype=int)
 
+def pcd2mesh(pcd):
+    """Use CGAL to create a Delaunay triangulation of a point cloud
+    with normals.
 
-def pcd2vol(pcd_points, voxel_voxel_size, zero_padding=0):
+    Parameters
+    __________
+    pcd: open3d.geometry.PointCloud
+        input point cloud (must have normals)
+
+    Returns
+    _______
+    open3d.geometry.TriangleMesh
+    """
+    assert(points.has_normals)
+    points, triangles = poisson_mesh(np.asarray(point_cloud.points),
+                          np.asarray(point_cloud.normals))
+
+    mesh = TriangleMesh()
+    mesh.vertices = Vector3dVector(points)
+    mesh.triangles = Vector3iVector(triangles)
+
+    return mesh
+
+
+def pcd2vol(pcd, voxel_size, zero_padding=0):
     """
     Voxelize a point cloud. Every voxel value is equal to the number
     of points in the corresponding cube.
 
-    :param pcd_points: Nx3 array of the 3D points
-    :param voxel_voxel_size: Width of voxels (float)
-    :param zero_padding: Space to leave around the volume
-    :rtype: 3D numpy array
+    Parameters
+    __________
+    pcd : open3d.geometry.PointCloud
+        input point cloud
+    voxel_size : float
+        target voxel size
+    zero_padding : int
+        number of zero padded values on every side of the volume (default = 0)
+
+    Returns
+    _______
+    vol : np.ndarray
+    origin : list
     """
-    origin = np.min(pcd_points, axis=0)
+    pcd_points = np.asarray(pcd.points)
+    origin = np.min(pcd_points, axis=0) - zero_padding*voxel_size
     indices = point2index(pcd_points, origin, voxel_voxel_size)
     shape = indices.max(axis=0)
 
@@ -39,14 +69,41 @@ def pcd2vol(pcd_points, voxel_voxel_size, zero_padding=0):
 
     return vol, origin
 
+def skeletonize(mesh):
+    """Use CGAL to create a Delaunay triangulation of a point cloud
+    with normals.
 
-def vol2pcd(volume, origin, voxel_size, dist_threshold=0, quiet=False):
+    Parameters
+    __________
+    mesh: open3d.geometry.TriangleMesh
+        input mesh
+
+    Returns
+    _______
+    json
+    """
+    points, lines = cgal.skeletonize_mesh(
+        np.asarray(mesh.vertices), np.asarray(mesh.triangles))
+    return {'points': points.tolist(),
+            'lines': lines.tolist()}
+
+
+def vox2pcd(volume, origin, voxel_size, level_set_value=0, quiet=False):
     """
     Converts a binary volume into a point cloud with normals.
-    :param volume: NxMxP 3D binary numpy array
-    :param voxel_size: voxel size
-    :param dist[=0]: distance of the level set on which the points are sampled
-    :rtype: open3D point cloud with normals
+
+    Parameters
+    __________
+    volume : np.ndarray
+        NxMxP 3D binary numpy array
+    voxel_size: float
+        voxel size
+    level_set_value: float
+        distance of the level set on which the points are sampled
+
+    Returns
+    _______
+    open3d.geometry.PointCloud
     """
     dist = distance_transform_edt(volume)
     mdist = distance_transform_edt(1-volume)
@@ -57,7 +114,7 @@ def vol2pcd(volume, origin, voxel_size, dist_threshold=0, quiet=False):
     gy = gaussian_filter(gy, 1)
     gz = gaussian_filter(gz, 1)
 
-    on_edge = (dist > -dist_threshold) * (dist <= -dist_threshold+np.sqrt(3))
+    on_edge = (dist > -level_set_value) * (dist <= -level_set_value+np.sqrt(3))
     x, y, z = np.nonzero(on_edge)
 
     if not quiet:
@@ -71,7 +128,7 @@ def vol2pcd(volume, origin, voxel_size, dist_threshold=0, quiet=False):
         grad_norm = np.linalg.norm(grad)
         if grad_norm > 0:
             grad_normalized = grad / grad_norm
-            val = dist[x[i], y[i], z[i]] + dist_threshold - np.sqrt(3)/2
+            val = dist[x[i], y[i], z[i]] + level_set_value - np.sqrt(3)/2
             pts = np.vstack([pts, np.array([x[i] - grad_normalized[0] * val,
                                       y[i] - grad_normalized[1] * val,
                                       z[i] - grad_normalized[2] * val])])
@@ -84,6 +141,7 @@ def vol2pcd(volume, origin, voxel_size, dist_threshold=0, quiet=False):
     pcd.points = Vector3dVector(pts)
     pcd.normals = Vector3dVector(normals)
     pcd.normalize_normals()
+
     return pcd
 
 def crop_point_cloud(point_cloud, bounding_box):

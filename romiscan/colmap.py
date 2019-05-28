@@ -2,13 +2,11 @@ import os
 import subprocess
 import numpy as np
 import json
+import tempfile
+import imageio
 
-try:
-   from open3d.geometry import PointCloud
-   from open3d.utility import Vector3dVector
-except ImportError:
-   from open3d import PointCloud
-   from open3d import Vector3dVector
+from open3d.geometry import PointCloud
+from open3d.utility import Vector3dVector
 
 from romiscan.thirdparty import read_model
 colmap_log_file = open("colmap_log.txt", "w")
@@ -106,13 +104,35 @@ def cameras_model_to_opencv(cameras):
 
 
 class ColmapRunner():
-    def __init__(self, matcher, compute_dense, all_cli_args, align_pcd,
-                    colmap_ws):
-        self.colmap_ws = colmap_ws
+    """Class from running colmap on a fileset"""
+    def __init__(self, fileset,
+                       matcher,
+                       compute_dense,
+                       all_cli_args,
+                       align_pcd,
+                       bounding_box):
+        """
+        Parameters
+        __________
+        fileset : db.Fileset
+            fileset containing source images
+        matcher : str
+            "exhaustive" or "sequential"
+        compute_dense : bool
+            compute dense point cloud
+        all_cli_args : dict
+            extra arguments for colmap commands
+        align_pcd : bool
+            align point cloud to known location in image metadata
+        bounding_box : dict
+            { "x" : [xmin, xmax], "y" : [ymin, ymax], "z" : [zmin, zmax]}
+        """
+        self.fileset = fileset
         self.matcher = matcher
         self.compute_dense = compute_dense
         self.all_cli_args = all_cli_args
         self.align_pcd = align_pcd
+        self.bounding_box = bounding_box
 
     def colmap_feature_extractor(self):
         if 'feature_extractor' in self.all_cli_args:
@@ -221,6 +241,39 @@ class ColmapRunner():
         subprocess.run(process, check=True, stdout=colmap_log_file)
 
     def run(self):
+        """Run colmap CLI commands
+
+        Returns
+        _______
+        points : dict
+        images : dict
+        cameras : dict
+        sparse : PointCloud
+        dense : PointCloud
+        """
+        if "COLMAP_WS" in os.environ:
+            colmap_ws = os.environ["COLMAP_WS"]
+        else:
+            tmpdir = tempfile.TemporaryDirectory()
+            colmap_ws = tmpdir.name
+
+        self.colmap_ws = colmap_ws
+        os.makedirs(os.path.join(colmap_ws, 'images'), exist_ok=True)
+
+        posefile = open('%s/poses.txt' % colmap_ws, mode='w')
+        for i, file in enumerate(self.fileset.get_files()):
+            filename = "%s.%s"%(file.id, file.ext)
+            target = os.path.join(os.path.join(
+                colmap_ws, 'images'), filename) # TODO use only DB API
+            if not os.path.isfile(target):
+                im = file.read()
+                imageio.imwrite(target, im)
+            p = file.get_metadata('pose')
+            if p is not None:
+                s = '%s %d %d %d\n' % (filename, p[0], p[1], p[2])
+                posefile.write(s)
+        posefile.close()
+
         self.colmap_feature_extractor()
         self.colmap_matcher()
         os.makedirs(os.path.join(self.colmap_ws, 'sparse'), exist_ok=True)
@@ -237,8 +290,20 @@ class ColmapRunner():
         self.points = read_model.read_points3d_binary(
             '%s/sparse/0/points3D.bin' % self.colmap_ws)
 
+        dense_pcd = None
         if self.compute_dense:
             os.makedirs(os.path.join(self.colmap_ws, 'dense'), exist_ok=True)
             self.colmap_image_undistorter()
             self.colmap_patch_match_stereo()
             self.colmap_stereo_fusion()
+            dense_pcd = read_point_cloud('%s/dense/fused.ply' % colmap_ws)
+
+        sparse_pcd = colmap_points_to_pcd(points)
+        if self.bounding_box is not None:
+            sparse_pcd = proc3d.crop_point_cloud(sparse_pcd, self.bounding_box)
+            if self.compute_dense:
+                dense_pcd = proc3d.crop_point_cloud(dense_pcd, self.bounding_box)
+        return points, images, cameras, sparse_pcd, dense_pcd
+
+
+

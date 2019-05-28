@@ -1,0 +1,23 @@
+{
+    "object": {
+        "environment": "virtual",
+        "plant_id": "arabidopsis000",
+        "species": "Arabidopsis Thaliana"
+    },
+    "scanner": {
+        "workspace": {
+            "x": [
+                -200,
+                200
+            ],
+            "y": [
+                -200,
+                200
+            ],
+            "z": [
+                10,
+                1000
+            ]
+        }
+    }
+}

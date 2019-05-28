@@ -21,53 +21,85 @@ from romiscan import proc3d
 from romiscan import cl
 from romiscan import colmap
 
+class InputTypeError(luigi.parameter.ParameterException):
+    pass
+
+valid_inputs = ["PointCloud", "TriangleMesh", "Voxels"]
+
+class InputParameter(Parameter):
+    """Parameter whose value is an instance of RomiTask.
+    """
+
+    def parse(self, s):
+        try:
+            assert(s in valid_inputs)
+            return eval("%s()"%s)
+        except:
+            raise InputTypeError(s)
+
+
 class PointCloud(RomiTask):
     """Computes a point cloud
     """
-    input_type = luigi.StringParameter(default="voxels")
+    input = luigi.InputParameter(default=Voxels())
+    parameters = luigi.DictParameter(default={})
 
     def requires(self):
-        if self.input_type == "voxels":
-            return Voxels()
-        else
-            raise Exception("Unkown input type for mesh: %s"%self.input_type)
+        return self.input
+
+    def run_voxels(self):
+        inobj = self.read(VOXELS_ID)
+        assert(isinstance(inobj), np.ndarray)
+
+        origin = self.input().get_metadata('origin')
+        voxel_size = self.input().get_metadata('voxel_size')
+        if 'level_set_value' in self.parameters:
+            level_set_value = self.parameters['level_set_value']
+        else:
+            level_set_value = 0.0
+        out = proc3d.vox2pcd(inobj, origin, voxel_size, level_set_value)
+        self.write(PCD_ID, "ply", out)
+
     def run(self):
-        inobj = self.read()
-        out = proc3d.vox2pcd(inobj)
-        self.write(MESH_ID, "ply", out)
+        if self.input == Voxels():
+            self.run_voxels()
+        else:
+            raise InputTypeError(self.input)
+
 
 class TriangleMesh(RomiTask):
     """Computes a mesh
     """
-    input_type = luigi.StringParameter(default="point_cloud")
+    input = luigi.InputParameter(default=PointCloud())
 
     def requires(self):
-        if self.input_type == "point_cloud":
-            return PointCloud()
-        else
-            raise Exception("Unkown input type for mesh: %s"%self.input_type)
+        return self.input
 
     def run(self):
-        inobj = self.read()
-        out = proc3d.pcd2mesh(inobj)
-        self.write(MESH_ID, "ply", out)
+        if self.input == PointCloud():
+            inobj = self.read()
+            out = proc3d.pcd2mesh(inobj)
+            self.write(MESH_ID, "ply", out)
+        else:
+            raise InputTypeError(self.input)
 
 
 class CurveSkeleton(RomiTask):
     """Computes a 3D curve skeleton
     """
-    input_type = luigi.StringParameter()
+    input = luigi.InputParameter(default=Mesh())
 
     def requires(self):
-        if self.input_type == "mesh":
-            return Mesh()
-        else
-            raise Exception("Unkown input type for curve skeleton: %s"%self.input_type)
+        return self.input
 
     def run(self):
-        inobj = self.read()
-        out = proc3d.skeletonize(inobj)
-        self.write(SKELETON_ID, "json", out)
+        if self.input_type == "mesh":
+            inobj = self.read()
+            assert(isinstance(inobj, open3d.geometry.TriangleMesh))
+            out = proc3d.skeletonize(inobj)
+            self.write(SKELETON_ID, "json", out)
+        else:
+            raise InputTypeError(self.input)
 
 
 class Voxels(RomiTask):
@@ -90,13 +122,30 @@ class Voxels(RomiTask):
         if camera_model is None:
             raise Exception("Could not find camera model for Backprojection")
 
-        sc = ClBackprojection(
+        pcd = colmap_fileset.get_file(COLMAP_SPARSE_ID).read()
+
+        points = np.asarray(pcd.points)
+
+        x_min, y_min, z_min = points.min(axis=0)
+        x_max, y_max, z_max = points.max(axis=0)
+
+        center = [(x_max + x_min)/2, (y_max + y_min)/2, (z_max + z_min)/2]
+        widths = [x_max - x_min, y_max - y_min, z_max - z_min]
+
+        nx = int((x_max-x_min) / self.voxel_size) + 1
+        ny = int((y_max-y_min) / self.voxel_size) + 1
+        nz = int((z_max-z_min) / self.voxel_size) + 1
+
+        origin = np.array([x_min, y_min, z_min])
+
+        sc = cl.Backprojection(
             [nx, ny, nz], [x_min, y_min, z_min], self.voxel_size, type=self.type)
 
         images = fileset_colmap.get_file(COLMAP_IMAGES_ID).read()
 
-        pcd = sc.process_fileset(output_fileset, masks_fileset, camera_model, poses)
-        self.write(VOXELS_ID, "ply", pcd)
+        vol = sc.process_fileset(masks_fileset, camera_model, poses)
+        self.write(VOXELS_ID, "npz", vol)
+        self.output().get().set_metadata({'voxel_size' : self.voxel_size, 'origin' : origin })
     
 
 class Masks(FileByFileTask):
@@ -175,20 +224,27 @@ class Colmap(RomiTask):
 
     def run(self):
         images_fileset = self.input().get()
+        try:
+            bounding_box = images_fileset.scan.get_metadata()['scanner']['workspace']
+        except:
+            bounding_box = None
+
         colmap_runner = ColmapRunner(
+            images_fileset,
             self.matcher,
             self.compute_dense,
             self.cli_args,
             self.align_pcd,
-            images_fileset)
+            bounding_box)
 
-        sparse, points, images, cameras, dense = colmap_runner.run()
+        points, images, cameras, sparse, dense = colmap_runner.run()
+
         self.write(COLMAP_SPARSE_ID, "ply", sparse)
         self.write(COLMAP_POINTS_ID, "json", points)
         self.write(COLMAP_IMAGES_ID, "json", images)
         self.write(COLMAP_CAMERAS_ID, "json", cameras)
         if dense is not None:
-            self.write(COLMAP_DENSE_ID, "json", dense)
+            self.write(COLMAP_DENSE_ID, "ply", dense)
 
 class TreeGraph(RomiTask):
     """Computes a tree graph of the plant.
@@ -219,4 +275,3 @@ class AnglesAndInternodes(RomiTask):
         t = self.read(TREE_ID)
         measures = arabidopsis.get_angles_and_internodes(t)
         self.write(MEASURES_ID, "json", measures)
-improc
