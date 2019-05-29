@@ -164,7 +164,27 @@ def draw_segmentation(main_stem, fruits, vertices, plane_vectors, axis_length):
     open3d.draw_geometries(geometries)
     return geometries
 
+def compte_tree_graph(skeleton, stem_axis, stem_direction):
+    points = skeleton["points"]
+    lines = skeleton["lines"]
+    G = build_graph(G)
 
+    # Get the root node
+    if stem_direction == 1:
+        root_node = np.argmax(points[:, stem_axis])
+    elif stem_direction == -1:
+        root_node = np.argmin(points[:, stem_axis])
+    else:
+        raise ValueError("stem direction must be +-1")
+
+    # Get the main stem and node locations
+    main_stem, nodes = get_main_stem_and_nodes(G, root_node)
+
+    # Compute the minimum spanning tree
+    T = compute_mst(G, main_stem, nodes)
+    return T
+
+  
 def compute_angles_and_internodes(points, lines, z_orientation="down"):
     """
     Get angle and internodes from graph
