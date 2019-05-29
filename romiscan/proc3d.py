@@ -90,7 +90,7 @@ def pcd2vol(pcd, voxel_size, zero_padding=0):
     """
     pcd_points = np.asarray(pcd.points)
     origin = np.min(pcd_points, axis=0) - zero_padding*voxel_size
-    indices = point2index(pcd_points, origin, voxel_voxel_size)
+    indices = point2index(pcd_points, origin, voxel_size)
     shape = indices.max(axis=0)
 
     vol = np.zeros(shape + 2*zero_padding + 1, dtype=np.float)
