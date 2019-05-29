@@ -120,7 +120,7 @@ def skeletonize(mesh):
             'lines': lines.tolist()}
 
 
-def vox2pcd(volume, origin, voxel_size, level_set_value=0, quiet=False):
+def vol2pcd(volume, origin, voxel_size, level_set_value=0, quiet=False):
     """
     Converts a binary volume into a point cloud with normals.
 
@@ -179,6 +179,16 @@ def vox2pcd(volume, origin, voxel_size, level_set_value=0, quiet=False):
 def crop_point_cloud(point_cloud, bounding_box):
     """
     Crops a point cloud by keeping only points inside bouding box.
+    Parameters
+    __________
+    point_cloud : PointCloud
+        input point cloud
+    bounding_box : dict
+        {"x" : [xmin, xmax], "y" : [ymin, ymax], "z" : [zmin, zmax]}
+
+    Returns
+    _______
+    PointCloud
     """
     x_bounds = bounding_box['x']
     y_bounds = bounding_box['y']

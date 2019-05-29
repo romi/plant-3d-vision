@@ -58,7 +58,7 @@ class PointCloud(RomiTask):
             level_set_value = self.parameters['level_set_value']
         else:
             level_set_value = 0.0
-        out = proc3d.vox2pcd(voxels, origin, voxel_size, level_set_value)
+        out = proc3d.vol2pcd(voxels, origin, voxel_size, level_set_value)
 
         io.write_point_cloud(self.output_file(PCD_ID), out)
 
