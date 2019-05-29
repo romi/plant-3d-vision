@@ -10,6 +10,8 @@ from open3d.utility import Vector3dVector
 
 from romiscan.thirdparty import read_model
 from romiscan import proc3d
+
+from romidata import  io
 colmap_log_file = open("colmap_log.txt", "w")
 
 
@@ -263,11 +265,11 @@ class ColmapRunner():
 
         posefile = open('%s/poses.txt' % colmap_ws, mode='w')
         for i, file in enumerate(self.fileset.get_files()):
-            filename = "%s.%s"%(file.id, file.ext)
+            filename = "%s.jpg"%file.id
             target = os.path.join(os.path.join(
                 colmap_ws, 'images'), filename) # TODO use only DB API
             if not os.path.isfile(target):
-                im = file.read()
+                im = io.read_image(file)
                 imageio.imwrite(target, im)
             p = file.get_metadata('pose')
             if p is not None:

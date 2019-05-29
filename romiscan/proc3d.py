@@ -2,15 +2,47 @@ import numpy as np
 from scipy.ndimage.morphology import distance_transform_edt
 from scipy.ndimage.filters import gaussian_filter
 
-# from romiscan import cgal
+from romiscan import cgal
 
 from open3d.geometry import PointCloud, TriangleMesh
 from open3d.utility import Vector3dVector, Vector3iVector
 
 def index2point(indexes, origin, voxel_size):
-    return indexes/voxel_size + origin[np.newaxis, :]
+    """Converts discrete nd indexes to a 3d points
+
+    Parameters
+    __________
+    indexes : np.ndarray
+        Nxd array of indices
+    origin : np.ndarray
+        1d array of length d
+    voxel_size : float
+        size of voxels
+
+    Returns
+    _______
+    np.ndarray
+        Nxd array of points
+    """
+    return voxel_size * indexes + origin[np.newaxis, :]
 
 def point2index(points, origin, voxel_size):
+    """Converts discrete nd indexes to a 3d points
+
+    Parameters
+    __________
+    points : np.ndarray
+        Nxd array of points
+    origin : np.ndarray
+        1d array of length d
+    voxel_size : float
+        size of voxels
+
+    Returns
+    _______
+    np.ndarray (dtype=int)
+        Nxd array of indices
+    """
     return np.array(np.round((points - origin[np.newaxis, :]) / voxel_size), dtype=int)
 
 def pcd2mesh(pcd):
@@ -26,9 +58,9 @@ def pcd2mesh(pcd):
     _______
     open3d.geometry.TriangleMesh
     """
-    assert(points.has_normals)
-    points, triangles = poisson_mesh(np.asarray(point_cloud.points),
-                          np.asarray(point_cloud.normals))
+    assert(pcd.has_normals)
+    points, triangles = cgal.poisson_mesh(np.asarray(pcd.points),
+                          np.asarray(pcd.normals))
 
     mesh = TriangleMesh()
     mesh.vertices = Vector3dVector(points)

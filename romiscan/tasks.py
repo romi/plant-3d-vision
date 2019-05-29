@@ -48,17 +48,19 @@ class PointCloud(RomiTask):
         return self.input
 
     def run_voxels(self):
-        inobj = self.read(VOXELS_ID)
-        assert(isinstance(inobj), np.ndarray)
+        ifile = self.input_file(VOXELS_ID)
+        voxels = io.read_volume(ifile)
 
-        origin = self.input().get_metadata('origin')
-        voxel_size = self.input().get_metadata('voxel_size')
+        origin = ifile.get_metadata('origin')
+        voxel_size = ifile.get_metadata('voxel_size')
+
         if 'level_set_value' in self.parameters:
             level_set_value = self.parameters['level_set_value']
         else:
             level_set_value = 0.0
-        out = proc3d.vox2pcd(inobj, origin, voxel_size, level_set_value)
-        self.write(PCD_ID, "ply", out)
+        out = proc3d.vox2pcd(voxels, origin, voxel_size, level_set_value)
+
+        io.write_point_cloud(self.output_file(PCD_ID), out)
 
     def run(self):
         if self.input == Voxels():
@@ -75,11 +77,16 @@ class TriangleMesh(RomiTask):
     def requires(self):
         return self.input
 
+    def run_point_cloud(self):
+        voxels = io.read_volume(self.input_file(PCD_ID))
+
+        out = proc3d.pcd2mesh(point_cloud)
+
+        io.write_triangle_mesh(self.output_file(MESH_ID), out)
+
     def run(self):
         if self.input == PointCloud():
-            inobj = self.read()
-            out = proc3d.pcd2mesh(inobj)
-            self.write(MESH_ID, "ply", out)
+            self.run_point_cloud()
         else:
             raise InputTypeError(self.input)
 
@@ -92,12 +99,16 @@ class CurveSkeleton(RomiTask):
     def requires(self):
         return self.input
 
+    def run_mesh(self):
+        mesh = io.read_triangle_mesh(self.input_file(MESH_ID))
+
+        out = proc3d.skeletonize(mesh)
+
+        io.write_json(self.output_file(SKELETON_ID), out)
+
     def run(self):
         if self.input_type == "mesh":
-            inobj = self.read()
-            assert(isinstance(inobj, open3d.geometry.TriangleMesh))
-            out = proc3d.skeletonize(inobj)
-            self.write(SKELETON_ID, "json", out)
+            self.run_mesh()
         else:
             raise InputTypeError(self.input)
 
@@ -115,6 +126,7 @@ class Voxels(RomiTask):
     def run(self):
         masks_fileset = self.input()['masks'].get()
         colmap_fileset = self.input()['colmap'].get()
+
         try:
             camera_model = scan.get_metadata()['computed']['camera_model']
         except:
@@ -144,13 +156,18 @@ class Voxels(RomiTask):
         images = fileset_colmap.get_file(COLMAP_IMAGES_ID).read()
 
         vol = sc.process_fileset(masks_fileset, camera_model, poses)
-        self.write(VOXELS_ID, "npz", vol)
-        self.output().get().set_metadata({'voxel_size' : self.voxel_size, 'origin' : origin })
+
+        outfile = self.output_file(VOXELS_ID)
+        io.write_volume(outfile, vol)
+        outfile.set_metadata({'voxel_size' : self.voxel_size, 'origin' : origin })
     
 
 class Masks(FileByFileTask):
     """Mask images
     """
+
+    reader = io.read_image
+    writer = io.write_image
 
     undistorted_input = luigi.BoolParameter(default=True)
 
@@ -193,6 +210,10 @@ class Masks(FileByFileTask):
 class Undistorted(FileByFileTask):
     """Obtain undistorted images
     """
+
+    reader = io.read_image
+    writer = io.write_image
+
     def input(self):
         return ImageFilesetExists()
 
@@ -239,19 +260,22 @@ class Colmap(RomiTask):
 
         points, images, cameras, sparse, dense = colmap_runner.run()
 
-        self.write(COLMAP_SPARSE_ID, "ply", sparse)
-        self.write(COLMAP_POINTS_ID, "json", points)
-        self.write(COLMAP_IMAGES_ID, "json", images)
-        self.write(COLMAP_CAMERAS_ID, "json", cameras)
+        outfile = self.output_file(COLMAP_SPARSE_ID)
+        io.write_point_cloud(outfile, sparse)
+        outfile = self.output_file(COLMAP_POINTS_ID)
+        io.write_json(outfile, points)
+        outfile = self.output_file(COLMAP_IMAGES_ID)
+        io.write_json(outfile, images)
+        outfile = self.output_file(COLMAP_CAMERAS_ID)
+        io.write_json(outfile, cameras)
         if dense is not None:
-            self.write(COLMAP_DENSE_ID, "ply", dense)
+            outfile = self.output_file(COLMAP_DENSE_ID)
+            io.write_point_cloud(outfile, dense)
 
 class TreeGraph(RomiTask):
     """Computes a tree graph of the plant.
     TODO
     """
-
-    input_format = luigi.Parameter(default="curve_skeleton")
 
     def requires(self):
         if input_format == "curve_skeleton":
