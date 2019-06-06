@@ -1,18 +1,31 @@
+import collections
+
 import operator
 import numpy as np
 import networkx as nx
 
-try:
-    from open3d.geometry import LineSet
-    from open3d.io import read_point_cloud
-    from open3d.utility import Vector3dVector, Vector2iVector
-except ImportError:
-    from open3d.geometry import LineSet
-    from open3d.io import read_point_cloud
-    from open3d.utility import Vector3dVector, Vector2iVector
+from open3d.geometry import LineSet
+from open3d.io import read_point_cloud
+from open3d.utility import Vector3dVector, Vector2iVector
+
+from treex import tree
 
 
 def get_main_stem_and_nodes(G, root_node):
+    """
+    Get main stem and branching nodes from graph.
+
+    Parameters
+    __________
+    G : networkx.graph
+        input graph
+    root_node : int
+        index of the root node
+
+    Returns
+    _______
+    nodes
+    """
     # Get main stem as shortest path to point furthest from root
     predecessors, distances_to_root = nx.dijkstra_predecessor_and_distance(
         G, root_node)
@@ -33,6 +46,25 @@ def get_main_stem_and_nodes(G, root_node):
 
 
 def compute_mst(G, main_stem, nodes):
+    """
+    Computes a minimum spanning tree in a graph using some custom
+    distance. The distance is some function of the distance of the node
+    to the closest node in the stem. This may need to be documented
+    a bit more!!!
+
+    Parameters
+    __________
+    G : nx.Graph
+        input graph
+    main_stem : list
+        list  of ids of points in the main stem
+    nodes : list
+        list of branching  points on the main stem.
+
+    Returns
+    _______
+    nx.Graph
+    """
     # Set weights proportional to distance to node
     # (for computing minimum spanning tree)
     G = G.copy()
@@ -48,7 +80,6 @@ def compute_mst(G, main_stem, nodes):
         if u in main_stem or v in main_stem:
             return 0
         if len(list(nx.neighbors(G, u))) > 2 or len(list(nx.neighbors(G, v))) > 2:
-            print(">2", u, v)
             return 10000 + distance_to_node[u] + distance_to_node[v]
         return (distance_to_node[u] + distance_to_node[v])
 
@@ -61,6 +92,20 @@ def compute_mst(G, main_stem, nodes):
 
 
 def build_graph(vertices, edges):
+    """
+    Buils a networkx graph from a list of vertices and edges.
+
+    Parameters
+    __________
+    vertices : np.ndarray
+        Input Nx3 array of points
+    edges : np.ndarray
+        Input Mx2 array of lines between points (dtype = int)
+
+    Returns
+    _______
+    nx.Graph
+    """
     G = nx.Graph()
     G.add_nodes_from(range(0, vertices.shape[0]))
 
@@ -68,21 +113,6 @@ def build_graph(vertices, edges):
         G.add_edge(edges[i, 0], edges[i, 1],
                    weight=np.linalg.norm(vertices[edges[i, 0], :] - vertices[edges[i, 1], :]))
     return G
-
-
-def compute_fruits(T, main_stem, nodes):
-    fruits = []
-    for i in nodes:
-        ns = nx.neighbors(T, i)
-        for n in ns:
-            if n not in main_stem:
-                temp_tree = T.copy()
-                temp_tree.remove_edge(n, i)
-                fruit, _ = get_main_stem_and_nodes(temp_tree, n)
-                fruit = np.hstack([i, fruit])
-                fruits.append({"node": i, "nodes": fruit})
-    fruits = fruits[:-1]  # give up the last one because it could be the stem
-    return fruits
 
 
 def fit_plane(points):
@@ -132,42 +162,84 @@ def fit_fruits(vertices, main_stem, fruits, nodes, n_nodes_fruit=5, n_nodes_stem
     return plane_vectors
 
 
-def draw_segmentation(main_stem, fruits, vertices, plane_vectors, axis_length):
-    geometries = []
-    lines = LineSet()
-    lines.points = Vector3dVector(vertices[main_stem, :])
-    lines.lines = Vector2iVector(np.vstack([[i, i+1]
-                                                   for i in range(len(main_stem) - 1)]))
+def nx_to_tx(T, attributes, root_id):
+    """
+    Converts a networkx graph object which is a tree into
+    a treex tree.
 
-    geometries.append(lines)
-    for i, fruit in enumerate(fruits):
-        lines = LineSet()
-        lines.points = Vector3dVector(vertices[fruit["nodes"], :])
-        lines.lines = Vector2iVector(np.vstack([[i, i+1]
-                                                       for i in range(len(fruit["nodes"]) - 1)]))
-        c = np.zeros((len(fruit["nodes"]) - 1, 3))
-        c[:, :] = np.random.rand(3)[np.newaxis, :]
-        lines.colors = Vector3dVector(c)
-        geometries.append(lines)
+    Parameters
+    __________
+    T: networkx graph
+        input graph (must be a tree).
+    attributes: list of dict
+        each element of the list is a dict containing the attributes of the corresponding node
+        in the graph.
+    root_id: int
+        id of the root node
+    """
+    successors = nx.dfs_successors(T, source=root_id)
+    TT = tree.Tree()
+    for k in attributes[root_id].keys():
+        TT.add_attribute_to_id(k, attributes[root_id][k])
+    Q = collections.deque()
+    Q.append((root_id, TT))
+    while len(Q) > 0:
+        current_id, current_T = Q.pop()
+        if current_id in successors:
+            for child_id in successors[current_id]:
+                new_T = tree.Tree()
+                current_T.add_subtree(new_T)
+                for k in attributes[child_id].keys():
+                    new_T.add_attribute_to_id(k, attributes[child_id][k])
+                Q.append((child_id, new_T))
+    return TT
 
-        vertices_basis = np.copy(plane_vectors[i])
-        vertices_basis[1, :] = vertices_basis[0, :] + \
-            vertices_basis[1, :]*axis_length
-        vertices_basis[2, :] = vertices_basis[0, :] + \
-            vertices_basis[2, :]*axis_length
-        basis = LineSet()
-        basis.points = Vector3dVector(vertices_basis)
-        basis.lines = Vector2iVector(np.vstack([[0, 1], [0, 2]]))
-        basis.colors = Vector3dVector(np.vstack([[1, 0, 0], [0, 1, 0]]))
-        geometries.append(basis)
 
-    open3d.draw_geometries(geometries)
-    return geometries
+def label_fruit(G, branching_node_id, fruit_id):
+    """
+    Labels fruits in a treex tree object.
 
-def compte_tree_graph(skeleton, stem_axis, stem_direction):
-    points = skeleton["points"]
-    lines = skeleton["lines"]
-    G = build_graph(G)
+    Parameters
+    __________
+    T: treex.tree.Tree
+        input tree which root is the branching node
+    """
+    Q = collections.deque()
+    Q.append(branching_node_id)
+    while len(Q) > 0:
+        current_id = Q.pop()
+        for new_id in G.neighbors(current_id):
+            node_data = G.nodes[new_id]
+            labels = node_data["labels"]
+            if not "stem" in labels and "fruit" not in labels:
+                labels.append("fruit")
+                node_data["fruit_id"] = fruit_id
+                Q.append(new_id)
+
+
+def compute_tree_graph(points, lines, stem_axis, stem_direction):
+    """
+    Returns a networkx tree object from the curve skeleton.
+    Labels include segmentation of main stem and organs,as well as position in space
+    of the points.
+
+    Parameters
+    __________
+    points: np.ndarray
+        Nx3 position of points
+    lines: np.ndarray
+        Nx2 lines between points (dtype=int)
+    stem_axis: int
+        axis to use for stem orientation to get the root node
+    stem_direction: int
+        direction of the stem along the specified axis (+1 or -1)
+
+    Returns
+    _______
+    nx.Graph
+    """
+    points, lines = np.asarray(points), np.asarray(lines)
+    G = build_graph(points, lines)
 
     # Get the root node
     if stem_direction == 1:
@@ -178,37 +250,41 @@ def compte_tree_graph(skeleton, stem_axis, stem_direction):
         raise ValueError("stem direction must be +-1")
 
     # Get the main stem and node locations
-    main_stem, nodes = get_main_stem_and_nodes(G, root_node)
+    main_stem, branching_points = get_main_stem_and_nodes(G, root_node)
+
+    attributes = {}
+    for i in range(len(points)):
+        label = []
+        if i in main_stem:
+            label.append("stem")
+        if i in branching_points:
+            label.append("node")
+        attributes[i] = {"position": points[i].tolist(),
+                         "labels": label}
+
+    for i, n_i in enumerate(branching_points):
+        attributes[n_i]["node_id"] = i
 
     # Compute the minimum spanning tree
-    T = compute_mst(G, main_stem, nodes)
+    T = compute_mst(G, main_stem, branching_points)
+    nx.set_node_attributes(T, attributes)
+
+    for i, n_i in enumerate(branching_points):
+        label_fruit(T, n_i, i)
+
     return T
 
-  
-def compute_angles_and_internodes(points, lines, z_orientation="down"):
+
+def compute_angles_and_internodes(T):
     """
     Get angle and internodes from graph
     """
-    G = build_graph(points, lines)
-    # Get the root node
-    if z_orientation == "down":
-        root_node = np.argmax(points[:, 2])
-    elif z_orientation == "up":
-        root_node = np.argmin(points[:, 2])
-    else:
-        raise ValueError("Unknown z orientation %s"%z_orientation)
-
-    # Get the main stem and node locations
-    main_stem, nodes = get_main_stem_and_nodes(G, root_node)
-
-    # Compute the minimum spanning tree
-    T = compute_mst(G, main_stem, nodes)
-
+    main_stem = [i for i in range(len(T.nodes)) if "stem" in T.nodes[i]["labels"]]
     # Segment fruits
-    fruits = compute_fruits(T, main_stem, nodes)
+    fruits = compute_fruits(tree, main_stem, nodes)
 
     # Fit a plane to each fruit
-    plane_vectors = fit_fruits(points, main_stem, fruits, nodes)
+    plane_vectors = fit_fruits(T)
 
     angles = np.zeros(len(plane_vectors) - 1)
     internodes = np.zeros(len(plane_vectors) - 1)
@@ -229,4 +305,4 @@ def compute_angles_and_internodes(points, lines, z_orientation="down"):
             angle = 2*np.pi - angle
         angles[i-1] = angle
         internodes[i-1] = np.linalg.norm(p2 - p1)
-    return points[main_stem,:].tolist(), [points[fruit["nodes"], :].tolist() for fruit in fruits], angles.tolist(), internodes.tolist()
+    return points[main_stem, :].tolist(), [points[fruit["nodes"], :].tolist() for fruit in fruits], angles.tolist(), internodes.tolist()

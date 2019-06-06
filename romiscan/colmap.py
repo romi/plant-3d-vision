@@ -26,7 +26,8 @@ def colmap_cameras_to_json(cameras):
             'height': cam.height,
             'params': cam.params.tolist()
         }
-    return json.dumps(res)
+
+    return res
 
 
 def colmap_points_to_json(points):
@@ -41,7 +42,7 @@ def colmap_points_to_json(points):
             'image_ids': pt.image_ids.tolist(),
             'point2D_idxs': pt.point2D_idxs.tolist()
         }
-    return json.dumps(res)
+    return res
 
 
 def colmap_points_to_pcd(points):
@@ -72,7 +73,7 @@ def colmap_images_to_json(images):
             'xys': im.xys.tolist(),
             'point3D_ids': im.point3D_ids.tolist()
         }
-    return json.dumps(res)
+    return res
 
 
 def cameras_model_to_opencv(cameras):
@@ -270,6 +271,7 @@ class ColmapRunner():
                 colmap_ws, 'images'), filename) # TODO use only DB API
             if not os.path.isfile(target):
                 im = io.read_image(file)
+                im = im[:,:,:3] # remove alpha channel
                 imageio.imwrite(target, im)
             p = file.get_metadata('pose')
             if p is not None:
@@ -286,12 +288,17 @@ class ColmapRunner():
             self.colmap_model_aligner()
 
         # Import sparse model into python and save as json
-        self.cameras = read_model.read_cameras_binary(
-            '%s/sparse/0/cameras.bin' % self.colmap_ws)
-        self.images = read_model.read_images_binary(
-            '%s/sparse/0/images.bin' % self.colmap_ws)
-        self.points = read_model.read_points3d_binary(
-            '%s/sparse/0/points3D.bin' % self.colmap_ws)
+        cameras = read_model.read_cameras_binary(
+           '%s/sparse/0/cameras.bin' % self.colmap_ws)
+        cameras = colmap_cameras_to_json(cameras)
+        images = read_model.read_images_binary(
+           '%s/sparse/0/images.bin' % self.colmap_ws)
+        images = colmap_images_to_json(images)
+        points = read_model.read_points3d_binary(
+           '%s/sparse/0/points3D.bin' % self.colmap_ws)
+
+        sparse_pcd = colmap_points_to_pcd(points)
+        points = colmap_points_to_json(points)
 
         dense_pcd = None
         if self.compute_dense:
@@ -301,12 +308,11 @@ class ColmapRunner():
             self.colmap_stereo_fusion()
             dense_pcd = read_point_cloud('%s/dense/fused.ply' % colmap_ws)
 
-        sparse_pcd = colmap_points_to_pcd(self.points)
         if self.bounding_box is not None:
             sparse_pcd = proc3d.crop_point_cloud(sparse_pcd, self.bounding_box)
             if self.compute_dense:
                 dense_pcd = proc3d.crop_point_cloud(dense_pcd, self.bounding_box)
-        return self.points, self.images, self.cameras, sparse_pcd, dense_pcd
+        return points, images, cameras, sparse_pcd, dense_pcd
 
 
 

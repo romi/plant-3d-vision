@@ -7,37 +7,23 @@ compute_dense = false
 "--SiftExtraction.use_gpu" = "0"
 
 [Colmap.cli_args.exhaustive_matcher]
-"--SiftMatching.use_gpu" = "0"
+"--SiftMatching.use_gpu" = "1"
 
 [Colmap.cli_args.model_aligner]
 "--robust_alignment_max_error" = "10"
 
-[Masking]
-type = "linear"
-
-[Masking.params]
+[Masks]
+type = "excess_green"
 dilation = 5
-coefs = [0.0, 1.0, 0.0, 0.3]
+binarize = true
+threshold = 0.0
 
-[SoftMasking]
-type = "vesselness"
-
-[SoftMasking.params]
-scale = 4
-
-[SpaceCarving]
+[Voxels]
 voxel_size = 1.0
+type = "carving"
 
-[BackProjection]
-voxel_size = 1.0
-
-[Voxel2PointCloud]
-dist = 1.0
-
-[Animate]
-rot_speed_x = 10.0
-rot_speed_y = 10.0
-n_img = 100
+[PointCloud]
+level_set_value = 1.0
 
 [Visualization]
 max_image_size = 1500

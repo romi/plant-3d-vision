@@ -52,7 +52,7 @@ __kernel void average(__read_only image2d_t mask, __global float *value,
     value[idx] += read_imagef(mask, samplerA, imagept).x;
 }
 
-__kernel void carve(__read_only image2d_t mask, __global unsigned char *labels,
+__kernel void carve(__read_only image2d_t mask, __global int *labels,
                     __global float *intrinsics, __global float *rot,
                     __global float *tvec, __global float *volinfo,
                     __global int *shape) {
@@ -62,7 +62,7 @@ __kernel void carve(__read_only image2d_t mask, __global unsigned char *labels,
     int idx = get_global_id(0);
     int3 ijk = unravel_index(idx, shape);
 
-    if (labels[idx] == 1) {
+    if (labels[idx] == -1) {
         return;
     }
 
@@ -74,9 +74,9 @@ __kernel void carve(__read_only image2d_t mask, __global unsigned char *labels,
     if (!backproject_point(pt, intrinsics, rot, tvec, mask, &imagept)) {
         return;
     }
-    if (read_imageui(mask, samplerA, imagept).x == 0) {
-        labels[idx] = 1;
+    if (read_imagei(mask, samplerA, imagept).x == 0) {
+        labels[idx] = -1;
     } else if (labels[idx] == 0) { // Mark a voxel the first time it is seen
-        labels[idx] = 2;
+        labels[idx] = 1;
     }
 }

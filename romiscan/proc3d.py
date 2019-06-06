@@ -137,6 +137,7 @@ def vol2pcd(volume, origin, voxel_size, level_set_value=0, quiet=False):
     _______
     open3d.geometry.PointCloud
     """
+    volume = volume>0 # variable level ?
     dist = distance_transform_edt(volume)
     mdist = distance_transform_edt(1-volume)
     dist = np.where(dist > 0.5, dist - 0.5, -mdist + 0.5)

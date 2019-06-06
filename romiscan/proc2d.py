@@ -1,9 +1,21 @@
 import numpy as np
 from scipy.special import betainc
 from skimage.filters import gaussian
+from skimage.morphology import binary_dilation
 from skimage.feature import hessian_matrix, hessian_matrix_eigvals
+from skimage.exposure import rescale_intensity
+import cv2
 
 EPS = 1e-9
+
+def undistort(img, camera):
+    camera_params = camera['params']
+    mat = np.matrix([[camera_params[0], 0, camera_params[2]],
+                     [0, camera_params[1], camera_params[3]],
+                     [0, 0, 1]])
+    undistort_parameters = np.array(camera_params[4:])
+    undistorted_data = cv2.undistort(img, mat, undistort_parameters)
+    return undistorted_data
 
 def excess_green(x):
     s = x.sum(axis=2) + EPS
@@ -35,3 +47,8 @@ def vesselness(image, scale):
     res = np.abs(L2) / np.abs(L2).max() * np.exp(
         np.abs(L1) / (np.abs(L2) + EPS))
     return res
+
+def dilation(img, n):
+    for i in range(n):
+        img = binary_dilation(img)
+    return img

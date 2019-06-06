@@ -3,6 +3,7 @@ import numpy as np
 import pyopencl as cl
 
 from romiscan.proc3d import point2index
+from romidata import io
 from skimage.morphology import binary_dilation
 
 
@@ -31,7 +32,7 @@ class Backprojection():
 
         self.type = type
         if type == "carving":
-            self.dtype = np.uint8
+            self.dtype = np.int32
             self.kernel = backprojection_kernels.carve
         elif type == "averaging":
             self.dtype = np.float32
@@ -90,7 +91,7 @@ class Backprojection():
         intrinsics = camera_model['params'][0:4]
 
         for fi in fs.get_files():
-            mask = fi.read_image()
+            mask = io.read_image(fi)
             key = None
             for k in poses.keys():
                 if os.path.splitext(poses[k]['name'])[0] == fi.id:
@@ -100,9 +101,9 @@ class Backprojection():
             if key is not None:
                 rot = sum(poses[key]['rotmat'], [])
                 tvec = poses[key]['tvec']
-                sc.process_view(intrinsics, rot, tvec, mask)
+                self.process_view(intrinsics, rot, tvec, mask)
 
-        result = sc.values()
+        result = self.values()
         result = result.reshape(self.shape)
         return result
 
