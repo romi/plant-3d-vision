@@ -1,3 +1,15 @@
+"""
+romiscan.cl
+___________
+
+This module contains all OpenCL accelerated functions.
+The two main functionalities are:
+
+* Backprojection
+* Geodesics computing
+
+Geodesic computing is still in a very experimental stage.
+"""
 import os
 import numpy as np
 import pyopencl as cl
@@ -24,6 +36,22 @@ with open(os.path.join(prg_dir, 'fim.c')) as f:
 
 
 class Backprojection():
+    """
+    This class implements backprojection onto a voxel volume.
+
+    Parameters
+    __________
+    shape: list
+        shape of the voxel volume
+    origin: list
+        location of the origin of the voxel space
+    voxel_size: float
+        size of voxels
+    type: str
+        "carving" or "averaging" (defaults to carving)
+    default_value: float
+        default value when initializing the voxels (defaults to 0)
+    """
     def __init__(self, shape, origin, voxel_size, type="carving", default_value=0):
         self.shape = shape
         self.origin = origin
@@ -41,6 +69,9 @@ class Backprojection():
         self.init_buffers()
 
     def init_buffers(self):
+        """
+        Helper function to initialize OpenCL buffers.
+        """
         self.values_h = self.default_value * \
             np.ones(self.shape).astype(self.dtype)
 
@@ -65,6 +96,20 @@ class Backprojection():
         )
 
     def process_view(self, intrinsics, rot, tvec, mask):
+        """
+        Process a new view.
+
+        Parameters
+        __________
+        intrinsics: list
+            [f_x, f_y, c_x, c_y]
+        rot: list of list
+            rotation matrix of the camera pose
+        tvec: list
+            translation vector of the camera pose
+        mask: np.ndarray
+            mask array (or float array if type is averaging)
+        """
         intrinsics_h = np.ascontiguousarray(intrinsics).astype(np.float32)
         rot_h = np.ascontiguousarray(rot).astype(np.float32)
         tvec_h = np.ascontiguousarray(tvec).astype(np.float32)
@@ -82,10 +127,23 @@ class Backprojection():
         queue.finish()
 
     def values(self):
+        """
+        Gets computed values from the OpenCL device.
+        """
         cl.enqueue_copy(queue, self.values_h, self.values_d)
         return self.values_h
 
     def process_fileset(self, fs, camera_model, poses):
+        """
+        Processes a whole fileset.
+
+        Parameters
+        __________
+        fs : romidata.DB.Fileset
+        camera_model: dict
+        poses: dict
+            poses file computed by colmap
+        """
         width = camera_model['width']
         height = camera_model['height']
         intrinsics = camera_model['params'][0:4]

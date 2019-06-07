@@ -1,3 +1,10 @@
+"""
+romiscan.proc3d
+---------------
+
+This module contains all functions for processing of 3D data.
+
+"""
 import numpy as np
 from scipy.ndimage.morphology import distance_transform_edt
 from scipy.ndimage.filters import gaussian_filter

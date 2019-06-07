@@ -1,3 +1,13 @@
+"""
+romican.arabidopsis
+-------------------
+
+This module contains all function related to the segmentation of arabidopsis
+from its curve skeleton. The two main functionalities are:
+
+    * Computing a tree  from the curve skeleton
+    * Estimating the angle between successive fruits from the tree.
+"""
 import collections
 
 import operator
@@ -125,43 +135,6 @@ def fit_plane(points):
     return m, v[0, :], v[1, :]
 
 
-def fit_fruits(vertices, main_stem, fruits, nodes, n_nodes_fruit=5, n_nodes_stem=5):
-    """
-    Fit a plane to each fruit. Each plane is defined by two vectors and a mean points.
-    The First vector is in the direction of the fruit (out from the stem)
-    and the second is upwards from the root.
-    """
-    plane_vectors = np.zeros((len(fruits), 3, 3))
-    for i, fruit in enumerate(fruits):
-        all_node_fruits = fruit["nodes"]
-        vertices_fruit_plane_est = vertices[all_node_fruits[0:n_nodes_fruit]]
-
-        idx = list(main_stem).index(fruit["node"])
-        vertices_node_plane_est = vertices[main_stem[idx -
-                                                     n_nodes_stem//2:idx+n_nodes_stem//2]]
-        node_point = vertices[main_stem[idx], :]
-        node_next_point = vertices[main_stem[idx + 1], :]
-
-        points = np.vstack([vertices_fruit_plane_est, vertices_node_plane_est])
-        _, v1, v2 = fit_plane(points)
-
-        fruit_mean = vertices[all_node_fruits].mean(axis=0)
-        new_v1 = fruit_mean - node_point
-        new_v1 = new_v1.dot(v1) * v1 + new_v1.dot(v2) * v2
-        new_v1 /= np.linalg.norm(new_v1)
-
-        # Set v1 as the fruit direction and v2 as the stem direction
-        v1, v2 = new_v1, v2 - v2.dot(new_v1)*new_v1
-        if v2.dot(node_next_point - node_point) < 0:
-            v2 = - v2
-
-        plane_vectors[i, 0, :] = node_point
-        plane_vectors[i, 1, :] = v1
-        plane_vectors[i, 2, :] = v2
-
-    return plane_vectors
-
-
 def nx_to_tx(T, attributes, root_id):
     """
     Converts a networkx graph object which is a tree into
@@ -195,7 +168,7 @@ def nx_to_tx(T, attributes, root_id):
     return TT
 
 
-def label_fruit(G, branching_node_id, fruit_id):
+def label_fruit(G, branching_fruit_id, fruit_id):
     """
     Labels fruits in a treex tree object.
 
@@ -205,7 +178,7 @@ def label_fruit(G, branching_node_id, fruit_id):
         input tree which root is the branching node
     """
     Q = collections.deque()
-    Q.append(branching_node_id)
+    Q.append(branching_fruit_id)
     while len(Q) > 0:
         current_id = Q.pop()
         for new_id in G.neighbors(current_id):
@@ -263,7 +236,7 @@ def compute_tree_graph(points, lines, stem_axis, stem_direction):
                          "labels": label}
 
     for i, n_i in enumerate(branching_points):
-        attributes[n_i]["node_id"] = i
+        attributes[n_i]["fruit_id"] = i
 
     # Compute the minimum spanning tree
     T = compute_mst(G, main_stem, branching_points)
@@ -275,19 +248,78 @@ def compute_tree_graph(points, lines, stem_axis, stem_direction):
     return T
 
 
-def compute_angles_and_internodes(T):
+def get_nodes_by_label(G, label):
+    """
+    Get all nodes in a graph which have the given label. The key "labels"
+    must exist in the data of each node.
+
+    Parameters
+    __________
+    G : nx.Graph
+    label: str
+
+    Returns
+    _______
+    list
+    """
+    return [i for i in G.nodes if label in G.nodes[i]["labels"]]
+
+
+def get_fruit(G, i):
+    x = get_nodes_by_label(G, "fruit")
+    return [j for j in x if G.nodes[j]["fruit_id"] == i]
+
+
+def compute_angles_and_internodes(T, n_neighbours=5):
     """
     Get angle and internodes from graph
+
+    Parameters
+    __________
+    T : nx.Graph
+        input tree as a networkx graph
+    n_neighbours : int
+        number of nodes to consider as neighbour of a branching point
+        for plane estimation
+
+    Returns
+    _______
+    dict
     """
-    main_stem = [i for i in range(len(T.nodes)) if "stem" in T.nodes[i]["labels"]]
-    # Segment fruits
-    fruits = compute_fruits(tree, main_stem, nodes)
 
-    # Fit a plane to each fruit
-    plane_vectors = fit_fruits(T)
+    main_stem = get_nodes_by_label(T, "stem")
+    branching_points = get_nodes_by_label(T, "node")
+    angles = np.zeros(len(branching_points) - 1)
+    internodes = np.zeros(len(branching_points) - 1)
+    plane_vectors = np.zeros((len(branching_points) -1, 3, 3))
 
-    angles = np.zeros(len(plane_vectors) - 1)
-    internodes = np.zeros(len(plane_vectors) - 1)
+    for i in range(len(branching_points) - 1):
+        node_point = np.array(T.nodes[branching_points[i]]["position"])
+        node_next_point = np.array(T.nodes[branching_points[i+1]]["position"])
+
+        neighbour_nodes = nx.algorithms.traversal.breadth_first_search.bfs_tree(
+            T, branching_points[i], depth_limit=n_neighbours)
+
+        points = np.vstack([np.array(T.nodes[n]["position"]) for n in neighbour_nodes])
+        _, v1, v2 = fit_plane(points)
+
+        fruit_points = np.vstack([np.array(T.nodes[n]["position"]) for n in get_fruit(T, i)])
+        fruit_mean = fruit_points.mean(axis=0)
+
+        new_v1 = fruit_mean - node_point
+        new_v1 = new_v1.dot(v1) * v1 + new_v1.dot(v2) * v2
+        new_v1 /= np.linalg.norm(new_v1)
+
+        # Set v1 as the fruit direction and v2 as the stem direction
+        v1, v2 = new_v1, v2 - v2.dot(new_v1)*new_v1
+        if v2.dot(node_next_point - node_point) < 0:
+            v2 = - v2
+
+        plane_vectors[i, 0, :] = node_point
+        plane_vectors[i, 1, :] = v1
+        plane_vectors[i, 2, :] = v2
+
+
     for i in range(1, len(plane_vectors)):
         n1 = np.cross(plane_vectors[i-1, 1, :], plane_vectors[i-1, 2, :])
         n2 = np.cross(plane_vectors[i, 1, :], plane_vectors[i, 2, :])
@@ -305,4 +337,8 @@ def compute_angles_and_internodes(T):
             angle = 2*np.pi - angle
         angles[i-1] = angle
         internodes[i-1] = np.linalg.norm(p2 - p1)
-    return points[main_stem, :].tolist(), [points[fruit["nodes"], :].tolist() for fruit in fruits], angles.tolist(), internodes.tolist()
+
+    return {
+        "angles" : angles.tolist(),
+        "internodes" : internodes.tolist()
+    }

@@ -270,5 +270,5 @@ class AnglesAndInternodes(RomiTask):
 
     def run(self):
         t = io.read_graph(self.input_file(TREE_ID))
-        measures = arabidopsis.get_angles_and_internodes(t)
-        io.write_json(self.output_file(ANGLES_ID))
+        measures = arabidopsis.compute_angles_and_internodes(t)
+        io.write_json(self.output_file(ANGLES_ID), measures)
