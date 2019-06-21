@@ -116,7 +116,7 @@ s = setup(
     author_email='timothee@timwin.fr',
     description='A plant scanner',
     long_description='',
-    ext_modules=[CMakeExtension('romiscan.cgal')],
+    ext_modules=[CMakeExtension('romiscan.cgal'), CMakeExtension('romiscan.ceres')],
     cmdclass=dict(build_ext=CMakeBuild),
     zip_safe=False,
     install_requires=install_requires,
