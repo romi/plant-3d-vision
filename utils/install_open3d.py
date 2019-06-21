@@ -27,10 +27,10 @@ try:
         for x in glob.glob('lib/Python/*.so'):
             print("Installing %s"%x)
             fname = os.path.basename(x)
-            if site.ENABLE_USER_SITE:
-                copyfile(x, os.path.join(site.getuserbase(), fname))
-            else:
+            if hasattr(sys, 'real_prefix'):
                 copyfile(x, os.path.join(python_lib_path, fname))
+            else:
+                copyfile(x, os.path.join(site.USER_SITE, fname))
 
 except Exception as e:
     raise e

@@ -7,6 +7,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <pybind11/eigen.h>
+#include <pybind11/numpy.h>
 
 namespace py = pybind11;
 // Templated pinhole camera model for used with Ceres.  The camera is
@@ -14,7 +15,7 @@ namespace py = pybind11;
 // focal length and 2 for radial distortion. The principal point is not modeled
 // (i.e. it is assumed be located at the image center).
 struct SnavelyReprojectionError {
-    SnavelyReprojectionError(double observed_x, double observed_y, const double* const intrinsics)
+    SnavelyReprojectionError(double observed_x, double observed_y, double* intrinsics)
         : observed_x(observed_x), observed_y(observed_y), intrinsics(intrinsics) {}
     template <typename T>
     bool operator()(const T *const camera, 
@@ -58,7 +59,7 @@ struct SnavelyReprojectionError {
     }
     double observed_x;
     double observed_y;
-    const double* const intrinsics;
+    double* intrinsics;
 };
 
 class BundleAdjustment {
@@ -130,7 +131,7 @@ private:
     std::vector<size_t> view_index_r_;
 };
 
-PYBIND11_MODULE(ceres, m) {
+PYBIND11_MODULE(pyceres, m) {
     // Add bindings here 
     py::class_<BundleAdjustment>(m, "BundleAdjustment")
         .def(py::init())
