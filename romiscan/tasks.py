@@ -205,6 +205,8 @@ class Colmap(RomiTask):
     cli_args = luigi.Parameter()
     align_pcd = luigi.BoolParameter(default=True)
 
+    calibration_scan_id = luigi.Parameter(default=None)
+
     def requires(self):
         return ImagesFilesetExists()
 
@@ -218,12 +220,47 @@ class Colmap(RomiTask):
         except:
             bounding_box = None
 
+        if calibration_scan_id is not None:
+            db = images_fileset.scan.db
+            calibration_scan = db.get_scan(calibration_scan_id)
+            colmap_fs = matching = [s for s in calibration_scan.get_filesets() if "Colmap" in s.id]
+            if len(colmap_fs) == 0:
+                raise Exception("Could not find Colmap fileset in calibration scan")
+            else:
+                colmap_fs = colmap_fs[0]
+            calib_poses = []
+            poses = colmap_fs.get_file("images")
+            calibration_images_fileset = calibration_scan.get_fileset("images")
+            calib_poses = []
+
+            for i, fi in enumerate(calibration_images_fileset.get_files()):
+                if i > len(images_fileset.get_files()):
+                    break
+
+                key = None
+                for k in poses.keys():
+                    if os.path.splitext(poses[k]['name'])[0] == fi.id:
+                        key = k
+                        break
+                if key is None:
+                    raise Exception("Could not find pose of image in calibration scan")
+
+                rot = np.matrix(sum(poses[key]['rotmat'], []))
+                tvec = np.matrix(poses[key]['tvec'])
+                pose = -rot.transpose()*(tvec.transpose())
+                pose = np.array(pose).flatten().tolist()
+
+                images_fileset.get_files()[i].set_metadata("calibrated_pose", pose)
+
+        use_calibration = self.calibration_scan_id is not None
+
         colmap_runner = colmap.ColmapRunner(
             images_fileset,
             self.matcher,
             self.compute_dense,
             cli_args,
             self.align_pcd,
+            use_calibration,
             bounding_box)
 
         points, images, cameras, sparse, dense = colmap_runner.run()

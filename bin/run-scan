@@ -21,9 +21,6 @@ if __name__ == "__main__":
     parser.add_option("-c", "--calibration", dest="calibration",
                       action="store_true", default=False)
 
-    parser.add_option("-u", "--use-calibration", dest="calibration",
-                      default=None)
-
     (options, args) = parser.parse_args()
 
     if len(args) != 4:
@@ -90,32 +87,6 @@ if __name__ == "__main__":
     db = DB(db)
     db.connect()
 
-    calib_poses = None
-
-    if options.use_calibration is not None:
-        print("Loading calibration scan...")
-        calibscan = db.get_scan(options.use_calibration)
-        colmap_fs = matching = [s for s in calibscan.get_filesets() if "Colmap" in s.id]
-        if len(colmap_fs) == 0:
-            raise Exception("Could not find Colmap fileset in calibration scan")
-        else:
-            colmap_fs = colmap_fs[0]
-        calib_poses = []
-        poses = colmap_fs.get_file("images")
-        images_fs = calibscan.get_fileset("images")
-        calib_poses = []
-        for i in range(len(path)):
-            fi = images_fs.get_files()[i]
-            for k in poses.keys():
-                if os.path.splitext(poses[k]['name'])[0] == fi.id:
-                    key = k
-                    break
-            rot = np.matrix(sum(poses[key]['rotmat'], []))
-            tvec = np.matrix(poses[key]['tvec'])
-            pose = -rot.transpose()*(tvec.transpose())
-            calib_poses.append(pose)
-
-        print("...OK")
 
     print("Initializing scanner...")
 
@@ -155,12 +126,7 @@ if __name__ == "__main__":
             mask = len(path)*[False] + len(line_1)*[True] + len(line_2)*[True]
         scanner.set_path(path, mask)
         scanner.scan()
-        if calib_poses is not None:
-            scan = db.get_scan(scan_id)
-            for i, im in enumerate(scan.get_fileset("images").get_files()):
-                pose = im.get_metadata("pose")
-                pose[0:3] = calib_poses[i]
-                im.set_metadata("pose", pose)
+
     except Exception as e:
         logger.error("Failed to finish scan.")
         raise
