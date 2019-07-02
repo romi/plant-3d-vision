@@ -204,7 +204,6 @@ class Colmap(RomiTask):
     compute_dense = luigi.BoolParameter()
     cli_args = luigi.Parameter()
     align_pcd = luigi.BoolParameter(default=True)
-
     calibration_scan_id = luigi.Parameter(default=None)
 
     def requires(self):
@@ -220,9 +219,9 @@ class Colmap(RomiTask):
         except:
             bounding_box = None
 
-        if calibration_scan_id is not None:
+        if self.calibration_scan_id is not None:
             db = images_fileset.scan.db
-            calibration_scan = db.get_scan(calibration_scan_id)
+            calibration_scan = db.get_scan(self.calibration_scan_id)
             colmap_fs = matching = [s for s in calibration_scan.get_filesets() if "Colmap" in s.id]
             if len(colmap_fs) == 0:
                 raise Exception("Could not find Colmap fileset in calibration scan")
