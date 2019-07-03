@@ -1,20 +1,25 @@
 #!/usr/bin/env python3
 import lettucethink
 import subprocess
-from lettucethink.fsdb import DB
+from romidata.fsdb import FSDB as DB
 from lettucethink import scan
-import time, datetime
+import time
+import datetime
 import json
 import logging
 import sys
 import appdirs
 import os
+import math
 from optparse import OptionParser
 
 if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     usage = "usage: %prog OBJECT_CONFIG SCANNER_CONFIG PATH_CONFIG DB[/SCAN_ID]"
     parser = OptionParser(usage=usage)
+
+    parser.add_option("-c", "--calibration", dest="calibration",
+                      action="store_true", default=False)
 
     (options, args) = parser.parse_args()
 
@@ -61,12 +66,15 @@ if __name__ == "__main__":
     print("Loading path config...")
     try:
         path_config = json.load(open(args[2]))
+        if path_config["type"] == "circular":
+            path = lettucethink.path.circle(**path_config["args"])
+        else:
+            raise ValueError("Unknown path type")
     except Exception as e:
         logger.error("Failed to read path config file")
         raise
     print("...OK")
 
-    print("Initializing scanner...")
 
     db = args[3]
     scan_id = None
@@ -76,9 +84,11 @@ if __name__ == "__main__":
     else:
         scan_id = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
-
-    db = DB(db) 
+    db = DB(db)
     db.connect()
+
+
+    print("Initializing scanner...")
 
     if db.get_scan(scan_id) is not None:
         raise Exception("Scan with this id already exists.")
@@ -88,7 +98,8 @@ if __name__ == "__main__":
         cnc = CNC(**scanner_config["cnc_args"])
         gimbal = Gimbal(**scanner_config["gimbal_args"])
         camera = Camera(**scanner_config["camera_args"])
-        scanner = scan.Scanner(cnc, gimbal, camera, db, scan_id=scan_id, **scanner_config["scanner_args"])
+        scanner = scan.Scanner(cnc, gimbal, camera, db,
+                               scan_id=scan_id, **scanner_config["scanner_args"])
     except Exception as e:
         logger.error("Failed to initialize scanner")
         raise
@@ -96,17 +107,26 @@ if __name__ == "__main__":
     print("...OK")
 
     metadata = {
-        "object" : object_metadata,
-        "scanner" : scanner_config,
-        "path" : path_config
+        "object": object_metadata,
+        "scanner": scanner_config,
+        "path": path_config
     }
 
     print("Starting scan...")
+    n_line = 20
     try:
-        if path_config["type"] == "circular":
-            scanner.do_circular_scan(**path_config["args"], metadata=metadata)
-        else:
-            raise ValueError("Unknown path type")
+        mask = None
+        if options.calibration:
+            line_1 = lettucethink.path.line([0, path_config["args"]["yc"], 0, math.pi, 0], [
+                                            path_config["args"]["xc"], path_config["args"]["yc"], 0, math.pi, 0], n_line)
+            line_2 = lettucethink.path.line([0, 0, 0, math.pi, 0],
+                                            [0, path_config["args"]["yc"], 0, math.pi, 0],
+                                            n_line)
+            path = path + line_1 + line_2
+            mask = len(path)*[False] + len(line_1)*[True] + len(line_2)*[True]
+        scanner.set_path(path, mask)
+        scanner.scan()
+
     except Exception as e:
         logger.error("Failed to finish scan.")
         raise

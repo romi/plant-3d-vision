@@ -114,6 +114,7 @@ class ColmapRunner():
                        compute_dense,
                        all_cli_args,
                        align_pcd,
+                       use_calibration,
                        bounding_box):
         """
         Parameters
@@ -128,6 +129,8 @@ class ColmapRunner():
             extra arguments for colmap commands
         align_pcd : bool
             align point cloud to known location in image metadata
+        use_calibration : bool
+            use "calibrated_pose" instead of "pose" metadata for alignment
         bounding_box : dict
             { "x" : [xmin, xmax], "y" : [ymin, ymax], "z" : [zmin, zmax]}
         """
@@ -136,6 +139,7 @@ class ColmapRunner():
         self.compute_dense = compute_dense
         self.all_cli_args = all_cli_args
         self.align_pcd = align_pcd
+        self.use_calibration = use_calibration
         self.bounding_box = bounding_box
 
     def colmap_feature_extractor(self):
@@ -273,7 +277,12 @@ class ColmapRunner():
                 im = io.read_image(file)
                 im = im[:,:,:3] # remove alpha channel
                 imageio.imwrite(target, im)
-            p = file.get_metadata('pose')
+
+            if self.use_calibration:
+                p = file.get_metadata('calibrated_pose')
+            else:
+                p = file.get_metadata('pose')
+
             if p is not None:
                 s = '%s %d %d %d\n' % (filename, p[0], p[1], p[2])
                 posefile.write(s)
