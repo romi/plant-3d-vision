@@ -4,10 +4,10 @@
 #include <cstdio>
 #include <iostream>
 
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
 #include <pybind11/eigen.h>
 #include <pybind11/numpy.h>
+#include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
 
 namespace py = pybind11;
 // Templated pinhole camera model for used with Ceres.  The camera is
@@ -15,11 +15,13 @@ namespace py = pybind11;
 // focal length and 2 for radial distortion. The principal point is not modeled
 // (i.e. it is assumed be located at the image center).
 struct SnavelyReprojectionError {
-    SnavelyReprojectionError(double observed_x, double observed_y, double* intrinsics)
-        : observed_x(observed_x), observed_y(observed_y), intrinsics(intrinsics) {}
+    SnavelyReprojectionError(double observed_x, double observed_y, double focal,
+                             double c_x, double c_y, double r_1, double r_2,
+                             double l_1, double l_2)
+        : observed_x(observed_x), observed_y(observed_y), focal(focal),
+          c_x(c_x), c_y(c_y), r_1(r_1), r_2(r_2), l_1(l_1), l_2(l_2) {}
     template <typename T>
-    bool operator()(const T *const camera, 
-                    const T *const point,
+    bool operator()(const T *const camera, const T *const point,
                     T *residuals) const {
         // camera[0,1,2] are the angle-axis rotation.
         T p[3];
@@ -37,7 +39,7 @@ struct SnavelyReprojectionError {
         const double &l1 = intrinsics[1];
         const double &l2 = intrinsics[2];
         T r2 = xp * xp + yp * yp;
-        T distortion = 1.0 + r2 * (l1 + l2 * r2);
+        double distortion = 1.0 + r1 * (l1 + l2 * r2);
         // Compute final projected point position.
         const double &focal = intrinsics[0];
         T predicted_x = focal * distortion * xp;
@@ -51,22 +53,34 @@ struct SnavelyReprojectionError {
     // Factory to hide the construction of the CostFunction object from
     // the client code.
     static ceres::CostFunction *Create(const double observed_x,
-                                       const double observed_y,
-                                       double* intrinsics) {
+                                       const double observed_y, double focal,
+                                       double c_x, double c_y, double r_1,
+                                       double r_2, double l_1, double l_2) {
         return (
             new ceres::AutoDiffCostFunction<SnavelyReprojectionError, 2, 6, 3>(
-                new SnavelyReprojectionError(observed_x, observed_y, intrinsics)));
+                new SnavelyReprojectionError(observed_x, observed_y, focal, c_x,
+                                             c_y, r_1, r_2, l_1, l_2)));
     }
     double observed_x;
     double observed_y;
-    double* intrinsics;
+    double focal;
+
+    double c_x;
+    double c_y;
+    double r_1;
+    double r_2;
+
+    double l_1;
+    double l_2
 };
 
 class BundleAdjustment {
   public:
     size_t num_points() { return points3d_.size() / 3; }
-    void set_intrinsics(std::vector<double> intrinsics) {
-        intrinsics_ = intrinsics;
+    void set_intrinsics(std::vector<double> camera_matrix,
+                        std::vector<double> dist_coefs) {
+        camera_matrix_ = camera_matrix;
+        dist_coefs_ = dist_coefs;
     }
     // Add a view with given initial guess
     void add_view(std::vector<double> &extrinsics) {
@@ -92,24 +106,22 @@ class BundleAdjustment {
         ceres::Problem problem;
         ceres::CostFunction *cost_function;
         for (int i = 0; i < num_points(); ++i) {
-            cost_function =
-                SnavelyReprojectionError::Create(points2d_l_[2 * i + 0],
-                                                 points2d_l_[2 * i + 1],
-                                                 &intrinsics_.at(0));
-            problem.AddResidualBlock(
-                cost_function, NULL /* squared loss */,
-                &extrinsics_.at(6*view_index_l_[i]),
-                &points3d_.at(3*i));
+            cost_function = SnavelyReprojectionError::Create(
+                points2d_l_[2 * i + 0], points2d_l_[2 * i + 1],
+                camera_matrix_[3 * 0 + 0], camera_matrix_[3 * 0 + 2],
+                camera_matrix_[3 * 1 + 2], dist_coefs_[0], dist_coefs_[1],
+                dist_coefs_[2], dist_coefs_[3]);
+            problem.AddResidualBlock(cost_function, NULL /* squared loss */,
+                                     &extrinsics_.at(6 * view_index_l_[i]),
+                                     &points3d_.at(3 * i));
 
             ceres::CostFunction *cost_function =
                 SnavelyReprojectionError::Create(points2d_r_[2 * i + 0],
                                                  points2d_r_[2 * i + 1],
                                                  &intrinsics_.at(0));
-            problem.AddResidualBlock(
-                cost_function, NULL /* squared loss */,
-                &extrinsics_.at(6*view_index_r_[i]),
-                &points3d_.at(3*i));
-
+            problem.AddResidualBlock(cost_function, NULL /* squared loss */,
+                                     &extrinsics_.at(6 * view_index_r_[i]),
+                                     &points3d_.at(3 * i));
         }
         ceres::Solver::Options options;
         options.linear_solver_type = ceres::DENSE_SCHUR;
@@ -119,21 +131,23 @@ class BundleAdjustment {
         std::cout << summary.FullReport() << "\n";
     }
 
-private:
+  private:
     std::vector<double> points2d_l_; // Observations
     std::vector<double> points2d_r_; // Observations
 
     std::vector<double> points3d_;
 
     std::vector<double> extrinsics_; // Camera poses
-    std::vector<double> intrinsics_; // Camera parameters
+
+    std::vector<double> camera_matrix_; // Camera parameters
+    std::vector<double> dist_coefs_;    // Camera parameters
 
     std::vector<size_t> view_index_l_;
     std::vector<size_t> view_index_r_;
 };
 
 PYBIND11_MODULE(pyceres, m) {
-    // Add bindings here 
+    // Add bindings here
     py::class_<BundleAdjustment>(m, "BundleAdjustment")
         .def(py::init())
         .def("set_intrinsics", &BundleAdjustment::set_intrinsics)
