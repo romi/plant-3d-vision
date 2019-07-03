@@ -54,7 +54,7 @@ struct SnavelyReprojectionError {
                                        const double observed_y,
                                        double* intrinsics) {
         return (
-            new ceres::AutoDiffCostFunction<SnavelyReprojectionError, 2, 9, 3>(
+            new ceres::AutoDiffCostFunction<SnavelyReprojectionError, 2, 6, 3>(
                 new SnavelyReprojectionError(observed_x, observed_y, intrinsics)));
     }
     double observed_x;
@@ -64,8 +64,9 @@ struct SnavelyReprojectionError {
 
 class BundleAdjustment {
   public:
-    size_t num_points() { return points3d_.size(); }
+    size_t num_points() { return points3d_.size() / 3; }
     void set_intrinsics(std::vector<double> intrinsics) {
+        intrinsics_ = intrinsics;
     }
     // Add a view with given initial guess
     void add_view(std::vector<double> &extrinsics) {

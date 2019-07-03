@@ -18,7 +18,7 @@ from open3d.geometry import LineSet
 from open3d.io import read_point_cloud
 from open3d.utility import Vector3dVector, Vector2iVector
 
-from treex import tree
+# from treex import tree
 
 
 def get_main_stem_and_nodes(G, root_node):
