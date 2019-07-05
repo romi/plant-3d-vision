@@ -117,7 +117,8 @@ class StructureFromMotion():
 
     def bundle_adjustment(self):
         ba = pyceres.BundleAdjustment()
-        ba.set_intrinsics(self.camera_matrix.ravel().tolist())
+        intrinsics = [self.camera_matrix[0, 0], self.camera_matrix[0,2], self.camera_matrix[1,2], 0, 0]
+        ba.set_intrinsics(intrinsics)
         initial_pair = max(self.filtered_matches, key=lambda k: len(
             self.filtered_matches[k]["pts1"]))
         extrinsics_1 = [0,0,0,0,0,0]

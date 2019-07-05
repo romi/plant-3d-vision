@@ -15,15 +15,20 @@ namespace py = pybind11;
 // focal length and 2 for radial distortion. The principal point is not modeled
 // (i.e. it is assumed be located at the image center).
 struct SnavelyReprojectionError {
-    SnavelyReprojectionError(double observed_x, double observed_y, double focal,
-                             double c_x, double c_y, double r_1, double r_2,
-                             double l_1, double l_2)
-        : observed_x(observed_x), observed_y(observed_y), focal(focal),
-          c_x(c_x), c_y(c_y), r_1(r_1), r_2(r_2), l_1(l_1), l_2(l_2) {}
+    SnavelyReprojectionError(double observed_x, double observed_y, double* camera_model)
+        : observed_x(observed_x), observed_y(observed_y),
+          camera_model(camera_model) {}
     template <typename T>
     bool operator()(const T *const camera, const T *const point,
                     T *residuals) const {
-        // camera[0,1,2] are the angle-axis rotation.
+
+        double focal = camera_model[0];
+        double cx = camera_model[1];
+        double cy = camera_model[2];
+
+        double k1 = camera_model[3];
+        double k2 = camera_model[4];
+
         T p[3];
         ceres::AngleAxisRotatePoint(camera, point, p);
         // camera[3,4,5] are the translation.
@@ -36,14 +41,11 @@ struct SnavelyReprojectionError {
         T xp = -p[0] / p[2];
         T yp = -p[1] / p[2];
         // Apply second and fourth order radial distortion.
-        const double &l1 = intrinsics[1];
-        const double &l2 = intrinsics[2];
         T r2 = xp * xp + yp * yp;
-        double distortion = 1.0 + r1 * (l1 + l2 * r2);
+        T distortion = 1.0 + r2 * (k1 + k2 * r2);
         // Compute final projected point position.
-        const double &focal = intrinsics[0];
-        T predicted_x = focal * distortion * xp;
-        T predicted_y = focal * distortion * yp;
+        T predicted_x = focal * distortion * xp + cx;
+        T predicted_y = focal * distortion * yp + cy;
         // The error is the difference between the predicted and observed
         // position.
         residuals[0] = predicted_x - observed_x;
@@ -53,34 +55,22 @@ struct SnavelyReprojectionError {
     // Factory to hide the construction of the CostFunction object from
     // the client code.
     static ceres::CostFunction *Create(const double observed_x,
-                                       const double observed_y, double focal,
-                                       double c_x, double c_y, double r_1,
-                                       double r_2, double l_1, double l_2) {
+                                       const double observed_y,
+                                       double* camera_model) {
         return (
             new ceres::AutoDiffCostFunction<SnavelyReprojectionError, 2, 6, 3>(
-                new SnavelyReprojectionError(observed_x, observed_y, focal, c_x,
-                                             c_y, r_1, r_2, l_1, l_2)));
+                new SnavelyReprojectionError(observed_x, observed_y, camera_model)));
     }
     double observed_x;
     double observed_y;
-    double focal;
-
-    double c_x;
-    double c_y;
-    double r_1;
-    double r_2;
-
-    double l_1;
-    double l_2
+    double* camera_model;
 };
 
 class BundleAdjustment {
   public:
     size_t num_points() { return points3d_.size() / 3; }
-    void set_intrinsics(std::vector<double> camera_matrix,
-                        std::vector<double> dist_coefs) {
-        camera_matrix_ = camera_matrix;
-        dist_coefs_ = dist_coefs;
+    void set_intrinsics(std::vector<double> camera_model) {
+        camera_model_ = camera_model;
     }
     // Add a view with given initial guess
     void add_view(std::vector<double> &extrinsics) {
@@ -108,9 +98,7 @@ class BundleAdjustment {
         for (int i = 0; i < num_points(); ++i) {
             cost_function = SnavelyReprojectionError::Create(
                 points2d_l_[2 * i + 0], points2d_l_[2 * i + 1],
-                camera_matrix_[3 * 0 + 0], camera_matrix_[3 * 0 + 2],
-                camera_matrix_[3 * 1 + 2], dist_coefs_[0], dist_coefs_[1],
-                dist_coefs_[2], dist_coefs_[3]);
+                &camera_model_.at(0));
             problem.AddResidualBlock(cost_function, NULL /* squared loss */,
                                      &extrinsics_.at(6 * view_index_l_[i]),
                                      &points3d_.at(3 * i));
@@ -118,7 +106,7 @@ class BundleAdjustment {
             ceres::CostFunction *cost_function =
                 SnavelyReprojectionError::Create(points2d_r_[2 * i + 0],
                                                  points2d_r_[2 * i + 1],
-                                                 &intrinsics_.at(0));
+                                                 &camera_model_.at(0));
             problem.AddResidualBlock(cost_function, NULL /* squared loss */,
                                      &extrinsics_.at(6 * view_index_r_[i]),
                                      &points3d_.at(3 * i));
@@ -139,8 +127,7 @@ class BundleAdjustment {
 
     std::vector<double> extrinsics_; // Camera poses
 
-    std::vector<double> camera_matrix_; // Camera parameters
-    std::vector<double> dist_coefs_;    // Camera parameters
+    std::vector<double> camera_model_; // Camera parameters
 
     std::vector<size_t> view_index_l_;
     std::vector<size_t> view_index_r_;
