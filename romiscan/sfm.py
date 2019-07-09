@@ -115,43 +115,118 @@ class StructureFromMotion():
 
         self.filtered_matches = result
 
-    def bundle_adjustment(self):
-        ba = pyceres.BundleAdjustment()
-        intrinsics = [self.camera_matrix[0, 0], self.camera_matrix[0,2], self.camera_matrix[1,2], 0, 0]
-        ba.set_intrinsics(intrinsics)
-        initial_pair = max(self.filtered_matches, key=lambda k: len(
-            self.filtered_matches[k]["pts1"]))
-        extrinsics_1 = [0,0,0,0,0,0]
-        a, _ = cv2.Rodrigues(self.filtered_matches[initial_pair]["rot"])
-        extrinsics_2 = np.vstack([a, self.filtered_matches[initial_pair]["tvec"]]).ravel().tolist()
-        ba.add_view(extrinsics_1)
-        ba.add_view(extrinsics_2)
+    def get_view_pairs(self, view):
+        return {m : self.filtered_matches[m] for m in self.filtered_matches.keys() if view == m[0] or view == m[1]}
 
-        mat = cv2.UMat(self.filtered_matches[initial_pair]["rot"])
-        tvec= cv2.UMat(self.filtered_matches[initial_pair]["tvec"])
+    def add_views(self):
+        """
+        """
+        self.ba_view_index = {}
+        self.initial_poses = {}
+
+        first_view = list(self.keypoints.keys())[0]
+        rot = np.eye(3)
+        tvec = np.zeros(3)
+        self.initial_poses[first_view] = rot, tvec
+
+        view = first_view
+        while True:
+            pairs = self.get_view_pairs(view)
+            pairs = {k: v for k, v in pairs.items() if not (k[0] in self.initial_poses and k[1] in self.initial_poses)}
+
+            if len(pairs) == 0:
+                break
+
+            best_pair = max(pairs, key=lambda k: len(
+                self.filtered_matches[k]["pts1"]))
+            if view == best_pair[0]:
+                new_view = best_pair[1]
+                rot = self.filtered_matches[best_pair]["rot"]
+                tvec = self.filtered_matches[best_pair]["tvec"].ravel()
+            else:
+                new_view = best_pair[0]
+                rot = self.filtered_matches[best_pair]["rot"].transpose()
+                tvec = -np.dot(rot, self.filtered_matches[best_pair]["tvec"]).ravel()
+
+            rot_1, tvec_1 = self.initial_poses[view]
+            rot_2 = np.dot(rot, rot_1)
+            tvec_2 = np.dot(rot, tvec_1) + tvec
+            self.initial_poses[new_view] = rot_2, tvec_2.ravel()
+            view = new_view
+
+        for k in self.initial_poses.keys():
+            rot, tvec = self.initial_poses[k]
+            a, _ = cv2.Rodrigues(rot)
+            extrinsics = np.hstack([a.ravel(), tvec]).ravel().tolist()
+            idx = self.ba.add_view(extrinsics)
+            self.ba_view_index[k] = idx
+
+    def add_pair(self, pair):
+        """
+        Add a pair to the bundle adjustment function.
+        """
+
+        rot_1, tvec_1 = self.initial_poses[pair[0]]
+        rot_2, tvec_2 = self.initial_poses[pair[1]]
+
+        rot = rot_2*rot_1.transpose()
+        tvec = tvec_2 - np.dot(rot_1.transpose(), tvec_1)
+
+        u_rot = cv2.UMat(rot)
+        u_tvec = cv2.UMat(tvec)
 
         R1, R2, P1, P2, Q, _, _= cv2.stereoRectify(cv2.UMat(self.camera_matrix), cv2.UMat(self.dist_coefs), cv2.UMat(self.camera_matrix), cv2.UMat(self.dist_coefs), (1920, 1080),
-                mat,
-                tvec)
+                u_rot,
+                u_tvec)
 
-        pts1 = self.filtered_matches[initial_pair]["pts1"].transpose()
-        pts2 = self.filtered_matches[initial_pair]["pts2"].transpose()
+        pts1 = self.filtered_matches[pair]["pts1"].transpose()
+        pts2 = self.filtered_matches[pair]["pts2"].transpose()
 
         pts4d = cv2.triangulatePoints(P1, P2, pts1, pts2).get()
+
         pts3d = np.zeros((3, pts4d.shape[1]))
 
         pts3d[0,:] = pts4d[0,:] / pts4d[3,:]
         pts3d[1,:] = pts4d[1,:] / pts4d[3,:]
         pts3d[2,:] = pts4d[2,:] / pts4d[3,:]
 
-        ba.add_pair(0,1,pts1.ravel().tolist(),pts2.ravel().tolist(),pts3d.ravel().tolist())
-        ba.solve()
+        pts3d = np.dot(rot, pts3d) + tvec[:, np.newaxis]
+
+        idx_1 = self.ba_view_index[pair[0]]
+        idx_2 = self.ba_view_index[pair[1]]
+        self.ba.add_pair(idx_1, idx_2, pts1.ravel().tolist(),pts2.ravel().tolist(),pts3d.ravel().tolist())
+
+
+
+    def bundle_adjustment(self):
+        self.ba = pyceres.BundleAdjustment()
+        intrinsics = [self.camera_matrix[0, 0], self.camera_matrix[0,2], self.camera_matrix[1,2], 0, 0]
+        self.ba.set_intrinsics(intrinsics)
+
+        self.add_views()
+
+        for pair in self.filtered_matches.keys():
+            self.add_pair(pair)
+
+        self.ba.init_cost_function()
+        self.ba.solve()
+
+    def get_poses(self):
+        l = self.ba.get_extrinsics()
+        res = {}
+        for k in self.keypoints.keys():
+            idx = self.ba_view_index[k]
+            a, tvec = l[idx]
+            rot, _= cv2.Rodrigues(cv2.UMat(np.array(a)))
+            res[k] = rot.get(), np.array(tvec)
+
+        return res
         
 
 if __name__ == "__main__":
-    db = fsdb.FSDB("/data/twintz/scanner/stitch")
+    db = fsdb.FSDB("/home/twintz/Data/scanner/original")
     db.connect()
-    scan = db.get_scan("light")
+    scan = db.get_scan("2018-11-06_11-06-49")
     images = scan.get_fileset("images")
     camera_matrix = np.array([[1379.78039550781, 0, 978.726440429688],
                               [0.0, 1379.78039550781, 529.610412597656],
@@ -163,4 +238,14 @@ if __name__ == "__main__":
     sfm.compute_matches()
     sfm.filter_matches()
     sfm.bundle_adjustment()
+    poses = sfm.get_poses()
+    x = []
+    y = []
+    for k in poses.keys():
+        rot, tvec = poses[k]
+        pos = np.dot(rot, tvec)
+
+        x.append(pos[0])
+        y.append(pos[1])
+
     db.disconnect()

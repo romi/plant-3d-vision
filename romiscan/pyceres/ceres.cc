@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdio>
 #include <iostream>
+#include <cassert>
 
 #include <pybind11/eigen.h>
 #include <pybind11/numpy.h>
@@ -69,13 +70,16 @@ struct SnavelyReprojectionError {
 class BundleAdjustment {
   public:
     size_t num_points() { return points3d_.size() / 3; }
+    size_t num_views() { return extrinsics_.size() / 6; }
     void set_intrinsics(std::vector<double> camera_model) {
         camera_model_ = camera_model;
     }
     // Add a view with given initial guess
-    void add_view(std::vector<double> &extrinsics) {
+    size_t add_view(std::vector<double> &extrinsics) {
+        assert(extrinsics.size() == 6);
         extrinsics_.insert(extrinsics_.end(), extrinsics.begin(),
                            extrinsics.end());
+        return (extrinsics_.size() - 1) / 6;
     }
 
     // Add a pair with given observations and initial guess for the 3d points
@@ -92,34 +96,54 @@ class BundleAdjustment {
         view_index_r_.insert(view_index_r_.end(), points2d_r_.size(), i_r);
     }
 
-    void solve() {
-        ceres::Problem problem;
-        ceres::CostFunction *cost_function;
-        for (int i = 0; i < num_points(); ++i) {
-            cost_function = SnavelyReprojectionError::Create(
+    std::vector<std::pair<std::vector<double>, std::vector<double>>> get_extrinsics() {
+        std::vector<std::pair<std::vector<double>, std::vector<double>>> res;
+        for (int i = 0; i < num_views(); ++i) {
+            std::vector<double> rodrigues;
+            for (int j = 0; j < 3; j++) {
+                rodrigues.push_back(extrinsics_[6*i + j]);
+            }
+            std::vector<double> tvec;
+            for (int j = 0; j < 3; j++) {
+                tvec.push_back(extrinsics_[6*i + 3 + j]);
+            }
+            res.push_back({rodrigues, tvec});
+        }
+        return res;
+    }
+
+    void init_cost_function() {
+          for (int i = 0; i < num_points(); ++i) {
+            ceres::CostFunction *cost_function_l = SnavelyReprojectionError::Create(
                 points2d_l_[2 * i + 0], points2d_l_[2 * i + 1],
                 &camera_model_.at(0));
-            problem.AddResidualBlock(cost_function, NULL /* squared loss */,
+            problem.AddResidualBlock(cost_function_l, NULL /* squared loss */,
                                      &extrinsics_.at(6 * view_index_l_[i]),
                                      &points3d_.at(3 * i));
 
-            ceres::CostFunction *cost_function =
+            ceres::CostFunction *cost_function_r =
                 SnavelyReprojectionError::Create(points2d_r_[2 * i + 0],
                                                  points2d_r_[2 * i + 1],
                                                  &camera_model_.at(0));
-            problem.AddResidualBlock(cost_function, NULL /* squared loss */,
+            problem.AddResidualBlock(cost_function_r, NULL /* squared loss */,
                                      &extrinsics_.at(6 * view_index_r_[i]),
                                      &points3d_.at(3 * i));
         }
-        ceres::Solver::Options options;
         options.linear_solver_type = ceres::DENSE_SCHUR;
-        options.minimizer_progress_to_stdout = true;
-        ceres::Solver::Summary summary;
+        options.minimizer_progress_to_stdout = true; 
+        }
+
+
+    void solve() {
         ceres::Solve(options, &problem, &summary);
         std::cout << summary.FullReport() << "\n";
     }
 
   private:
+    ceres::Solver::Options options;
+    ceres::Problem problem;
+    ceres::Solver::Summary summary;
+
     std::vector<double> points2d_l_; // Observations
     std::vector<double> points2d_r_; // Observations
 
@@ -140,5 +164,7 @@ PYBIND11_MODULE(pyceres, m) {
         .def("set_intrinsics", &BundleAdjustment::set_intrinsics)
         .def("add_view", &BundleAdjustment::add_view)
         .def("add_pair", &BundleAdjustment::add_pair)
+        .def("init_cost_function", &BundleAdjustment::init_cost_function)
+        .def("get_extrinsics", &BundleAdjustment::get_extrinsics)
         .def("solve", &BundleAdjustment::solve);
 }
