@@ -156,9 +156,7 @@ class StructureFromMotion():
 
         for k in self.initial_poses.keys():
             rot, tvec = self.initial_poses[k]
-            a, _ = cv2.Rodrigues(rot)
-            extrinsics = np.hstack([a.ravel(), tvec]).ravel().tolist()
-            idx = self.ba.add_view(extrinsics)
+            idx = self.ba.add_view(rot.ravel().tolist(), tvec.ravel().tolist())
             self.ba_view_index[k] = idx
 
     def add_pair(self, pair):
@@ -224,16 +222,16 @@ class StructureFromMotion():
         
 
 if __name__ == "__main__":
-    db = fsdb.FSDB("/home/twintz/Data/scanner/original")
+    db = fsdb.FSDB("/data/twintz/scanner/stitch/")
     db.connect()
-    scan = db.get_scan("2018-11-06_11-06-49")
+    scan = db.get_scan("light")
     images = scan.get_fileset("images")
     camera_matrix = np.array([[1379.78039550781, 0, 978.726440429688],
                               [0.0, 1379.78039550781, 529.610412597656],
                               [0.0, 0.0, 1.0]])
     dist_coefs = np.array([0,0,0,0,0])
     sfm = StructureFromMotion(images, camera_matrix, dist_coefs)
-    sfm.compute_pair_lists(3)
+    sfm.compute_pair_lists(6)
     sfm.compute_features()
     sfm.compute_matches()
     sfm.filter_matches()
@@ -243,7 +241,7 @@ if __name__ == "__main__":
     y = []
     for k in poses.keys():
         rot, tvec = poses[k]
-        pos = np.dot(rot, tvec)
+        pos = -np.dot(rot.transpose(), tvec)
 
         x.append(pos[0])
         y.append(pos[1])
