@@ -62,15 +62,26 @@ class TriangleMesh(RomiTask):
 class CurveSkeleton(RomiTask):
     """Computes a 3D curve skeleton
     """
+    upstream_task = luigi.Parameter(default=None)
+    method = luigi.Parameter(default="cgal")
+
     def requires(self):
-        return TriangleMesh()
+        if self.upstream_task is not None:
+            return self.upstream_task
+        if self.method == "cgal":
+            return TriangleMesh()
+        if self.method == "xu":
+            return SpaceCarving()
 
     def run(self):
-        mesh = io.read_triangle_mesh(self.input_file(MESH_ID))
-
-        out = proc3d.skeletonize(mesh)
-
-        io.write_json(self.output_file(SKELETON_ID), out)
+        if method == "xu":
+            mesh = io.read_triangle_mesh(self.input_file(MESH_ID))
+            out = proc3d.skeletonize(mesh)
+            io.write_json(self.output_file(SKELETON_ID), out)
+        elif method == "cgal":
+            pcd = io.read_point_cloud(self.input_file(VOXELS_ID))
+        else:
+            raise Exception("Unknown method for CurveSkeleton")
 
 
 class Voxels(RomiTask):
