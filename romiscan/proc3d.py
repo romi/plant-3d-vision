@@ -305,6 +305,14 @@ def distance_to_root_clusters(g, root_index, pcd, bin_size):
     return cluster_graph, cluster_values
 
 def draw_pcd_graph(g):
+    """
+    Draw graph in 3D
+
+    Parameters
+    __________
+    g: nx.Graph
+        graph with "center" attribute as a 3 element array
+    """
     line_set = open3d.geometry.LineSet()
     pts = np.zeros((len(g.nodes), 3))
     lines = np.zeros((len(g.edges), 2), dtype=int)
@@ -321,6 +329,16 @@ def draw_pcd_graph(g):
 
 def draw_distance_to_root_clusters(cluster_graph, cluster_values, pcd):
     """
+    Draw point cloud with clusters as well as skeleton graph.
+
+    Parameters
+    __________
+    cluster_graph: nx.Graph
+        Skeleton graphj
+    cluster_valuies: dict
+        Correspondance between point cloud points and cluster indices
+    pcd: open3d.geometry.PointCloud
+        point cloud
     """
     colors = np.zeros((len(pcd.points), 3))
     n_colors = max(cluster_values.values())
@@ -351,13 +369,21 @@ def draw_distance_to_root_clusters(cluster_graph, cluster_values, pcd):
     
 
 
-def skeleton_from_distance_to_root_clusters(point_cloud, root_index,
-                                            binsize, k, connect_all_points):
+def skeleton_from_distance_to_root_clusters(pcd, root_index,
+                                            binsize, k, connect_all_points=True):
     """
     The infamous XU method.
     Xu, Hui et al. "Knowledge and heuristic-based modeling of laser-scanned trees" 
     """
     g = knn_graph(pcd, k)
+    if connect_all_points:
+        connect_graph(g, pcd, root_index)
+
+    cluster_graph, cluster_values = distance_to_root_clusters(g, root_index, pcd, bin_size)
+    cluster_graph = nx.to_undirected(cluster_graph)
+    cluster_graph = nx.minimum_spanning_tree(cluster_graph)
+    return cluster_graph, cluster_values
+        
 
 
 
