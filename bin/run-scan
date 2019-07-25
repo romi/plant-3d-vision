@@ -99,7 +99,7 @@ if __name__ == "__main__":
         gimbal = Gimbal(**scanner_config["gimbal_args"])
         camera = Camera(**scanner_config["camera_args"])
         scanner = scan.Scanner(cnc, gimbal, camera, db,
-                               scan_id=scan_id, **scanner_config["scanner_args"])
+                               scan_id=scan_id, **scanner_config["scanner_args"], metadata=metadata)
     except Exception as e:
         logger.error("Failed to initialize scanner")
         raise
@@ -125,7 +125,7 @@ if __name__ == "__main__":
             path = path + line_1 + line_2
             mask = len(path)*[False] + len(line_1)*[True] + len(line_2)*[True]
         scanner.set_path(path, mask)
-        scanner.scan()
+        scanner.scan(metadata=metadata)
 
     except Exception as e:
         logger.error("Failed to finish scan.")
