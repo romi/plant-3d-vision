@@ -20,7 +20,7 @@ from open3d.utility import Vector3dVector, Vector3iVector
 import open3d
 import bisect
 import cv2
-import proc2d
+from romiscan import proc2d
 
 def index2point(indexes, origin, voxel_size):
     """Converts discrete nd indexes to a 3d points

@@ -277,9 +277,6 @@ class CurveSkeleton(RomiTask):
 
 
 
-
-
-
 class TreeGraph(RomiTask):
     """Computes a tree graph of the plant.
     """
