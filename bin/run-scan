@@ -75,7 +75,6 @@ if __name__ == "__main__":
         raise
     print("...OK")
 
-
     db = args[3]
     scan_id = None
 
@@ -86,7 +85,6 @@ if __name__ == "__main__":
 
     db = DB(db)
     db.connect()
-
 
     print("Initializing scanner...")
 
@@ -99,7 +97,7 @@ if __name__ == "__main__":
         gimbal = Gimbal(**scanner_config["gimbal_args"])
         camera = Camera(**scanner_config["camera_args"])
         scanner = scan.Scanner(cnc, gimbal, camera, db,
-                               scan_id=scan_id, **scanner_config["scanner_args"], metadata=metadata)
+                               scan_id=scan_id, **scanner_config["scanner_args"])
     except Exception as e:
         logger.error("Failed to initialize scanner")
         raise
@@ -117,10 +115,13 @@ if __name__ == "__main__":
     try:
         mask = None
         if options.calibration:
-            line_1 = lettucethink.path.line([0, path_config["args"]["yc"], 0, math.pi, 0], [
-                                            path_config["args"]["xc"], path_config["args"]["yc"], 0, math.pi, 0], n_line)
-            line_2 = lettucethink.path.line([0, 0, 0, math.pi, 0],
-                                            [0, path_config["args"]["yc"], 0, math.pi, 0],
+            x0, y0, z, pan0, tilt0 = path[0]
+            _, y1, _, _, _ = path[len(path)//4-1]
+           
+            line_1 = lettucethink.path.line([x0, y0, z, pan0, tilt0], [
+                                            path_config["args"]["xc"], path_config["args"]["yc"], z, pan0, tilt0], n_line)
+            line_2 = lettucethink.path.line([x0, y0, z, pan0, tilt0],
+                                            [x0, y1, z, pan0, tilt0],
                                             n_line)
             path = path + line_1 + line_2
             mask = len(path)*[False] + len(line_1)*[True] + len(line_2)*[True]
