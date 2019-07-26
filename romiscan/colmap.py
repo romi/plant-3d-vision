@@ -7,6 +7,7 @@ import imageio
 
 from open3d.geometry import PointCloud
 from open3d.utility import Vector3dVector
+import open3d
 
 from romiscan.thirdparty import read_model
 from romiscan import proc3d
@@ -315,7 +316,7 @@ class ColmapRunner():
             self.colmap_image_undistorter()
             self.colmap_patch_match_stereo()
             self.colmap_stereo_fusion()
-            dense_pcd = read_point_cloud('%s/dense/fused.ply' % colmap_ws)
+            dense_pcd = open3d.io.read_point_cloud('%s/dense/fused.ply' % colmap_ws)
 
         if self.bounding_box is not None:
             sparse_pcd = proc3d.crop_point_cloud(sparse_pcd, self.bounding_box)

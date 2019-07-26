@@ -99,7 +99,7 @@ if __name__ == "__main__":
         gimbal = Gimbal(**scanner_config["gimbal_args"])
         camera = Camera(**scanner_config["camera_args"])
         scanner = scan.Scanner(cnc, gimbal, camera, db,
-                               scan_id=scan_id, **scanner_config["scanner_args"])
+                               scan_id=scan_id, **scanner_config["scanner_args"], metadata=metadata)
     except Exception as e:
         logger.error("Failed to initialize scanner")
         raise

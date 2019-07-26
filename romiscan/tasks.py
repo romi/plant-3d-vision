@@ -13,6 +13,7 @@ modules (arabidopsis, proc2d...)
 import luigi
 import json
 import numpy as np
+import importlib
 
 from romidata.task import ImagesFilesetExists, RomiTask, FileByFileTask
 from romidata import io
@@ -24,196 +25,23 @@ from romiscan import proc3d
 from romiscan import cl
 from romiscan import colmap
 
-
-class PointCloud(RomiTask):
-    """Computes a point cloud
-    """
-    level_set_value = luigi.FloatParameter(default=0.0)
-
-    def requires(self):
-        return Voxels()
-
-    def run(self):
-        ifile = self.input_file(VOXELS_ID)
-        voxels = io.read_volume(ifile)
-
-        origin = np.array(ifile.get_metadata('origin'))
-        voxel_size = float(ifile.get_metadata('voxel_size'))
-
-        out = proc3d.vol2pcd(voxels, origin, voxel_size, self.level_set_value)
-
-        io.write_point_cloud(self.output_file(PCD_ID), out)
-
-
-class TriangleMesh(RomiTask):
-    """Computes a mesh
-    """
-    def requires(self):
-        return PointCloud()
-
-    def run(self):
-        point_cloud = io.read_point_cloud(self.input_file(PCD_ID))
-
-        out = proc3d.pcd2mesh(point_cloud)
-
-        io.write_triangle_mesh(self.output_file(MESH_ID), out)
-
-
-class CurveSkeleton(RomiTask):
-    """Computes a 3D curve skeleton
-    """
-    def requires(self):
-        return TriangleMesh()
-
-    def run(self):
-        mesh = io.read_triangle_mesh(self.input_file(MESH_ID))
-
-        out = proc3d.skeletonize(mesh)
-
-        io.write_json(self.output_file(SKELETON_ID), out)
-
-
-class Voxels(RomiTask):
-    """Backproject masks into 3D space
-    """
-
-    voxel_size = luigi.FloatParameter()
-    type = luigi.Parameter()
-
-    def requires(self):
-        return {'masks': Masks(), 'colmap': Colmap()}
-
-    def run(self):
-        masks_fileset = self.input()['masks'].get()
-        colmap_fileset = self.input()['colmap'].get()
-
-        scan = colmap_fileset.scan
-
-        try:
-            camera_model = scan.get_metadata()['computed']['camera_model']
-        except:
-            camera_model = scan.get_metadata()['scanner']['camera_model']
-        if camera_model is None:
-            raise Exception("Could not find camera model for Backprojection")
-
-        pcd = io.read_point_cloud(colmap_fileset.get_file(COLMAP_SPARSE_ID))
-
-        points = np.asarray(pcd.points)
-
-        x_min, y_min, z_min = points.min(axis=0)
-        x_max, y_max, z_max = points.max(axis=0)
-
-        center = [(x_max + x_min)/2, (y_max + y_min)/2, (z_max + z_min)/2]
-        widths = [x_max - x_min, y_max - y_min, z_max - z_min]
-
-        nx = int((x_max-x_min) / self.voxel_size) + 1
-        ny = int((y_max-y_min) / self.voxel_size) + 1
-        nz = int((z_max-z_min) / self.voxel_size) + 1
-
-        origin = np.array([x_min, y_min, z_min])
-
-        sc = cl.Backprojection(
-            [nx, ny, nz], [x_min, y_min, z_min], self.voxel_size, type=self.type)
-
-        images = io.read_json(colmap_fileset.get_file(COLMAP_IMAGES_ID))
-
-
-        vol = sc.process_fileset(masks_fileset, camera_model, images)
-
-        outfile = self.output_file(VOXELS_ID)
-        io.write_volume(outfile, vol)
-        outfile.set_metadata({'voxel_size' : self.voxel_size, 'origin' : origin.tolist() })
-    
-
-class Masks(FileByFileTask):
-    """Mask images
-    """
-
-    reader = io.read_image
-    writer = io.write_image
-
-    undistorted_input = luigi.BoolParameter(default=True)
-
-    type = luigi.Parameter()
-    parameters = luigi.ListParameter(default=[])
-    dilation = luigi.IntParameter()
-
-    binarize = luigi.BoolParameter(default=True)
-    threshold = luigi.FloatParameter(default=0.0)
-
-    def requires(self):
-        if self.undistorted_input:
-            return Undistorted()
-        else:
-            return ImagesFilesetExists()
-
-    def f_raw(self, x):
-        if self.type == "linear":
-            coefs = self.parameters['coefs']
-            return (coefs[0] * x[:, :, 0] + coefs[1] * x[:, :, 1] +
-                   coefs[2] * x[:, :, 2])
-        elif self.type == "excess_green":
-            return proc2d.excess_green(x)
-        elif self.type == "vesselness":
-            scale = self.parameters['scale']
-            channel = self.parameters['channel']
-            return proc2d.vesselness_2D(x, scale, channel=channel)
-        else:
-            raise Exception("Unknown masking type")
-
-    def f(self, x):
-        x = self.f_raw(x)
-        x[x<self.threshold] = 0
-        x = proc2d.rescale_intensity(x,out_range=(0,1))
-        if self.binarize and self.dilation > 0:
-            x = x > 0
-            x = proc2d.dilation(x, self.dilation)
-        x = np.array(255*x, dtype=np.uint8)
-        return x
-
-
-class Undistorted(FileByFileTask):
-    """Obtain undistorted images
-    """
-
-    reader = io.read_image
-    writer = io.write_image
-
-    def input(self):
-        return ImagesFilesetExists().output()
-
-    def requires(self):
-        return [Colmap(), ImagesFilesetExists()] 
-
-    def f(self, x):
-        scan = self.output().scan
-        try:
-            camera = scan.get_metadata()['computed']['camera_model']
-        except:
-            camera = scan.get_metadata()['scanner']['camera_model']
-
-        if camera is None:
-            raise Exception("Could not find camera model for undistortion")
-        return proc2d.undistort(x, camera)
-
-
 class Colmap(RomiTask):
     """Runs colmap on the "images" fileset
     """
+    upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)
+
     matcher = luigi.Parameter()
     compute_dense = luigi.BoolParameter()
     cli_args = luigi.Parameter()
     align_pcd = luigi.BoolParameter(default=True)
     calibration_scan_id = luigi.Parameter(default=None)
 
-    def requires(self):
-        return ImagesFilesetExists()
-
     def run(self):
         images_fileset = self.input().get()
 
-        print("cli_args = %s"%self.cli_args)
-        cli_args = json.loads(self.cli_args.replace("'", '"'))
+        # print("cli_args = %s"%self.cli_args)
+        # cli_args = json.loads(self.cli_args.replace("'", '"'))
+
         try:
             bounding_box = images_fileset.scan.get_metadata()['scanner']['workspace']
         except:
@@ -257,7 +85,7 @@ class Colmap(RomiTask):
             images_fileset,
             self.matcher,
             self.compute_dense,
-            cli_args,
+            self.cli_args,
             self.align_pcd,
             use_calibration,
             bounding_box)
@@ -282,29 +110,194 @@ class Colmap(RomiTask):
         md['camera_model'] = cameras_opencv[list(cameras_opencv.keys())[0]]
         outfile.fileset.scan.set_metadata('computed', md)
 
+class Undistorted(FileByFileTask):
+    """Obtain undistorted images
+    """
+    upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)
+
+    reader = io.read_image
+    writer = io.write_image
+
+    def input(self):
+        return ImagesFilesetExists().output()
+
+    def requires(self):
+        return [Colmap(), ImagesFilesetExists()] 
+
+    def f(self, x):
+        scan = self.output().scan
+        try:
+            camera = scan.get_metadata()['computed']['camera_model']
+        except:
+            camera = scan.get_metadata()['scanner']['camera_model']
+
+        if camera is None:
+            raise Exception("Could not find camera model for undistortion")
+        return proc2d.undistort(x, camera)
+
+class Masks(FileByFileTask):
+    """Mask images
+    """
+    upstream_task = luigi.TaskParameter(default=Undistorted)
+
+    reader = io.read_image
+    writer = io.write_image
+
+    undistorted_input = luigi.BoolParameter(default=True)
+
+    type = luigi.Parameter()
+    parameters = luigi.ListParameter(default=[])
+    dilation = luigi.IntParameter()
+
+    binarize = luigi.BoolParameter(default=True)
+    threshold = luigi.FloatParameter(default=0.0)
+
+    def f_raw(self, x):
+        if self.type == "linear":
+            coefs = self.parameters['coefs']
+            return (coefs[0] * x[:, :, 0] + coefs[1] * x[:, :, 1] +
+                   coefs[2] * x[:, :, 2])
+        elif self.type == "excess_green":
+            return proc2d.excess_green(x)
+        elif self.type == "vesselness":
+            scale = self.parameters['scale']
+            channel = self.parameters['channel']
+            return proc2d.vesselness_2D(x, scale, channel=channel)
+        else:
+            raise Exception("Unknown masking type")
+
+    def f(self, x):
+        x = self.f_raw(x)
+        x[x<self.threshold] = 0
+        x = proc2d.rescale_intensity(x,out_range=(0,1))
+        if self.binarize and self.dilation > 0:
+            x = x > 0
+            x = proc2d.dilation(x, self.dilation)
+        x = np.array(255*x, dtype=np.uint8)
+        return x
+
+
+class Voxels(RomiTask):
+    """Backproject masks into 3D space
+    """
+    upstream_task = None
+    upstream_mask = luigi.TaskParameter(default=Masks)
+    upstream_colmap = luigi.TaskParameter(default=Colmap)
+
+
+    voxel_size = luigi.FloatParameter()
+    type = luigi.Parameter()
+
+    def requires(self):
+        return {'masks': self.upstream_mask(), 'colmap': self.upstream_colmap()}
+
+    def run(self):
+        masks_fileset = self.input()['masks'].get()
+        colmap_fileset = self.input()['colmap'].get()
+
+        scan = colmap_fileset.scan
+
+        try:
+            camera_model = scan.get_metadata()['computed']['camera_model']
+        except:
+            camera_model = scan.get_metadata()['scanner']['camera_model']
+        if camera_model is None:
+            raise Exception("Could not find camera model for Backprojection")
+
+        pcd = io.read_point_cloud(colmap_fileset.get_file(COLMAP_SPARSE_ID))
+
+        points = np.asarray(pcd.points)
+
+        x_min, y_min, z_min = points.min(axis=0)
+        x_max, y_max, z_max = points.max(axis=0)
+
+        center = [(x_max + x_min)/2, (y_max + y_min)/2, (z_max + z_min)/2]
+        widths = [x_max - x_min, y_max - y_min, z_max - z_min]
+
+        nx = int((x_max-x_min) / self.voxel_size) + 1
+        ny = int((y_max-y_min) / self.voxel_size) + 1
+        nz = int((z_max-z_min) / self.voxel_size) + 1
+
+        origin = np.array([x_min, y_min, z_min])
+
+        sc = cl.Backprojection(
+            [nx, ny, nz], [x_min, y_min, z_min], self.voxel_size, type=self.type)
+
+        images = io.read_json(colmap_fileset.get_file(COLMAP_IMAGES_ID))
+
+
+        vol = sc.process_fileset(masks_fileset, camera_model, images)
+
+        outfile = self.output_file()
+        io.write_volume(outfile, vol)
+        outfile.set_metadata({'voxel_size' : self.voxel_size, 'origin' : origin.tolist() })
+    
+class PointCloud(RomiTask):
+    """Computes a point cloud
+    """
+    upstream_task = luigi.TaskParameter(default=Voxels)
+
+    level_set_value = luigi.FloatParameter(default=0.0)
+
+    def run(self):
+        ifile = self.input_file()
+        voxels = io.read_volume(ifile)
+
+        origin = np.array(ifile.get_metadata('origin'))
+        voxel_size = float(ifile.get_metadata('voxel_size'))
+        out = proc3d.vol2pcd(voxels, origin, voxel_size, self.level_set_value)
+
+        io.write_point_cloud(self.output_file(), out)
+
+
+class TriangleMesh(RomiTask):
+    """Computes a mesh
+    """
+    upstream_task = luigi.TaskParameter(default=PointCloud)
+
+    def run(self):
+        point_cloud = io.read_point_cloud(self.input_file())
+
+        out = proc3d.pcd2mesh(point_cloud)
+
+        io.write_triangle_mesh(self.output_file(), out)
+
+
+class CurveSkeleton(RomiTask):
+    """Computes a 3D curve skeleton
+    """
+    upstream_task = luigi.TaskParameter(default=TriangleMesh)
+
+    def run(self):
+        mesh = io.read_triangle_mesh(self.input_file())
+
+        out = proc3d.skeletonize(mesh)
+
+        io.write_json(self.output_file(), out)
+
+
+
 class TreeGraph(RomiTask):
     """Computes a tree graph of the plant.
     """
+    upstream_task = luigi.TaskParameter(default=CurveSkeleton)
+
     z_axis =  luigi.IntParameter(default=2)
     z_orientation =  luigi.IntParameter(default=1)
 
-    def requires(self):
-        return CurveSkeleton()
-
     def run(self):
-        f = io.read_json(self.input_file(SKELETON_ID))
+        f = io.read_json(self.input_file())
         t = arabidopsis.compute_tree_graph(f["points"], f["lines"], self.z_axis, self.z_orientation)
-        io.write_graph(self.output_file(TREE_ID), t)
+        io.write_graph(self.output_file(), t)
 
 class AnglesAndInternodes(RomiTask):
     """Computes angles and internodes from skeleton
     """
+    upstream_task = luigi.TaskParameter(default=TreeGraph)
+
     z_orientation = luigi.Parameter(default="down")
 
-    def requires(self):
-        return TreeGraph()
-
     def run(self):
-        t = io.read_graph(self.input_file(TREE_ID))
+        t = io.read_graph(self.input_file())
         measures = arabidopsis.compute_angles_and_internodes(t)
-        io.write_json(self.output_file(ANGLES_ID), measures)
+        io.write_json(self.output_file(), measures)
