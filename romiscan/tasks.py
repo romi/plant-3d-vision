@@ -14,6 +14,7 @@ import luigi
 import json
 import numpy as np
 import importlib
+import os
 
 from romidata.task import ImagesFilesetExists, RomiTask, FileByFileTask
 from romidata import io
@@ -56,12 +57,15 @@ class Colmap(RomiTask):
             else:
                 colmap_fs = colmap_fs[0]
             calib_poses = []
-            poses = colmap_fs.get_file("images")
+
+            poses = colmap_fs.get_file(COLMAP_IMAGES_ID)
+            poses = io.read_json(poses)
+
             calibration_images_fileset = calibration_scan.get_fileset("images")
             calib_poses = []
 
             for i, fi in enumerate(calibration_images_fileset.get_files()):
-                if i > len(images_fileset.get_files()):
+                if i >= len(images_fileset.get_files()):
                     break
 
                 key = None
@@ -72,7 +76,7 @@ class Colmap(RomiTask):
                 if key is None:
                     raise Exception("Could not find pose of image in calibration scan")
 
-                rot = np.matrix(sum(poses[key]['rotmat'], []))
+                rot = np.matrix(poses[key]['rotmat'])
                 tvec = np.matrix(poses[key]['tvec'])
                 pose = -rot.transpose()*(tvec.transpose())
                 pose = np.array(pose).flatten().tolist()
