@@ -123,9 +123,9 @@ if __name__ == "__main__":
             line_2 = lettucethink.path.line([x0, y0, z, pan0, tilt0],
                                             [x0, y1, z, pan0, tilt0],
                                             n_line)
-            path = path + line_1 + line_2
+            full_path = path + line_1 + line_2
             mask = len(path)*[False] + len(line_1)*[True] + len(line_2)*[True]
-        scanner.set_path(path, mask)
+        scanner.set_path(full_path, mask)
         scanner.scan(metadata=metadata)
 
     except Exception as e:
