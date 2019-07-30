@@ -15,7 +15,10 @@ import json
 import numpy as np
 import importlib
 import os
-import open3d
+try:
+    import open3d.open3d as open3d
+except:
+    import open3d
 import tempfile
 import shutil
 from skimage.transform import resize
