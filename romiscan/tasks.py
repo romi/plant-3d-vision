@@ -352,7 +352,16 @@ class Visualization(RomiTask):
                          "mesh" : None,
                          "point_cloud" : None,
                          "images" : None,
+                         "poses" : None,
                          "thumbnails" : None}
+
+        # POSES
+        colmap_fileset = self.upstream_colmap().output().get()
+        images = io.read_json(colmap_fileset.get_file(COLMAP_IMAGES_ID))
+        f = output_fileset.get_file(COLMAP_IMAGES_ID, create=True)
+        io.write_json(f, images)
+        files_metadata["poses"] = f.id
+
 
         # ZIP
         scan = self.output().scan
@@ -363,7 +372,7 @@ class Visualization(RomiTask):
                                 os.path.join(basedir, scan.id))
             f = output_fileset.get_file('scan', create=True)
             f.import_file(os.path.join(tmpdir, 'scan.zip'))
-        files_metadata["zip"]  = 'scan.zip'
+        files_metadata["zip"]  = 'scan'
 
         # ANGLES
         if self.upstream_angles().complete():
