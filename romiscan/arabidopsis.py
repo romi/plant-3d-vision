@@ -13,11 +13,14 @@ import collections
 import operator
 import numpy as np
 import networkx as nx
-
-from open3d.geometry import LineSet
-from open3d.io import read_point_cloud
-from open3d.utility import Vector3dVector, Vector2iVector
-
+try: 
+    from open3d.geometry import LineSet
+    from open3d.io import read_point_cloud
+    from open3d.utility import Vector3dVector, Vector2iVector
+except:
+    from open3d.open3d.geometry import LineSet
+    from open3d.open3d.io import read_point_cloud
+    from open3d.open3d.utility import Vector3dVector, Vector2iVector
 
 def get_main_stem_and_nodes(G, root_node):
     """
