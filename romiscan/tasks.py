@@ -326,6 +326,11 @@ class Visualization(RomiTask):
     max_point_cloud_size = luigi.IntParameter()
     thumbnail_size = luigi.IntParameter()
 
+
+    def __init__(self):
+        super().__init__()
+        self.task_id = "Visualization"
+
     def requires(self):
         return []
 
@@ -341,6 +346,13 @@ class Visualization(RomiTask):
             return resize(img, new_shape)
 
         output_fileset = self.output().get()
+        files_metadata = { "zip" : None,
+                         "angles" : None,
+                         "skeleton" : None,
+                         "mesh" : None,
+                         "point_cloud" : None,
+                         "images" : None,
+                         "thumbnails" : None}
 
         # ZIP
         scan = self.output().scan
@@ -351,24 +363,28 @@ class Visualization(RomiTask):
                                 os.path.join(basedir, scan.id))
             f = output_fileset.get_file('scan', create=True)
             f.import_file(os.path.join(tmpdir, 'scan.zip'))
+        files_metadata["zip"]  = 'scan.zip'
 
         # ANGLES
         if self.upstream_angles().complete():
             angles_file = self.upstream_angles().output_file()
             f = output_fileset.create_file(angles_file.id)
             io.write_json(f, io.read_json(angles_file))
+            files_metadata["angles"] = angles_file.id
 
         # SKELETON
         if self.upstream_skeleton().complete():
             skeleton_file = self.upstream_skeleton().output_file()
             f = output_fileset.create_file(skeleton_file.id)
             io.write_json(f, io.read_json(skeleton_file))
+            files_metadata["skeleton"] = skeleton_file.id
 
         # MESH
         if self.upstream_mesh().complete():
             mesh_file = self.upstream_mesh().output_file()
             f = output_fileset.create_file(mesh_file.id)
             io.write_triangle_mesh(f, io.read_triangle_mesh(mesh_file))
+            files_metadata["mesh"] = mesh_file.id
 
         # PCD
         if self.upstream_point_cloud().complete():
@@ -380,19 +396,35 @@ class Visualization(RomiTask):
             else:
                 point_cloud_lowres = open3d.geometry.uniform_down_sample(point_cloud, len(point_cloud.points) // self.max_point_cloud_size + 1)
             io.write_point_cloud(f, point_cloud)
+            files_metadata["point_cloud"] = point_cloud_file.id
 
         # IMAGES
         images_fileset = self.upstream_images().output().get()
+        files_metadata["images"] = []
+        files_metadata["thumbnails"] = []
+
         for img in images_fileset.get_files():
             data = io.read_image(img)
             # remove alpha channel
             if data.shape[2] == 4:
                 data = data[:,:,:3]
-            lowres = resize_to_max(data, self.max_image_size)
+            image = resize_to_max(data, self.max_image_size)
             thumbnail = resize_to_max(data, self.thumbnail_size)
 
-            f = output_fileset.create_file("lowres_%s"%img.id)
-            io.write_image(f, lowres)
-            f = output_fileset.create_file("thumbnail_%s"%img.id)
+            image_id = "image_%s"%img.id
+            thumbnail_id = "thumbnail_%s"%img.id
+
+            f = output_fileset.create_file(image_id)
+            io.write_image(f, image)
+            f.set_metadata("image_id", img.id)
+
+            f = output_fileset.create_file(thumbnail_id)
             io.write_image(f, thumbnail)
+            f.set_metadata("image_id", img.id)
+
+            files_metadata["images"].append(image_id)
+            files_metadata["thumbnails"].append(thumbnail_id)
+
+        # DESCRIPTION OF FILES
+        output_fileset.set_metadata("files", files_metadata)
 
