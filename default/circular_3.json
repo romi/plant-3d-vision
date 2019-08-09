@@ -1,6 +1,6 @@
 {
         "args": {
-            "num_points": 72,
+            "num_points": 3,
             "radius": 350,
             "tilt": 0.45,
             "xc": 400,
