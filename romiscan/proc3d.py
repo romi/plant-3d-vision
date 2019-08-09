@@ -13,10 +13,14 @@ import networkx as nx
 from tqdm import tqdm
 
 from romiscan import cgal
-
-from open3d.geometry import PointCloud, TriangleMesh
+try:
+    from open3d.geometry import PointCloud, TriangleMesh
+    from open3d.utility import Vector3dVector, Vector3iVector
+except:
+    from open3d.open3d.geometry import PointCloud, TriangleMesh
+    from open3d.open3d.utility import Vector3dVector, Vector3iVector
+    
 import imageio
-from open3d.utility import Vector3dVector, Vector3iVector
 import open3d
 import bisect
 import cv2

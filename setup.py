@@ -97,7 +97,8 @@ install_requires=[
         'luigi',
         'pybind11',
         'requests',
-        'mako'
+        'mako', 
+        'tqdm'
     ]
 
 version_minor = sys.version_info.minor
