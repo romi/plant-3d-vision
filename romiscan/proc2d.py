@@ -47,6 +47,8 @@ def excess_green(img):
     np.ndarray
         NxM excess green image
     """
+    print("shape = ")
+    print(img.shape)
     s = img.sum(axis=2) + EPS
     r = img[:, :, 0] / s
     g = img[:, :, 1] / s

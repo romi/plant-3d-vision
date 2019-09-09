@@ -2,9 +2,11 @@ from romidata import io
 import numpy as np
 from romidata import fsdb
 from tqdm import tqdm
-import open3d
+# import open3d
+import open3d.open3d as open3d
 import cv2
 from romiscan import pyceres
+import networkx as nx
 
 
 class StructureFromMotion():
@@ -115,84 +117,97 @@ class StructureFromMotion():
 
         self.filtered_matches = result
 
-    def get_view_pairs(self, view):
-        return {m : self.filtered_matches[m] for m in self.filtered_matches.keys() if view == m[0] or view == m[1]}
+    def compute_tracks(self):
+        G = nx.Graph()
+        added_view = set()
+        for v1, v2 in tqdm(self.filtered_matches.keys()):
+            m = self.filtered_matches[(v1, v2)]
+            for i in range(len(m["pts1"])):
+                n1 = (v1, tuple(m["pts1"][i].tolist()))
+                n2 = (v2, tuple(m["pts2"][i].tolist()))
+                G.add_node(n1)
+                G.add_node(n2)
+                G.add_edge(n1, n2)
+        self.tracks = nx.connected_components(G)
 
-    def add_views(self):
-        """
-        """
-        self.ba_view_index = {}
-        self.initial_poses = {}
+    # def get_view_pairs(self, view):
+    #     return {m : self.filtered_matches[m] for m in self.filtered_matches.keys() if view == m[0] or view == m[1]}
 
-        first_view = list(self.keypoints.keys())[0]
-        rot = np.eye(3)
-        tvec = np.zeros(3)
-        self.initial_poses[first_view] = rot, tvec
+    # def add_views(self):
+    #     """
+    #     """
+    #     self.ba_view_index = {}
+    #     self.initial_poses = {}
 
-        view = first_view
-        while True:
-            pairs = self.get_view_pairs(view)
-            pairs = {k: v for k, v in pairs.items() if not (k[0] in self.initial_poses and k[1] in self.initial_poses)}
+    #     first_view = list(self.keypoints.keys())[0]
+    #     rot = np.eye(3)
+    #     tvec = np.zeros(3)
+    #     self.initial_poses[first_view] = rot, tvec
 
-            if len(pairs) == 0:
-                break
+    #     view = first_view
+    #     while True:
+    #         pairs = self.get_view_pairs(view)
+    #         pairs = {k: v for k, v in pairs.items() if not (k[0] in self.initial_poses and k[1] in self.initial_poses)}
 
-            best_pair = max(pairs, key=lambda k: len(
-                self.filtered_matches[k]["pts1"]))
-            if view == best_pair[0]:
-                new_view = best_pair[1]
-                rot = self.filtered_matches[best_pair]["rot"]
-                tvec = self.filtered_matches[best_pair]["tvec"].ravel()
-            else:
-                new_view = best_pair[0]
-                rot = self.filtered_matches[best_pair]["rot"].transpose()
-                tvec = -np.dot(rot, self.filtered_matches[best_pair]["tvec"]).ravel()
+    #         if len(pairs) == 0:
+    #             break
 
-            rot_1, tvec_1 = self.initial_poses[view]
-            rot_2 = np.dot(rot, rot_1)
-            tvec_2 = np.dot(rot, tvec_1) + tvec
-            self.initial_poses[new_view] = rot_2, tvec_2.ravel()
-            view = new_view
+    #         best_pair = max(pairs, key=lambda k: len(
+    #             self.filtered_matches[k]["pts1"]))
+    #         if view == best_pair[0]:
+    #             new_view = best_pair[1]
+    #             rot = self.filtered_matches[best_pair]["rot"]
+    #             tvec = self.filtered_matches[best_pair]["tvec"].ravel()
+    #         else:
+    #             new_view = best_pair[0]
+    #             rot = self.filtered_matches[best_pair]["rot"].transpose()
+    #             tvec = -np.dot(rot, self.filtered_matches[best_pair]["tvec"]).ravel()
 
-        for k in self.initial_poses.keys():
-            rot, tvec = self.initial_poses[k]
-            idx = self.ba.add_view(rot.ravel().tolist(), tvec.ravel().tolist())
-            self.ba_view_index[k] = idx
+    #         rot_1, tvec_1 = self.initial_poses[view]
+    #         rot_2 = np.dot(rot, rot_1)
+    #         tvec_2 = np.dot(rot, tvec_1) + tvec
+    #         self.initial_poses[new_view] = rot_2, tvec_2.ravel()
+    #         view = new_view
 
-    def add_pair(self, pair):
-        """
-        Add a pair to the bundle adjustment function.
-        """
+    #     for k in self.initial_poses.keys():
+    #         rot, tvec = self.initial_poses[k]
+    #         idx = self.ba.add_view(rot.ravel().tolist(), tvec.ravel().tolist())
+    #         self.ba_view_index[k] = idx
 
-        rot_1, tvec_1 = self.initial_poses[pair[0]]
-        rot_2, tvec_2 = self.initial_poses[pair[1]]
+    # def add_pair(self, pair):
+    #     """
+    #     Add a pair to the bundle adjustment function.
+    #     """
 
-        rot = rot_2*rot_1.transpose()
-        tvec = tvec_2 - np.dot(rot_1.transpose(), tvec_1)
+    #     rot_1, tvec_1 = self.initial_poses[pair[0]]
+    #     rot_2, tvec_2 = self.initial_poses[pair[1]]
 
-        u_rot = cv2.UMat(rot)
-        u_tvec = cv2.UMat(tvec)
+    #     rot = rot_2*rot_1.transpose()
+    #     tvec = tvec_2 - np.dot(rot_1.transpose(), tvec_1)
 
-        R1, R2, P1, P2, Q, _, _= cv2.stereoRectify(cv2.UMat(self.camera_matrix), cv2.UMat(self.dist_coefs), cv2.UMat(self.camera_matrix), cv2.UMat(self.dist_coefs), (1920, 1080),
-                u_rot,
-                u_tvec)
+    #     u_rot = cv2.UMat(rot)
+    #     u_tvec = cv2.UMat(tvec)
 
-        pts1 = self.filtered_matches[pair]["pts1"].transpose()
-        pts2 = self.filtered_matches[pair]["pts2"].transpose()
+    #     R1, R2, P1, P2, Q, _, _= cv2.stereoRectify(cv2.UMat(self.camera_matrix), cv2.UMat(self.dist_coefs), cv2.UMat(self.camera_matrix), cv2.UMat(self.dist_coefs), (1920, 1080),
+    #             u_rot,
+    #             u_tvec)
 
-        pts4d = cv2.triangulatePoints(P1, P2, pts1, pts2).get()
+    #     pts1 = self.filtered_matches[pair]["pts1"].transpose()
+    #     pts2 = self.filtered_matches[pair]["pts2"].transpose()
 
-        pts3d = np.zeros((3, pts4d.shape[1]))
+    #     pts4d = cv2.triangulatePoints(P1, P2, pts1, pts2).get()
 
-        pts3d[0,:] = pts4d[0,:] / pts4d[3,:]
-        pts3d[1,:] = pts4d[1,:] / pts4d[3,:]
-        pts3d[2,:] = pts4d[2,:] / pts4d[3,:]
+    #     pts3d = np.zeros((3, pts4d.shape[1]))
 
-        pts3d = np.dot(rot, pts3d) + tvec[:, np.newaxis]
+    #     pts3d[0,:] = pts4d[0,:] / pts4d[3,:]
+    #     pts3d[1,:] = pts4d[1,:] / pts4d[3,:]
+    #     pts3d[2,:] = pts4d[2,:] / pts4d[3,:]
 
-        idx_1 = self.ba_view_index[pair[0]]
-        idx_2 = self.ba_view_index[pair[1]]
-        self.ba.add_pair(idx_1, idx_2, pts1.ravel().tolist(),pts2.ravel().tolist(),pts3d.ravel().tolist())
+    #     pts3d = np.dot(rot, pts3d) + tvec[:, np.newaxis]
+
+    #     idx_1 = self.ba_view_index[pair[0]]
+    #     idx_2 = self.ba_view_index[pair[1]]
+    #     self.ba.add_pair(idx_1, idx_2, pts1.ravel().tolist(),pts2.ravel().tolist(),pts3d.ravel().tolist())
 
 
 
@@ -235,15 +250,16 @@ if __name__ == "__main__":
     sfm.compute_features()
     sfm.compute_matches()
     sfm.filter_matches()
-    sfm.bundle_adjustment()
-    poses = sfm.get_poses()
-    x = []
-    y = []
-    for k in poses.keys():
-        rot, tvec = poses[k]
-        pos = -np.dot(rot.transpose(), tvec)
+    sfm.compute_tracks()
+    # sfm.bundle_adjustment()
+    # poses = sfm.get_poses()
+    # x = []
+    # y = []
+    # for k in poses.keys():
+    #     rot, tvec = poses[k]
+    #     pos = -np.dot(rot.transpose(), tvec)
 
-        x.append(pos[0])
-        y.append(pos[1])
+    #     x.append(pos[0])
+    #     y.append(pos[1])
 
     db.disconnect()
