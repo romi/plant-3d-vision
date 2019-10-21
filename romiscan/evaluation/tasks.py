@@ -1,3 +1,5 @@
+import luigi
+from romidata import io
 from romiscan import tasks
 from romidata.task import FilesetExists, RomiTask
 
@@ -27,12 +29,13 @@ class PointCloudGroundTruth(FilesetExists):
 class PointCloudEvaluation(EvaluationTask):
     upstream_task = luigi.TaskParameter(default=tasks.PointCloud)
     ground_truth = luigi.TaskParameter(default=PointCloudGroundTruth)
+    max_distance = luigi.FloatParameter(default=2)
     def evaluate(self):
         source = io.read_point_cloud(self.input_file())
-        target = io.read_point_cloud(self.ground_truth.output_file())
-        res = open3d.registration.evaluate_registration(source, target)
+        target = io.read_point_cloud(self.ground_truth().output().get().get_files()[0])
+        res = open3d.registration.evaluate_registration(source, target, self.max_distance)
         return {
-            "id": self.upstream_task.task_id,
+            "id": self.upstream_task().task_id,
             "fitness": res.fitness,
             "inlier_rmse": res.inlier_rmse
         }
