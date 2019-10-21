@@ -1,7 +1,7 @@
 import luigi
 from romidata import io
 from romiscan import tasks
-from romidata.task import FilesetExists, RomiTask
+from romidata.task import FilesetExists, RomiTask, FilesetTarget, DatabaseConfig
 
 class EvaluationTask(RomiTask):
     upstream_task = luigi.TaskParameter()
