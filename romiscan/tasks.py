@@ -164,8 +164,10 @@ class Masks(FileByFileTask):
     threshold = luigi.FloatParameter(default=0.0)
 
     def f_raw(self, x):
+        x = np.asarray(x, dtype=np.float)
+        x = proc2d.rescale_intensity(x, out_range=(0, 1))
         if self.type == "linear":
-            coefs = self.parameters['coefs']
+            coefs = self.parameters
             return (coefs[0] * x[:, :, 0] + coefs[1] * x[:, :, 1] +
                    coefs[2] * x[:, :, 2])
         elif self.type == "excess_green":
@@ -179,11 +181,13 @@ class Masks(FileByFileTask):
 
     def f(self, x):
         x = self.f_raw(x)
-        x[x<self.threshold] = 0
-        x = proc2d.rescale_intensity(x,out_range=(0,1))
-        if self.binarize and self.dilation > 0:
-            x = x > 0
-            x = proc2d.dilation(x, self.dilation)
+        if self.binarize:
+            x = x > self.threshold
+            if self.dilation > 0:
+                x = proc2d.dilation(x, self.dilation)
+        else:
+            x[x < self.threshold] = 0
+            x = proc2d.rescale_intensity(x, out_range=(0, 1))
         x = np.array(255*x, dtype=np.uint8)
         return x
 
