@@ -7,9 +7,10 @@ class EvaluationTask(RomiTask):
     upstream_task = luigi.TaskParameter()
     ground_truth = luigi.TaskParameter()
 
-    def __init__(self):
-        super(EvaluationTask, self).__init__()
-        self.task_id = self.task_id + "Eval"
+    def output(self):
+        fileset_id = self.upstream_task().task_id + "Evaluation"
+        return FilesetTarget(DatabaseConfig().scan, fileset_id)
+
 
     def evaluate(self):
         raise NotImplementedError
