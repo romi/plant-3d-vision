@@ -1,0 +1,47 @@
+[Colmap]
+matcher = "exhaustive"
+compute_dense = false
+
+[accessory]
+calibration_scan_id = "calib_scan_shortpath"
+
+[Masks]
+type = "excess_green"
+dilation = 5
+binarize = true
+threshold = 0.0
+
+[Segmentation2D]
+Sx = 896
+Sy = 896
+N_vox = 1000000
+model_segmentation_name = "/model_weights/table1_test5_hdri_arabidopsis_resnet50_epoch15_rotate_True_finetune_3_epoch20"
+
+
+[Reconstruction3D]
+N_vox = 1000000
+
+[Voxels]
+voxel_size = 0.05
+type = "carving"
+
+[PointCloud]
+level_set_value = 1.0
+
+[Visualization]
+max_image_size = 1500
+max_pcd_size = 10000
+thumbnail_size = 150
+pcd_source = "vox2pcd"
+mesh_source = "delaunay"
+
+[Colmap.cli_args.feature_extractor]
+"--ImageReader.single_camera" = "1"
+"--SiftExtraction.use_gpu" = "1"
+#"--ImageReader.camera_model" = "OPENCV_FISHEYE"
+
+[Colmap.cli_args.exhaustive_matcher]
+"--SiftMatching.use_gpu" = "1"
+
+[Colmap.cli_args.model_aligner]
+--robust_alignment_max_error = "10"
