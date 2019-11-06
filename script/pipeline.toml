@@ -15,7 +15,7 @@ threshold = 0.0
 Sx = 896
 Sy = 896
 N_vox = 1000000
-model_segmentation_name = "/model_weights/table1_test5_hdri_arabidopsis_resnet50_epoch15_rotate_True_finetune_3_epoch20"
+model_segmentation_name ="table1_test5_hdri_arabidopsis_resnet50_epoch15_rotate_True_finetune_3_epoch20.pt"
 
 
 [Reconstruction3D]

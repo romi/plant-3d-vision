@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 
 import sys
-
-sys.path.append("/home/alienor/Documents/Segmentation/")
+import os
+directory = os.path.split(os.getcwd())[0]
+directory = os.path.split(directory)[0]
+sys.path.append(directory +"/Segmentation/")
 
 import luigi
 
@@ -99,11 +101,12 @@ class Segmentation2D(RomiTask):
         output_fileset = self.output().get()
         
         #Save prediction matrix [N_cam, N_labels, xinit, yinit]
-        f = output_fileset.create_file('full_prediction_matrix')
-        write_torch(f, images_segmented)
-        f.id = 'images_matrix'
+        #f = output_fileset.create_file('full_prediction_matrix')
+        #write_torch(f, images_segmented)
+        #f.id = 'images_matrix'
         
         #Save class prediction as images, one by one, class per class
+        print("Saving the segmented images, takes around 15 s")
         for i in range(images_segmented.shape[0]):
             for j in range(len(self.label_names)):
                 f = output_fileset.create_file('%03d_%s'%(i, self.label_names[j]))
