@@ -114,7 +114,7 @@ class Segmentation2D(RomiTask):
                 f = output_fileset.create_file('%03d_%s'%(i, self.label_names[j]))
                 im = (images_segmented[i, j, :, :].cpu().numpy() * 255).astype(np.uint8)
                 io.write_image(f, im, 'png' )
-                f.set_metadata({'image_id' : id_im[i], 'label' : self.label_names[j]})
+                f.set_metadata({'image_id' : id_im[i][0], 'label' : self.label_names[j]})
 
         
 if __name__ == "__main__":
