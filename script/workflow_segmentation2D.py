@@ -2,9 +2,12 @@
 
 import sys
 import os
-directory = os.path.split(os.getcwd())[0]
-directory = os.path.split(directory)[0]
-sys.path.append(directory +"/Segmentation/")
+
+#directory = os.path.split(os.getcwd())[0]
+#directory = os.path.split(directory)[0]
+#sys.path.append(directory +"/Segmentation/romiseg/")
+#from Segmentation2D import segmentation
+
 
 import luigi
 
@@ -30,8 +33,7 @@ from romiscan import colmap
 from romiscan.tasks import *
 import open3d
 
-from Segmentation2D import segmentation
-
+from romiseg.Segmentation2D import segmentation
 
 
 
