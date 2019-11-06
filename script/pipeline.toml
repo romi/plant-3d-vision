@@ -17,13 +17,14 @@ Sy = 896
 N_vox = 1000000
 model_segmentation_name ="table1_test5_hdri_arabidopsis_resnet50_epoch15_rotate_True_finetune_3_epoch20.pt"
 
-
 [Reconstruction3D]
 N_vox = 1000000
 
 [Voxels]
-voxel_size = 0.05
-type = "carving"
+upstream_mask = "Segmentation2D"
+multiclass = true
+voxel_size = 2.0
+type = "averaging"
 
 [PointCloud]
 level_set_value = 1.0
