@@ -26,13 +26,15 @@ mf = cl.mem_flags
 prg_dir = os.path.join(os.path.dirname(__file__), 'kernels')
 
 with open(os.path.join(prg_dir, 'backprojection.c')) as f:
-    backprojection_kernels = cl.Program(ctx, f.read()).build(options="-I%s"%prg_dir)
+    backprojection_kernels = cl.Program(
+        ctx, f.read()).build(options="-I%s" % prg_dir)
 
 with open(os.path.join(prg_dir, 'geodesics.c')) as f:
-    geodesics_kernels = cl.Program(ctx, f.read()).build(options="-I%s"%prg_dir)
+    geodesics_kernels = cl.Program(
+        ctx, f.read()).build(options="-I%s" % prg_dir)
 
 with open(os.path.join(prg_dir, 'fim.c')) as f:
-    fim_kernels = cl.Program(ctx, f.read()).build(options="-I%s"%prg_dir)
+    fim_kernels = cl.Program(ctx, f.read()).build(options="-I%s" % prg_dir)
 
 
 class Backprojection():
@@ -52,11 +54,13 @@ class Backprojection():
     default_value: float
         default value when initializing the voxels (defaults to 0)
     """
-    def __init__(self, shape, origin, voxel_size, type="carving", default_value=0):
+
+    def __init__(self, shape, origin, voxel_size, type="carving", default_value=0, multiclass=False):
         self.shape = shape
         self.origin = origin
         self.voxel_size = voxel_size
         self.default_value = default_value
+        self.multiclass = True
 
         self.type = type
         if type == "carving":
@@ -134,6 +138,17 @@ class Backprojection():
         return self.values_h
 
     def process_fileset(self, fs, camera_model, poses):
+        if self.multiclass:
+            labels = self.get_labels(fs)
+            result = np.zeros((len(labels), *self.shape))
+            for i,l in enumerate(labels):
+                result[i, :] = self.process_label(fs, camera_model, poses, l)
+            return result
+        else:
+            return self.process_label(fs, camera_model, poses)
+
+
+    def process_label(self, fs, camera_model, poses, label=None):
         """
         Processes a whole fileset.
 
@@ -144,17 +159,31 @@ class Backprojection():
         poses: dict
             poses file computed by colmap
         """
+        self.clear()
+
         width = camera_model['width']
         height = camera_model['height']
         intrinsics = camera_model['params'][0:4]
 
         for fi in fs.get_files():
-            mask = io.read_image(fi)
             key = None
+            mask = None
             for k in poses.keys():
-                if os.path.splitext(poses[k]['name'])[0] == fi.id:
-                    key = k
-                    break
+                if label is None:
+                    if os.path.splitext(poses[k]['name'])[0] == fi.id:
+                        mask = io.read_image(fi)
+                        key = k
+                        break
+                else:
+                    print("label (tgt) = %s"%label)
+                    print("label (fi) = %s"%fi.get_metadata('label'))
+                    print(os.path.splitext(poses[k]['name'])[0])
+                    print(fi.get_metadata('image_id'))
+
+                    if fi.get_metadata('label') == label and os.path.splitext(poses[k]['name'])[0] == fi.get_metadata('image_id'):
+                        mask = io.read_image(fi)
+                        key = k
+                        break
 
             if key is not None:
                 rot = sum(poses[key]['rotmat'], [])
@@ -164,6 +193,21 @@ class Backprojection():
         result = self.values()
         result = result.reshape(self.shape)
         return result
+
+    def get_labels(self, fs):
+        labels = set()
+        for fi in fs.get_files():
+            label = fi.get_metadata('label')
+            if label is not None:
+                labels.add(label)
+        return list(labels)
+
+    def clear(self):
+        self.values_h = self.default_value * \
+            np.ones(self.shape).astype(self.dtype)
+        cl.enqueue_copy(queue, self.values_h, self.values_d)
+
+
 
 class Geodesics():
     def __init__(self):
@@ -283,7 +327,8 @@ class FIM():
                           hostbuf=cnt_h)
 
         has_converged_h = np.ones(1, dtype=np.int32)
-        has_converged_d = cl.Buffer(ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=has_converged_h)
+        has_converged_d = cl.Buffer(
+            ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=has_converged_h)
         while True:
             if steps is not None and n_iter >= steps:
                 break
@@ -313,10 +358,11 @@ class FIM():
 
             n_iter_update = 0
             while True:
-                cl.enqueue_copy(queue, has_converged_d, np.ones(1, dtype=np.int32))
+                cl.enqueue_copy(queue, has_converged_d,
+                                np.ones(1, dtype=np.int32))
                 self.kernel_update(queue, (self.n_active,), None,
-                   self.sol, self.shape_d, self.speed, self.active_pts, self.point_status,
-                   np.int32(self.n_active), np.float32(self.tol), has_converged_d)
+                                   self.sol, self.shape_d, self.speed, self.active_pts, self.point_status,
+                                   np.int32(self.n_active), np.float32(self.tol), has_converged_d)
                 cl.enqueue_copy(queue, has_converged_h, has_converged_d)
                 queue.finish()
                 if (has_converged_h[0] > 0):
@@ -332,15 +378,14 @@ class FIM():
         return x
 
     def get_gradient_flow(self):
-        fs = np.array([1,2,1], dtype=np.float32)
-        fd = np.array([-1,0,1], dtype=np.float32)
+        fs = np.array([1, 2, 1], dtype=np.float32)
+        fd = np.array([-1, 0, 1], dtype=np.float32)
         x = np.zeros(self.shape, dtype=np.float32)
         cl.enqueue_copy(queue, x, self.sol)
         queue.finish()
         gx, gy, gz = np.gradient(x)
         n = np.sqrt(gx**2 + gy**2 + gz**2)
         return gx/n, gy/n, gz/n
-
 
 
 if __name__ == "__main__":

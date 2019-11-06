@@ -202,6 +202,7 @@ class Voxels(RomiTask):
 
     voxel_size = luigi.FloatParameter()
     type = luigi.Parameter()
+    multiclass = luigi.BoolParameter(default=False)
 
     def requires(self):
         return {'masks': self.upstream_mask(), 'colmap': self.upstream_colmap()}
@@ -236,16 +237,23 @@ class Voxels(RomiTask):
         origin = np.array([x_min, y_min, z_min])
 
         sc = cl.Backprojection(
-            [nx, ny, nz], [x_min, y_min, z_min], self.voxel_size, type=self.type)
+            [nx, ny, nz], [x_min, y_min, z_min], self.voxel_size, type=self.type, multiclass=self.multiclass)
 
         images = io.read_json(colmap_fileset.get_file(COLMAP_IMAGES_ID))
 
-
         vol = sc.process_fileset(masks_fileset, camera_model, images)
+        if self.multiclass:
+            outfs = self.output().get()
+            for i, label in enumerate(sc.get_labels(masks_fileset)):
+                print(label)
+                outfile = outfs.create_file(label)
+                io.write_volume(outfile, vol[i,:])
+                outfile.set_metadata({'voxel_size' : self.voxel_size, 'origin' : origin.tolist() , 'label' : label })
+        else:
+            outfile = self.output_file()
+            io.write_volume(outfile, vol)
+            outfile.set_metadata({'voxel_size' : self.voxel_size, 'origin' : origin.tolist() })
 
-        outfile = self.output_file()
-        io.write_volume(outfile, vol)
-        outfile.set_metadata({'voxel_size' : self.voxel_size, 'origin' : origin.tolist() })
     
 class PointCloud(RomiTask):
     """Computes a point cloud
