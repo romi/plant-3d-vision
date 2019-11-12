@@ -15,7 +15,10 @@ threshold = 0.0
 Sx = 896
 Sy = 896
 N_vox = 1000000
-model_segmentation_name ="table1_test5_hdri_arabidopsis_resnet50_epoch15_rotate_True_finetune_3_epoch20.pt"
+model_segmentation_name = "table1_test5_hdri_arabidopsis_resnet50_epoch15_rotate_True_finetune_folder_epoch20.pt"
+directory_images = "/home/alienor/Documents/database/FINETUNE"
+directory_weights = "/home/alienor/Documents/database/WEIGHTS"
+finetune_epochs = 20
 
 [Reconstruction3D]
 N_vox = 1000000
@@ -39,7 +42,6 @@ mesh_source = "delaunay"
 [Colmap.cli_args.feature_extractor]
 "--ImageReader.single_camera" = "1"
 "--SiftExtraction.use_gpu" = "1"
-#"--ImageReader.camera_model" = "OPENCV_FISHEYE"
 
 [Colmap.cli_args.exhaustive_matcher]
 "--SiftMatching.use_gpu" = "1"

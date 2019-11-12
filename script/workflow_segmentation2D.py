@@ -83,6 +83,7 @@ class Segmentation2D(RomiTask):
     Sx = luigi.IntParameter(default=896)
     Sy = luigi.IntParameter(default=1000)
     model_segmentation_name = luigi.Parameter('ERROR')
+    directory_weights = luigi.Parameter('complete here')
 
     def requires(self):
         return {'images': self.upstream_image(), 'colmap': self.upstream_colmap()}
@@ -98,7 +99,7 @@ class Segmentation2D(RomiTask):
         
         #APPLY SEGMENTATION
         images_segmented, id_im = segmentation(self.Sx, self.Sy, self.label_names, 
-                                        images_fileset, scan, self.model_segmentation_name)
+                                        images_fileset, scan, self.model_segmentation_name, self.directory_weights)
         
         output_fileset = self.output().get()
         
