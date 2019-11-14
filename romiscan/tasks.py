@@ -23,8 +23,9 @@ import tempfile
 import shutil
 from skimage.transform import resize
 
-from romidata.task import ImagesFilesetExists, RomiTask, FileByFileTask
+from romidata.task import  RomiTask, FileByFileTask
 from romidata import io
+from romidata.task import FilesetTarget, DatabaseConfig
 
 from romiscan.filenames import *
 from romiscan import arabidopsis
@@ -33,10 +34,81 @@ from romiscan import proc3d
 from romiscan import cl
 from romiscan import colmap
 
+import lettucethink
+from lettucethink import scan
+
+class Scan(RomiTask):
+    upstream_task = None
+
+    metadata = luigi.Parameter(default={})
+    scanner = luigi.Parameter()
+    path = luigi.Parameter()
+
+    def requires(self):
+        return []
+
+    def output(self):
+        """Output for a RomiTask is a FileSetTarget, the fileset ID being
+        the task ID.
+        """
+        return FilesetTarget(DatabaseConfig().scan, "Scan")
+
+    def run(self):
+        if self.scanner["cnc_firmware"].split("-")[0] == "grbl":
+            from lettucethink.grbl import CNC
+        elif self.scanner["cnc_firmware"].split("-")[0] == "cnccontroller":
+            from lettucethink.cnccontroller import CNC
+        elif self.scanner["cnc_firmware"].split("-")[0] == "virtual":
+            from lettucethink.vscan import CNC
+        else:
+            raise ValueError("Unknown CNC firmware parameter")
+
+        if self.scanner["gimbal_firmware"].split("-")[0] == "dynamixel":
+            from lettucethink.dynamixel import Gimbal
+        elif self.scanner["gimbal_firmware"].split("-")[0] == "blgimbal":
+            from lettucethink.blgimbal import Gimbal
+        elif self.scanner["gimbal_firmware"].split("-")[0] == "virtual":
+            from lettucethink.vscan import Gimbal
+        else:
+            raise ValueError("Unknown Gimbal firmware parameter")
+
+        if self.scanner["camera_firmware"].split("-")[0] == "gphoto2":
+            from lettucethink.gp2 import Camera
+        elif self.scanner["camera_firmware"].split("-")[0] == "sony_wifi":
+            from lettucethink.sony import Camera
+        elif self.scanner["camera_firmware"].split("-")[0] == "virtual":
+            from lettucethink.vscan import Camera
+        else:
+            raise ValueError("Unknown Camera firmware parameter")
+
+        cnc = CNC(**self.scanner["cnc_args"])
+        gimbal = Gimbal(**self.scanner["gimbal_args"])
+        camera = Camera(**self.scanner["camera_args"])
+        scanner = scan.Scanner(cnc, gimbal, camera, **self.scanner["scanner_args"])
+
+        if self.path["type"] == "circular":
+            path = lettucethink.path.circle(**self.path["args"])
+        else:
+            raise ValueError("Unknown path type")
+
+        metadata = {
+            "object": self.metadata,
+            "scanner": self.scanner,
+            "path": self.path
+        }
+
+        scanner.set_path(path, mask=None)
+        scanner.scan()
+        scanner.store(self.output().get(), metadata=metadata)
+
+class CalibrationScan(Scan):
+    pass
+
+
 class Colmap(RomiTask):
     """Runs colmap on the "images" fileset
     """
-    upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)
+    upstream_task = luigi.TaskParameter(default=Scan)
 
     matcher = luigi.Parameter()
     compute_dense = luigi.BoolParameter()
@@ -124,16 +196,16 @@ class Colmap(RomiTask):
 class Undistorted(FileByFileTask):
     """Obtain undistorted images
     """
-    upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)
+    upstream_task = luigi.TaskParameter(default=Scan)
 
     reader = io.read_image
     writer = io.write_image
 
     def input(self):
-        return ImagesFilesetExists().output()
+        return Scan().output()
 
     def requires(self):
-        return [Colmap(), ImagesFilesetExists()] 
+        return [Colmap(), Scan()] 
 
     def f(self, x):
         scan = self.output().scan

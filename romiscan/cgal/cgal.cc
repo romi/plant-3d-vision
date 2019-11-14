@@ -27,6 +27,7 @@ typedef CGAL::Mean_curvature_flow_skeletonization<Triangle_mesh>
 typedef Skeletonization::Skeleton Skeleton;
 typedef Skeleton::vertex_descriptor Skeleton_vertex;
 typedef Skeleton::edge_descriptor Skeleton_edge;
+typedef std::vector<int> ArrayX1i;
 
 typedef std::pair<Point, Vector> Pwn;
 
@@ -52,6 +53,17 @@ std::pair<ArrayX3d, ArrayX2i> skeleton_to_arrays(const Skeleton &skeleton) {
         i++;
     }
     return std::pair<ArrayX3d, ArrayX2i>(vertex_array, edge_array);
+}
+
+ArrayX1i skeleton_mesh_correspondance(const Skeleton &skeleton) {
+    ArrayX1i corres(boost::num_vertices(skeleton));
+    auto es = boost::edges(skeleton);
+    for(Skeleton_vertex v : CGAL::make_range(vertices(skeleton))) {
+        for(vertex_descriptor vd : skeleton[v].vertices) {
+            corres[(size_t) vd] = v;
+        }
+    }
+    return corres;
 }
 
 Triangle_mesh arrays_to_mesh(const ArrayX3d &points,
@@ -134,6 +146,16 @@ triangles) {
     return skeleton_to_arrays(skeleton);
 }
 
+std::tuple<ArrayX3d, ArrayX2i, ArrayX1i> skeletonize_mesh_with_corres(ArrayX3d& points, ArrayX3i
+triangles) {
+    Triangle_mesh tmesh = arrays_to_mesh(points, triangles);
+    Skeleton skeleton;
+    CGAL::extract_mean_curvature_flow_skeleton(tmesh, skeleton);
+    std::pair<ArrayX3d, ArrayX2i> arrays = skeleton_to_arrays(skeleton);
+    ArrayX1i corres = skeleton_mesh_correspondance(skeleton);
+    return std::tuple<ArrayX3d, ArrayX2i, ArrayX1i>(arrays.first, arrays.second, corres);
+}
+
 std::pair<ArrayX3d, ArrayX2i> skeletonize_pcd(ArrayX3d& points, ArrayX3d
 normals) {
     auto mesh = poisson_mesh(points, normals);
@@ -145,4 +167,5 @@ PYBIND11_MODULE(cgal, m) {
     m.def("poisson_mesh", poisson_mesh);
     m.def("skeletonize_mesh", skeletonize_mesh);
     m.def("skeletonize_pcd", skeletonize_pcd);
+    m.def("skeletonize_mesh_with_corres", skeletonize_mesh_with_corres);
 }
