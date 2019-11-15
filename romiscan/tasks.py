@@ -41,8 +41,8 @@ class Scan(RomiTask):
     upstream_task = None
 
     metadata = luigi.Parameter(default={})
-    scanner = luigi.Parameter()
-    path = luigi.Parameter()
+    scanner = luigi.Parameter(default=None)
+    path = luigi.Parameter(default=None)
 
     def requires(self):
         return []
