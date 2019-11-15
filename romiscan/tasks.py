@@ -51,7 +51,7 @@ class Scan(RomiTask):
         """Output for a RomiTask is a FileSetTarget, the fileset ID being
         the task ID.
         """
-        return FilesetTarget(DatabaseConfig().scan, "Scan")
+        return FilesetTarget(DatabaseConfig().scan, "images")
 
     def run(self):
         if self.scanner["cnc_firmware"].split("-")[0] == "grbl":
