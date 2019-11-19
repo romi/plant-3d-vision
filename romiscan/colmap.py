@@ -6,13 +6,16 @@ import tempfile
 import imageio
 
 try:
-    from open3d.geometry import PointCloud
-    from open3d.utility import Vector3dVector
-except: 
-    from open3d.open3d.geometry import PointCloud
-    from open3d.open3d.utility import Vector3dVector
+    from open3d import open3d
+    from open3d.open3d.geometry import PointCloud, TriangleMesh
+except:
+    import open3d
+    from open3d.geometry import PointCloud, TriangleMesh
 
-import open3d
+try: # 0.7 -> 0.8 breaking
+    Vector3dVector = open3d.utility.Vector3dVector
+except:
+    Vector3dVector = open3d.Vector3dVector
 
 from romiscan.thirdparty import read_model
 from romiscan import proc3d

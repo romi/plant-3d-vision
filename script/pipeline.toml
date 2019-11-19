@@ -15,9 +15,9 @@ threshold = 0.0
 Sx = 896
 Sy = 896
 N_vox = 1000000
-model_segmentation_name = "table1_test5_hdri_arabidopsis_resnet50_epoch15_rotate_True_finetune_folder_epoch20.pt"
-directory_images = "/home/alienor/Documents/database/FINETUNE"
-directory_weights = "/home/alienor/Documents/database/WEIGHTS"
+model_segmentation_name = "table1_test5_hdri_arabidopsis_resnet50_epoch15_rotate_True_finetune_3_epoch50.pt"
+# directory_images = "/home/alienor/Documents/database/FINETUNE"
+directory_weights = "/home/twintz/.cache/romiscan"
 finetune_epochs = 20
 
 [Reconstruction3D]

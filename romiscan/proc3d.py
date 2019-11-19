@@ -12,14 +12,20 @@ from scipy.ndimage.filters import gaussian_filter
 import networkx as nx
 from tqdm import tqdm
 
-from romiscan import cgal
+import cgal_skel as cgal
+
 try:
-    from open3d.geometry import PointCloud, TriangleMesh
-    from open3d.utility import Vector3dVector, Vector3iVector
-except:
+    from open3d import open3d
     from open3d.open3d.geometry import PointCloud, TriangleMesh
-    from open3d.open3d.utility import Vector3dVector, Vector3iVector
-    
+except:
+    import open3d
+    from open3d.geometry import PointCloud, TriangleMesh
+
+try: # 0.7 -> 0.8 breaking
+    Vector3dVector = open3d.utility.Vector3dVector
+except:
+    Vector3dVector = open3d.Vector3dVector
+
 import imageio
 import open3d
 import bisect

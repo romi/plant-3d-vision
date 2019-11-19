@@ -1,10 +1,10 @@
 [Colmap]
 matcher = "exhaustive"
-compute_dense = true
+compute_dense = false
 
 [Colmap.cli_args.feature_extractor]
 "--ImageReader.single_camera" = "1"
-"--SiftExtraction.use_gpu" = "0"
+"--SiftExtraction.use_gpu" = "1"
 
 [Colmap.cli_args.exhaustive_matcher]
 "--SiftMatching.use_gpu" = "1"

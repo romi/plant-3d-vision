@@ -60,7 +60,7 @@ class Backprojection():
         self.origin = origin
         self.voxel_size = voxel_size
         self.default_value = default_value
-        self.multiclass = True
+        self.multiclass = multiclass
 
         self.type = type
         if type == "carving":
@@ -175,12 +175,6 @@ class Backprojection():
                         key = k
                         break
                 else:
-                    print("label (tgt) = %s"%label)
-                    print("label (fi) = %s"%fi.get_metadata('label'))
-                    print(os.path.splitext(poses[k]['name'])[0])
-                    print(fi.get_metadata('image_id'))
-
-                    if fi.get_metadata('label') == label and os.path.splitext(poses[k]['name'])[0] == fi.get_metadata('image_id'):
                         mask = io.read_image(fi)
                         key = k
                         break

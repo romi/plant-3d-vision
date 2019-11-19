@@ -1,4 +1,95 @@
-#!/bin/bash
-CONFIG_FILE=/tmp/luigi_config.toml
-cat $3 > $CONFIG_FILE
-LUIGI_CONFIG_PARSER=toml LUIGI_CONFIG_PATH=$CONFIG_FILE luigi --local-scheduler --module romiscan.tasks $2 --DatabaseConfig-scan $1
+#!/usr/bin/env python3
+import argparse
+import appdirs
+import toml
+import pprint
+import json
+import tempfile
+import glob
+import os
+from warnings import warn
+import subprocess
+
+
+default_config_dir = os.path.join(appdirs.user_config_dir(), "romiscan")
+default_luigicmd = "luigi"
+
+default_modules = {
+    "Scan": "romiscan.tasks.scan",
+    "CalibrationScan": "romiscan.tasks.scan",
+    "Colmap": "romiscan.tasks.colmap",
+    "Undistorted": "romiscan.tasks.proc2d",
+    "Masks": "romiscan.tasks.proc2d",
+    "Segmentation2D": "romiscan.tasks.proc2d",
+    "Voxels": "romiscan.tasks.cl",
+    "PointCloud": "romiscan.tasks.proc3d",
+    "TriangleMesh": "romiscan.tasks.proc3d",
+    "CurveSkeleton": "romiscan.tasks.proc3d",
+    "TreeGraph": "romiscan.tasks.arabidopsis",
+    "AnglesAndInternodes": "romiscan.tasks.arabidopsis"
+}
+
+parser = argparse.ArgumentParser(description='Process some integers.')
+
+
+parser.add_argument('--config', dest='config', default=default_config_dir,
+                    help='config dir, default: %s'%default_config_dir)
+
+parser.add_argument('--luigicmd', dest='luigicmd', default=default_luigicmd,
+                    help='luigi command, default: %s'%default_luigicmd)
+
+parser.add_argument('--module', dest='module', default=None,
+                    help='module for the task')
+
+parser.add_argument('task', metavar='task', type=str,
+                    help='Luigi task to run')
+
+parser.add_argument('scan', metavar='scan', type=str,
+                    help='FSDB Scan to process (path)')
+
+parser.add_argument('--local-scheduler', dest='ls', action="store_true", default=False,
+                    help='Luigi CLI argument')
+
+
+args = parser.parse_args()
+config = {}
+
+# Read config (json or toml)
+for f in glob.glob(os.path.join(args.config, "*.toml")):
+    try:
+        c = toml.load(open(f))
+        config = {**config, **c}
+    except:
+        warn("Could not process config file: %s"%f)
+
+for f in glob.glob(os.path.join(args.config, "*.json")):
+    try:
+        c = json.load(open(f))
+        config = {**config, **c}
+    except:
+        warn("Could not process config file: %s"%f)
+
+pp = pprint.PrettyPrinter(indent=4)
+print("Using the following configuration: ")
+pp.pprint(config)
+
+if args.module is not None:
+    module = args.module
+else:
+    module = default_modules[args.task]
+
+# Save config to tempfile
+with tempfile.TemporaryDirectory() as d:
+    file_path = os.path.join(d, "config.toml")
+    toml.dump(config, open(file_path, 'w'))
+
+    # Set env
+    env = {
+        "LUIGI_CONFIG_PARSER" : "toml",
+        "LUIGI_CONFIG_PATH" : file_path
+    }
+    # Command
+    cmd= [args.luigicmd, "--module", module, args.task, "--DatabaseConfig-scan", args.scan]
+    if args.ls:
+        cmd.append("--local-scheduler")
+    subprocess.run(cmd, env={**os.environ, **env})

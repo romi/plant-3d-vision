@@ -85,7 +85,7 @@ class CMakeBuild(build_ext):
                               cwd=tempdir)
         print()  # Add an empty line for cleaner output
 
-lt_link = "https://github.com/romi/lettucethink-python/tarball/dev"
+# lt_link = "https://github.com/romi/lettucethink-python/tarball/dev"
 install_requires=[
         'numpy',
         'pyopencl',
@@ -101,12 +101,12 @@ install_requires=[
         'tqdm'
     ]
 
-version_minor = sys.version_info.minor
+# version_minor = sys.version_info.minor
 
-if version_minor >= 7:
-    install_requires.append('lettucethink @ %s'%lt_link)
-else:
-    install_requires.append('lettucethink')
+# if version_minor >= 7:
+#     install_requires.append('lettucethink @ %s'%lt_link)
+# else:
+#     install_requires.append('lettucethink')
 
 s = setup(
     name='romiscan',
@@ -117,10 +117,9 @@ s = setup(
     author_email='timothee@timwin.fr',
     description='A plant scanner',
     long_description='',
-    ext_modules=[CMakeExtension('romiscan.cgal'), CMakeExtension('romiscan.pyceres')],
     cmdclass=dict(build_ext=CMakeBuild),
     zip_safe=False,
     install_requires=install_requires,
     include_package_data=True,
-    dependency_links = ['%s#egg=lettucethink-0'%lt_link]
+    # dependency_links = ['%s#egg=lettucethink-0'%lt_link]
 )
