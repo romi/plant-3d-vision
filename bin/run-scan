@@ -1,4 +1,0 @@
-#!/bin/bash
-CONFIG_FILE=/tmp/luigi_config.toml
-cat $2 > $CONFIG_FILE
-LUIGI_CONFIG_PARSER=toml LUIGI_CONFIG_PATH=$CONFIG_FILE luigi --local-scheduler --module romiscan.tasks Scan --DatabaseConfig-scan $1
