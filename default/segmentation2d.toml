@@ -1,0 +1,50 @@
+[Colmap]
+matcher = "exhaustive"
+compute_dense = false
+
+[accessory]
+calibration_scan_id = "calib_scan_shortpath"
+
+[Masks]
+type = "excess_green"
+dilation = 5
+binarize = true
+threshold = 0.0
+
+[Segmentation2D]
+Sx = 896
+Sy = 896
+N_vox = 1000000
+model_segmentation_name = "table1_test5_hdri_arabidopsis_resnet50_epoch15_rotate_True_finetune_3_epoch50.pt"
+# directory_images = "/home/alienor/Documents/database/FINETUNE"
+directory_weights = "/home/twintz/.cache/romiscan"
+finetune_epochs = 20
+
+[Reconstruction3D]
+N_vox = 1000000
+
+[Voxels]
+upstream_mask = "Segmentation2D"
+multiclass = true
+voxel_size = 2.0
+type = "averaging"
+
+[PointCloud]
+level_set_value = 1.0
+
+[Visualization]
+max_image_size = 1500
+max_pcd_size = 10000
+thumbnail_size = 150
+pcd_source = "vox2pcd"
+mesh_source = "delaunay"
+
+[Colmap.cli_args.feature_extractor]
+"--ImageReader.single_camera" = "1"
+"--SiftExtraction.use_gpu" = "1"
+
+[Colmap.cli_args.exhaustive_matcher]
+"--SiftMatching.use_gpu" = "1"
+
+[Colmap.cli_args.model_aligner]
+--robust_alignment_max_error = "10"
