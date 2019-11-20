@@ -117,7 +117,7 @@ class Backprojection():
         mask: np.ndarray
             mask array (or float array if type is averaging)
         """
-        if self.log:
+        if self.log and self.dtype=np.float32:
             mask = np.log(mask + eps)
         intrinsics_h = np.ascontiguousarray(intrinsics).astype(np.float32)
         rot_h = np.ascontiguousarray(rot).astype(np.float32)
