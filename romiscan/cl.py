@@ -114,6 +114,7 @@ class Backprojection():
         mask: np.ndarray
             mask array (or float array if type is averaging)
         """
+        mask = np.log(mask + 0.1)
         intrinsics_h = np.ascontiguousarray(intrinsics).astype(np.float32)
         rot_h = np.ascontiguousarray(rot).astype(np.float32)
         tvec_h = np.ascontiguousarray(tvec).astype(np.float32)
@@ -168,17 +169,13 @@ class Backprojection():
         for fi in fs.get_files():
             key = None
             mask = None
+            if not label == fi.get_metadata('label'):
+                continue
             for k in poses.keys():
-                if label is None:
-                    if os.path.splitext(poses[k]['name'])[0] == fi.id:
-                        mask = io.read_image(fi)
-                        key = k
-                        break
-                else:
-                    if fi.get_metadata('image_id') == os.path.splitext(poses[k]['name'])[0] and label == fi.get_metadata('label'):
-                        mask = io.read_image(fi)
-                        key = k
-                        break
+                if os.path.splitext(poses[k]['name'])[0] == fi.id or os.path.splitext(poses[k]['name'])[0] == fi.get_metadata('image_id'):
+                    mask = io.read_image(fi)
+                    key = k
+                    break
 
             if key is not None:
                 rot = sum(poses[key]['rotmat'], [])
@@ -200,7 +197,7 @@ class Backprojection():
     def clear(self):
         self.values_h = self.default_value * \
             np.ones(self.shape).astype(self.dtype)
-        cl.enqueue_copy(queue, self.values_h, self.values_d)
+        cl.enqueue_copy(queue, self.values_d, self.values_h)
 
 
 

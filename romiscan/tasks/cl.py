@@ -65,12 +65,13 @@ class Voxels(RomiTask):
         print(vol.size)
         if self.multiclass:
             outfs = self.output().get()
-            for i, label in enumerate(sc.get_labels(masks_fileset)):
-                outfile = outfs.create_file(label)
-                io.write_volume(outfile, vol[i,:])
-                outfile.set_metadata({'voxel_size' : self.voxel_size, 'origin' : origin.tolist() , 'label' : label })
-        else:
             outfile = self.output_file()
-            io.write_volume(outfile, vol)
+            if self.multiclass:
+                out = {}
+                for i, label in enumerate(sc.get_labels(masks_fileset)):
+                    out[label] = vol[i, :]
+                io.write_npz(outfile, out)
+            else:
+                io.write_volume(outfile, vol)
             outfile.set_metadata({'voxel_size' : self.voxel_size, 'origin' : origin.tolist() })
 
