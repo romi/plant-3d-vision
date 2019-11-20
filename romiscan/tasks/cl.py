@@ -64,15 +64,14 @@ class Voxels(RomiTask):
         vol = sc.process_fileset(masks_fileset, camera_model, images)
         print("size = ")
         print(vol.size)
+        outfs = self.output().get()
+        outfile = self.output_file()
         if self.multiclass:
-            outfs = self.output().get()
-            outfile = self.output_file()
-            if self.multiclass:
-                out = {}
-                for i, label in enumerate(sc.get_labels(masks_fileset)):
-                    out[label] = vol[i, :]
-                io.write_npz(outfile, out)
-            else:
-                io.write_volume(outfile, vol)
-            outfile.set_metadata({'voxel_size' : self.voxel_size, 'origin' : origin.tolist() })
+            out = {}
+            for i, label in enumerate(sc.get_labels(masks_fileset)):
+                out[label] = vol[i, :]
+            io.write_npz(outfile, out)
+        else:
+            io.write_volume(outfile, vol)
+        outfile.set_metadata({'voxel_size' : self.voxel_size, 'origin' : origin.tolist() })
 

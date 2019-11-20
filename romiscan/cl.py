@@ -117,7 +117,7 @@ class Backprojection():
         mask: np.ndarray
             mask array (or float array if type is averaging)
         """
-        if self.log and self.dtype=np.float32:
+        if self.log and self.dtype == np.float32:
             mask = np.log(mask + eps)
         intrinsics_h = np.ascontiguousarray(intrinsics).astype(np.float32)
         rot_h = np.ascontiguousarray(rot).astype(np.float32)
@@ -173,13 +173,15 @@ class Backprojection():
         for fi in fs.get_files():
             key = None
             mask = None
-            if not label == fi.get_metadata('label'):
+            if label is not None and not label == fi.get_metadata('label'):
                 continue
+            print(fi.id)
             for k in poses.keys():
                 if os.path.splitext(poses[k]['name'])[0] == fi.id or os.path.splitext(poses[k]['name'])[0] == fi.get_metadata('image_id'):
                     mask = io.read_image(fi)
                     key = k
                     break
+            print(key)
 
             if key is not None:
                 rot = sum(poses[key]['rotmat'], [])

@@ -64,6 +64,8 @@ class Masks(FileByFileTask):
             scale = self.parameters['scale']
             channel = self.parameters['channel']
             return proc2d.vesselness_2D(x, scale, channel=channel)
+        elif self.type == "invert":
+            return 1-x
         else:
             raise Exception("Unknown masking type")
 
@@ -88,11 +90,13 @@ class Segmentation2D(RomiTask):
     upstream_image = luigi.TaskParameter(default=Undistorted)
     upstream_colmap = luigi.TaskParameter(default=Colmap)
 
-    label_names = luigi.ListParameter(default=['background', 'flowers', 'peduncle', 'stem', 'leaves', 'fruits'])
+    label_names = luigi.Parameter(default=['background', 'flowers', 'peduncle', 'stem', 'leaves', 'fruits'])
     Sx = luigi.IntParameter(default=896)
     Sy = luigi.IntParameter(default=1000)
     model_segmentation_name = luigi.Parameter('ERROR')
     directory_weights = luigi.Parameter('complete here')
+
+    single_label = luigi.Parameter(default=None)
 
     def requires(self):
         return {'images': self.upstream_image(), 'colmap': self.upstream_colmap()}
@@ -120,10 +124,19 @@ class Segmentation2D(RomiTask):
         
         #Save class prediction as images, one by one, class per class
         print("Saving the segmented images, takes around 15 s")
-        for i in range(images_segmented.shape[0]):
-            for j in range(len(self.label_names)):
+        if self.single_label is None:
+            for i in range(images_segmented.shape[0]):
+                for j in range(len(self.label_names)):
+                    f = output_fileset.create_file('%03d_%s'%(i, self.label_names[j]))
+                    im = (images_segmented[i, j, :, :].cpu().numpy() * 255).astype(np.uint8)
+                    io.write_image(f, im, 'png' )
+                    f.set_metadata({'image_id' : id_im[i][0], 'label' : self.label_names[j]})
+        else:
+            for i in range(images_segmented.shape[0]):
+                j = self.label_names.index(self.single_label)
                 f = output_fileset.create_file('%03d_%s'%(i, self.label_names[j]))
                 im = (images_segmented[i, j, :, :].cpu().numpy() * 255).astype(np.uint8)
                 io.write_image(f, im, 'png' )
                 f.set_metadata({'image_id' : id_im[i][0], 'label' : self.label_names[j]})
+
         
