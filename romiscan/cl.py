@@ -25,6 +25,8 @@ mf = cl.mem_flags
 
 prg_dir = os.path.join(os.path.dirname(__file__), 'kernels')
 
+eps = 1e-10
+
 with open(os.path.join(prg_dir, 'backprojection.c')) as f:
     backprojection_kernels = cl.Program(
         ctx, f.read()).build(options="-I%s" % prg_dir)
@@ -55,12 +57,13 @@ class Backprojection():
         default value when initializing the voxels (defaults to 0)
     """
 
-    def __init__(self, shape, origin, voxel_size, type="carving", default_value=0, multiclass=False):
+    def __init__(self, shape, origin, voxel_size, type="carving", default_value=0, multiclass=False, log=False):
         self.shape = shape
         self.origin = origin
         self.voxel_size = voxel_size
         self.default_value = default_value
         self.multiclass = multiclass
+        self.log = log
 
         self.type = type
         if type == "carving":
@@ -114,7 +117,8 @@ class Backprojection():
         mask: np.ndarray
             mask array (or float array if type is averaging)
         """
-        mask = np.log(mask + 0.1)
+        if self.log:
+            mask = np.log(mask + eps)
         intrinsics_h = np.ascontiguousarray(intrinsics).astype(np.float32)
         rot_h = np.ascontiguousarray(rot).astype(np.float32)
         tvec_h = np.ascontiguousarray(tvec).astype(np.float32)

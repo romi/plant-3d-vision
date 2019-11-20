@@ -19,6 +19,7 @@ class Voxels(RomiTask):
     voxel_size = luigi.FloatParameter()
     type = luigi.Parameter()
     multiclass = luigi.BoolParameter(default=False)
+    log = luigi.BoolParameter(default=True)
 
     def requires(self):
         return {'masks': self.upstream_mask(), 'colmap': self.upstream_colmap()}
@@ -55,7 +56,7 @@ class Voxels(RomiTask):
         origin = np.array([x_min, y_min, z_min])
 
         sc = cl.Backprojection(
-            [nx, ny, nz], [x_min, y_min, z_min], self.voxel_size, type=self.type, multiclass=self.multiclass)
+            [nx, ny, nz], [x_min, y_min, z_min], self.voxel_size, type=self.type, multiclass=self.multiclass, log=self.log)
 
         images = io.read_json(colmap_fileset.get_file(COLMAP_IMAGES_ID))
 
