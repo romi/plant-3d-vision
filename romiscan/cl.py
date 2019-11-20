@@ -175,6 +175,7 @@ class Backprojection():
                         key = k
                         break
                 else:
+                    if fi.get_metadata('image_id') == os.path.splitext(poses[k]['name'])[0] and label == fi.get_metadata('label'):
                         mask = io.read_image(fi)
                         key = k
                         break
