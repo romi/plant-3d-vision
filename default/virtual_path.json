@@ -1,0 +1,12 @@
+{
+        "args": {
+            "num_points": 10,
+            "radius": 100,
+            "tilt": 0.45,
+            "xc": 0,
+            "yc": 0,
+            "z": 50
+        },
+        "id": "virtual",
+        "type": "circular"
+}
