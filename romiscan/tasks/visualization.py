@@ -36,6 +36,7 @@ class Visualization(RomiTask):
 
     def run(self):
         import tempfile
+        import shutil
         def resize_to_max(img, max_size):
             i = np.argmax(img.shape[0:2])
             if img.shape[i] <= max_size:
