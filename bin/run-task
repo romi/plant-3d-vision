@@ -27,6 +27,7 @@ default_modules = {
     "CurveSkeleton": "romiscan.tasks.proc3d",
     "TreeGraph": "romiscan.tasks.arabidopsis",
     "AnglesAndInternodes": "romiscan.tasks.arabidopsis"
+    "Visualization": "romiscan.tasks.visualization"
 }
 
 parser = argparse.ArgumentParser(description='Run a romiscan task.')
