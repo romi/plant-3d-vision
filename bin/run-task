@@ -54,20 +54,33 @@ parser.add_argument('--local-scheduler', dest='ls', action="store_true", default
 args = parser.parse_args()
 config = {}
 
-# Read config (json or toml)
-for f in glob.glob(os.path.join(args.config, "*.toml")):
-    try:
-        c = toml.load(open(f))
-        config = {**config, **c}
-    except:
-        warn("Could not process config file: %s"%f)
+if os.path.isdir(args.config):
 
-for f in glob.glob(os.path.join(args.config, "*.json")):
+    # Read config (json or toml)
+    for f in glob.glob(os.path.join(args.config, "*.toml")):
+        try:
+            c = toml.load(open(f))
+            config = {**config, **c}
+        except:
+            warn("Could not process config file: %s"%f)
+
+    for f in glob.glob(os.path.join(args.config, "*.json")):
+        try:
+            c = json.load(open(f))
+            config = {**config, **c}
+        except:
+            warn("Could not process config file: %s"%f)
+elif os.path.isfile(args.config):
     try:
-        c = json.load(open(f))
-        config = {**config, **c}
+        c = json.load(open(args.config))
     except:
-        warn("Could not process config file: %s"%f)
+        try:
+            c = toml.load(open(args.config))
+        except:
+            raise IOError("Could not load config file")
+    config = c
+else:
+    raise IOError("Config file do not exit")
 
 pp = pprint.PrettyPrinter(indent=4)
 print("Using the following configuration: ")
