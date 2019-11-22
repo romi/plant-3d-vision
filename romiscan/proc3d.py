@@ -27,8 +27,12 @@ except:
 
 try: # 0.7 -> 0.8 breaking
     Vector3dVector = open3d.utility.Vector3dVector
+    Vector3iVector = open3d.utility.Vector3iVector
+    Vector2iVector = open3d.utility.Vector2iVector
 except:
     Vector3dVector = open3d.Vector3dVector
+    Vector3iVector = open3d.Vector3iVector
+    Vector2iVector = open3d.Vector2iVector
 
 import imageio
 import open3d
@@ -228,7 +232,7 @@ def connect_graph(g, pcd, root_index):
                 non_connected_cc.append(list(c))
 
         pcd_root_cc = open3d.geometry.PointCloud()
-        pcd_root_cc.points = open3d.utility.Vector3dVector(np.asarray(pcd.points)[connected_cc, :])
+        pcd_root_cc.points = Vector3dVector(np.asarray(pcd.points)[connected_cc, :])
         pcd_root_tree = open3d.geometry.KDTreeFlann(pcd_root_cc)
 
         points = np.asarray(pcd.points)
@@ -337,8 +341,8 @@ def draw_pcd_graph(g):
     for j in range(len(g.edges)):
         lines[j,:] = list(g.edges)[j]
 
-    line_set.points = open3d.utility.Vector3dVector(pts)
-    line_set.lines = open3d.utility.Vector2iVector(lines)
+    line_set.points = Vector3dVector(pts)
+    line_set.lines = Vector2iVector(lines)
     open3d.visualization.draw_geometries([line_set])
 
 def draw_distance_to_root_clusters(cluster_graph, cluster_values, pcd):
@@ -362,7 +366,7 @@ def draw_distance_to_root_clusters(cluster_graph, cluster_values, pcd):
         cluster_nodes = [x for x in cluster_values.keys() if cluster_values[x] == i]
         colors[cluster_nodes, :] = base_colors[i, :][np.newaxis, :]
 
-    pcd.colors = open3d.utility.Vector3dVector(colors)
+    pcd.colors = Vector3dVector(colors)
 
     line_set = open3d.geometry.LineSet()
     pts = np.zeros((len(cluster_graph.nodes), 3))
@@ -374,8 +378,8 @@ def draw_distance_to_root_clusters(cluster_graph, cluster_values, pcd):
     for j in range(len(cluster_graph.edges)):
         lines[j,:] = list(cluster_graph.edges)[j]
 
-    line_set.points = open3d.utility.Vector3dVector(pts)
-    line_set.lines = open3d.utility.Vector2iVector(lines)
+    line_set.points = Vector3dVector(pts)
+    line_set.lines = Vector2iVector(lines)
     open3d.visualization.draw_geometries([pcd, line_set])
 
 
