@@ -5,7 +5,6 @@ from romidata.task import  RomiTask, FileByFileTask
 from romidata import io
 
 from romiscan.tasks.proc3d import CurveSkeleton
-from romiscan.tasks.arabidopsis import TreeGraph
 
 class TreeGraph(RomiTask):
     """Computes a tree graph of the plant.
