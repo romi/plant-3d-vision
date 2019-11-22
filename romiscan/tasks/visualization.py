@@ -38,6 +38,11 @@ class Visualization(RomiTask):
         import tempfile
         import shutil
         import os
+        try:
+            from open3d import open3d
+        except:
+            import open3d
+
         def resize_to_max(img, max_size):
             i = np.argmax(img.shape[0:2])
             if img.shape[i] <= max_size:
