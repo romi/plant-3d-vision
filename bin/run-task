@@ -29,7 +29,7 @@ default_modules = {
     "AnglesAndInternodes": "romiscan.tasks.arabidopsis"
 }
 
-parser = argparse.ArgumentParser(description='Process some integers.')
+parser = argparse.ArgumentParser(description='Run a romiscan task.')
 
 
 parser.add_argument('--config', dest='config', default=default_config_dir,
