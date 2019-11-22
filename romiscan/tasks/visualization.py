@@ -42,6 +42,7 @@ class Visualization(RomiTask):
             from open3d import open3d
         except:
             import open3d
+        from skimage.transform import resize
 
         def resize_to_max(img, max_size):
             i = np.argmax(img.shape[0:2])
