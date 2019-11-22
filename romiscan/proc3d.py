@@ -11,8 +11,12 @@ import os
 from scipy.ndimage.filters import gaussian_filter
 import networkx as nx
 from tqdm import tqdm
+from warnings import warn
 
-import cgal_skel as cgal
+try:
+    import cgal_skel as cgal
+except:
+    warn("Could not load CGAL bindings, some methods will be unavailable")
 
 try:
     from open3d import open3d

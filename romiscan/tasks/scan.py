@@ -4,7 +4,6 @@ import numpy as np
 from romidata.task import  RomiTask, FileByFileTask, FilesetTarget, DatabaseConfig
 from romidata import io
 
-from romiscan.tasks import *
 
 class Scan(RomiTask):
     upstream_task = None
