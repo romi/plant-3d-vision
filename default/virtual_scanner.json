@@ -1,32 +1,51 @@
-{
-    "scanner_args": {
-	"inverted": false
-    },
-    "camera_args": {
-        "width": 640,
-        "height": 480,
-        "focal": 25
-    },
-    "camera_firmware": "virtual",
-    "cnc_args": {
-    },
-    "cnc_firmware": "virtual",
-    "gimbal_args": {
-    },
-    "gimbal_firmware": "virtual",
-    "id": "virtual",
-    "workspace": {
-        "x": [
-            200,
-            600
-        ],
-        "y": [
-            200,
-            600
-        ],
-        "z": [
-            -100,
-            300
-        ]
+{ "Scan" :
+    { "scanner" :
+        {
+        "scanner_args": {
+    	"inverted": false
+        },
+        "camera_args": {
+            "width": 640,
+            "height": 480,
+            "focal": 25
+        },
+        "camera_firmware": "virtual",
+        "cnc_args": {
+        },
+        "cnc_firmware": "virtual",
+        "gimbal_args": {
+        },
+        "gimbal_firmware": "virtual",
+        "id": "virtual",
+        "workspace": {
+            "x": [
+                200,
+                600
+            ],
+            "y": [
+                200,
+                600
+            ],
+            "z": [
+                -100,
+                300
+            ]
+        }
+        },
+    "path":
+    {
+        {
+                "args": {
+                    "num_points": 10,
+                    "radius": 100,
+                    "tilt": 0.45,
+                    "xc": 0,
+                    "yc": 0,
+                    "z": 50
+                },
+                "id": "virtual",
+                "type": "circular"
+        }
     }
 }
+
