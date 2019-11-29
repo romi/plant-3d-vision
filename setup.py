@@ -86,20 +86,7 @@ class CMakeBuild(build_ext):
         print()  # Add an empty line for cleaner output
 
 # lt_link = "https://github.com/romi/lettucethink-python/tarball/dev"
-install_requires=[
-        'numpy',
-        'pyopencl',
-        'scikit-image',
-        'networkx',
-        'Flask',
-        'flask-restful',
-        'imageio',
-        'luigi',
-        'pybind11',
-        'requests',
-        'mako', 
-        'tqdm'
-    ]
+install_requires=[ ]
 
 # version_minor = sys.version_info.minor
 
