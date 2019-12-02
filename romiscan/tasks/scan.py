@@ -69,8 +69,10 @@ class Scan(RomiTask):
         scanner.store(self.output().get(), metadata=metadata)
 
     def run(self):
+        import lettucethink
+        from lettucethink import path as lp
         if self.path["type"] == "circular":
-            path = lettucethink.path.circle(**self.path["args"])
+            path = lp.circle(**self.path["args"])
         else:
             raise ValueError("Unknown path type")
         self._run_path(path, None)
