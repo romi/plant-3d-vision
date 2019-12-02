@@ -1,6 +1,5 @@
 from flask import Flask, send_file
 from flask import request, send_from_directory
-from flask_cors import CORS
 import json
 from flask_restful import Resource, Api
 import os
@@ -11,13 +10,17 @@ app = Flask(__name__)
 # CORS(app)
 api = Api(app)
 
-# db_location =  '/home/twintz/Data/scanner/processed'
-# db_location =  '/data/v0.4'
-db_location =  '/data/twintz/scanner/test'
-# db = DB('/home/twintz/dataviz/processed')
+try:
+    db_location = os.environ["DB_LOCATION"]
+except:
+    raise Error("DB_LOCATION environment variable is not set")
+
 db_prefix = "/files"
 
-db = None
+db = DB(db_location)
+db.connect()
+
+print("n scans = %i"%len(db.get_scans()))
 
 def fmt_date(scan):
     try:
@@ -175,9 +178,3 @@ api.add_resource(ScanList, '/scans')
 api.add_resource(Scan, '/scans/<scan_id>')
 api.add_resource(File, '/files/<path:path>')
 api.add_resource(Refresh, '/refresh')
-
-if __name__ == '__main__':
-    if db is None:
-        db = DB(db_location)
-        db.connect()
-    app.run(debug=True, threaded=False,host="0.0.0.0")
