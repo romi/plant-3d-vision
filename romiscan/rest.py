@@ -15,7 +15,10 @@ try:
 except:
     raise Error("DB_LOCATION environment variable is not set")
 
-db_prefix = "/files"
+try:
+    db_prefix = os.environ["DB_PREFIX"]
+except:
+    raise Error("DB_LOCATION environment variable is not set")
 
 db = DB(db_location)
 db.connect()
