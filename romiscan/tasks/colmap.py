@@ -21,6 +21,7 @@ class Colmap(RomiTask):
     def run(self):
 
         from romiscan import colmap
+        import os
         images_fileset = self.input().get()
 
         # print("cli_args = %s"%self.cli_args)
