@@ -140,7 +140,7 @@ def fmt_scan(scan):
         f = fileset_visu.get_file(im) 
         id = f.get_metadata("image_id")
         for k in poses.keys():
-            if poses[k]['name'] == f.filename:
+            if os.path.splitext(poses[k]['name'])[0] == id:
                 res['camera']['poses'].append({
                     'id': id,
                     'tvec': poses[k]['tvec'],
