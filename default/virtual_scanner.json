@@ -7,8 +7,8 @@
         "camera_args": {
             "width": 640,
             "height": 480,
-            "focal": 25,	
-	    "render_ground_truth": "True",
+            "focal": 25,
+	    "render_ground_truth": false
         },
         "camera_firmware": "virtual",
         "cnc_args": {
@@ -34,8 +34,8 @@
         }
         },
     "path":
-    {
-	"args": {
+        {
+                "args": {
                     "num_points": 10,
                     "radius": 100,
                     "tilt": 0.45,
@@ -43,9 +43,9 @@
                     "yc": 0,
                     "z": 50
                 },
-	"id": "virtual",
-	"type": "circular"
-        
+                "id": "virtual",
+                "type": "circular"
+        }
     }
 }
 
