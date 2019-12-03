@@ -8,7 +8,10 @@
             "width": 640,
             "height": 480,
             "focal": 25,
-	    "render_ground_truth": false
+	    "render_ground_truth": true,
+	    "load_object": "arabidopsis_3.obj?dx=10&dy=10&dz=-5",
+	    "load_background": "greenwich_park_4k.hdr"
+	
         },
         "camera_firmware": "virtual",
         "cnc_args": {
