@@ -112,7 +112,10 @@ class Visualization(RomiTask):
             if len(point_cloud.points) < self.max_point_cloud_size:
                 point_cloud_lowres = point_cloud
             else:
-                point_cloud_lowres = open3d.geometry.uniform_down_sample(point_cloud, len(point_cloud.points) // self.max_point_cloud_size + 1)
+                try:
+                    point_cloud_lowres = open3d.geometry.uniform_down_sample(point_cloud, len(point_cloud.points) // self.max_point_cloud_size + 1)
+                except:
+                    point_cloud_lowres = point_cloud.voxel_down_sample( len(point_cloud.points) // self.max_point_cloud_size + 1)
             io.write_point_cloud(f, point_cloud)
             files_metadata["point_cloud"] = point_cloud_file.id
 

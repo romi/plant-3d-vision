@@ -341,5 +341,6 @@ def compute_angles_and_internodes(T, n_neighbours=5):
 
     return {
         "angles" : angles.tolist(),
-        "internodes" : internodes.tolist()
+        "internodes" : internodes.tolist(),
+        "fruit_points": fruit_points.tolist()
     }
