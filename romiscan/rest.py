@@ -131,6 +131,10 @@ def fmt_scan(scan):
         x = io.read_json(fileset_visu.get_file(files_metadata["angles"]))
         res["data"]["angles"] = x
 
+    try:
+        res["data"]["measured_angles"] = metadata["measures"]["angles"]
+
+
     res["workspace"] = metadata["scanner"]["workspace"]
     res["camera"] = {}
 
