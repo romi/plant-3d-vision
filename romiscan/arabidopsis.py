@@ -293,6 +293,7 @@ def compute_angles_and_internodes(T, n_neighbours=5):
     angles = np.zeros(len(branching_points) - 1)
     internodes = np.zeros(len(branching_points) - 1)
     plane_vectors = np.zeros((len(branching_points) -1, 3, 3))
+    all_fruit_points = []
 
     for i in range(len(branching_points) - 1):
         node_point = np.array(T.nodes[branching_points[i]]["position"])
@@ -306,6 +307,7 @@ def compute_angles_and_internodes(T, n_neighbours=5):
 
         fruit_points = np.vstack([np.array(T.nodes[n]["position"]) for n in get_fruit(T, i)])
         fruit_mean = fruit_points.mean(axis=0)
+        all_fruit_points.append(fruit_points.tolist())
 
         new_v1 = fruit_mean - node_point
         new_v1 = new_v1.dot(v1) * v1 + new_v1.dot(v2) * v2
@@ -342,5 +344,5 @@ def compute_angles_and_internodes(T, n_neighbours=5):
     return {
         "angles" : angles.tolist(),
         "internodes" : internodes.tolist(),
-        "fruit_points": fruit_points.tolist()
+        "fruit_points": all_fruit_points
     }
