@@ -142,7 +142,7 @@ class Backprojection():
         cl.enqueue_copy(queue, self.values_h, self.values_d)
         return self.values_h
 
-    def process_fileset(self, fs, camera_model, poses):
+    def process_fileset(self, fs, camera_model):
         if self.multiclass:
             labels = self.get_labels(fs)
             result = np.zeros((len(labels), *self.shape))
@@ -150,10 +150,10 @@ class Backprojection():
                 result[i, :] = self.process_label(fs, camera_model, poses, l)
             return result
         else:
-            return self.process_label(fs, camera_model, poses)
+            return self.process_label(fs, camera_model)
 
 
-    def process_label(self, fs, camera_model, poses, label=None):
+    def process_label(self, fs, camera_model, label=None):
         """
         Processes a whole fileset.
 
@@ -171,22 +171,16 @@ class Backprojection():
         intrinsics = camera_model['params'][0:4]
 
         for fi in fs.get_files():
-            key = None
-            mask = None
-            if label is not None and not label == fi.get_metadata('label'):
+            try:
+                cam = fi.get_metadata('camera')
+            except:
+                warn("Could not get camera pose for view, skipping...")
                 continue
-            print(fi.id)
-            for k in poses.keys():
-                if os.path.splitext(poses[k]['name'])[0] == fi.id or os.path.splitext(poses[k]['name'])[0] == fi.get_metadata('image_id'):
-                    mask = io.read_image(fi)
-                    key = k
-                    break
-            print(key)
 
-            if key is not None:
-                rot = sum(poses[key]['rotmat'], [])
-                tvec = poses[key]['tvec']
-                self.process_view(intrinsics, rot, tvec, mask)
+rot = sum(, [])
+            rot = sum(cam['rotmat'], [])
+            tvec = cam['tvec']
+            self.process_view(intrinsics, rot, tvec, mask)
 
         result = self.values()
         result = result.reshape(self.shape)

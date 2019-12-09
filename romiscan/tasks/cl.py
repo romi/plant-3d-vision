@@ -22,22 +22,42 @@ class Voxels(RomiTask):
     log = luigi.BoolParameter(default=True)
 
     def requires(self):
-        return {'masks': self.upstream_mask(), 'colmap': self.upstream_colmap()}
+        if self.upstream_colmap is not None:
+            return {'masks': self.upstream_mask(), 'colmap': self.upstream_colmap()}
+        else:
+            return {'masks': self.upstream_mask(), 'colmap': None}
 
     def run(self):
         from romiscan import cl
 
         masks_fileset = self.input()['masks'].get()
-        colmap_fileset = self.input()['colmap'].get()
 
-        scan = colmap_fileset.scan
+        use_colmap_poses = False
+        if self.input()['colmap'] is not None:
+            colmap_fileset = self.input()['colmap'].get()
+            use_colmap_poses = True
+
+        scan = masks_fileset.scan
 
         try:
             camera_model = scan.get_metadata()['computed']['camera_model']
         except:
             camera_model = scan.get_metadata()['scanner']['camera_model']
+
         if camera_model is None:
-            raise Exception("Could not find camera model for Backprojection")
+            try:
+                fi = masks_fileset.get_files()[0]
+                K = fi.get_metdata('camera')
+                im = io.read_image(fi)
+
+                camera_model = {
+                    "width" : im.shape[1],
+                    "height": im.shape[2],
+                    "intrinsics": [K[0][0], K[1][1], K[0][2], K[1][2]]
+                }
+
+            except:
+                raise Exception("Could not find camera model for Backprojection")
 
         pcd = io.read_point_cloud(colmap_fileset.get_file(COLMAP_SPARSE_ID))
 
@@ -58,9 +78,22 @@ class Voxels(RomiTask):
         sc = cl.Backprojection(
             [nx, ny, nz], [x_min, y_min, z_min], self.voxel_size, type=self.type, multiclass=self.multiclass, log=self.log)
 
-        images = io.read_json(colmap_fileset.get_file(COLMAP_IMAGES_ID))
+        if use_colmap_poses:
+            poses = io.read_json(colmap_fileset.get_file(COLMAP_IMAGES_ID))
+            for fi in fs.get_files():
+                key = None
+                mask = None
+                if label is not None and not label == fi.get_metadata('label'):
+                    continue
+                for k in poses.keys():
+                    if os.path.splitext(poses[k]['name'])[0] == fi.id or os.path.splitext(poses[k]['name'])[0] == fi.get_metadata('image_id'):
+                        mask = io.read_image(fi)
+                        key = k
+                        break
+                if key is not None:
+                    camera = { "rotmat" : poses[key]["rotmat"], "tvec" : poses[key]["tvec"] }
+                    fi.set_metadata("camera", camera)
 
-        print(len(masks_fileset.get_files()))
         vol = sc.process_fileset(masks_fileset, camera_model, images)
         print("size = ")
         print(vol.size)

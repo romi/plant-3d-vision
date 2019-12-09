@@ -86,9 +86,7 @@ class Segmentation2D(RomiTask):
     """
     Segment images by class"""
     
-    upstream_task = None
-    upstream_image = luigi.TaskParameter(default=Undistorted)
-    upstream_colmap = luigi.TaskParameter(default=Colmap)
+    upstream_task = luigi.TaskParameter(default=Undistorted)
 
     label_names = luigi.Parameter(default=['background', 'flowers', 'peduncle', 'stem', 'leaves', 'fruits'])
     Sx = luigi.IntParameter(default=896)
@@ -99,16 +97,14 @@ class Segmentation2D(RomiTask):
     single_label = luigi.Parameter(default=None)
 
     def requires(self):
-        return {'images': self.upstream_image(), 'colmap': self.upstream_colmap()}
+        return self.upstream_image()
 
 
     def run(self):
         from romiseg.Segmentation2D import segmentation
         
-        images_fileset = self.input()['images'].get().get_files()
-        colmap_fileset = self.input()['colmap'].get()
-
-        scan = colmap_fileset.scan
+        images_fileset = self.input_fileset()
+        scan = images_fileset.scan
         
         
         #APPLY SEGMENTATION
