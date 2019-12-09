@@ -91,9 +91,3 @@ class Colmap(RomiTask):
         if dense is not None:
             outfile = self.output_file(COLMAP_DENSE_ID)
             io.write_point_cloud(outfile, dense)
-
-        # Metadata
-        cameras_opencv = colmap.cameras_model_to_opencv(cameras)
-        md = {}
-        md['camera_model'] = cameras_opencv[list(cameras_opencv.keys())[0]]
-        outfile.fileset.scan.set_metadata('computed', md)

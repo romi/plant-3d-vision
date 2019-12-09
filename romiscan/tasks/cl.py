@@ -59,12 +59,11 @@ class Voxels(RomiTask):
             except:
                 raise Exception("Could not find camera model for Backprojection")
 
-        pcd = io.read_point_cloud(colmap_fileset.get_file(COLMAP_SPARSE_ID))
+        bounding_box = scan.get_metadata("bounding_box")
 
-        points = np.asarray(pcd.points)
-
-        x_min, y_min, z_min = points.min(axis=0)
-        x_max, y_max, z_max = points.max(axis=0)
+        x_min, x_max = bounding_box["x"]
+        y_min, y_max = bounding_box["y"]
+        z_min, z_max = bounding_box["z"]
 
         center = [(x_max + x_min)/2, (y_max + y_min)/2, (z_max + z_min)/2]
         widths = [x_max - x_min, y_max - y_min, z_max - z_min]

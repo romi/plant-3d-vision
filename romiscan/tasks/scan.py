@@ -64,6 +64,9 @@ class Scan(RomiTask):
             "path": self.path
         }
 
+        if self.scanner["camera_firmware"].split("-")[0] == "virtual":
+            metadata["bounding_box"] = camera.bounding_box
+
         scanner.set_path(path, mask=mask)
         scanner.scan()
         scanner.store(self.output().get(), metadata=metadata)

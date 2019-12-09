@@ -9,8 +9,8 @@
             "height": 480,
             "focal": 25,
 	    "render_ground_truth": true,
-	    "load_object": "arabidopsis_3.obj?dx=10&dy=10&dz=-5",
-	    "load_background": "greenwich_park_4k.hdr"
+	    "load_object": "arabidopsis_0.obj?dx=10&dy=10&dz=-5",
+	    "load_background": "quarry_03_8k.hdr"
 	
         },
         "camera_firmware": "virtual",

@@ -309,6 +309,7 @@ class ColmapRunner():
         cameras = read_model.read_cameras_binary(
            '%s/sparse/0/cameras.bin' % self.colmap_ws)
         cameras = colmap_cameras_to_json(cameras)
+        cameras = cameras_model_to_opencv(cameras)
         images = read_model.read_images_binary(
            '%s/sparse/0/images.bin' % self.colmap_ws)
         images = colmap_images_to_json(images)
@@ -330,6 +331,36 @@ class ColmapRunner():
             sparse_pcd = proc3d.crop_point_cloud(sparse_pcd, self.bounding_box)
             if self.compute_dense:
                 dense_pcd = proc3d.crop_point_cloud(dense_pcd, self.bounding_box)
+
+        # Save pose results in file metadata
+        for i, fi in enumerate(self.fileset.get_files()):
+            key = None
+            mask = None
+            if label is not None and not label == fi.get_metadata('label'):
+                continue
+            for k in images.keys():
+                if os.path.splitext(images[k]['name'])[0] == fi.id or os.path.splitext(images[k]['name'])[0] == fi.get_metadata('image_id'):
+                    mask = io.read_image(fi)
+                    key = k
+                    break
+            if key is not None:
+                camera_id = images[k]['camera']
+                camera = { "rotmat" : images[key]["rotmat"],
+                           "tvec" : images[key]["tvec"],
+                           "camera_model" : cameras[camera_id]
+                       }}
+                fi.set_metadata("camera", camera)
+
+        # Save bounding box (by sparse pcd) in scan metadata
+        if self.fileset.scan.get_metdata("bounding_box") is None:
+            points = np.asarray(sparse_pcd.points)
+
+            x_min, y_min, z_min = points.min(axis=0)
+            x_max, y_max, z_max = points.max(axis=0)
+            self.fileset.scan.set_metadata("bounding_box", {"x" : [x_min, x_max],"y" : [y_min, y_max],
+            "z" : [z_min, z_max] })
+
+
         return points, images, cameras, sparse_pcd, dense_pcd
 
 
