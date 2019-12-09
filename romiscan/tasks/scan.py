@@ -25,29 +25,33 @@ class Scan(RomiTask):
         import lettucethink
         from lettucethink import scan
 
-        if self.scanner["cnc_firmware"].split("-")[0] == "grbl":
+        cnc_type = self.scanner["cnc_firmware"].split("-")[0]
+        if cnc_type == "grbl":
             from lettucethink.grbl import CNC
-        elif self.scanner["cnc_firmware"].split("-")[0] == "cnccontroller":
+        elif cnc_type == "cnccontroller":
             from lettucethink.cnccontroller import CNC
-        elif self.scanner["cnc_firmware"].split("-")[0] == "virtual":
+        elif cnc_type == "virtual":
             from lettucethink.vscan import CNC
         else:
             raise ValueError("Unknown CNC firmware parameter")
 
-        if self.scanner["gimbal_firmware"].split("-")[0] == "dynamixel":
+        gimbal_type = self.scanner["gimbal_firmware"].split("-")[0] 
+        if gimbal_type == "dynamixel":
             from lettucethink.dynamixel import Gimbal
-        elif self.scanner["gimbal_firmware"].split("-")[0] == "blgimbal":
+        elif gimbal_type == "blgimbal":
             from lettucethink.blgimbal import Gimbal
-        elif self.scanner["gimbal_firmware"].split("-")[0] == "virtual":
+        elif gimbal_type == "virtual":
             from lettucethink.vscan import Gimbal
         else:
             raise ValueError("Unknown Gimbal firmware parameter")
 
-        if self.scanner["camera_firmware"].split("-")[0] == "gphoto2":
+
+        camera_type = self.scanner["camera_firmware"].split("-")[0] 
+        if camera_type == "gphoto2":
             from lettucethink.gp2 import Camera
-        elif self.scanner["camera_firmware"].split("-")[0] == "sony_wifi":
+        elif camera_type == "sony_wifi":
             from lettucethink.sony import Camera
-        elif self.scanner["camera_firmware"].split("-")[0] == "virtual":
+        elif camera_type == "virtual":
             from lettucethink.vscan import Camera
         else:
             raise ValueError("Unknown Camera firmware parameter")
@@ -57,14 +61,13 @@ class Scan(RomiTask):
         camera = Camera(**self.scanner["camera_args"])
         scanner = scan.Scanner(cnc, gimbal, camera, **self.scanner["scanner_args"])
 
-
         metadata = {
             "object": self.metadata,
             "scanner": self.scanner,
             "path": self.path
         }
 
-        if self.scanner["camera_firmware"].split("-")[0] == "virtual":
+        if camera_type == "virtual":
             metadata["bounding_box"] = camera.bounding_box
 
         scanner.set_path(path, mask=mask)
