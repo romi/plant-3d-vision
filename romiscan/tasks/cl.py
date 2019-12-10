@@ -15,6 +15,8 @@ class Voxels(RomiTask):
     upstream_mask = luigi.TaskParameter(default=Masks)
     upstream_colmap = luigi.TaskParameter(default=Colmap)
 
+    use_colmap_poses = luigi.BoolParameter(default=True)
+
 
     voxel_size = luigi.FloatParameter()
     type = luigi.Parameter()
@@ -22,7 +24,7 @@ class Voxels(RomiTask):
     log = luigi.BoolParameter(default=True)
 
     def requires(self):
-        if self.upstream_colmap is not None:
+        if self.use_colmap_poses:
             return {'masks': self.upstream_mask(), 'colmap': self.upstream_colmap()}
         else:
             return {'masks': self.upstream_mask(), 'colmap': None}
@@ -32,10 +34,8 @@ class Voxels(RomiTask):
 
         masks_fileset = self.input()['masks'].get()
 
-        use_colmap_poses = False
-        if self.input()['colmap'] is not None:
+        if self.use_colmap_poses:
             colmap_fileset = self.input()['colmap'].get()
-            use_colmap_poses = True
 
         scan = masks_fileset.scan
 
@@ -77,7 +77,7 @@ class Voxels(RomiTask):
         sc = cl.Backprojection(
             [nx, ny, nz], [x_min, y_min, z_min], self.voxel_size, type=self.type, multiclass=self.multiclass, log=self.log)
 
-        if use_colmap_poses:
+        if self.use_colmap_poses:
             poses = io.read_json(colmap_fileset.get_file(COLMAP_IMAGES_ID))
             for fi in fs.get_files():
                 key = None
