@@ -27,11 +27,10 @@ class Voxels(RomiTask):
         if self.use_colmap_poses:
             return {'masks': self.upstream_mask(), 'colmap': self.upstream_colmap()}
         else:
-            return {'masks': self.upstream_mask(), 'colmap': None}
+            return {'masks': self.upstream_mask()}#, 'colmap': None}
 
     def run(self):
         from romiscan import cl
-
         masks_fileset = self.input()['masks'].get()
 
         if self.use_colmap_poses:
@@ -50,14 +49,7 @@ class Voxels(RomiTask):
         if camera_model is None:
             try:
                 fi = masks_fileset.get_files()[0]
-                K = fi.get_metdata('camera')
-                im = io.read_image(fi)
-
-                camera_model = {
-                    "width" : im.shape[1],
-                    "height": im.shape[2],
-                    "intrinsics": [K[0][0], K[1][1], K[0][2], K[1][2]]
-                }
+                camera_model = fi.get_metadata('camera')['camera_model']
 
             except:
                 raise Exception("Could not find camera model for Backprojection")
@@ -95,12 +87,14 @@ class Voxels(RomiTask):
                 if key is not None:
                     camera = { "rotmat" : poses[key]["rotmat"], "tvec" : poses[key]["tvec"] }
                     fi.set_metadata("camera", camera)
+    
 
-        vol = sc.process_fileset(masks_fileset, camera_model, images)
+        vol = sc.process_fileset(masks_fileset, camera_model)#, images)
         print("size = ")
         print(vol.size)
         outfs = self.output().get()
         outfile = self.output_file()
+        
         if self.multiclass:
             out = {}
             for i, label in enumerate(sc.get_labels(masks_fileset)):

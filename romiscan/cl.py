@@ -147,7 +147,7 @@ class Backprojection():
             labels = self.get_labels(fs)
             result = np.zeros((len(labels), *self.shape))
             for i,l in enumerate(labels):
-                result[i, :] = self.process_label(fs, camera_model, poses, l)
+                result[i, :] = self.process_label(fs, camera_model, l)
             return result
         else:
             return self.process_label(fs, camera_model)
@@ -177,10 +177,13 @@ class Backprojection():
                 warn("Could not get camera pose for view, skipping...")
                 continue
 
-rot = sum(, [])
+            #rot = sum(, [])
             rot = sum(cam['rotmat'], [])
             tvec = cam['tvec']
-            self.process_view(intrinsics, rot, tvec, mask)
+            for fi in fs.get_files():
+                mask = io.read_image(fi)
+
+                self.process_view(intrinsics, rot, tvec, mask)
 
         result = self.values()
         result = result.reshape(self.shape)
