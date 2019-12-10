@@ -50,15 +50,7 @@ class Voxels(RomiTask):
         if camera_model is None:
             try:
                 fi = masks_fileset.get_files()[0]
-                K = fi.get_metdata('camera')
-                im = io.read_image(fi)
-
-                camera_model = {
-                    "width" : im.shape[1],
-                    "height": im.shape[2],
-                    "intrinsics": [K[0][0], K[1][1], K[0][2], K[1][2]]
-                }
-
+                camera_model = fi.get_metdata('camera')['camera_model']
             except:
                 raise Exception("Could not find camera model for Backprojection")
 
