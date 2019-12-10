@@ -179,13 +179,11 @@ class Backprojection():
                 warn("Could not get camera pose for view, skipping...")
                 continue
 
-            #rot = sum(, [])
             rot = sum(cam['rotmat'], [])
             tvec = cam['tvec']
-            for fi in fs.get_files():
-                mask = io.read_image(fi)
 
-                self.process_view(intrinsics, rot, tvec, mask)
+            mask = io.read_image(fi)
+            self.process_view(intrinsics, rot, tvec, mask)
 
         result = self.values()
         result = result.reshape(self.shape)
