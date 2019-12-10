@@ -283,9 +283,14 @@ class ColmapRunner():
             target = os.path.join(os.path.join(
                 colmap_ws, 'images'), filename) # TODO use only DB API
             if not os.path.isfile(target):
-                im = io.read_image(file)
-                im = im[:,:,:3] # remove alpha channel
-                imageio.imwrite(target, im)
+                go = True
+                if 'channel' in file.metadata.keys():
+                    if file.metadata['channel'] == 'segmentation':
+                        go = False
+                if go:
+                    im = io.read_image(file)
+                    im = im[:,:,:3] # remove alpha channel
+                    imageio.imwrite(target, im)
 
             if self.use_calibration:
                 p = file.get_metadata('calibrated_pose')
@@ -348,7 +353,7 @@ class ColmapRunner():
                 camera = { "rotmat" : images[key]["rotmat"],
                            "tvec" : images[key]["tvec"],
                            "camera_model" : cameras[camera_id]
-                       }}
+                       }
                 fi.set_metadata("camera", camera)
 
         # Save bounding box (by sparse pcd) in scan metadata
