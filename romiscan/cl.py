@@ -171,6 +171,8 @@ class Backprojection():
         intrinsics = camera_model['params'][0:4]
 
         for fi in fs.get_files():
+            if label is not None and fi.get_metadata("label") != label:
+                continue
             try:
                 cam = fi.get_metadata('camera')
             except:
