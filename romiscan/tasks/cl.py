@@ -42,7 +42,10 @@ class Voxels(RomiTask):
         try:
             camera_model = scan.get_metadata()['computed']['camera_model']
         except:
-            camera_model = scan.get_metadata()['scanner']['camera_model']
+            try:
+                camera_model = scan.get_metadata()['scanner']['camera_model']
+            except:
+                camera_model = None
 
         if camera_model is None:
             try:
