@@ -69,7 +69,7 @@ class Scan(RomiTask):
 
         if camera_type == "virtual":
             metadata["bounding_box"] = camera.bounding_box
-
+            metadata["displacement"] = camera.displacement
         scanner.set_path(path, mask=mask)
         scanner.scan()
         scanner.store(self.output().get(), metadata=metadata)

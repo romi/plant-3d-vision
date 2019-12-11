@@ -55,12 +55,30 @@ class Voxels(RomiTask):
                 raise Exception("Could not find camera model for Backprojection")
 
         bounding_box = scan.get_metadata("bounding_box")
+        
 
         x_min, x_max = bounding_box["x"]
         y_min, y_max = bounding_box["y"]
         z_min, z_max = bounding_box["z"]
+        
+        try: 
+            displacement = scan.get_metadata("displacement")
+            
 
-        center = [(x_max + x_min)/2, (y_max + y_min)/2, (z_max + z_min)/2]
+            x_min += displacement["dx"]
+            x_max += displacement["dx"]
+            
+            y_min += displacement["dy"]
+            y_max += displacement["dy"]
+            
+            z_min += displacement["dz"]
+            z_max += displacement["dz"]
+        
+        except:
+            pass
+            
+        
+        center = [(x_max + x_min )/2, (y_max + y_min)/2, (z_max + z_min)/2]
         widths = [x_max - x_min, y_max - y_min, z_max - z_min]
 
         nx = int((x_max-x_min) / self.voxel_size) + 1

@@ -173,6 +173,7 @@ class Backprojection():
         for fi in fs.get_files():
             if label is not None and fi.get_metadata("label") != label:
                 continue
+
             try:
                 cam = fi.get_metadata('camera')
             except:
@@ -182,10 +183,8 @@ class Backprojection():
             #rot = sum(, [])
             rot = sum(cam['rotmat'], [])
             tvec = cam['tvec']
-            for fi in fs.get_files():
-                mask = io.read_image(fi)
-
-                self.process_view(intrinsics, rot, tvec, mask)
+            mask = io.read_image(fi)
+            self.process_view(intrinsics, rot, tvec, mask)
 
         result = self.values()
         result = result.reshape(self.shape)
