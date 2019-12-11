@@ -180,7 +180,6 @@ class Backprojection():
                 warn("Could not get camera pose for view, skipping...")
                 continue
 
-            #rot = sum(, [])
             rot = sum(cam['rotmat'], [])
             tvec = cam['tvec']
             mask = io.read_image(fi)

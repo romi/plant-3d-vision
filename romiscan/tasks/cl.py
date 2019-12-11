@@ -95,8 +95,6 @@ class Voxels(RomiTask):
             for fi in fs.get_files():
                 key = None
                 mask = None
-                if label is not None and not label == fi.get_metadata('label'):
-                    continue
                 for k in poses.keys():
                     if os.path.splitext(poses[k]['name'])[0] == fi.id or os.path.splitext(poses[k]['name'])[0] == fi.get_metadata('image_id'):
                         mask = io.read_image(fi)
