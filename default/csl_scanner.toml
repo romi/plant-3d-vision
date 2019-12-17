@@ -1,0 +1,38 @@
+camera_firmware = "sony_wifi"
+camera_hardware = "Sony Alpha 5100"
+camera_lens = "16-35 stock"
+cnc_firmware = "grbl-v1.1"
+cnc_hardware = "xcarve-v2"
+frame = "alu 40mm"
+gimbal_firmware = "blgimbal"
+gimbal_hardware = "blgimbal"
+id = "lyon_1"
+
+[scanner_args]
+inverted = false
+
+[camera_args]
+postview = true
+device_ip = "10.0.2.66"
+api_port = "10000"
+
+[camera_model]
+height = 1080
+id = 1
+model = "OPENCV"
+params = [ 1120.72122223961, 1120.72122223961, 808.0, 540.0, 0.0007513494532588769, 0.0007513494532588769, 0.0, 0.0,]
+width = 1616
+
+[cnc_args]
+homing = true
+port = "/dev/ttyUSB0"
+
+[gimbal_args]
+port = "/dev/ttyACM1"
+has_tilt = false
+zero_pan = 145
+
+[workspace]
+x = [ 200, 600,]
+y = [ 200, 600,]
+z = [ -100, 300,]

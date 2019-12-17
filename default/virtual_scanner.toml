@@ -1,0 +1,37 @@
+[Scan.scanner]
+camera_firmware = "virtual"
+cnc_firmware = "virtual"
+gimbal_firmware = "virtual"
+id = "virtual"
+
+[Scan.path]
+id = "virtual"
+type = "circular"
+
+[Scan.scanner.scanner_args]
+inverted = false
+
+[Scan.scanner.camera_args]
+width = 640
+height = 480
+focal = 25
+render_ground_truth = true
+load_object = "arabidopsis_0.obj?dx=10&dy=10&dz=-5"
+load_background = "quarry_03_8k.hdr"
+
+[Scan.scanner.cnc_args]
+
+[Scan.scanner.gimbal_args]
+
+[Scan.scanner.workspace]
+x = [ 200, 600,]
+y = [ 200, 600,]
+z = [ -100, 300,]
+
+[Scan.path.args]
+num_points = 10
+radius = 100
+tilt = 0.45
+xc = 0
+yc = 0
+z = 50

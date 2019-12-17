@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from flask import Flask, send_file
 from flask import request, send_from_directory
 import json
@@ -5,9 +6,10 @@ from flask_restful import Resource, Api
 import os
 from romidata import io
 from romidata import FSDB as DB
+from flask_cors import CORS
 
 app = Flask(__name__)
-# CORS(app)
+CORS(app)
 api = Api(app)
 
 try:
@@ -18,7 +20,7 @@ except:
 try:
     db_prefix = os.environ["DB_PREFIX"]
 except:
-    raise Error("DB_LOCATION environment variable is not set")
+    db_prefix = "/files/"
 
 db = DB(db_location)
 db.connect()
@@ -133,7 +135,7 @@ def fmt_scan(scan):
 
         try:
             res["data"]["angles"]["measured_angles"] = metadata["measures"]["angles"]
-        finally:
+        except:
             pass
 
 
@@ -187,3 +189,6 @@ api.add_resource(ScanList, '/scans')
 api.add_resource(Scan, '/scans/<scan_id>')
 api.add_resource(File, '/files/<path:path>')
 api.add_resource(Refresh, '/refresh')
+
+if __name__ == "__main__":
+    app.run()
