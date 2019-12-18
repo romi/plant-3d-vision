@@ -90,21 +90,7 @@ class Voxels(RomiTask):
         sc = cl.Backprojection(
             [nx, ny, nz], [x_min, y_min, z_min], self.voxel_size, type=self.type, multiclass=self.multiclass, log=self.log)
 
-        if self.use_colmap_poses:
-            poses = io.read_json(colmap_fileset.get_file(COLMAP_IMAGES_ID))
-            for fi in fs.get_files():
-                key = None
-                mask = None
-                for k in poses.keys():
-                    if os.path.splitext(poses[k]['name'])[0] == fi.id or os.path.splitext(poses[k]['name'])[0] == fi.get_metadata('image_id'):
-                        mask = io.read_image(fi)
-                        key = k
-                        break
-                if key is not None:
-                    camera = { "rotmat" : poses[key]["rotmat"], "tvec" : poses[key]["tvec"] }
-                    fi.set_metadata("camera", camera)
-    
-
+  
         vol = sc.process_fileset(masks_fileset, camera_model)#, images)
         print("size = ")
         print(vol.size)
