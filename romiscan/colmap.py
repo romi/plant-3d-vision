@@ -341,15 +341,13 @@ class ColmapRunner():
         for i, fi in enumerate(self.fileset.get_files()):
             key = None
             mask = None
-            if label is not None and not label == fi.get_metadata('label'):
-                continue
             for k in images.keys():
                 if os.path.splitext(images[k]['name'])[0] == fi.id or os.path.splitext(images[k]['name'])[0] == fi.get_metadata('image_id'):
                     mask = io.read_image(fi)
                     key = k
                     break
             if key is not None:
-                camera_id = images[k]['camera']
+                camera_id = images[k]['camera_id']
                 camera = { "rotmat" : images[key]["rotmat"],
                            "tvec" : images[key]["tvec"],
                            "camera_model" : cameras[camera_id]
@@ -357,7 +355,7 @@ class ColmapRunner():
                 fi.set_metadata("camera", camera)
 
         # Save bounding box (by sparse pcd) in scan metadata
-        if self.fileset.scan.get_metdata("bounding_box") is None:
+        if self.fileset.scan.get_metadata("bounding_box") is None:
             points = np.asarray(sparse_pcd.points)
 
             x_min, y_min, z_min = points.min(axis=0)

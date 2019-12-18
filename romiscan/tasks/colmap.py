@@ -80,14 +80,15 @@ class Colmap(RomiTask):
 
         points, images, cameras, sparse, dense = colmap_runner.run()
 
-        outfile = self.output_file(COLMAP_SPARSE_ID)
-        io.write_point_cloud(outfile, sparse)
+        if len(sparse.points) > 0:
+            outfile = self.output_file(COLMAP_SPARSE_ID)
+            io.write_point_cloud(outfile, sparse)
         outfile = self.output_file(COLMAP_POINTS_ID)
         io.write_json(outfile, points)
         outfile = self.output_file(COLMAP_IMAGES_ID)
         io.write_json(outfile, images)
         outfile = self.output_file(COLMAP_CAMERAS_ID)
         io.write_json(outfile, cameras)
-        if dense is not None:
+        if dense is not None and len(dense.points) > 0:
             outfile = self.output_file(COLMAP_DENSE_ID)
             io.write_point_cloud(outfile, dense)
