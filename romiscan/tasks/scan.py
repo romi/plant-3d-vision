@@ -8,7 +8,7 @@ from romidata import io
 class Scan(RomiTask):
     upstream_task = None
 
-    metadata = luigi.Parameter(default=None)
+    metadata = luigi.Parameter(default={})
     scanner = luigi.Parameter(default=None)
     path = luigi.Parameter(default=None)
 
