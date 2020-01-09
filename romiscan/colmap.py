@@ -356,10 +356,10 @@ class ColmapRunner():
 
         # Save bounding box (by sparse pcd) in scan metadata
         if self.fileset.scan.get_metadata("bounding_box") is None:
-            points = np.asarray(sparse_pcd.points)
+            points_array = np.asarray(sparse_pcd.points)
 
-            x_min, y_min, z_min = points.min(axis=0)
-            x_max, y_max, z_max = points.max(axis=0)
+            x_min, y_min, z_min = points_array.min(axis=0)
+            x_max, y_max, z_max = points_array.max(axis=0)
             self.fileset.scan.set_metadata("bounding_box", {"x" : [x_min, x_max],"y" : [y_min, y_max],
             "z" : [z_min, z_max] })
 
