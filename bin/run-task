@@ -16,6 +16,7 @@ default_luigicmd = "luigi"
 
 default_modules = {
     "Scan": "romiscan.tasks.scan",
+    "Clean": "romiscan.tasks.scan",
     "CalibrationScan": "romiscan.tasks.scan",
     "Colmap": "romiscan.tasks.colmap",
     "Undistorted": "romiscan.tasks.proc2d",

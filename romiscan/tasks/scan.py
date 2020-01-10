@@ -102,3 +102,30 @@ class CalibrationScan(Scan):
         full_path = path + line_1 + line_2
         mask = len(path)*[False] + len(line_1)*[True] + len(line_2)*[True]
         self._run_path(full_path, mask)
+
+class Clean(RomiTask):
+    no_confirm = luigi.BoolParameter(default=False)
+    upstream_task = None
+
+    def requires(self):
+        return []
+
+    def confirm(self, c, default='n'):
+        valid = {"yes": True, "y": True, "ye": True,
+        "no": False, "n": False}
+        if c == '':
+            return valid[default]
+        else:
+            return valid[c]
+
+    def run(self):
+        print("This is going to delete all filesets except the scan fileset (images). Confirm? [y/N]")
+        choice = self.confirm(input().lower())
+        if not choice:
+            raise IOError("Did not validate deletion.")
+
+        scan = DatabaseConfig().scan
+        fs_ids = [fs.id for fs in scan.get_filesets()]
+        for fs in fs_ids:
+            if fs != "images":
+                scan.delete_fileset(fs)
