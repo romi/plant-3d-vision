@@ -12,7 +12,7 @@ upstream_task="Scan"
 Sx = 256
 Sy = 256
 N_vox = 1000000
-label_names="background,class_0,class_1,class_2"
+label_names="background,class_0,class_1,class_2,class_3,class_4"
 model_segmentation_name = "table1_test5_hdri_arabidopsis_resnet50_epoch15_rotate_True_finetune_3_epoch50.pt"
 
 #"resnet18_256_256_epoch100.pt"

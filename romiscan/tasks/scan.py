@@ -110,6 +110,9 @@ class Clean(RomiTask):
     def requires(self):
         return []
 
+    def complete(self):
+        return False
+
     def confirm(self, c, default='n'):
         valid = {"yes": True, "y": True, "ye": True,
         "no": False, "n": False}
