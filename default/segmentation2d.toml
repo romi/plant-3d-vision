@@ -2,6 +2,7 @@
 calibration_scan_id = "calib_scan_shortpath"
 
 [Masks]
+upstream_task="Scan"
 type = "excess_green"
 dilation = 5
 binarize = true
@@ -25,8 +26,8 @@ finetune_epochs = 20
 N_vox = 1000000
 
 [Voxels]
-upstream_mask = "Segmentation2D"
-multiclass = true
+upstream_mask = "Masks"
+multiclass = false
 voxel_size = 0.2
 type = "averaging"
 #upstream_colmap = "None"

@@ -85,7 +85,7 @@ else:
     raise IOError("Config file do not exit")
 
 pp = pprint.PrettyPrinter(indent=4)
-config["core"] = {"log_level" : "ERROR" } #Only print errors
+config["core"] = {"log_level" : "INFO" }
 print("Using the following configuration: ")
 pp.pprint(config)
 

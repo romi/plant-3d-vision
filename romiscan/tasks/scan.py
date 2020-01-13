@@ -8,9 +8,9 @@ from romidata import io
 class Scan(RomiTask):
     upstream_task = None
 
-    metadata = luigi.Parameter(default={})
-    scanner = luigi.Parameter(default=None)
-    path = luigi.Parameter(default=None)
+    metadata = luigi.DictParameter(default={})
+    scanner = luigi.DictParameter(default={})
+    path = luigi.DictParameter(default={})
 
     def requires(self):
         return []

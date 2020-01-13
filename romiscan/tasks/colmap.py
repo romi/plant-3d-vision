@@ -12,11 +12,11 @@ class Colmap(RomiTask):
     """
     upstream_task = luigi.TaskParameter(default=Scan)
 
-    matcher = luigi.Parameter()
+    matcher = luigi.Parameter(default="exhaustive")
     compute_dense = luigi.BoolParameter()
-    cli_args = luigi.Parameter()
+    cli_args = luigi.DictParameter()
     align_pcd = luigi.BoolParameter(default=True)
-    calibration_scan_id = luigi.Parameter(default=None)
+    calibration_scan_id = luigi.Parameter(default="")
 
     def run(self):
 
@@ -32,7 +32,7 @@ class Colmap(RomiTask):
         except:
             bounding_box = None
 
-        if self.calibration_scan_id is not None:
+        if self.calibration_scan_id is not "":
             db = images_fileset.scan.db
             calibration_scan = db.get_scan(self.calibration_scan_id)
             colmap_fs = matching = [s for s in calibration_scan.get_filesets() if "Colmap" in s.id]
