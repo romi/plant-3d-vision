@@ -1,4 +1,5 @@
 import luigi
+import logging
 import numpy as np
 
 from romidata.task import  RomiTask, FileByFileTask
@@ -9,6 +10,8 @@ from romiscan.tasks.colmap import *
 from romiscan.tasks.proc2d import *
 from romiscan.tasks.proc3d import *
 from romiscan.tasks.arabidopsis import *
+
+logger = logging.getLogger('__name__')
 
 class Visualization(RomiTask):
     """Prepares files for visualization
@@ -75,7 +78,7 @@ class Visualization(RomiTask):
         # ZIP
         scan = self.output().scan
         basedir = scan.db.basedir
-        print("basedir = %s"%basedir)
+        logger.debug("basedir = %s"%basedir)
         with tempfile.TemporaryDirectory() as tmpdir:
             shutil.make_archive(os.path.join(tmpdir, "scan"), "zip",
                                 os.path.join(basedir, scan.id))

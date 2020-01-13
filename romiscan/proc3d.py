@@ -6,6 +6,7 @@ This module contains all functions for processing of 3D data.
 
 """
 import numpy as np
+import logging
 from scipy.ndimage.morphology import distance_transform_edt
 import os
 from scipy.ndimage.filters import gaussian_filter
@@ -39,6 +40,7 @@ import open3d
 import bisect
 import cv2
 from romiscan import proc2d
+logger = logging.getLogger('__name__')
 
 def index2point(indexes, origin, voxel_size):
     """Converts discrete nd indexes to a 3d points
@@ -293,7 +295,7 @@ def distance_to_root_clusters(g, root_index, pcd, bin_size):
     cluster_centers = []
     cluster_sets = []
 
-    print("Computing clusters")
+    logger.debug("Computing clusters")
     for i in range(1, len(bin_index)):
         idx_min = bin_index[i-1]
         idx_max = bin_index[i]
@@ -313,7 +315,7 @@ def distance_to_root_clusters(g, root_index, pcd, bin_size):
 
             n = c[0]
 
-    print("Computing quotient graph")
+    logger.debug("Computing quotient graph")
     cluster_graph = nx.algorithms.minors.quotient_graph(g, cluster_sets)
     cluster_graph = nx.relabel_nodes(cluster_graph, lambda x: cluster_sets.index(x))
 
@@ -436,7 +438,7 @@ def vol2pcd(volume, origin, voxel_size, level_set_value=0, quiet=False):
     x, y, z = np.nonzero(on_edge)
 
     if not quiet:
-        print("number of points = %d" % len(x))
+        logger.debug("number of points = %d" % len(x))
     pts = np.zeros((0, 3))
     normals = np.zeros((0,3))
     for i in range(len(x)):
@@ -516,7 +518,7 @@ def fit_plane_ransac(point_cloud, inliers=0.8, n_iter=100):
             argmin_v = vh
             argmin_g = G
             min_error = s[2]
-            print("error = %.2f"%s[2])
+            logger.debug("error = %.2f"%s[2])
 
     X0 = argmin_g # point belonging to the plane
     n = vh[:, 2] # normal vector
@@ -598,7 +600,6 @@ def test_cam_planes(pcd, cameras, images, imgdir, X0=None, n=None, scaling=100):
     ks.sort(key=lambda x: int(x))
 
     for i, k in enumerate(ks):
-        print(k)
         img = imageio.imread(os.path.join(imgdir, images[k]["name"]))
         img = np.array(img, dtype=np.float)
         # img = (img - img.mean()) / img.std()

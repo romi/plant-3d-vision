@@ -1,9 +1,12 @@
 import os
+import logging
 import subprocess
 import numpy as np
 import json
 import tempfile
 import imageio
+
+logger = logging.getLogger('__name__')
 
 try:
     from open3d import open3d
@@ -161,7 +164,7 @@ class ColmapRunner():
                    '--image_path', '%s/images' % self.colmap_ws]
         for x in cli_args.keys():
             process.extend([x, cli_args[x]])
-        print(' '.join(process))
+        logger.debug('Running subprocess: ' + ' '.join(process))
         subprocess.run(process, check=True, stdout=colmap_log_file)
 
     def colmap_matcher(self):
@@ -174,7 +177,7 @@ class ColmapRunner():
                        '--database_path', '%s/database.db' % self.colmap_ws]
             for x in cli_args.keys():
                 process.extend([x, cli_args[x]])
-            print(' '.join(process))
+            logger.debug('Running subprocess: ' + ' '.join(process))
             subprocess.run(process, check=True, stdout=colmap_log_file)
         elif self.matcher == 'sequential':
             if 'sequential_matcher' in self.all_cli_args:
@@ -185,7 +188,7 @@ class ColmapRunner():
                        '--database_path', '%s/database.db' % self.colmap_ws]
             for x in cli_args.keys():
                 process.extend([x, cli_args[x]])
-            print(' '.join(process))
+            logger.debug('Running subprocess: ' + ' '.join(process))
             subprocess.run(process, check=True, stdout=colmap_log_file)
         else:
             raise ColmapError('Unknown matcher type')
@@ -201,7 +204,7 @@ class ColmapRunner():
                    '--output_path', '%s/sparse' % self.colmap_ws]
         for x in cli_args.keys():
             process.extend([x, cli_args[x]])
-        print(' '.join(process))
+        logger.debug('Running subprocess: ' + ' '.join(process))
         subprocess.run(process, check=True, stdout=colmap_log_file)
 
     def colmap_model_aligner(self):
@@ -215,7 +218,7 @@ class ColmapRunner():
                    '--output_path', '%s/sparse/0' % self.colmap_ws]
         for x in cli_args.keys():
             process.extend([x, cli_args[x]])
-        print(' '.join(process))
+        logger.debug('Running subprocess: ' + ' '.join(process))
         subprocess.run(process, check=True, stdout=colmap_log_file)
 
     def colmap_image_undistorter(self):
@@ -229,7 +232,7 @@ class ColmapRunner():
                    '--output_path', '%s/dense' % self.colmap_ws]
         for x in cli_args.keys():
             process.extend([x, cli_args[x]])
-        print(' '.join(process))
+        logger.debug('Running subprocess: ' + ' '.join(process))
         subprocess.run(process, check=True, stdout=colmap_log_file)
 
     def colmap_patch_match_stereo(self):
@@ -241,7 +244,7 @@ class ColmapRunner():
                    '--workspace_path', '%s/dense' % self.colmap_ws]
         for x in cli_args.keys():
             process.extend([x, cli_args[x]])
-        print(' '.join(process))
+        logger.debug('Running subprocess: ' + ' '.join(process))
         subprocess.run(process, check=True, stdout=colmap_log_file)
 
     def colmap_stereo_fusion(self):
@@ -254,7 +257,7 @@ class ColmapRunner():
                    '--output_path', '%s/dense/fused.ply' % self.colmap_ws]
         for x in cli_args.keys():
             process.extend([x, cli_args[x]])
-        print(' '.join(process))
+        logger.debug('Running subprocess: ' + ' '.join(process))
         subprocess.run(process, check=True, stdout=colmap_log_file)
 
     def run(self):

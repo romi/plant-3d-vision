@@ -1,4 +1,5 @@
 import luigi
+import logging
 import numpy as np
 
 from romidata.task import  RomiTask, FileByFileTask
@@ -6,6 +7,8 @@ from romidata import io
 
 from romiscan.tasks.scan import Scan
 from romiscan.tasks.colmap import Colmap
+
+logger = logging.getLogger('__name__')
 
 class Undistorted(FileByFileTask):
     """Obtain undistorted images
@@ -115,7 +118,7 @@ class Segmentation2D(RomiTask):
         #f.id = 'images_matrix'
         
         #Save class prediction as images, one by one, class per class
-        print("Saving the segmented images, takes around 15 s")
+        logger.debug("Saving the segmented images, takes around 15 s")
         if self.single_label is None:
             for i in range(images_segmented.shape[0]):
                 for j in range(len(self.label_names)):

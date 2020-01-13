@@ -1,8 +1,12 @@
 import luigi
+import logging
+
 import numpy as np
 
 from romidata.task import  RomiTask, FileByFileTask, FilesetTarget, DatabaseConfig
 from romidata import io
+
+logger = logging.getLogger('__name__')
 
 
 class Scan(RomiTask):
@@ -122,7 +126,7 @@ class Clean(RomiTask):
             return valid[c]
 
     def run(self):
-        print("This is going to delete all filesets except the scan fileset (images). Confirm? [y/N]")
+        logging.critical("This is going to delete all filesets except the scan fileset (images). Confirm? [y/N]")
         choice = self.confirm(input().lower())
         if not choice:
             raise IOError("Did not validate deletion.")

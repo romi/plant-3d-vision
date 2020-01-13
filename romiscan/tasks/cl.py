@@ -1,4 +1,5 @@
 import luigi
+import logging
 import numpy as np
 
 from romidata.task import  RomiTask, FileByFileTask
@@ -7,6 +8,8 @@ from romidata import io
 from romiscan.tasks.colmap import Colmap
 from romiscan.tasks.proc2d import Masks
 from romiscan.filenames import *
+
+logger = logging.getLogger('__name__')
 
 class Voxels(RomiTask):
     """Backproject masks into 3D space
@@ -74,8 +77,7 @@ class Voxels(RomiTask):
 
   
         vol = sc.process_fileset(masks_fileset)#, images)
-        print("size = ")
-        print(vol.size)
+        logger.debug("size = %i" % vol.size)
         outfs = self.output().get()
         outfile = self.output_file()
         
