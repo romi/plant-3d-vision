@@ -79,11 +79,12 @@ class Masks(FileByFileTask):
         return outfi
         
 
-class Segmentation2D(FileByFileTask):
+class Segmentation2D(RomiTask):
     """
     Segment images by class"""
     
     upstream_task = luigi.TaskParameter(default=Undistorted)
+    query = luigi.Parameter(default=None)
 
     label_names = luigi.Parameter(default='background,flowers,peduncle,stem,leaves,fruits')
     Sx = luigi.IntParameter(default=896)
@@ -99,7 +100,7 @@ class Segmentation2D(FileByFileTask):
 
     def run(self):
         from romiseg.Segmentation2D import segmentation
-        images_fileset = self.input().get().get_files(query={'channel':'rgb'})
+        images_fileset = self.input().get().get_files(query=self.query)
         scan = self.input().scan
         self.label_names = self.label_names.split(',')
         #APPLY SEGMENTATION
