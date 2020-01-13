@@ -17,7 +17,6 @@ class Voxels(RomiTask):
 
     use_colmap_poses = luigi.BoolParameter(default=True)
 
-
     voxel_size = luigi.FloatParameter()
     type = luigi.Parameter()
     multiclass = luigi.BoolParameter(default=False)
@@ -37,23 +36,6 @@ class Voxels(RomiTask):
             colmap_fileset = self.input()['colmap'].get()
 
         scan = masks_fileset.scan
-
-        try:
-            camera_model = scan.get_metadata()['computed']['camera_model']
-        except:
-            try:
-                camera_model = scan.get_metadata()['scanner']['camera_model']
-            except:
-                camera_model = None
-
-        if camera_model is None:
-            try:
-                fi = masks_fileset.get_files()[0]
-                camera_model = fi.get_metadata('camera')['camera_model']
-
-            except:
-                raise Exception("Could not find camera model for Backprojection")
-
         bounding_box = scan.get_metadata("bounding_box")
         
 
@@ -91,7 +73,7 @@ class Voxels(RomiTask):
             [nx, ny, nz], [x_min, y_min, z_min], self.voxel_size, type=self.type, multiclass=self.multiclass, log=self.log)
 
   
-        vol = sc.process_fileset(masks_fileset, camera_model)#, images)
+        vol = sc.process_fileset(masks_fileset)#, images)
         print("size = ")
         print(vol.size)
         outfs = self.output().get()

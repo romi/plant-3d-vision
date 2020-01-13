@@ -12,35 +12,27 @@ class Undistorted(FileByFileTask):
     """
     upstream_task = luigi.TaskParameter(default=Scan)
 
-    reader = io.read_image
-    writer = io.write_image
-
     def input(self):
         return Scan().output()
 
     def requires(self):
         return [Colmap(), Scan()] 
 
-    def f(self, x):
+    def f(self, fi, outfs):
         from romiscan import proc2d
-        scan = self.output().scan
-        try:
-            camera = scan.get_metadata()['computed']['camera_model']
-        except:
-            camera = scan.get_metadata()['scanner']['camera_model']
+        camera_model = fi.get_metadata('camera')['camera_model']
 
-        if camera is None:
-            raise Exception("Could not find camera model for undistortion")
-        return proc2d.undistort(x, camera)
+        x = io.read_image(fi)
+        x = proc2d.undistort(x, camera_model)
+
+        outfi = outfs.create_file(fi.id)
+        io.write_image(outfi, x)
+        return outfi
 
 class Masks(FileByFileTask):
     """Mask images
     """
     upstream_task = luigi.TaskParameter(default=Undistorted)
-
-    reader = io.read_image
-    writer = io.write_image
-
     undistorted_input = luigi.BoolParameter(default=True)
 
     type = luigi.Parameter()
@@ -69,8 +61,9 @@ class Masks(FileByFileTask):
         else:
             raise Exception("Unknown masking type")
 
-    def f(self, x):
+    def f(self, fi, outfs):
         from romiscan import proc2d
+        x = io.read_image(fi)
         x = self.f_raw(x)
         if self.binarize:
             x = x > self.threshold
@@ -80,7 +73,10 @@ class Masks(FileByFileTask):
             x[x < self.threshold] = 0
             x = proc2d.rescale_intensity(x, out_range=(0, 1))
         x = np.array(255*x, dtype=np.uint8)
-        return x
+
+        outfi = outfs.create_file(fi.id)
+        io.write_image(outfi, x)
+        return outfi
         
 
 class Segmentation2D(FileByFileTask):

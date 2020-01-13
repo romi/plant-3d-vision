@@ -142,18 +142,18 @@ class Backprojection():
         cl.enqueue_copy(queue, self.values_h, self.values_d)
         return self.values_h
 
-    def process_fileset(self, fs, camera_model):
+    def process_fileset(self, fs):
         if self.multiclass:
             labels = self.get_labels(fs)
             result = np.zeros((len(labels), *self.shape))
             for i,l in enumerate(labels):
-                result[i, :] = self.process_label(fs, camera_model, l)
+                result[i, :] = self.process_label(fs, l)
             return result
         else:
-            return self.process_label(fs, camera_model)
+            return self.process_label(fs)
 
 
-    def process_label(self, fs, camera_model, label=None):
+    def process_label(self, fs, label=None):
         """
         Processes a whole fileset.
 
@@ -166,11 +166,14 @@ class Backprojection():
         """
         self.clear()
 
-        width = camera_model['width']
-        height = camera_model['height']
-        intrinsics = camera_model['params'][0:4]
 
         for fi in fs.get_files():
+            camera_model = fi.get_metadata("camera")["camera_model"]
+
+            width = camera_model['width']
+            height = camera_model['height']
+            intrinsics = camera_model['params'][0:4]
+
             if label is not None and fi.get_metadata("label") != label:
                 continue
 
@@ -183,6 +186,7 @@ class Backprojection():
             rot = sum(cam['rotmat'], [])
             tvec = cam['tvec']
             mask = io.read_image(fi)
+
             self.process_view(intrinsics, rot, tvec, mask)
 
         result = self.values()
