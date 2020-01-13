@@ -43,6 +43,9 @@ parser.add_argument('--luigicmd', dest='luigicmd', default=default_luigicmd,
 parser.add_argument('--module', dest='module', default=None,
                     help='module for the task')
 
+parser.add_argument('--log-level', dest='log_level', default='INFO',
+                    help='log level (DEBUG, INFO (default), WARNING, ERROR, CRITICAL)')
+
 parser.add_argument('task', metavar='task', type=str,
                     help='Luigi task to run')
 
@@ -85,7 +88,7 @@ else:
     raise IOError("Config file do not exit")
 
 pp = pprint.PrettyPrinter(indent=4)
-config["core"] = {"log_level" : "INFO" }
+config["core"] = {"log_level" : args.log_level}
 print("Using the following configuration: ")
 pp.pprint(config)
 
