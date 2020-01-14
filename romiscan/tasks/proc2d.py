@@ -89,7 +89,7 @@ class Segmentation2D(RomiTask):
     upstream_task = luigi.TaskParameter(default=Undistorted)
     query = luigi.DictParameter(default={})
 
-    label_names = luigi.ListParameter(default=['background','flowers','peduncle','stem','leaves','fruits'])
+    label_names = luigi.Parameter(default='background,flowers,peduncle,stem,leaves,fruits')
     Sx = luigi.IntParameter(default=896)
     Sy = luigi.IntParameter(default=1000)
     model_segmentation_name = luigi.Parameter('ERROR')
@@ -105,7 +105,7 @@ class Segmentation2D(RomiTask):
         from romiseg.Segmentation2D import segmentation
         images_fileset = self.input().get().get_files(query=self.query)
         scan = self.input().scan
-        self.label_names = self.label_names
+        self.label_names = self.label_names.split(',')
         #APPLY SEGMENTATION
         images_segmented, id_im = segmentation(self.Sx, self.Sy, self.label_names, 
                                         images_fileset, scan, self.model_segmentation_name, self.directory_weights)
