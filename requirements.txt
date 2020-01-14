@@ -168,7 +168,7 @@ QtPy==1.9.0
 requests==2.22.0
 requests-oauthlib==1.3.0
 retrying==1.3.3
-romidata==0.5.1.dev2+g3302a87.d20200114
+romidata==0.5.1.dev3+gfdafc45
 romiseg==0.0.1
 rsa==4.0
 scikit-image==0.16.2
