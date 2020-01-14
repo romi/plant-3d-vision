@@ -6,7 +6,7 @@ import numpy as np
 from romidata.task import  RomiTask, FileByFileTask, FilesetTarget, DatabaseConfig
 from romidata import io
 
-logger = logging.getLogger('__name__')
+logger = logging.getLogger('romiscan')
 
 
 class Scan(RomiTask):

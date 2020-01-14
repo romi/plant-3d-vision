@@ -14,10 +14,12 @@ import networkx as nx
 from tqdm import tqdm
 from warnings import warn
 
+logger = logging.getLogger('romiscan')
+
 try:
     import cgal_skel as cgal
 except:
-    warn("Could not load CGAL bindings, some methods will be unavailable")
+    logger.warning("Could not load CGAL bindings, some methods will be unavailable")
 
 try:
     from open3d import open3d
@@ -40,7 +42,7 @@ import open3d
 import bisect
 import cv2
 from romiscan import proc2d
-logger = logging.getLogger('__name__')
+
 
 def index2point(indexes, origin, voxel_size):
     """Converts discrete nd indexes to a 3d points

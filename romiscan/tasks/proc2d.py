@@ -8,7 +8,7 @@ from romidata import io
 from romiscan.tasks.scan import Scan
 from romiscan.tasks.colmap import Colmap
 
-logger = logging.getLogger('__name__')
+logger = logging.getLogger('romiscan')
 
 class Undistorted(FileByFileTask):
     """Obtain undistorted images
@@ -87,15 +87,15 @@ class Segmentation2D(RomiTask):
     Segment images by class"""
     
     upstream_task = luigi.TaskParameter(default=Undistorted)
-    query = luigi.Parameter(default=None)
+    query = luigi.DictParameter(default={})
 
-    label_names = luigi.Parameter(default='background,flowers,peduncle,stem,leaves,fruits')
+    label_names = luigi.ListParameter(default=['background','flowers','peduncle','stem','leaves','fruits'])
     Sx = luigi.IntParameter(default=896)
     Sy = luigi.IntParameter(default=1000)
     model_segmentation_name = luigi.Parameter('ERROR')
     directory_weights = luigi.Parameter('complete here')
 
-    single_label = luigi.Parameter(default=None)
+    single_label = luigi.Parameter(default="")
 
     def requires(self):
         return self.upstream_task()
@@ -105,7 +105,7 @@ class Segmentation2D(RomiTask):
         from romiseg.Segmentation2D import segmentation
         images_fileset = self.input().get().get_files(query=self.query)
         scan = self.input().scan
-        self.label_names = self.label_names.split(',')
+        self.label_names = self.label_names
         #APPLY SEGMENTATION
         images_segmented, id_im = segmentation(self.Sx, self.Sy, self.label_names, 
                                         images_fileset, scan, self.model_segmentation_name, self.directory_weights)
@@ -119,7 +119,7 @@ class Segmentation2D(RomiTask):
         
         #Save class prediction as images, one by one, class per class
         logger.debug("Saving the segmented images, takes around 15 s")
-        if self.single_label is None:
+        if self.single_label == "":
             for i in range(images_segmented.shape[0]):
                 for j in range(len(self.label_names)):
                     f = output_fileset.create_file('%03d_%s'%(i, self.label_names[j]))

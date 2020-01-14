@@ -9,7 +9,7 @@ from romiscan.tasks.colmap import Colmap
 from romiscan.tasks.proc2d import Masks
 from romiscan.filenames import *
 
-logger = logging.getLogger('__name__')
+logger = logging.getLogger('romiscan')
 
 class Voxels(RomiTask):
     """Backproject masks into 3D space

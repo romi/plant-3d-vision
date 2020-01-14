@@ -6,7 +6,7 @@ import json
 import tempfile
 import imageio
 
-logger = logging.getLogger('__name__')
+logger = logging.getLogger('romiscan')
 
 try:
     from open3d import open3d
