@@ -13,10 +13,13 @@ Geodesic computing is still in a very experimental stage.
 import os
 import numpy as np
 import pyopencl as cl
+import logging
 
 from romiscan.proc3d import point2index
 from romidata import io
 from skimage.morphology import binary_dilation
+
+logger = logging.getLogger('romiscan')
 
 
 ctx = cl.create_some_context()
@@ -168,20 +171,22 @@ class Backprojection():
 
 
         for fi in fs.get_files():
-            camera_model = fi.get_metadata("camera")["camera_model"]
 
-            width = camera_model['width']
-            height = camera_model['height']
-            intrinsics = camera_model['params'][0:4]
 
             if label is not None and fi.get_metadata("label") != label:
                 continue
 
             try:
                 cam = fi.get_metadata('camera')
+                camera_model = cam["camera_model"]
             except:
-                warn("Could not get camera pose for view, skipping...")
+                logger.warning("Could not get camera pose for view, skipping...")
                 continue
+
+
+            width = camera_model['width']
+            height = camera_model['height']
+            intrinsics = camera_model['params'][0:4]
 
             rot = sum(cam['rotmat'], [])
             tvec = cam['tvec']
