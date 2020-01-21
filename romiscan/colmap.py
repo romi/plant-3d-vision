@@ -340,6 +340,9 @@ class ColmapRunner():
             if self.compute_dense:
                 dense_pcd = proc3d.crop_point_cloud(dense_pcd, self.bounding_box)
 
+        if len(sparse_pcd.points) == 0:
+            raise Exception("Empty sparse point cloud. The bounding box is probably wrong, check workspace in metadata.")
+
         # Save pose results in file metadata
         for i, fi in enumerate(self.fileset.get_files()):
             key = None
