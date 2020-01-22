@@ -16,6 +16,9 @@ s = setup(
     use_scm_version=True,
     setup_requires=['setuptools_scm'],
     install_requires=[
+        'appdirs',
+        'toml',
+        'tqdm',
         'romidata',
         'imageio',
         'opencv-python',
@@ -23,7 +26,7 @@ s = setup(
         'pybind11',
         'colorlog',
         'scikit-image',
-        'open3d'
+        'open3d==0.9'
     ],
     include_package_data=True,
 )
