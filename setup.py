@@ -15,5 +15,15 @@ s = setup(
     zip_safe=False,
     use_scm_version=True,
     setup_requires=['setuptools_scm'],
+    install_requires=[
+        'romidata',
+        'imageio',
+        'opencv-python',
+        'luigi',
+        'pybind11',
+        'colorlog',
+        'scikit-image',
+        'open3d'
+    ],
     include_package_data=True,
 )
