@@ -85,7 +85,7 @@ class Masks(FileByFileTask):
 class Segmentation2D(RomiTask):
     """
     Segment images by class"""
-    
+    import appdirs    
     upstream_task = luigi.TaskParameter(default=Undistorted)
     query = luigi.DictParameter(default={})
 
@@ -93,7 +93,7 @@ class Segmentation2D(RomiTask):
     Sx = luigi.IntParameter(default=896)
     Sy = luigi.IntParameter(default=1000)
     model_segmentation_name = luigi.Parameter('ERROR')
-    directory_weights = luigi.Parameter('complete here')
+    directory_weights = luigi.Parameter(default = appdirs.user_cache_dir())
 
     single_label = luigi.Parameter(default="")
 
