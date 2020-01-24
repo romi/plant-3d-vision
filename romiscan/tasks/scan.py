@@ -66,10 +66,15 @@ class Scan(RomiTask):
         scanner = scan.Scanner(cnc, gimbal, camera, **self.scanner["scanner_args"])
 
         metadata = {
-            "object": self.metadata.get_wrapped(),
-            "scanner": self.scanner.get_wrapped(),
-            "path": self.path.get_wrapped()
+            "object": self.metadata,
+            "scanner": self.scanner,
+            "path": self.path
         }
+
+        # ugly fix for inability of luigi to unfreeze dictparameters correctly
+        import json
+        metadata = json.loads(luigi.DictParameter().serialize(metadata))
+
 
         if camera_type == "virtual":
             metadata["bounding_box"] = camera.bounding_box
