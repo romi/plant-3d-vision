@@ -66,9 +66,9 @@ class Scan(RomiTask):
         scanner = scan.Scanner(cnc, gimbal, camera, **self.scanner["scanner_args"])
 
         metadata = {
-            "object": self.metadata,
-            "scanner": self.scanner,
-            "path": self.path
+            "object": self.metadata.get_wrapped(),
+            "scanner": self.scanner.get_wrapped(),
+            "path": self.path.get_wrapped()
         }
 
         if camera_type == "virtual":
