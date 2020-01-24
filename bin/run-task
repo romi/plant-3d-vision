@@ -151,6 +151,7 @@ with tempfile.TemporaryDirectory() as tmpd:
         f.write(logging_config)
 
     file_path = os.path.join(d, cfgname)
+    config["retcode"] = { "already_running":10 , "missing_data":20 , "not_run":25 , "task_failed":30 , "scheduling_error":35 , "unhandled_exception":40 }
     toml.dump(config, open(file_path, 'w'))
 
     # Set env
