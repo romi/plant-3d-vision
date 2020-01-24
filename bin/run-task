@@ -162,4 +162,4 @@ with tempfile.TemporaryDirectory() as tmpd:
     cmd= [args.luigicmd, "--logging-conf-file", logging_file_path,"--module", module, args.task, "--DatabaseConfig-scan", args.scan]
     if args.ls:
         cmd.append("--local-scheduler")
-    subprocess.run(cmd, env={**os.environ, **env})
+    subprocess.run(cmd, env={**os.environ, **env}, check=True)
