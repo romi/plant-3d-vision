@@ -36,7 +36,6 @@ class Masks(FileByFileTask):
     """Mask images
     """
     upstream_task = luigi.TaskParameter(default=Undistorted)
-    undistorted_input = luigi.BoolParameter(default=True)
 
     type = luigi.Parameter()
     parameters = luigi.ListParameter(default=[])
