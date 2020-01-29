@@ -80,10 +80,10 @@ class AltAnglesAndInternodes(RomiTask):
 
         for i, axis in enumerate(stem_frame_axis):
             point[self.stem_axis] = axis
-            k, idx, _ = kdtree.search_knn_vector_3d(point, 50)
+            k, idx, _ = kdtree.search_knn_vector_3d(point, 100)
             vtx = np.asarray(stem_mesh.vertices)[idx]
             mean = vtx.mean(axis=0)
-            u,s,v = np.linalg.svd(vtx - mean)
+            u,s,v = np.linalg.svd(vtx - point)
             print(v[0,:])
             first_vector = v[0, :]
             if first_vector[self.stem_axis] < 0 and not self.stem_axis_inverted:
@@ -91,7 +91,7 @@ class AltAnglesAndInternodes(RomiTask):
             elif first_vector[self.stem_axis] > 0 and self.stem_axis_inverted:
                 first_vector = -first_vector
 
-            second_vector = prev_axis[2] - np.dot(prev_axis[2], first_vector)*first_vector
+            second_vector = prev_axis[1] - np.dot(prev_axis[1], first_vector)*first_vector
             second_vector = second_vector / np.linalg.norm(second_vector)
 
             third_vector = np.cross(first_vector, second_vector)
@@ -102,22 +102,23 @@ class AltAnglesAndInternodes(RomiTask):
             stem_frame[i][0:3, 0:3] = rot.transpose()
             stem_frame[i][:, 3] = np.dot(rot, mean)
 
-            point = mean
-            pts[i,:] = mean
 
             visu_trans = np.zeros((4,4))
             visu_trans[:3, :3] = rot.transpose()
-            visu_trans[:3, 3] = mean
+            visu_trans[:3, 3] = point
             visu_trans[3,3] = 1.0
 
-            f = open3d.geometry.TriangleMesh.create_coordinate_frame(size=20)
+            f = open3d.geometry.TriangleMesh.create_coordinate_frame(size=10)
             f.transform(visu_trans)
             gs.append(f)
+
+            point = mean
+            pts[i,:] = mean
 
         ls.points = open3d.utility.Vector3dVector(pts)
         ls.lines = open3d.utility.Vector2iVector(lines)
 
-        open3d.visualization.draw_geometries([ls, *gs])
+        open3d.visualization.draw_geometries([ls, *gs, stem_mesh])
 
         peduncle_meshes = [io.read_triangle_mesh(f) for f in input_fileset.get_files(query={"label": "peduncle"})]
         fruit_meshes = [io.read_triangle_mesh(f) for f in input_fileset.get_files(query={"label": "fruit"})]
