@@ -23,6 +23,7 @@ default_modules = {
     "Segmentation2D": "romiscan.tasks.proc2d",
     "Voxels": "romiscan.tasks.cl",
     "PointCloud": "romiscan.tasks.proc3d",
+    "ClusteredPointCloud": "romiscan.tasks.proc3d",
     "TriangleMesh": "romiscan.tasks.proc3d",
     "CurveSkeleton": "romiscan.tasks.proc3d",
     "TreeGraph": "romiscan.tasks.arabidopsis",

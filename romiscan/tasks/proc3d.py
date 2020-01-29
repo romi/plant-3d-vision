@@ -32,7 +32,7 @@ class PointCloud(RomiTask):
             origin = np.array(ifile.get_metadata('origin'))
 
             voxel_size = float(ifile.get_metadata('voxel_size'))
-            labels = []
+            point_labels = []
 
             for i in range(len(l)):
                 if l[i] != 'background':
@@ -42,10 +42,10 @@ class PointCloud(RomiTask):
                     color = open3d.utility.Vector3dVector(color)
                     out.colors = color
                     pcd = pcd + out
-                    labels = labels + [l[i] for x in range(len(pcd.points))]
+                    point_labels = point_labels + [i for x in range(len(out.points))]
 
             io.write_point_cloud(self.output_file(), pcd)
-            self.output_file().set_metadata({'labels' : labels})        
+            self.output_file().set_metadata({'labels' : l, 'point_labels' : point_labels})        
 
         else:
             voxels = io.read_volume(ifile)
@@ -71,6 +71,51 @@ class TriangleMesh(RomiTask):
 
         io.write_triangle_mesh(self.output_file(), out)
 
+class ClusteredPointCloud(RomiTask):
+    upstream_task = luigi.TaskParameter(default=PointCloud)
+
+    min_vol = luigi.FloatParameter(default=1.0)
+    min_length = luigi.FloatParameter(default=10.0)
+
+    def run(self):
+        from sklearn.cluster import DBSCAN, SpectralClustering
+        import open3d
+        x = io.read_point_cloud(self.input_file())
+        all_points = np.asarray(x.points)
+        all_normals = np.asarray(x.normals)
+        all_colors = np.asarray(x.colors)
+
+        labels = self.input_file().get_metadata("labels")
+        point_labels = np.asarray(self.input_file().get_metadata("point_labels"), dtype=int)
+        print(point_labels.shape)
+        print(len(x.points))
+
+        geometries = []
+        output_fileset = self.output().get()
+
+        for i, l in enumerate(labels):
+            pcd = open3d.geometry.PointCloud()
+            points = all_points[point_labels==i, :]
+            normals = all_normals[point_labels==i, :]
+            colors = all_colors[point_labels==i, :]
+            if len(points > 0):
+                pcd.points = open3d.utility.Vector3dVector(points)
+                pcd.normals = open3d.utility.Vector3dVector(normals)
+                pcd.colors = open3d.utility.Vector3dVector(colors)
+
+                t, _ = open3d.geometry.TriangleMesh.create_from_point_cloud_poisson(pcd)
+                t.compute_adjacency_list()
+                k, cc, _ = t.cluster_connected_triangles()
+                k = np.asarray(k)
+                tri_np = np.asarray(t.triangles)
+                for j in range(len(cc)):
+                    newt = open3d.geometry.TriangleMesh(t.vertices, open3d.utility.Vector3iVector(tri_np[k==j, :]))
+                    newt.vertex_colors = t.vertex_colors
+                    newt.remove_unreferenced_vertices()
+
+                    f = output_fileset.create_file("%s_%03d"%(l, j))
+                    io.write_triangle_mesh(f, newt)
+                    f.set_metadata("label", l)
 
 class CurveSkeleton(RomiTask):
     """Computes a 3D curve skeleton
