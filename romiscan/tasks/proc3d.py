@@ -13,6 +13,7 @@ class PointCloud(RomiTask):
     """Computes a point cloud
     """
     upstream_task = luigi.TaskParameter(default=Voxels)
+    level_set_value = luigi.FloatParameter(default=0.0)
 
     def run(self):
         from romiscan import proc3d
