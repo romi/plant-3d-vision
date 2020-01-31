@@ -36,7 +36,6 @@ class Masks(FileByFileTask):
     """Mask images
     """
     upstream_task = luigi.TaskParameter(default=Undistorted)
-    undistorted_input = luigi.BoolParameter(default=True)
 
     type = luigi.Parameter()
     parameters = luigi.ListParameter(default=[])
@@ -96,6 +95,7 @@ class Segmentation2D(RomiTask):
     directory_weights = luigi.Parameter(default = appdirs.user_cache_dir())
 
     single_label = luigi.Parameter(default="")
+    resize = luigi.BoolParameter(default=False)
 
     def requires(self):
         return self.upstream_task()
@@ -103,12 +103,14 @@ class Segmentation2D(RomiTask):
 
     def run(self):
         from romiseg.Segmentation2D import segmentation
+        from skimage import transform
+        import PIL
         images_fileset = self.input().get().get_files(query=self.query)
         scan = self.input().scan
         self.label_names = self.labels.split(',')
         #APPLY SEGMENTATION
         images_segmented, id_im = segmentation(self.Sx, self.Sy, self.label_names, 
-                                        images_fileset, scan, self.model_segmentation_name, self.directory_weights)
+                                        images_fileset, scan, self.model_segmentation_name, self.directory_weights, self.resize)
         
         output_fileset = self.output().get()
         
@@ -118,7 +120,7 @@ class Segmentation2D(RomiTask):
         #f.id = 'images_matrix'
         
         #Save class prediction as images, one by one, class per class
-        logger.debug("Saving the segmented images, takes around 15 s")
+        logger.debug("Saving the .astype(np.uint8)segmented images, takes around 15 s")
         if self.single_label == "":
             for i in range(images_segmented.shape[0]):
                 for j in range(len(self.label_names)):
