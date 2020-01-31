@@ -26,7 +26,6 @@ class Scan(RomiTask):
         return FilesetTarget(DatabaseConfig().scan, "images")
 
     def _run_path(self, path, mask):
-        import lettucethink
         from lettucethink import scan
 
         cnc_type = self.scanner["cnc_firmware"].split("-")[0]
@@ -84,7 +83,6 @@ class Scan(RomiTask):
         scanner.store(self.output().get(), metadata=metadata)
 
     def run(self):
-        import lettucethink
         from lettucethink import path as lp
         if self.path["type"] == "circular":
             path = lp.circle(**self.path["args"])
@@ -95,19 +93,20 @@ class Scan(RomiTask):
 class CalibrationScan(Scan):
     n_line = luigi.IntParameter(default=5)
     def run(self):
+        from lettucethink import path as lp
+
         if self.path["type"] == "circular":
-            path = lettucethink.path.circle(**self.path["args"])
+            path = lp.circle(**self.path["args"])
         else:
             raise ValueError("Unknown path type")
 
         x0, y0, z, pan0, tilt0 = path[0]
         _, y1, _, _, _ = path[len(path)//4-1]
            
-        line_1 = lettucethink.path.line([x0, y0, z, pan0, tilt0], [
+        line_1 = lp.line([x0, y0, z, pan0, tilt0], [
             self.path["args"]["xc"], self.path["args"]["yc"], z, pan0, tilt0], self.n_line)
-        line_2 = lettucethink.path.line([x0, y0, z, pan0, tilt0],
-                [x0, y1, z, pan0, tilt0],
-                        n_line)
+        line_2 = lp.line([x0, y0, z, pan0, tilt0],
+                [x0, y1, z, pan0, tilt0], self.n_line)
         full_path = path + line_1 + line_2
         mask = len(path)*[False] + len(line_1)*[True] + len(line_2)*[True]
         self._run_path(full_path, mask)
