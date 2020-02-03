@@ -18,7 +18,7 @@ class PointCloud(RomiTask):
     def run(self):
         from romiscan import proc3d
         ifile = self.input_file()
-        if Voxels.multiclass:
+        if Voxels().multiclass:
             import open3d
             voxels = io.read_npz(ifile)
             l = list(voxels.keys())
