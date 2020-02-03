@@ -7,7 +7,7 @@ from setuptools import setup, Extension, find_packages
 s = setup(
     name='romiscan',
     packages=find_packages(),
-    scripts=['bin/run-task', 'bin/scanner-rest-api'],
+    scripts=['bin/run-task'],
     author='Timothée Wintz',
     author_email='timothee@timwin.fr',
     description='A plant scanner',
