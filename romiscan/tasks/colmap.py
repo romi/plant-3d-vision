@@ -30,7 +30,7 @@ class Colmap(RomiTask):
         # cli_args = json.loads(self.cli_args.replace("'", '"'))
 
         try:
-            bounding_box = images_fileset.scan.get_metadata()['scanner']['workspace']
+            bounding_box = images_fileset.scan.get_metadata()['workspace']
         except:
             bounding_box = None
 
