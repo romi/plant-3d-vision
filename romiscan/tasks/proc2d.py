@@ -5,7 +5,7 @@ import numpy as np
 from romidata.task import  RomiTask, FileByFileTask
 from romidata import io
 
-from romiscan.tasks.scan import Scan
+from romiscanner.scan import Scan
 from romiscan.tasks.colmap import Colmap
 
 logger = logging.getLogger('romiscan')
