@@ -140,6 +140,6 @@ class Segmentation2D(RomiTask):
                 im = (images_segmented[i, j, :, :].cpu().numpy() * 255).astype(np.uint8)
                 io.write_image(f, im, 'png' )
                 orig_metadata = images_fileset[i].get_metadata()
-                f.set_metadata({'image_id' : id_im[i][0], **orig_metadata, 'channel' : labels[j]}})
+                f.set_metadata({'image_id' : id_im[i][0], **orig_metadata, 'channel' : labels[j]})
 
         
