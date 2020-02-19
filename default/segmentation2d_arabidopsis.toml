@@ -19,7 +19,7 @@ directory_dataset = "data/dataset_stem_green/"
 [Segmentation2D]
 upstream_task = "ImagesFilesetExists"
 query = "{\"channel\":\"rgb\"}"
-model_id = "Resnet101_896_896_epoch51"
+model_id = "Resnet101dataset_final_896_896_epoch50"
 #directory_weights = "/home/alienor/Documents/training2D/weights/"
 Sx = 896
 Sy = 896
