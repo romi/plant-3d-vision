@@ -113,8 +113,6 @@ class Segmentation2D(RomiTask):
         import PIL
 
         images_fileset = self.input()["images"].get().get_files(query=self.query)
-        self.label_names = self.labels.split(',')
-
         model_file = self.input()["model"].get().get_file(self.model_id)
 
         #APPLY SEGMENTATION
