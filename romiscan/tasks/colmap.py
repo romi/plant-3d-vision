@@ -2,17 +2,16 @@ import luigi
 import numpy as np
 import logging
 
-from romidata.task import  RomiTask, FileByFileTask
+from romidata.task import  RomiTask, FileByFileTask, ImagesFilesetExists
 from romidata import io
 
 from romiscan.filenames import *
-from romiscanner.scan import Scan
 
 
 class Colmap(RomiTask):
     """Runs colmap on the "images" fileset
     """
-    upstream_task = luigi.TaskParameter(default=Scan)
+    upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)
 
     matcher = luigi.Parameter(default="exhaustive")
     compute_dense = luigi.BoolParameter()

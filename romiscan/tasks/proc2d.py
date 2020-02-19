@@ -2,10 +2,8 @@ import luigi
 import logging
 import numpy as np
 
-from romidata.task import  RomiTask, FileByFileTask
+from romidata.task import  RomiTask, FileByFileTask, ImagesFilesetExists
 from romidata import io
-
-from romiscanner.scan import Scan
 from romiscan.tasks.colmap import Colmap
 
 logger = logging.getLogger('romiscan')
@@ -13,13 +11,13 @@ logger = logging.getLogger('romiscan')
 class Undistorted(FileByFileTask):
     """Obtain undistorted images
     """
-    upstream_task = luigi.TaskParameter(default=Scan)
+    upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)
 
     def input(self):
-        return Scan().output()
+        return self.upstream_task().output()
 
     def requires(self):
-        return [Colmap(), Scan()] 
+        return [Colmap(), self.upstream_task()] 
 
     def f(self, fi, outfs):
         from romiscan import proc2d
