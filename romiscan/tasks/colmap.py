@@ -6,7 +6,7 @@ from romidata.task import  RomiTask, FileByFileTask
 from romidata import io
 
 from romiscan.filenames import *
-from romiscan.tasks.scan import Scan
+from romiscanner.scan import Scan
 
 
 class Colmap(RomiTask):

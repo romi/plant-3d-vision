@@ -5,7 +5,7 @@ import numpy as np
 from romidata.task import  RomiTask, FileByFileTask
 from romidata import io
 
-from romiscan.tasks.scan import *
+from romiscanner.scan import *
 from romiscan.tasks.colmap import *
 from romiscan.tasks.proc2d import *
 from romiscan.tasks.proc3d import *

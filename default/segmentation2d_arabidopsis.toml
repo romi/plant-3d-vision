@@ -14,7 +14,7 @@ tsboard = "board/"
 directory_dataset = "data/dataset_stem_green/"
 
 [Segmentation2D]
-upstream_task = "Scan"
+upstream_task = "VirtualScan"
 query = "{\"channel\":\"rgb\"}"
 labels = "background,flower,peduncle,stem,bud,leaf,fruit"
 model_name = "Resnet101"
