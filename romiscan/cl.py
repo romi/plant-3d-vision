@@ -171,9 +171,7 @@ class Backprojection():
 
 
         for fi in fs.get_files():
-
-
-            if label is not None and fi.get_metadata("label") != label:
+            if label is not None and fi.get_metadata("channel") != label:
                 continue
 
             try:
