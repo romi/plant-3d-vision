@@ -1,6 +1,9 @@
 [accessory]
 calibration_scan_id = "calib_scan_shortpath"
 
+[ModelFileset]
+scan_id = "vscan_data"
+
 [Masks]
 type = "excess_green"
 dilation = 5
@@ -14,11 +17,9 @@ tsboard = "board/"
 directory_dataset = "data/dataset_stem_green/"
 
 [Segmentation2D]
-upstream_task = "VirtualScan"
+upstream_task = "ImagesFilesetExists"
 query = "{\"channel\":\"rgb\"}"
-labels = "background,flower,peduncle,stem,bud,leaf,fruit"
-model_name = "Resnet101"
-model_segmentation_name = "Resnet101_896_896_epoch51.pt"
+model_id = "Resnet101_896_896_epoch51"
 #directory_weights = "/home/alienor/Documents/training2D/weights/"
 Sx = 896
 Sy = 896
