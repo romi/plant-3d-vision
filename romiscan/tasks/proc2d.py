@@ -114,6 +114,10 @@ class Segmentation2D(RomiTask):
 
         images_fileset = self.input()["images"].get().get_files(query=self.query)
         model_file = self.input()["model"].get().get_file(self.model_id)
+        if model_file is None:
+            raise IOError("unable to find model: %s"%self.model_id)
+
+        labels = model_file.get_metadata("label_names")
 
         #APPLY SEGMENTATION
         images_segmented, id_im = segmentation(self.Sx, self.Sy, images_fileset, model_file, self.resize)
@@ -123,19 +127,19 @@ class Segmentation2D(RomiTask):
         logger.debug("Saving the .astype(np.uint8)segmented images, takes around 15 s")
         if self.single_label == "":
             for i in range(images_segmented.shape[0]):
-                for j in range(len(self.label_names)):
-                    f = output_fileset.create_file('%03d_%s'%(i, self.label_names[j]))
+                for j in range(len(labels)):
+                    f = output_fileset.create_file('%03d_%s'%(i, labels[j]))
                     im = (images_segmented[i, j, :, :].cpu().numpy() * 255).astype(np.uint8)
                     io.write_image(f, im, 'png' )
                     orig_metadata = images_fileset[i].get_metadata()
-                    f.set_metadata({'image_id' : id_im[i][0], 'label' : self.label_names[j], **orig_metadata})
+                    f.set_metadata({'image_id' : id_im[i][0], 'label' : labels[j], **orig_metadata})
         else:
             for i in range(images_segmented.shape[0]):
-                j = self.label_names.index(self.single_label)
-                f = output_fileset.create_file('%03d_%s'%(i, self.label_names[j]))
+                j = labels.index(self.single_label)
+                f = output_fileset.create_file('%03d_%s'%(i, labels[j]))
                 im = (images_segmented[i, j, :, :].cpu().numpy() * 255).astype(np.uint8)
                 io.write_image(f, im, 'png' )
                 orig_metadata = images_fileset[i].get_metadata()
-                f.set_metadata({'image_id' : id_im[i][0], 'label' : self.label_names[j], **orig_metadata})
+                f.set_metadata({'image_id' : id_im[i][0], 'label' : labels[j], **orig_metadata})
 
         
