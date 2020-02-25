@@ -14,6 +14,7 @@ class PointCloud(RomiTask):
     """
     upstream_task = luigi.TaskParameter(default=Voxels)
     level_set_value = luigi.FloatParameter(default=0.0)
+    background_prior = luigi.FloatParameter(default=-10)
 
     def run(self):
         from romiscan import proc3d
@@ -26,6 +27,9 @@ class PointCloud(RomiTask):
 
             for i in range(len(l)):
                 res[:,:,:,i] = voxels[l[i]]
+                if l[i] == 'background':
+                    res[:,:,:,i] += self.background_prior
+
 
             res = np.argmax(res, axis=3)
             pcd = open3d.geometry.PointCloud()
