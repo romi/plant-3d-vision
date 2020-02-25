@@ -36,7 +36,7 @@ class Colmap(RomiTask):
             except:
                 raise
 
-        if self.calibration_scan_id is not "":
+        if self.calibration_scan_id != "":
             db = images_fileset.scan.db
             calibration_scan = db.get_scan(self.calibration_scan_id)
             colmap_fs = matching = [s for s in calibration_scan.get_filesets() if "Colmap" in s.id]
