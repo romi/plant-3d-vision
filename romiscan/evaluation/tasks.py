@@ -1,10 +1,15 @@
 import luigi
-from romidata import io
-from romiscan.tasks import proc2d, proc3d
-from romidata.task import FilesetExists, RomiTask, FilesetTarget, DatabaseConfig, ImagesFilesetExists
-from romiscanner.scan import VirtualScan
 import numpy as np
+import tempfile
+import os
+
+from romidata import io
+from romidata.task import FilesetExists, RomiTask, FilesetTarget, DatabaseConfig, ImagesFilesetExists
+
 from romiscan.log import logger
+from romiscan.tasks import proc2d, proc3d
+from romiscanner.lpy import VirtualPlant
+from romiscan.tasks.cl import Voxels
 
 class EvaluationTask(RomiTask):
     upstream_task = luigi.TaskParameter()
@@ -22,11 +27,47 @@ class EvaluationTask(RomiTask):
         res = self.evaluate()
         io.write_json(self.output_file(), res)
 
-try:
-    from open3d import open3d
-except:
-    import open3d
-"""
+class VoxelGroundTruth(RomiTask):
+    upstream_task = luigi.TaskParameter(default=VirtualPlant)
+
+    def run(self):
+        import pywavefront
+        import open3d
+        import trimesh
+        x = self.input_file()
+        mtl_file = self.input().get().get_file(x.id + "_mtl")
+        outfs = self.output().get()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            io.to_file(x, os.path.join(tmpdir, "plant.obj"))
+            io.to_file(x, os.path.join(tmpdir, "plant.mtl"))
+            x = pywavefront.Wavefront(os.path.join(tmpdir, "plant.obj"), collect_faces=True, create_materials=True)
+            res = {}
+            min= np.min(x.vertices, axis=0)
+            max = np.max(x.vertices, axis=0)
+            arr_size = np.asarray((max-min) / Voxels().voxel_size, dtype=np.int)+ 1
+            for k in x.meshes.keys():
+                t = open3d.geometry.TriangleMesh()
+                t.triangles = open3d.utility.Vector3iVector(np.asarray(x.meshes[k].faces))
+                t.vertices = open3d.utility.Vector3dVector(np.asarray(x.vertices))
+                t.compute_triangle_normals()
+                open3d.io.write_triangle_mesh(os.path.join(tmpdir, "tmp.stl"), t)
+                m = trimesh.load(os.path.join(tmpdir, "tmp.stl"))
+                v = m.voxelized(Voxels().voxel_size)
+
+
+                class_name = x.meshes[k].materials[0].name
+                arr = np.zeros(arr_size)
+                voxel_size = Voxels().voxel_size
+                origin_idx = np.asarray((v.origin - min) / voxel_size, dtype=np.int) 
+                arr[origin_idx[0]:origin_idx[0] + v.matrix.shape[0],origin_idx[1]:origin_idx[1] + v.matrix.shape[1], origin_idx[2]:origin_idx[2] + v.matrix.shape[2]] = v.matrix
+                res[class_name] = arr
+
+            bg = np.ones((arr_size))
+            for k in res.keys():
+                bg = np.minimum(bg, 1-res[k])
+            res["background"] = bg
+            io.write_npz(self.output_file(), res)
+              
 class PointCloudGroundTruth(FilesetExists):
     fileset_id = "PointCloudGroundTruth"
 
@@ -34,7 +75,9 @@ class PointCloudEvaluation(EvaluationTask):
     upstream_task = luigi.TaskParameter(default=proc3d.PointCloud)
     ground_truth = luigi.TaskParameter(default=PointCloudGroundTruth)
     max_distance = luigi.FloatParameter(default=2)
+
     def evaluate(self):
+        import open3d
         source = io.read_point_cloud(self.input_file())
         target = io.read_point_cloud(self.ground_truth().output().get().get_files()[0])
         res = open3d.registration.evaluate_registration(source, target, self.max_distance)
@@ -43,7 +86,7 @@ class PointCloudEvaluation(EvaluationTask):
             "fitness": res.fitness,
             "inlier_rmse": res.inlier_rmse
         }
-"""
+
 class Segmentation2DEvaluation(EvaluationTask):
     upstream_task = luigi.TaskParameter(default = proc2d.Segmentation2D)
     ground_truth = luigi.TaskParameter(default = ImagesFilesetExists)
@@ -109,4 +152,6 @@ class Segmentation2DEvaluation(EvaluationTask):
             #recall_tot[c] =recall
         
 
+
 	#return {'accuracy': accuracy_tot, 'recall': recall_tot, 'precision': precision_tot}
+

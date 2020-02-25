@@ -361,16 +361,15 @@ class ColmapRunner():
                 fi.set_metadata("camera", camera)
 
         # Save bounding box (by sparse pcd) in scan metadata
-        if self.fileset.scan.get_metadata("bounding_box") is None:
-            points_array = np.asarray(sparse_pcd.points)
+        points_array = np.asarray(sparse_pcd.points)
 
-            x_min, y_min, z_min = points_array.min(axis=0)
-            x_max, y_max, z_max = points_array.max(axis=0)
-            self.fileset.scan.set_metadata("bounding_box", {"x" : [x_min, x_max],"y" : [y_min, y_max],
-            "z" : [z_min, z_max] })
+        x_min, y_min, z_min = points_array.min(axis=0)
+        x_max, y_max, z_max = points_array.max(axis=0)
+        bounding_box = {"x" : [x_min, x_max],"y" : [y_min, y_max],
+        "z" : [z_min, z_max]}
 
 
-        return points, images, cameras, sparse_pcd, dense_pcd
+        return points, images, cameras, sparse_pcd, dense_pcd, bounding_box
 
 
 

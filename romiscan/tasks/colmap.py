@@ -31,7 +31,10 @@ class Colmap(RomiTask):
         try:
             bounding_box = images_fileset.scan.get_metadata()['workspace']
         except:
-            bounding_box = None
+            try:
+                bounding_box = images_fileset.scan.get_metadata('scanner')['workspace']
+            except:
+                raise
 
         if self.calibration_scan_id is not "":
             db = images_fileset.scan.db
@@ -79,7 +82,7 @@ class Colmap(RomiTask):
             use_calibration,
             bounding_box)
 
-        points, images, cameras, sparse, dense = colmap_runner.run()
+        points, images, cameras, sparse, dense, bounding_box = colmap_runner.run()
 
         if len(sparse.points) > 0:
             outfile = self.output_file(COLMAP_SPARSE_ID)
@@ -93,3 +96,4 @@ class Colmap(RomiTask):
         if dense is not None and len(dense.points) > 0:
             outfile = self.output_file(COLMAP_DENSE_ID)
             io.write_point_cloud(outfile, dense)
+        self.output().get().set_metadata("bounding_box", bounding_box)

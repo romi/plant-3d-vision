@@ -19,8 +19,7 @@ from romiscan.proc3d import point2index
 from romidata import io
 from skimage.morphology import binary_dilation
 
-logger = logging.getLogger('romiscan')
-
+from .log import logger
 
 ctx = cl.create_some_context()
 queue = cl.CommandQueue(ctx)
@@ -104,6 +103,8 @@ class Backprojection():
             ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=np.array(
                 self.shape, dtype=np.int32)
         )
+        logger.debug("buffer size = ")
+        logger.debug(self.shape)
 
     def process_view(self, intrinsics, rot, tvec, mask):
         """
@@ -120,11 +121,15 @@ class Backprojection():
         mask: np.ndarray
             mask array (or float array if type is averaging)
         """
+        if self.dtype == np.float32 and mask.dtype == np.uint8:
+            logger.debug("type is uint8")
+            mask = mask / 255
         if self.log and self.dtype == np.float32:
             mask = np.log(mask + eps)
         intrinsics_h = np.ascontiguousarray(intrinsics).astype(np.float32)
         rot_h = np.ascontiguousarray(rot).astype(np.float32)
         tvec_h = np.ascontiguousarray(tvec).astype(np.float32)
+        logger.debug("mask max: %.2f"%(mask.max()))
         mask_h = np.ascontiguousarray(mask).astype(self.dtype)
 
         mask_d = cl.image_from_array(ctx, mask_h, 1)
@@ -148,6 +153,8 @@ class Backprojection():
     def process_fileset(self, fs):
         if self.multiclass:
             labels = self.get_labels(fs)
+            logger.debug("labels: ")
+            logger.debug(labels)
             result = np.zeros((len(labels), *self.shape))
             for i,l in enumerate(labels):
                 result[i, :] = self.process_label(fs, l)
@@ -168,11 +175,13 @@ class Backprojection():
             poses file computed by colmap
         """
         self.clear()
+        logger.debug("processing label %s"%label)
 
 
         for fi in fs.get_files():
             if label is not None and fi.get_metadata("channel") != label:
                 continue
+            logger.debug("processing file %s"%fi.id)
 
             try:
                 cam = fi.get_metadata('camera')
@@ -199,7 +208,7 @@ class Backprojection():
     def get_labels(self, fs):
         labels = set()
         for fi in fs.get_files():
-            label = fi.get_metadata('label')
+            label = fi.get_metadata('channel')
             if label is not None:
                 labels.add(label)
         return list(labels)
