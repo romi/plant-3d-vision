@@ -11,7 +11,7 @@ class EvaluationTask(RomiTask):
     ground_truth = luigi.TaskParameter()
 
     def output(self):
-        fileset_id = self.upstream_task().task_id + "Evaluation"
+        fileset_id = self.task_family #self.upstream_task().task_id + "Evaluation"
         return FilesetTarget(DatabaseConfig().scan, fileset_id)
 
 
@@ -47,15 +47,20 @@ class PointCloudEvaluation(EvaluationTask):
 class Segmentation2DEvaluation(EvaluationTask):
     upstream_task = luigi.TaskParameter(default = proc2d.Segmentation2D)
     ground_truth = luigi.TaskParameter(default = ImagesFilesetExists)
+    hist_bins = luigi.IntParameter(default = 100)
+
     def evaluate(self):
         
         prediction_fileset = self.upstream_task().output().get()
         gt_fileset = self.ground_truth().output().get()
         channels = gt_fileset.get_metadata('channels')
         channels.remove('rgb')
-        accuracy_tot = {}
-        precision_tot = {}
-        recall_tot = {}
+        #accuracy_tot = {}
+        #precision_tot = {}
+        #recall_tot = {}
+        
+        histograms = {}
+
         for c in channels:
             accuracy = []
             precision = []
@@ -63,26 +68,45 @@ class Segmentation2DEvaluation(EvaluationTask):
             logger.debug(prediction_fileset)
             preds = prediction_fileset.get_files(query = {'channel' : c})
             logger.debug(preds)
-            true_positive = 0 
-            true_negative = 0
-            false_positive = 0 
-            false_negative = 0
+            hist_high, disc = np.histogram(np.array([]), self.hist_bins, range=(0,1))
+            hist_low, disc = np.histogram(np.array([]), self.hist_bins, range=(0,1))
+            #true_positive = 0 
+            #true_negative = 0
+            #false_positive = 0 
+            #false_negative = 0
             
             for pred in preds:
-                ground_truth = gt_fileset.get_files(query = {'channel': c, 'shot_id': pred.get_metadata('shot_id')})[0]
-                im_pred = io.read_image(pred)
-                im_gt = io.read_image(ground_truth)
-                im_pred = im_pred > (255/2)
-                im_gt = im_gt == 255
-                true_positive += np.sum(im_pred * im_gt * 1)
-                true_negative += np.sum((1-im_pred)*(1-im_gt))
-                false_positive += np.sum(im_pred * (1-im_gt))
-                false_negative += np.sum(im_gt * (1-im_pred))
+                        ground_truth = gt_fileset.get_files(query = {'channel': c, 'shot_id': pred.get_metadata('shot_id')})[0]
+                        im_pred = io.read_image(pred)
+                        im_gt = io.read_image(ground_truth)
+                
+                        im_gt = im_gt // 255
+                        im_gt_high = im_gt * im_pred
+                        im_gt_high = im_gt_high[im_gt != 0]
 
-            accuracy= (true_positive + true_negative)/ (true_positive + true_negative + false_positive + false_negative)
-            precision= (true_positive/(true_positive + false_positive))
-            recall = (true_positive/(true_positive + false_negative))
-            accuracy_tot[c] = accuracy
-            precision_tot[c] = precision
-            recall_tot[c] =recall
-        return {'accuracy': accuracy_tot, 'recall': recall_tot, 'precision': precision_tot}
+                        im_gt = 1 - im_gt
+                        im_gt_low = im_gt * im_pred
+                        im_gt_low = im_gt_low[im_gt != 0] 	
+
+            hist_high_pred, bins_high = np.histogram(im_gt_high, self.hist_bins, range=(0,1))
+            hist_low_pred, bins_low = np.histogram(im_gt_low, self.hist_bins, range=(0,1))
+            hist_high += hist_high_pred
+            hist_low += hist_low_pred
+
+            histograms[c] = {"hist_high": hist_high.tolist(), "bins_high": bins_high.tolist(), "hist_low": hist_low.tolist(), "bins_low": bins_low.tolist()}
+        return histograms
+		
+                #true_positive += np.sum(im_pred * im_gt * 1)
+                #true_negative += np.sum((1-im_pred)*(1-im_gt))
+                #false_positive += np.sum(im_pred * (1-im_gt))
+                #false_negative += np.sum(im_gt * (1-im_pred))
+
+            #accuracy= (true_positive + true_negative)/ (true_positive + true_negative + false_positive + false_negative)
+            #precision= (true_positive/(true_positive + false_positive))
+            #recall = (true_positive/(true_positive + false_negative))
+            #accuracy_tot[c] = accuracy
+            #precision_tot[c] = precision
+            #recall_tot[c] =recall
+        
+
+	#return {'accuracy': accuracy_tot, 'recall': recall_tot, 'precision': precision_tot}
