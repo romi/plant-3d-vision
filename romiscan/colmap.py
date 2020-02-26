@@ -281,6 +281,10 @@ class ColmapRunner():
         os.makedirs(os.path.join(colmap_ws, 'images'), exist_ok=True)
 
         posefile = open('%s/poses.txt' % colmap_ws, mode='w')
+        exact_poses = False
+        for f in self.fileset.get_files():
+            if f.get_metadata('pose') is not None:
+                exact_poses = True
         for i, file in enumerate(self.fileset.get_files()):
             filename = "%s.jpg"%file.id
             target = os.path.join(os.path.join(
@@ -297,8 +301,10 @@ class ColmapRunner():
 
             if self.use_calibration:
                 p = file.get_metadata('calibrated_pose')
-            else:
+            else if exact_poses:
                 p = file.get_metadata('pose')
+            else:
+                p = file.get_metadata('approximate_pose')
 
             if p is not None:
                 s = '%s %d %d %d\n' % (filename, p[0], p[1], p[2])
