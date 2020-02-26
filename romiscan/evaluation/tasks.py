@@ -2,6 +2,7 @@ import luigi
 import numpy as np
 import tempfile
 import os
+from scipy.ndimage.filters import gaussian_filter
 
 from romidata import io
 from romidata.task import FilesetExists, RomiTask, FilesetTarget, DatabaseConfig, ImagesFilesetExists
@@ -60,7 +61,7 @@ class VoxelGroundTruth(RomiTask):
                 voxel_size = Voxels().voxel_size
                 origin_idx = np.asarray((v.origin - min) / voxel_size, dtype=np.int) 
                 arr[origin_idx[0]:origin_idx[0] + v.matrix.shape[0],origin_idx[1]:origin_idx[1] + v.matrix.shape[1], origin_idx[2]:origin_idx[2] + v.matrix.shape[2]] = v.matrix
-                res[class_name] = arr
+                res[class_name] = gaussian_filter(arr, voxel_size)
 
             bg = np.ones((arr_size))
             for k in res.keys():
