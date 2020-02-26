@@ -129,7 +129,7 @@ class Segmentation2DEvaluation(EvaluationTask):
 
                         im_gt = 1 - im_gt
                         im_gt_low = im_gt * im_pred
-                        im_gt_low = im_gt_low[im_gt != 0] 	
+                        im_gt_low = im_gt_low[im_gt != 0] 
 
             hist_high_pred, bins_high = np.histogram(im_gt_high, self.hist_bins, range=(0,1))
             hist_low_pred, bins_low = np.histogram(im_gt_low, self.hist_bins, range=(0,1))
@@ -138,7 +138,7 @@ class Segmentation2DEvaluation(EvaluationTask):
 
             histograms[c] = {"hist_high": hist_high.tolist(), "bins_high": bins_high.tolist(), "hist_low": hist_low.tolist(), "bins_low": bins_low.tolist()}
         return histograms
-		
+
                 #true_positive += np.sum(im_pred * im_gt * 1)
                 #true_negative += np.sum((1-im_pred)*(1-im_gt))
                 #false_positive += np.sum(im_pred * (1-im_gt))
@@ -153,5 +153,40 @@ class Segmentation2DEvaluation(EvaluationTask):
         
 
 
-	#return {'accuracy': accuracy_tot, 'recall': recall_tot, 'precision': precision_tot}
+#return {'accuracy': accuracy_tot, 'recall': recall_tot, 'precision': precision_tot}
+
+class VoxelsEvaluation(EvaluationTask):
+    upstream_task = luigi.TaskParameter(default = cl.Voxels)
+    ground_truth = luigi.TaskParameter(default = VoxelGroundTruth)
+    hist_bins = luigi.IntParameter(default = 100)
+
+    def evaluate(self):
+        prediction_file = self.upstream_task().output().get().get_files()[0]
+        gt_file = self.ground_truth().output().get().get_files()[0]
+
+        predictions = io.read_npz(prediction_file)
+        gts = io.read_npz(gt_file)
+
+        channels = list(gts.keys())
+        histograms = {}
+
+        for c in channels:
+            accuracy = []
+            precision = []
+            recall = []
+            logger.debug(prediction_fileset)
+
+            prediction_c = predictions[c]
+            gt_c = gts[c]
+
+            im_gt_high = prediction_c[gt_c > 0.5]
+            im_gt_low = prediction_c[gt_c < 0.5] 
+
+            hist_high, bins_high = np.histogram(im_gt_high, self.hist_bins, range=(0,1))
+            hist_low, bins_low = np.histogram(im_gt_low, self.hist_bins, range=(0,1))
+
+            histograms[c] = {"hist_high": hist_high.tolist(), "bins_high": bins_high.tolist(), "hist_low": hist_low.tolist(), "bins_low": bins_low.tolist()}
+        return histograms
+
+
 
