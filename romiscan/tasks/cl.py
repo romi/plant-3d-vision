@@ -37,9 +37,10 @@ class Voxels(RomiTask):
 
         if self.use_colmap_poses:
             colmap_fileset = self.input()['colmap'].get()
+            bounding_box = colmap_fileset.get_metadata("bounding_box")
+        else:
+            bounding_box = self.output().get().scan.get_metadata("bounding_box")
 
-        scan = masks_fileset.scan
-        bounding_box = scan.get_metadata("bounding_box")
         
 
         x_min, x_max = bounding_box["x"]

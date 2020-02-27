@@ -2,17 +2,16 @@ import luigi
 import numpy as np
 import logging
 
-from romidata.task import  RomiTask, FileByFileTask
+from romidata.task import  RomiTask, FileByFileTask, ImagesFilesetExists
 from romidata import io
 
 from romiscan.filenames import *
-from romiscan.tasks.scan import Scan
 
 
 class Colmap(RomiTask):
     """Runs colmap on the "images" fileset
     """
-    upstream_task = luigi.TaskParameter(default=Scan)
+    upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)
 
     matcher = luigi.Parameter(default="exhaustive")
     compute_dense = luigi.BoolParameter()
@@ -30,11 +29,14 @@ class Colmap(RomiTask):
         # cli_args = json.loads(self.cli_args.replace("'", '"'))
 
         try:
-            bounding_box = images_fileset.scan.get_metadata()['scanner']['workspace']
+            bounding_box = images_fileset.scan.get_metadata()['workspace']
         except:
-            bounding_box = None
+            try:
+                bounding_box = images_fileset.scan.get_metadata('scanner')['workspace']
+            except:
+                raise
 
-        if self.calibration_scan_id is not "":
+        if self.calibration_scan_id != "":
             db = images_fileset.scan.db
             calibration_scan = db.get_scan(self.calibration_scan_id)
             colmap_fs = matching = [s for s in calibration_scan.get_filesets() if "Colmap" in s.id]
@@ -80,7 +82,7 @@ class Colmap(RomiTask):
             use_calibration,
             bounding_box)
 
-        points, images, cameras, sparse, dense = colmap_runner.run()
+        points, images, cameras, sparse, dense, bounding_box = colmap_runner.run()
 
         if len(sparse.points) > 0:
             outfile = self.output_file(COLMAP_SPARSE_ID)
@@ -94,3 +96,4 @@ class Colmap(RomiTask):
         if dense is not None and len(dense.points) > 0:
             outfile = self.output_file(COLMAP_DENSE_ID)
             io.write_point_cloud(outfile, dense)
+        self.output().get().set_metadata("bounding_box", bounding_box)
