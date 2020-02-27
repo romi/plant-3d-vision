@@ -91,7 +91,7 @@ class Colmap(RomiTask):
 
                 images_fileset.get_files()[i].set_metadata("calibrated_pose", pose)
 
-        use_calibration = self.calibration_scan_id is not ""
+        use_calibration = self.calibration_scan_id != ""
 
         colmap_runner = colmap.ColmapRunner(
             images_fileset,
