@@ -23,15 +23,23 @@ class PointCloud(RomiTask):
             import open3d
             voxels = io.read_npz(ifile)
             l = list(voxels.keys())
+            background_idx = l.index("background")
+            # l.remove("background")
             res = np.zeros((*voxels[l[0]].shape, len(l)))
-
             for i in range(len(l)):
                 res[:,:,:,i] = voxels[l[i]]
                 if l[i] == 'background':
                     res[:,:,:,i] += self.background_prior
 
+            # bg = voxels["background"] > voxels["background"].max() - 10
+            # logger.critical(voxels["background"].max())
 
-            res = np.argmax(res, axis=3)
+            res_idx = np.argmax(res, axis=3)
+            # res_value = np.amax(res, axis=3)
+
+            # threshold= np.quantile(res_value.flatten(), 0.99)
+            # res_idx[res_value < threshold] = background_idx # low scores belong to background
+
             pcd = open3d.geometry.PointCloud()
             origin = np.array(ifile.get_metadata('origin'))
 
@@ -40,7 +48,7 @@ class PointCloud(RomiTask):
 
             for i in range(len(l)):
                 if l[i] != 'background':
-                    out = proc3d.vol2pcd(res == i, origin, voxel_size, self.level_set_value)
+                    out = proc3d.vol2pcd(res_idx == i, origin, voxel_size, self.level_set_value)
                     color = np.zeros((len(out.points), 3))
                     color[:] =np.random.rand(3)[np.newaxis, :]
                     color = open3d.utility.Vector3dVector(color)

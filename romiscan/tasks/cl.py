@@ -2,7 +2,7 @@ import luigi
 import logging
 import numpy as np
 
-from romidata.task import  RomiTask, FileByFileTask
+from romidata.task import  RomiTask, FileByFileTask, ImagesFilesetExists
 from romidata import io
 
 from romiscan.tasks.colmap import Colmap
@@ -40,7 +40,8 @@ class Voxels(RomiTask):
             bounding_box = colmap_fileset.get_metadata("bounding_box")
         else:
             bounding_box = self.output().get().scan.get_metadata("bounding_box")
-
+        if bounding_box is None:
+            bounding_box = ImagesFilesetExists().output().get().get_metadata("bounding_box")
         
 
         x_min, x_max = bounding_box["x"]

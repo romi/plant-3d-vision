@@ -26,7 +26,8 @@ s = setup(
         'pybind11',
         'colorlog',
         'scikit-image',
-        'open3d==0.9'
+        'open3d==0.9',
+        'pywavefront'
     ],
     include_package_data=True,
 )

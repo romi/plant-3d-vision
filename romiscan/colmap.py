@@ -292,7 +292,7 @@ class ColmapRunner():
             if not os.path.isfile(target):
                 go = True
                 if 'channel' in file.metadata.keys():
-                    if file.metadata['channel'] == 'segmentation':
+                    if file.metadata['channel'] != 'rgb':
                         go = False
                 if go:
                     im = io.read_image(file)
@@ -301,7 +301,7 @@ class ColmapRunner():
 
             if self.use_calibration:
                 p = file.get_metadata('calibrated_pose')
-            else if exact_poses:
+            elif exact_poses:
                 p = file.get_metadata('pose')
             else:
                 p = file.get_metadata('approximate_pose')
