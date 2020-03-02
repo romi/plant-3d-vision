@@ -27,7 +27,8 @@ s = setup(
         'colorlog',
         'scikit-image',
         'open3d==0.9',
-        'pywavefront'
+        'pywavefront',
+        'trimesh'
     ],
     include_package_data=True,
 )
