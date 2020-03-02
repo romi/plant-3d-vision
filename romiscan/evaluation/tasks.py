@@ -69,8 +69,39 @@ class VoxelGroundTruth(RomiTask):
             res["background"] = bg
             io.write_npz(self.output_file(), res)
               
-class PointCloudGroundTruth(FilesetExists):
-    fileset_id = "PointCloudGroundTruth"
+class PointCloudGroundTruth(RomiTask):
+    upstream_task = luigi.TaskParameter(default=VirtualPlant)
+    pcd_size = luigi.IntParameter(default=100000)
+
+    def run(self):
+        import pywavefront
+        import open3d
+        import trimesh
+        x = self.input_file()
+        mtl_file = self.input().get().get_file(x.id + "_mtl")
+        outfs = self.output().get()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            io.to_file(x, os.path.join(tmpdir, "plant.obj"))
+            io.to_file(x, os.path.join(tmpdir, "plant.mtl"))
+            x = pywavefront.Wavefront(os.path.join(tmpdir, "plant.obj"), collect_faces=True, create_materials=True)
+            res = open3d.geometry.PointCloud()
+            point_labels = []
+            labels = []
+
+            for i, k in enumerate(x.meshes.keys()):
+                t = open3d.geometry.TriangleMesh()
+                t.triangles = open3d.utility.Vector3iVector(np.asarray(x.meshes[k].faces))
+                t.vertices = open3d.utility.Vector3dVector(np.asarray(x.vertices))
+                t.compute_triangle_normals()
+
+                pcd = t.sample_points_poisson_disk(self.pcd_size)
+                res = res + pcd
+                class_name = x.meshes[k].materials[0].name
+                labels += class_name
+                point_labels += [i] * len(pcd.points)
+
+            io.write_point_cloud(self.output_file(), res)
+            self.output_file().set_metadata({'labels' : labels, 'point_labels' : point_labels})        
 
 class PointCloudEvaluation(EvaluationTask):
     upstream_task = luigi.TaskParameter(default=proc3d.PointCloud)
