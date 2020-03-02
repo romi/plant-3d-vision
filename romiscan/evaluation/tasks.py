@@ -94,10 +94,16 @@ class PointCloudGroundTruth(RomiTask):
                 t.vertices = open3d.utility.Vector3dVector(np.asarray(x.vertices))
                 t.compute_triangle_normals()
 
+                # The following is needed because there are rotation in lpy's output...
                 pcd = t.sample_points_poisson_disk(self.pcd_size)
+                pcd_pts = np.asarray(pcd.points)
+                pcd_pts = pcd_pts[:,[0,2,1]]
+                pcd_pts[:, 1] *= -1
+                pcd.points = open3d.utility.Vector3dVector(pcd_pts)
+
                 res = res + pcd
                 class_name = x.meshes[k].materials[0].name
-                labels += class_name
+                labels += [class_name]
                 point_labels += [i] * len(pcd.points)
 
             io.write_point_cloud(self.output_file(), res)
@@ -112,12 +118,41 @@ class PointCloudEvaluation(EvaluationTask):
         import open3d
         source = io.read_point_cloud(self.input_file())
         target = io.read_point_cloud(self.ground_truth().output().get().get_files()[0])
-        res = open3d.registration.evaluate_registration(source, target, self.max_distance)
-        return {
-            "id": self.upstream_task().task_id,
-            "fitness": res.fitness,
-            "inlier_rmse": res.inlier_rmse
-        }
+        labels = self.input_file().get_metadata('labels')
+        labels_gt = self.ground_truth().output_file().get_metadata('labels')
+        point_labels = np.array(self.input_file().get_metadata('point_labels'))
+        point_labels_gt = np.array(self.ground_truth().output_file().get_metadata('point_labels'))
+        if labels is not None:
+            eval = { "id": self.upstream_task().task_id }
+            for i,l in enumerate(labels):
+                subpcd_source = open3d.geometry.PointCloud()
+                if np.sum(point_labels==i) > 0:
+                    subpcd_source.points = open3d.utility.Vector3dVector(np.asarray(source.points)[point_labels == i])
+                try:
+                    j = labels_gt.index(l)
+                except:
+                    continue
+                subpcd_target = open3d.geometry.PointCloud()
+                if np.sum(point_labels_gt==j) > 0:
+                    subpcd_target.points = open3d.utility.Vector3dVector(np.asarray(target.points)[point_labels_gt == j])
+                else:
+                    continue
+                logger.debug("label : %s"%l)
+                logger.debug("gt points: %i"%len(subpcd_target.points))
+                logger.debug("pcd points: %i"%len(subpcd_source.points))
+                res = open3d.registration.evaluate_registration(subpcd_source, subpcd_target, self.max_distance)
+                eval[l] = {
+                    "fitness": res.fitness,
+                    "inlier_rmse": res.inlier_rmse
+                }
+            return eval
+        else:
+            res = open3d.registration.evaluate_registration(source, target, self.max_distance)
+            return {
+                "id": self.upstream_task().task_id,
+                "fitness": res.fitness,
+                "inlier_rmse": res.inlier_rmse
+            }
 
 class Segmentation2DEvaluation(EvaluationTask):
     upstream_task = luigi.TaskParameter(default = proc2d.Segmentation2D)
@@ -213,8 +248,11 @@ class VoxelsEvaluation(EvaluationTask):
 
             prediction_c = predictions[c]
             gt_c = gts[c]
+
+            # The following is needed because there are rotation in lpy's output...
             gt_c = np.swapaxes(gt_c, 2,1)
             gt_c = np.flip(gt_c, 1)
+
             logger.critical(gt_c.shape)
             logger.critical(prediction_c.shape)
             gt_c = gt_c[0:prediction_c.shape[0],0:prediction_c.shape[1] ,0:prediction_c.shape[2]]
