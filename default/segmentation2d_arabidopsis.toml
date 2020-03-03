@@ -1,27 +1,28 @@
+[Colmap]
+matcher = "exhaustive"
+compute_dense = true
+
+[Colmap.cli_args.feature_extractor]
+"--ImageReader.single_camera" = "1"
+"--SiftExtraction.use_gpu" = "1"
+
+[Colmap.cli_args.exhaustive_matcher]
+"--SiftMatching.use_gpu" = "1"
+
+[Colmap.cli_args.model_aligner]
+"--robust_alignment_max_error" = "10"
+
 [accessory]
 calibration_scan_id = "calib_scan_shortpath"
 
 [ModelFileset]
-scan_id = "vscan_data"
-
-[Masks]
-type = "excess_green"
-dilation = 5
-binarize = true
-threshold = 0.0
-
-[TrainingDirectory]
-path = "/home/alienor/Documents/training2D/" #replace by path to your database
-directory_weights = "weights/"
-tsboard = "board/"
-directory_dataset = "data/blabla/"
+scan_id = "models"
 
 [Segmentation2D]
 upstream_task = "ImagesFilesetExists"
 query = "{\"channel\":\"rgb\"}"
-
-
-model_id = "Resnet101dataset_final_896_896_epoch50"
+model_id = "Resnet_896_896_epoch50"
+resize = true
 
 Sx = 896
 Sy = 896
@@ -29,25 +30,19 @@ epochs = 1
 batch = 1
 learning_rate = 0.0001
 
-[Finetune]
-directory_images = "/run/user/1001/gvfs/sftp:host=db.romi-project.eu/data/finetune/"
-finetune_epochs = 10
-batch = 1
-train_or_scan = "scan"
-
-[Reconstruction3D]
-N_vox = 1000000
-coord_file_loc = "volume/"
-
 [Voxels]
 upstream_mask = "Segmentation2D"
 multiclass = true
-voxel_size = 0.2
+voxel_size = 0.07
 type = "averaging"
-use_colmap_poses = "False"
+use_colmap_poses = false
 
 [PointCloud]
 level_set_value = 1.0
+background_prior= -20
+
+[PointCloudGroundTruth]
+pcd_size = 10000
 
 [Visualization]
 max_image_size = 1500
@@ -55,3 +50,6 @@ max_pcd_size = 10000
 thumbnail_size = 150
 pcd_source = "vox2pcd"
 mesh_source = "delaunay"
+
+[PointCloudEvaluation]
+max_distance = 0.2
