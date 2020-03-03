@@ -54,10 +54,10 @@ class PointCloud(RomiTask):
                     color = open3d.utility.Vector3dVector(color)
                     out.colors = color
                     pcd = pcd + out
-                    point_labels = point_labels + [i for x in range(len(out.points))]
+                    point_labels = point_labels + [l[i]] * len(out.points)
 
             io.write_point_cloud(self.output_file(), pcd)
-            self.output_file().set_metadata({'labels' : l, 'point_labels' : point_labels})        
+            self.output_file().set_metadata({'labels' : point_labels})        
 
         else:
             voxels = io.read_volume(ifile)
@@ -83,7 +83,7 @@ class TriangleMesh(RomiTask):
 
         io.write_triangle_mesh(self.output_file(), out)
 
-class ClusteredPointCloud(RomiTask):
+class ClusteredMesh(RomiTask):
     upstream_task = luigi.TaskParameter(default=PointCloud)
 
     min_vol = luigi.FloatParameter(default=1.0)
@@ -98,18 +98,19 @@ class ClusteredPointCloud(RomiTask):
         all_colors = np.asarray(x.colors)
 
         labels = self.input_file().get_metadata("labels")
-        point_labels = np.asarray(self.input_file().get_metadata("point_labels"), dtype=int)
-        print(point_labels.shape)
-        print(len(x.points))
+        logger.critical(len(labels))
+        logger.critical(len(x.points))
 
         geometries = []
         output_fileset = self.output().get()
 
-        for i, l in enumerate(labels):
+        for l in set(labels):
             pcd = open3d.geometry.PointCloud()
-            points = all_points[point_labels==i, :]
-            normals = all_normals[point_labels==i, :]
-            colors = all_colors[point_labels==i, :]
+            idx = [i for i in range(len(labels)) if labels[i] == l]
+            logger.critical("%s, %i"%(l, len(idx)))
+            points = all_points[idx, :]
+            normals = all_normals[idx, :]
+            colors = all_colors[idx, :]
             if len(points > 0):
                 pcd.points = open3d.utility.Vector3dVector(points)
                 pcd.normals = open3d.utility.Vector3dVector(normals)
