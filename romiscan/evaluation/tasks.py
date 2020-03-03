@@ -16,6 +16,9 @@ class EvaluationTask(RomiTask):
     upstream_task = luigi.TaskParameter()
     ground_truth = luigi.TaskParameter()
 
+    def requires(self):
+        return [self.upstream_task(), self.ground_truth()]
+
     def output(self):
         fileset_id = self.task_family #self.upstream_task().task_id + "Evaluation"
         return FilesetTarget(DatabaseConfig().scan, fileset_id)
@@ -86,7 +89,6 @@ class PointCloudGroundTruth(RomiTask):
             x = pywavefront.Wavefront(os.path.join(tmpdir, "plant.obj"), collect_faces=True, create_materials=True)
             res = open3d.geometry.PointCloud()
             point_labels = []
-            labels = []
 
             for i, k in enumerate(x.meshes.keys()):
                 t = open3d.geometry.TriangleMesh()
@@ -103,11 +105,10 @@ class PointCloudGroundTruth(RomiTask):
 
                 res = res + pcd
                 class_name = x.meshes[k].materials[0].name
-                labels += [class_name]
-                point_labels += [i] * len(pcd.points)
+                point_labels += [k] * len(pcd.points)
 
             io.write_point_cloud(self.output_file(), res)
-            self.output_file().set_metadata({'labels' : labels, 'point_labels' : point_labels})        
+            self.output_file().set_metadata({'labels' : point_labels})        
 
 class PointCloudEvaluation(EvaluationTask):
     upstream_task = luigi.TaskParameter(default=proc3d.PointCloud)
@@ -116,27 +117,24 @@ class PointCloudEvaluation(EvaluationTask):
 
     def evaluate(self):
         import open3d
-        source = io.read_point_cloud(self.input_file())
-        target = io.read_point_cloud(self.ground_truth().output().get().get_files()[0])
-        labels = self.input_file().get_metadata('labels')
+        source = io.read_point_cloud(self.upstream_task().output_file())
+        target = io.read_point_cloud(self.ground_truth().output_file())
+        labels = self.upstream_task().output_file().get_metadata('labels')
         labels_gt = self.ground_truth().output_file().get_metadata('labels')
-        point_labels = np.array(self.input_file().get_metadata('point_labels'))
-        point_labels_gt = np.array(self.ground_truth().output_file().get_metadata('point_labels'))
         if labels is not None:
             eval = { "id": self.upstream_task().task_id }
-            for i,l in enumerate(labels):
+            for l in set(labels_gt):
+                idx = [i for i in range(len(labels)) if labels[i] == l]
+                idx_gt = [i for i in range(len(labels)) if labels_gt[i] == l]
+
                 subpcd_source = open3d.geometry.PointCloud()
-                if np.sum(point_labels==i) > 0:
-                    subpcd_source.points = open3d.utility.Vector3dVector(np.asarray(source.points)[point_labels == i])
-                try:
-                    j = labels_gt.index(l)
-                except:
-                    continue
+                subpcd_source.points = open3d.utility.Vector3dVector(np.asarray(source.points)[idx])
                 subpcd_target = open3d.geometry.PointCloud()
-                if np.sum(point_labels_gt==j) > 0:
-                    subpcd_target.points = open3d.utility.Vector3dVector(np.asarray(target.points)[point_labels_gt == j])
-                else:
+                subpcd_target.points = open3d.utility.Vector3dVector(np.asarray(target.points)[idx_gt])
+
+                if len(subpcd_target.points) == 0:
                     continue
+
                 logger.debug("label : %s"%l)
                 logger.debug("gt points: %i"%len(subpcd_target.points))
                 logger.debug("pcd points: %i"%len(subpcd_source.points))
@@ -145,14 +143,12 @@ class PointCloudEvaluation(EvaluationTask):
                     "fitness": res.fitness,
                     "inlier_rmse": res.inlier_rmse
                 }
-            return eval
-        else:
-            res = open3d.registration.evaluate_registration(source, target, self.max_distance)
-            return {
-                "id": self.upstream_task().task_id,
-                "fitness": res.fitness,
-                "inlier_rmse": res.inlier_rmse
-            }
+        res = open3d.registration.evaluate_registration(source, target, self.max_distance)
+        eval["all"] = {
+            "fitness": res.fitness,
+            "inlier_rmse": res.inlier_rmse
+        }
+        return eval
 
 class Segmentation2DEvaluation(EvaluationTask):
     upstream_task = luigi.TaskParameter(default = proc2d.Segmentation2D)
