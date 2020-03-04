@@ -5,9 +5,15 @@ from romidata.task import  RomiTask, FileByFileTask
 from romidata import io
 
 from romiscan.tasks.cl import Voxels
+from romiscan.tasks.colmap import Colmap
+from romiscan.tasks.proc2d import Segmentation2D
+from romiscan.tasks.evaluation import PointCloudGroundTruth, VoxelGroundTruth
+from romiscan import proc3d
+from romiscan.tasks import config
 
 import logging
 logger = logging.getLogger('romiscan')
+
 
 class PointCloud(RomiTask):
     """Computes a point cloud
@@ -45,12 +51,16 @@ class PointCloud(RomiTask):
 
             voxel_size = float(ifile.get_metadata('voxel_size'))
             point_labels = []
+            colors = config.PointCloudColorConfig().colors
 
             for i in range(len(l)):
                 if l[i] != 'background':
                     out = proc3d.vol2pcd(res_idx == i, origin, voxel_size, self.level_set_value)
                     color = np.zeros((len(out.points), 3))
-                    color[:] =np.random.rand(3)[np.newaxis, :]
+                    if l[i] in colors:
+                        color[:] = np.asarray(colors[l[i]])
+                    else:
+                        color[:] = np.random.rand(3)
                     color = open3d.utility.Vector3dVector(color)
                     out.colors = color
                     pcd = pcd + out
@@ -67,6 +77,100 @@ class PointCloud(RomiTask):
             out = proc3d.vol2pcd(voxels, origin, voxel_size, self.level_set_value)
 
             io.write_point_cloud(self.output_file(), out)
+
+class SegmentedPointCloud(RomiTask):
+    """ Segments an existing point cloud using 2D pictures
+    """
+    upstream_task = luigi.TaskParameter(default=Colmap)
+    upstream_segmentation = luigi.TaskParameter(default=Segmentation2D)
+    use_colmap_poses = luigi.BoolParameter(default=True)
+
+
+
+    def requires(self):
+        return [self.upstream_task(), self.upstream_segmentation()]
+
+    def load_point_cloud(self):
+        try:
+            x = self.requires()[0].output().get().get_file("dense")
+            return io.read_point_cloud(x)
+        except:
+            x = self.requires()[0].output().get().get_files()[0]
+            return io.read_point_cloud(x)
+
+    def is_in_pict(self, px, shape):
+        return px[0] > 0 and px[0] < shape[0] and px[1] > 0 and px[1] < shape[1]
+
+
+    def run(self):
+        import open3d
+        fs = self.upstream_segmentation().output().get()
+        pcd = self.load_point_cloud()
+        pts = np.asarray(pcd.points)
+
+        labels = set()
+        for fi in fs.get_files():
+            label = fi.get_metadata('channel')
+            if label is not None:
+                labels.add(label)
+        labels = list(labels)
+        labels.remove('background')
+        if 'rgb' in labels:
+            labels.remove('rgb')
+
+        shot_ids = set()
+        for fi in fs.get_files():
+            shot_id = fi.get_metadata('shot_id')
+            if shot_id is not None:
+                shot_ids.add(shot_id)
+        shot_ids = list(shot_ids)
+
+        scores = np.zeros((len(shot_ids), len(labels), len(pts)))
+
+        for shot_idx, shot_id in enumerate(shot_ids):
+            f = fs.get_files(query = {"shot_id" : shot_id, "channel" : labels[0]})[0]
+            if self.use_colmap_poses:
+                camera = f.get_metadata("colmap_camera")
+            else:
+                camera = f.get_metadata("camera")
+
+            if camera is None:
+                logger.warning("No pose for image %s"%shot_id)
+                continue
+
+            rotmat = np.array(camera["rotmat"])
+            tvec = np.array(camera["tvec"])
+
+            intrinsics = camera["camera_model"]["params"]
+            K = np.array([[intrinsics[0], 0, intrinsics[2]], [0, intrinsics[1], intrinsics[3]], [0, 0, 1]])
+            pixels = np.asarray(proc3d.backproject_points(pts, K, rotmat, tvec) + 0.5, dtype=int)
+            for label_idx, l in enumerate(labels):
+                f = fs.get_files(query = {"shot_id" : shot_id, "channel" : l})[0]
+                mask = io.read_image(f)
+                for i, px in enumerate(pixels):
+                    if self.is_in_pict(px, mask.shape):
+                        scores[shot_idx, label_idx, i] = mask[px[1], px[0]]
+        scores = np.sum(np.log(scores + 0.1), axis=0)
+        pts_labels = np.argmax(scores, axis=0).flatten()
+
+        colors = config.PointCloudColorConfig().colors
+        color_array = np.zeros((len(pts), 3))
+        point_labels = [""] * len(pts)
+        for i in range(len(labels)):
+            if labels[i] in colors:
+                color_array[pts_labels==i, :] = np.asarray(colors[labels[i]])
+            else:
+                color_array[pts_labels==i, :] = np.random.rand(3)
+            l = np.nonzero(pts_labels==i)[0].tolist()
+            for u in l:
+                point_labels[u] = labels[i]
+        pcd.colors = open3d.utility.Vector3dVector(color_array)
+
+
+        out = self.output_file()
+        io.write_point_cloud(out, pcd)
+        out.set_metadata("labels", point_labels)
+
 
 
 class TriangleMesh(RomiTask):

@@ -527,6 +527,12 @@ def fit_plane_ransac(point_cloud, inliers=0.8, n_iter=100):
 
     return X0, n
 
+def backproject_points(points, K, rot, tvec):
+    x = rot @ points.transpose() + tvec[:, np.newaxis]
+    x = K @ x
+    x = x / x[2, :][np.newaxis, :]
+    return x[:2, :].transpose()
+
 def project_camera_plane(K, rot, tvec, X0, n):
     """
     """

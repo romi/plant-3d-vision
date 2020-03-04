@@ -22,6 +22,8 @@ except:
     from open3d.open3d.io import read_point_cloud
     from open3d.open3d.utility import Vector3dVector, Vector2iVector
 
+from romiscan.log import logger
+
 def get_main_stem_and_nodes(G, root_node):
     """
     Get main stem and branching nodes from graph.
@@ -269,6 +271,197 @@ def get_nodes_by_label(G, label):
 def get_fruit(G, i):
     x = get_nodes_by_label(G, "fruit")
     return [j for j in x if G.nodes[j]["fruit_id"] == i]
+
+def angles_from_meshes(input_fileset, characteristic_length, number_nn, stem_axis, stem_axis_inverted, min_elongation_ratio, min_fruit_size):
+    import open3d
+    from romidata import io
+    stem_meshes = [io.read_triangle_mesh(f) for f in input_fileset.get_files(query={"label": "stem"})]
+    stem_mesh = open3d.geometry.TriangleMesh()
+    for m in stem_meshes:
+        stem_mesh = stem_mesh + m
+
+    stem_points = np.asarray(stem_mesh.vertices)
+
+    idx_min = np.argmin(stem_points[:, stem_axis])
+    idx_max = np.argmax(stem_points[:, stem_axis])
+
+    stem_axis_min = stem_points[idx_min, stem_axis]
+    stem_axis_max = stem_points[idx_max, stem_axis]
+
+    stem_frame_axis = np.arange(stem_axis_min, stem_axis_max, characteristic_length)
+    stem_frame = np.zeros((len(stem_frame_axis), 3, 4))
+
+    kdtree = open3d.geometry.KDTreeFlann(stem_mesh)
+
+    point = stem_points[idx_min]
+    test = []
+
+    ls = open3d.geometry.LineSet()
+    lines = [[i,i+1] for i in range(len(stem_frame_axis) - 1)]
+    pts = np.zeros((len(stem_frame_axis), 3))
+    prev_axis = np.eye(3)
+
+    if stem_axis_inverted:
+        prev_axis[stem_axis, stem_axis] = -1
+
+    gs= []
+
+    for i, axis in enumerate(stem_frame_axis):
+        point[stem_axis] = axis
+        k, idx, _ = kdtree.search_knn_vector_3d(point, 100)
+        vtx = np.asarray(stem_mesh.vertices)[idx]
+        mean = vtx.mean(axis=0)
+        mean[stem_axis] = axis
+        u,s,v = np.linalg.svd(vtx - point)
+        print(v[0,:])
+        first_vector = v[0, :]
+        if first_vector[stem_axis] < 0 and not stem_axis_inverted:
+            first_vector = -first_vector
+        elif first_vector[stem_axis] > 0 and stem_axis_inverted:
+            first_vector = -first_vector
+
+        second_vector = prev_axis[1] - np.dot(prev_axis[1], first_vector)*first_vector
+        second_vector = second_vector / np.linalg.norm(second_vector)
+
+        third_vector = np.cross(first_vector, second_vector)
+
+        rot = np.array([first_vector, second_vector, third_vector])
+        prev_axis = rot
+
+        stem_frame[i][0:3, 0:3] = rot.transpose()
+        stem_frame[i][:, 3] = mean
+
+
+        visu_trans = np.zeros((4,4))
+        visu_trans[:3, :3] = rot.transpose()
+        visu_trans[:3, 3] = mean
+        visu_trans[3,3] = 1.0
+
+        f = open3d.geometry.TriangleMesh.create_coordinate_frame(size=1)
+        f.transform(visu_trans)
+        gs.append(f)
+
+        point = mean
+        pts[i,:] = mean
+
+    ls.points = open3d.utility.Vector3dVector(pts)
+    ls.lines = open3d.utility.Vector2iVector(lines)
+
+    # open3d.visualization.draw_geometries([ls, *gs, stem_mesh])
+    # open3d.visualization.draw_geometries([stem_mesh])
+
+    # peduncle_meshes = [io.read_triangle_mesh(f) for f in input_fileset.get_files(query={"label": "pedicel"})]
+    fruits = []
+    for f in input_fileset.get_files(query={"label": "fruit"}):
+        m = io.read_triangle_mesh(f)
+        bb = open3d.geometry.OrientedBoundingBox.create_from_points(m.vertices)
+
+        minb = bb.get_min_bound()
+        maxb = bb.get_max_bound()
+
+        lines = [[0, 1],
+                [1, 7],
+                [7, 2],
+                [2, 0],
+                [3, 6],
+                [6, 4],
+                [4, 5],
+                [5, 3],
+                [0, 3],
+                [1, 6],
+                [7, 4],
+                [2, 5]]
+        pts = np.asarray(bb.get_box_points())
+        maxl = 0.0
+        minl = np.inf
+        maxidx = 0
+        minidx = 0
+        for i, l in enumerate(lines):
+            if np.linalg.norm(pts[l[0]] - pts[l[1]]) > maxl:
+                maxl = np.linalg.norm(pts[l[0]] - pts[l[1]])
+                maxidx = i
+            if np.linalg.norm(pts[l[0]] - pts[l[1]]) < minl:
+                minl = np.linalg.norm(pts[l[0]] - pts[l[1]])
+                minidx = i
+
+        if np.linalg.norm(maxb-minb) > min_fruit_size and maxl/minl > min_elongation_ratio:
+            direction = pts[lines[maxidx][1]] - pts[lines[maxidx][0]]
+            direction /= np.linalg.norm(direction)
+            fruits.append({
+                "mesh" : bb,
+                "direction": direction,
+                "center" : bb.center
+            })
+
+
+    angles = []
+    lg = []
+    fruits.sort(key = lambda x: x["center"][stem_axis] if not stem_axis_inverted else -x["center"][stem_axis])
+    for i in range(len(fruits)):
+        print(i)
+        stem_loc = fruits[i]["center"][stem_axis] 
+        closest_frame = int((stem_loc - stem_axis_min) / (stem_axis_max - stem_axis_min) * len(stem_frame_axis))
+        if closest_frame < 0:
+            closest_frame = 0
+        if closest_frame >= len(stem_frame_axis):
+            closest_frame = len(stem_frame_axis) - 1
+        frame = stem_frame[closest_frame, :, :]
+        frame[stem_axis, 3] = stem_loc
+
+        rot = frame[0:3, 0:3].transpose()
+        tvec = - rot @ frame[0:3, 3]
+
+        avg_rel = rot @ fruits[i]["center"] + tvec
+
+        direction_rel = rot @ fruits[i]["direction"]
+
+        if i > 0:
+            avg_rel_prev = rot @ fruits[i-1]["center"] + tvec
+            direction_rel_prev = rot @ fruits[i-1]["direction"]
+            v1 = direction_rel_prev[1:3]
+            v1 = v1 / np.linalg.norm(v1)
+            v2= direction_rel[1:3]
+            v2 = v2 / np.linalg.norm(v2)
+
+            if v2.dot(avg_rel[1:3]) < 0:
+                v2 *= -1
+            if v1.dot(avg_rel_prev[1:3]) < 0:
+                v1 *= -1
+
+            w = np.array([-v1[1], v1[0]])
+
+            c = np.dot(v1, v2)
+            s = np.dot(v2, w)
+
+            logger.critical(c)
+            logger.critical(s)
+
+            angle = np.arctan2(s, c)
+            logger.debug("angle = %i"%(180*angle/np.pi))
+            angles.append(angle * 180 / np.pi)
+
+            ls = open3d.geometry.LineSet()
+
+            pts = np.zeros((3,3))
+            lines = [[0,1], [0,2]]
+
+            pts[1, :] = [0, *v2]
+            pts[2, :] = [0, *v1]
+            pts *= 10
+            # pts = (rot.transpose() @ pts.transpose() - rot.transpose() @ tvec).transpose()
+            ls.points = open3d.utility.Vector3dVector(pts)
+            ls.lines = open3d.utility.Vector2iVector(lines)
+            frame_viz = np.zeros((4,4))
+            frame_viz[:3, :] = frame
+            frame_viz[3,3] = 1
+            ls.transform(frame_viz)
+            lg.append(ls)
+            lg.append(fruits[i]["mesh"])
+
+
+    open3d.visualization.draw_geometries([ls, *gs, stem_mesh, *lg])
+    return { "angles" : angles }
+
 
 
 def compute_angles_and_internodes(T, n_neighbours=5):

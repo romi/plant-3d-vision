@@ -78,7 +78,7 @@ class Voxels(RomiTask):
             [nx, ny, nz], [x_min, y_min, z_min], self.voxel_size, type=self.type, multiclass=self.multiclass, log=self.log)
 
   
-        vol = sc.process_fileset(masks_fileset)#, images)
+        vol = sc.process_fileset(masks_fileset, use_colmap_poses=self.use_colmap_poses)#, images)
         logger.debug("size = %i" % vol.size)
         outfs = self.output().get()
         outfile = self.output_file()

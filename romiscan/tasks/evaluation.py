@@ -8,9 +8,8 @@ from romidata import io
 from romidata.task import FilesetExists, RomiTask, FilesetTarget, DatabaseConfig, ImagesFilesetExists
 
 from romiscan.log import logger
-from romiscan.tasks import proc2d, proc3d
+from romiscan.tasks import config
 from romiscanner.lpy import VirtualPlant
-from romiscan.tasks.cl import Voxels
 
 class EvaluationTask(RomiTask):
     upstream_task = luigi.TaskParameter()
@@ -86,6 +85,7 @@ class PointCloudGroundTruth(RomiTask):
         x = self.input_file()
         mtl_file = self.input().get().get_file(x.id + "_mtl")
         outfs = self.output().get()
+        colors = config.PointCloudColorConfig().colors
         with tempfile.TemporaryDirectory() as tmpdir:
             io.to_file(x, os.path.join(tmpdir, "plant.obj"))
             io.to_file(x, os.path.join(tmpdir, "plant.mtl"))
@@ -99,6 +99,9 @@ class PointCloudGroundTruth(RomiTask):
                 t.vertices = open3d.utility.Vector3dVector(np.asarray(x.vertices))
                 t.compute_triangle_normals()
 
+                class_name = x.meshes[k].materials[0].name
+
+
                 # The following is needed because there are rotation in lpy's output...
                 pcd = t.sample_points_poisson_disk(self.pcd_size)
                 pcd_pts = np.asarray(pcd.points)
@@ -106,15 +109,66 @@ class PointCloudGroundTruth(RomiTask):
                 pcd_pts[:, 1] *= -1
                 pcd.points = open3d.utility.Vector3dVector(pcd_pts)
 
+                color = np.zeros((len(pcd.points), 3))
+                if class_name in colors:
+                    color[:] = np.asarray(colors[class_name])
+                else:
+                    color[:] = np.random.rand(3)
+                color = open3d.utility.Vector3dVector(color)
+                pcd.colors = color
+
                 res = res + pcd
-                class_name = x.meshes[k].materials[0].name
                 point_labels += [k] * len(pcd.points)
 
             io.write_point_cloud(self.output_file(), res)
-            self.output_file().set_metadata({'labels' : point_labels})        
+            self.output_file().set_metadata({'labels' : point_labels})
+
+class ClusteredMeshGroundTruth(RomiTask):
+    upstream_task = luigi.TaskParameter(default=VirtualPlant)
+    def run(self):
+        import pywavefront
+        import open3d
+        import trimesh
+        x = self.input_file()
+        mtl_file = self.input().get().get_file(x.id + "_mtl")
+        outfs = self.output().get()
+        colors = config.PointCloudColorConfig().colors
+        output_fileset = self.output().get()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            io.to_file(x, os.path.join(tmpdir, "plant.obj"))
+            io.to_file(x, os.path.join(tmpdir, "plant.mtl"))
+            x = pywavefront.Wavefront(os.path.join(tmpdir, "plant.obj"), collect_faces=True, create_materials=True)
+            res = open3d.geometry.PointCloud()
+            point_labels = []
+
+            for i, k in enumerate(x.meshes.keys()):
+                t = open3d.geometry.TriangleMesh()
+                t.triangles = open3d.utility.Vector3iVector(np.asarray(x.meshes[k].faces))
+
+                pts = np.asarray(x.vertices)
+                pts = pts[:,[0,2,1]]
+                pts[:, 1] *= -1
+
+                t.vertices = open3d.utility.Vector3dVector(pts)
+                t.compute_triangle_normals()
+
+                class_name = x.meshes[k].materials[0].name
+
+                k, cc, _ = t.cluster_connected_triangles()
+                k = np.asarray(k)
+                tri_np = np.asarray(t.triangles)
+                for j in range(len(cc)):
+                    newt = open3d.geometry.TriangleMesh(t.vertices, open3d.utility.Vector3iVector(tri_np[k==j, :]))
+                    newt.vertex_colors = t.vertex_colors
+                    newt.remove_unreferenced_vertices()
+
+                    f = output_fileset.create_file("%s_%03d"%(class_name, j))
+                    io.write_triangle_mesh(f, newt)
+                    f.set_metadata("label", class_name)
+
 
 class PointCloudEvaluation(EvaluationTask):
-    upstream_task = luigi.TaskParameter(default=proc3d.PointCloud)
+    upstream_task = luigi.TaskParameter()
     ground_truth = luigi.TaskParameter(default=PointCloudGroundTruth)
     max_distance = luigi.FloatParameter(default=2)
 
@@ -154,7 +208,7 @@ class PointCloudEvaluation(EvaluationTask):
         return eval
 
 class Segmentation2DEvaluation(EvaluationTask):
-    upstream_task = luigi.TaskParameter(default = proc2d.Segmentation2D)
+    upstream_task = luigi.TaskParameter()
     ground_truth = luigi.TaskParameter(default = ImagesFilesetExists)
     hist_bins = luigi.IntParameter(default = 100)
 
@@ -198,7 +252,7 @@ class Segmentation2DEvaluation(EvaluationTask):
         return histograms
 
 class VoxelsEvaluation(EvaluationTask):
-    upstream_task = luigi.TaskParameter(default = Voxels)
+    upstream_task = luigi.TaskParameter()
     ground_truth = luigi.TaskParameter(default = VoxelGroundTruth)
     hist_bins = luigi.IntParameter(default = 100)
 
@@ -245,6 +299,5 @@ class VoxelsEvaluation(EvaluationTask):
 
             histograms[c] = {"hist_high": hist_high.tolist(), "bins_high": bins_high.tolist(), "hist_low": hist_low.tolist(), "bins_low": bins_low.tolist()}
         return histograms
-
 
 

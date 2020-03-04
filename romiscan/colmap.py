@@ -364,7 +364,7 @@ class ColmapRunner():
                            "tvec" : images[key]["tvec"],
                            "camera_model" : cameras[camera_id]
                        }
-                fi.set_metadata("camera", camera)
+                fi.set_metadata("colmap_camera", camera)
 
         # Save bounding box (by sparse pcd) in scan metadata
         points_array = np.asarray(sparse_pcd.points)

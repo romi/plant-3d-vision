@@ -150,20 +150,20 @@ class Backprojection():
         cl.enqueue_copy(queue, self.values_h, self.values_d)
         return self.values_h
 
-    def process_fileset(self, fs):
+    def process_fileset(self, fs, use_colmap_poses=False):
         if self.multiclass:
             labels = self.get_labels(fs)
             logger.debug("labels: ")
             logger.debug(labels)
             result = np.zeros((len(labels), *self.shape))
             for i,l in enumerate(labels):
-                result[i, :] = self.process_label(fs, l)
+                result[i, :] = self.process_label(fs, l, use_colmap_poses)
             return result
         else:
-            return self.process_label(fs)
+            return self.process_label(fs, use_colmap_poses=use_colmap_poses)
 
 
-    def process_label(self, fs, label=None):
+    def process_label(self, fs, label=None, use_colmap_poses=False):
         """
         Processes a whole fileset.
 
@@ -183,12 +183,16 @@ class Backprojection():
                 continue
             logger.debug("processing file %s"%fi.id)
 
-            try:
+            if use_colmap_poses:
+                cam = fi.get_metadata('colmap_camera')
+            else:
                 cam = fi.get_metadata('camera')
-                camera_model = cam["camera_model"]
-            except:
+
+            if cam is None:
                 logger.warning("Could not get camera pose for view, skipping...")
                 continue
+
+            camera_model = cam["camera_model"]
 
 
             width = camera_model['width']
