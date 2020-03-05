@@ -21,7 +21,7 @@ class Undistorted(FileByFileTask):
 
     def f(self, fi, outfs):
         from romiscan import proc2d
-        camera_model = fi.get_metadata('camera')['camera_model']
+        camera_model = fi.get_metadata('colmap_camera')['camera_model']
 
         x = io.read_image(fi)
         x = proc2d.undistort(x, camera_model)
