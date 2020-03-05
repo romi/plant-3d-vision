@@ -30,15 +30,6 @@ class Colmap(RomiTask):
         # cli_args = json.loads(self.cli_args.replace("'", '"'))
         bounding_box = images_fileset.get_metadata("bounding_box")
         if bounding_box is None:
-            logger.warning(VirtualPlant().task_id)
-            if VirtualPlant().complete():
-                obj = io.read_point_cloud(VirtualPlant().output_file())
-                points_array = np.asarray(obj.points)
-                x_min, y_min, z_min = points_array.min(axis=0)
-                x_max, y_max, z_max = points_array.max(axis=0)
-                bounding_box = {"x" : [x_min, x_max],"y" : [y_min, y_max],
-                "z" : [z_min, z_max]}
-        if bounding_box is None:
             bounding_box = images_fileset.scan.get_metadata('workspace')
         if bounding_box is None:
             try:
