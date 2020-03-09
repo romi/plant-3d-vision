@@ -11,6 +11,8 @@ from romiscan.tasks.evaluation import PointCloudGroundTruth, VoxelGroundTruth
 from romiscan import proc3d
 from romiscan.tasks import config
 
+from scipy.ndimage import gaussian_filter
+
 import logging
 logger = logging.getLogger('romiscan')
 
@@ -84,6 +86,7 @@ class SegmentedPointCloud(RomiTask):
     upstream_task = luigi.TaskParameter(default=Colmap)
     upstream_segmentation = luigi.TaskParameter(default=Segmentation2D)
     use_colmap_poses = luigi.BoolParameter(default=True)
+    blur = luigi.FloatParameter(default=0.0)
 
 
 
@@ -147,6 +150,8 @@ class SegmentedPointCloud(RomiTask):
             for label_idx, l in enumerate(labels):
                 f = fs.get_files(query = {"shot_id" : shot_id, "channel" : l})[0]
                 mask = io.read_image(f)
+                if (self.blur > 0):
+                    mask = gaussian_filter(mask, sigma=self.blur)
                 for i, px in enumerate(pixels):
                     if self.is_in_pict(px, mask.shape):
                         scores[shot_idx, label_idx, i] = mask[px[1], px[0]]

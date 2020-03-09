@@ -21,14 +21,16 @@ class Undistorted(FileByFileTask):
 
     def f(self, fi, outfs):
         from romiscan import proc2d
-        camera_model = fi.get_metadata('colmap_camera')['camera_model']
+        camera = fi.get_metadata('colmap_camera')
+        if camera is not None:
+            camera_model = camera['camera_model']
 
-        x = io.read_image(fi)
-        x = proc2d.undistort(x, camera_model)
+            x = io.read_image(fi)
+            x = proc2d.undistort(x, camera_model)
 
-        outfi = outfs.create_file(fi.id)
-        io.write_image(outfi, x)
-        return outfi
+            outfi = outfs.create_file(fi.id)
+            io.write_image(outfi, x)
+            return outfi
 
 class Masks(FileByFileTask):
     """Mask images
