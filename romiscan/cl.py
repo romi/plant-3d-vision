@@ -18,6 +18,7 @@ import logging
 from romiscan.proc3d import point2index
 from romidata import io
 from skimage.morphology import binary_dilation
+from scipy.ndimage import gaussian_filter
 
 from .log import logger
 
@@ -59,13 +60,14 @@ class Backprojection():
         default value when initializing the voxels (defaults to 0)
     """
 
-    def __init__(self, shape, origin, voxel_size, type="carving", default_value=0, multiclass=False, log=False):
+    def __init__(self, shape, origin, voxel_size, type="carving", default_value=0, multiclass=False, log=False, blur=0.0):
         self.shape = shape
         self.origin = origin
         self.voxel_size = voxel_size
         self.default_value = default_value
         self.multiclass = multiclass
         self.log = log
+        self.blur = blur
 
         self.type = type
         if type == "carving":
@@ -131,6 +133,8 @@ class Backprojection():
         tvec_h = np.ascontiguousarray(tvec).astype(np.float32)
         logger.debug("mask max: %.2f"%(mask.max()))
         mask_h = np.ascontiguousarray(mask).astype(self.dtype)
+        if (self.blur > 0):
+            mask_h = gaussian_filter(mask_h, sigma=self.blur)
 
         mask_d = cl.image_from_array(ctx, mask_h, 1)
 

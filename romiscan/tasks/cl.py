@@ -24,6 +24,7 @@ class Voxels(RomiTask):
     type = luigi.Parameter()
     multiclass = luigi.BoolParameter(default=False)
     log = luigi.BoolParameter(default=True)
+    blur = luigi.FloatParameter(default=0.0)
 
     def requires(self):
         if self.use_colmap_poses:
@@ -35,13 +36,16 @@ class Voxels(RomiTask):
         from romiscan import cl
         masks_fileset = self.input()['masks'].get()
 
+        bounding_box = self.output().get().scan.get_metadata("bounding_box")
+
         if self.use_colmap_poses:
             colmap_fileset = self.input()['colmap'].get()
-            bounding_box = colmap_fileset.get_metadata("bounding_box")
-        else:
-            bounding_box = self.output().get().scan.get_metadata("bounding_box")
+            if bounding_box is None:
+                bounding_box = colmap_fileset.get_metadata("bounding_box")
         if bounding_box is None:
             bounding_box = ImagesFilesetExists().output().get().get_metadata("bounding_box")
+
+        logger.debug(f"Bounding box : {bounding_box}")
         
 
         x_min, x_max = bounding_box["x"]
@@ -75,7 +79,7 @@ class Voxels(RomiTask):
         origin = np.array([x_min, y_min, z_min])
 
         sc = cl.Backprojection(
-            [nx, ny, nz], [x_min, y_min, z_min], self.voxel_size, type=self.type, multiclass=self.multiclass, log=self.log)
+            [nx, ny, nz], [x_min, y_min, z_min], self.voxel_size, type=self.type, multiclass=self.multiclass, log=self.log, blur=self.blur)
 
   
         vol = sc.process_fileset(masks_fileset, use_colmap_poses=self.use_colmap_poses)#, images)
