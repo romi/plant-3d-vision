@@ -10,6 +10,7 @@ from romidata.task import FilesetExists, RomiTask, FilesetTarget, DatabaseConfig
 from romiscan.log import logger
 from romiscan.tasks import config
 from romiscanner.lpy import VirtualPlant
+from romiscan.tasks import proc2d, cl, proc3d
 
 class EvaluationTask(RomiTask):
     upstream_task = luigi.TaskParameter()
@@ -47,7 +48,8 @@ class VoxelGroundTruth(RomiTask):
             res = {}
             min= np.min(x.vertices, axis=0)
             max = np.max(x.vertices, axis=0)
-            arr_size = np.asarray((max-min) / Voxels().voxel_size + 1, dtype=np.int)+ 1
+            arr_size = np.asarray((max-min) / cl.Voxels().voxel_size + 1, dtype=np.int)+ 1
+            logger.critical(arr_size)
             for k in x.meshes.keys():
                 t = open3d.geometry.TriangleMesh()
                 t.triangles = open3d.utility.Vector3iVector(np.asarray(x.meshes[k].faces))
@@ -55,20 +57,23 @@ class VoxelGroundTruth(RomiTask):
                 t.compute_triangle_normals()
                 open3d.io.write_triangle_mesh(os.path.join(tmpdir, "tmp.stl"), t)
                 m = trimesh.load(os.path.join(tmpdir, "tmp.stl"))
-                v = m.voxelized(Voxels().voxel_size)
+                v = m.voxelized(cl.Voxels().voxel_size)
                 
 
                 class_name = x.meshes[k].materials[0].name
                 arr = np.zeros(arr_size)
-                voxel_size = Voxels().voxel_size
-                origin_idx = np.asarray((v.origin - min) / voxel_size, dtype=np.int) 
+                voxel_size = cl.Voxels().voxel_size
+                origin_idx = np.asarray((v.origin - min) / voxel_size, dtype=np.int)
                 arr[origin_idx[0]:origin_idx[0] + v.matrix.shape[0],origin_idx[1]:origin_idx[1] + v.matrix.shape[1], origin_idx[2]:origin_idx[2] + v.matrix.shape[2]] = v.matrix
-                res[class_name] = gaussian_filter(arr, voxel_size)
+
+                # The following is needed because there are rotation in lpy's output...
+                arr = np.swapaxes(arr, 2,1)
+                arr = np.flip(arr, 1)
+
+                res[class_name] = arr#gaussian_filter(arr, voxel_size)
                 
-            # The following is needed because there are rotation in lpy's output...
-            arr = np.swapaxes(arr, 2,1)
-            arr = np.flip(arr, 1)
-            bg = np.ones((arr_size))
+
+            bg = np.ones(arr.shape)
             for k in res.keys():
                 bg = np.minimum(bg, 1-res[k])
             res["background"] = bg
@@ -208,7 +213,7 @@ class PointCloudEvaluation(EvaluationTask):
         return eval
 
 class Segmentation2DEvaluation(EvaluationTask):
-    upstream_task = luigi.TaskParameter()
+    upstream_task = luigi.TaskParameter(default = proc2d.Segmentation2D)
     ground_truth = luigi.TaskParameter(default = ImagesFilesetExists)
     hist_bins = luigi.IntParameter(default = 100)
 
@@ -235,13 +240,16 @@ class Segmentation2DEvaluation(EvaluationTask):
                         ground_truth = gt_fileset.get_files(query = {'channel': c, 'shot_id': pred.get_metadata('shot_id')})[0]
                         im_pred = io.read_image(pred)
                         im_gt = io.read_image(ground_truth)
-                
-                        
-                        im_gt_high = im_pred[im_gt > 255//2]/255
 
 
-
-                        im_gt_low = im_pred[im_gt < 255//2]/255	
+                        if c == "background":
+                            threshold = 254
+                        else:
+                            threshold = 0
+             
+                        im_gt = im_gt > threshold
+                        im_gt_high = im_pred[im_gt]/255
+                        im_gt_low = im_pred[1-im_gt]/255	
 
 
             hist_high_pred, bins_high = np.histogram(im_gt_high, self.hist_bins, range=(0,1))
@@ -252,9 +260,11 @@ class Segmentation2DEvaluation(EvaluationTask):
         return histograms
 
 class VoxelsEvaluation(EvaluationTask):
-    upstream_task = luigi.TaskParameter()
+    upstream_task = luigi.TaskParameter(default = cl.Voxels)
     ground_truth = luigi.TaskParameter(default = VoxelGroundTruth)
     hist_bins = luigi.IntParameter(default = 100)
+    hist_low = luigi.IntParameter(default= 0)
+    hist_high= luigi.IntParameter(default= 18)
 
     def requires(self):
         return [self.upstream_task(), self.ground_truth()]
@@ -271,18 +281,25 @@ class VoxelsEvaluation(EvaluationTask):
         from matplotlib import pyplot as plt
 
         for c in channels:
+            if c == "background":
+                continue
 
             prediction_c = predictions[c]
             gt_c = gts[c]
 
+            maxval = np.max(prediction_c)
+            minval = np.min(prediction_c)
+
 
             gt_c = gt_c[0:prediction_c.shape[0],0:prediction_c.shape[1] ,0:prediction_c.shape[2]]
+            logger.critical(gt_c.shape)
+            logger.critical(prediction_c.shape)
             im_gt_high = prediction_c[gt_c > 0.5]
             im_gt_low = prediction_c[gt_c < 0.5]
 
 
-            hist_high, bins_high = np.histogram(im_gt_high, self.hist_bins)
-            hist_low, bins_low = np.histogram(im_gt_low, self.hist_bins)
+            hist_high, bins_high = np.histogram(im_gt_high, self.hist_bins, range=[self.hist_low, self.hist_high])
+            hist_low, bins_low = np.histogram(im_gt_low, self.hist_bins, range=[self.hist_low, self.hist_high])
             plt.figure()
             plt.plot(bins_high[:-1], hist_high)
             plt.savefig("high%s.png"%c)

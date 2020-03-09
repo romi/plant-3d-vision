@@ -38,7 +38,6 @@ create_folder_if(save_dir)
 db.disconnect()
 
 classes = [
-        "background",
         "flower",
         "fruit",
         "leaf",
@@ -65,7 +64,7 @@ for c in classes:
 # Iteration over the scans
 for scan_id in scans:  
    if 'model' not in scan_id and 'Evaluation' not in scan_id:         
-        call(["romi_run_task", "--log-level", "WARNING", "--config", "/home/alienor/Documents/scanner-meta-repository/Scan3D/config/segmentation2d_arabidopsis.toml", "--module", 'romiscan.tasks.evaluation', task_eval, os.path.join(db_path, scan_id), "--local-scheduler"], check=True)
+        # call(["romi_run_task", "--log-level", "WARNING", "--config", "/home/alienor/Documents/scanner-meta-repository/Scan3D/config/segmentation2d_arabidopsis.toml", "--module", 'romiscan.tasks.evaluation', task_eval, os.path.join(db_path, scan_id), "--local-scheduler"], check=True)
         db = fsdb.FSDB(db_path)
         db.connect()
         scan = db.get_scan(scan_id)
@@ -74,7 +73,8 @@ for scan_id in scans:
             f = evaluation.get_files()[0]
             results = io.read_json(f)
     
-            for c in results.keys():
+            for c in classes:
+                if c in results.keys():
                     histograms[c][task_eval]['hist_high'] += results[c]['hist_high']
                     histograms[c][task_eval]['hist_low'] += results[c]['hist_low']
                     histograms[c][task_eval]['bins_high'] = results[c]['bins_high']
@@ -93,11 +93,9 @@ for task_eval in tasks_eval:
       plt.title('Histogram +')
       plt.xlabel('prediction level')
       plt.ylabel('num of hits')   
-      plt.savefig(save_dir + "high_%s_%s.jpg"%(c, task_eval))
-
 
       plt.plot(histograms[c][task_eval]['bins_low'][:-1], hist_low, label = c)     
-      plt.legend()
+      plt.legend(['+', '-'])
       plt.title('Histogram -')
       plt.xlabel('prediction level')
       plt.ylabel('num of hits')
