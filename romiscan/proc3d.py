@@ -426,19 +426,9 @@ def vol2pcd(volume, origin, voxel_size, level_set_value=0, quiet=False):
     _______
     open3d.geometry.PointCloud
     """
-    from matplotlib import pyplot as plt
     volume = 1.0*(volume>0.5) # variable level ?
-    plt.imshow(volume.max(0))
-    plt.colorbar()
-    plt.savefig("tmp3.png")
     dist = distance_transform_edt(volume)
     mdist = distance_transform_edt(1-volume)
-    plt.imshow(dist.min(0))
-    plt.colorbar()
-    plt.savefig("tmp.png")
-    plt.imshow(mdist.min(0))
-    plt.colorbar()
-    plt.savefig("tmp2.png")
     logger.critical(dist.max())
     logger.critical(dist.min())
     dist = np.where(dist > 0.5, dist - 0.5, -mdist + 0.5)
