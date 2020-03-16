@@ -1,0 +1,56 @@
+[accessory]
+calibration_scan_id = "calib_scan_shortpath"
+
+[ModelFileset]
+scan_id = "models"
+
+[Masks]
+type = "excess_green"
+dilation = 5
+binarize = true
+threshold = 0.0
+
+[TrainingDirectory]
+path = "/home/twintz/training2D/"
+directory_weights = "weights/"
+tsboard = "board/"
+directory_dataset = "dataset_vscan/"
+
+[Segmentation2D]
+upstream_task = "ImagesFilesetExists"
+query = "{\"channel\":\"rgb\"}"
+model_id = "Resnet_896_896_epoch50"
+model_name = "Resnet"
+Sx = 896
+Sy = 896
+epochs = 50
+batch = 1
+learning_rate = 0.0001
+
+[Finetune]
+directory_images = "/run/user/1001/gvfs/sftp:host=db.romi-project.eu/data/finetune/"
+directory_weights = "/home/alienor/Documents/training2D/weights/"
+finetune_epochs = 10
+batch = 1
+train_or_scan = "scan"
+
+[Reconstruction3D]
+N_vox = 1000000
+coord_file_loc = "volume/"
+
+[Voxels]
+upstream_mask = "Segmentation2D"
+multiclass = true
+voxel_size = 0.2
+type = "averaging"
+use_colmap_poses = "False"
+
+[PointCloud]
+level_set_value = 1.0
+
+[Visualization]
+max_image_size = 1500
+max_pcd_size = 10000
+thumbnail_size = 150
+pcd_source = "vox2pcd"
+mesh_source = "delaunay"
