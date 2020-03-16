@@ -70,6 +70,8 @@ for scan_id in scans:
         scan = db.get_scan(scan_id)
         for task_eval in tasks_eval:
             evaluation = scan.get_fileset(task_eval)
+            if evaluation is None:
+                continue
             f = evaluation.get_files()[0]
             results = io.read_json(f)
     
@@ -82,24 +84,19 @@ for scan_id in scans:
     
         
         db.disconnect()
-        break
+        # break
 for task_eval in tasks_eval:        
    for c in classes:
       plt.figure()
       hist_high = histograms[c][task_eval]['hist_high']/np.sum(histograms[c][task_eval]['hist_high'])
       hist_low = histograms[c][task_eval]['hist_low']/np.sum(histograms[c][task_eval]['hist_low'])
       plt.plot(histograms[c][task_eval]['bins_high'][:-1], hist_high, label = c)
-      plt.legend()
-      plt.title('Histogram +')
-      plt.xlabel('prediction level')
-      plt.ylabel('num of hits')   
-
       plt.plot(histograms[c][task_eval]['bins_low'][:-1], hist_low, label = c)     
       plt.legend(['+', '-'])
-      plt.title('Histogram -')
+      plt.title(c)
       plt.xlabel('prediction level')
       plt.ylabel('num of hits')
-      plt.savefig(save_dir + "low_%s_%s.jpg"%(c, task_eval))
+      plt.savefig(save_dir + "%s_%s.jpg"%(c, task_eval))
 
 precision = {}
 recall = {}

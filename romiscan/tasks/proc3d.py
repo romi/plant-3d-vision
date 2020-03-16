@@ -22,7 +22,8 @@ class PointCloud(RomiTask):
     """
     upstream_task = luigi.TaskParameter(default=Voxels)
     level_set_value = luigi.FloatParameter(default=0.0)
-    background_prior = luigi.FloatParameter(default=-10)
+    log = luigi.BoolParameter(default=False)
+    background_prior = luigi.FloatParameter(default=1.0)
 
     def run(self):
         from romiscan import proc3d
@@ -31,13 +32,15 @@ class PointCloud(RomiTask):
             import open3d
             voxels = io.read_npz(ifile)
             l = list(voxels.keys())
-            background_idx = l.index("background")
+            # background_idx = l.index("background")
             # l.remove("background")
             res = np.zeros((*voxels[l[0]].shape, len(l)))
             for i in range(len(l)):
                 res[:,:,:,i] = voxels[l[i]]
+            for i in range(len(l)):
                 if l[i] == 'background':
-                    res[:,:,:,i] += self.background_prior
+                    res[:,:,:,i] *= self.background_prior
+
 
             # bg = voxels["background"] > voxels["background"].max() - 10
             # logger.critical(voxels["background"].max())
@@ -73,6 +76,7 @@ class PointCloud(RomiTask):
 
         else:
             voxels = io.read_volume(ifile)
+            logger.critical(voxels.sum())
 
             origin = np.array(ifile.get_metadata('origin'))
             voxel_size = float(ifile.get_metadata('voxel_size'))

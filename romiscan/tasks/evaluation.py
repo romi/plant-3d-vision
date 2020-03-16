@@ -229,33 +229,31 @@ class Segmentation2DEvaluation(EvaluationTask):
 
         for c in channels:
 
-            logger.debug(prediction_fileset)
             preds = prediction_fileset.get_files(query = {'channel' : c})
-            logger.debug(preds)
             hist_high, disc = np.histogram(np.array([]), self.hist_bins, range=(0,1))
             hist_low, disc = np.histogram(np.array([]), self.hist_bins, range=(0,1))
 
             
             for pred in preds:
-                        ground_truth = gt_fileset.get_files(query = {'channel': c, 'shot_id': pred.get_metadata('shot_id')})[0]
-                        im_pred = io.read_image(pred)
-                        im_gt = io.read_image(ground_truth)
+                logger.critical(pred.id)
+                ground_truth = gt_fileset.get_files(query = {'channel': c, 'shot_id': pred.get_metadata('shot_id')})[0]
+                im_pred = io.read_image(pred)
+                im_gt = io.read_image(ground_truth)
 
 
-                        if c == "background":
-                            threshold = 254
-                        else:
-                            threshold = 0
-             
-                        im_gt = im_gt > threshold
-                        im_gt_high = im_pred[im_gt]/255
-                        im_gt_low = im_pred[1-im_gt]/255	
+                if c == "background":
+                    threshold = 254
+                else:
+                    threshold = 0
+     
+                im_gt_high = im_pred[im_gt > threshold] / 255
+                im_gt_low = im_pred[1-im_gt < threshold] / 255
 
 
-            hist_high_pred, bins_high = np.histogram(im_gt_high, self.hist_bins, range=(0,1))
-            hist_low_pred, bins_low = np.histogram(im_gt_low, self.hist_bins, range=(0,1))
-            hist_high += hist_high_pred
-            hist_low += hist_low_pred
+                hist_high_pred, bins_high = np.histogram(im_gt_high, self.hist_bins, range=(0,1))
+                hist_low_pred, bins_low = np.histogram(im_gt_low, self.hist_bins, range=(0,1))
+                hist_high += hist_high_pred
+                hist_low += hist_low_pred
             histograms[c] = {"hist_high": hist_high.tolist(), "bins_high": bins_high.tolist(), "hist_low": hist_low.tolist(), "bins_low": bins_low.tolist()}
         return histograms
 
@@ -263,8 +261,6 @@ class VoxelsEvaluation(EvaluationTask):
     upstream_task = luigi.TaskParameter(default = cl.Voxels)
     ground_truth = luigi.TaskParameter(default = VoxelGroundTruth)
     hist_bins = luigi.IntParameter(default = 100)
-    hist_low = luigi.IntParameter(default= 0)
-    hist_high= luigi.IntParameter(default= 18)
 
     def requires(self):
         return [self.upstream_task(), self.ground_truth()]
@@ -297,22 +293,8 @@ class VoxelsEvaluation(EvaluationTask):
             im_gt_high = prediction_c[gt_c > 0.5]
             im_gt_low = prediction_c[gt_c < 0.5]
 
-
-            hist_high, bins_high = np.histogram(im_gt_high, self.hist_bins, range=[self.hist_low, self.hist_high])
-            hist_low, bins_low = np.histogram(im_gt_low, self.hist_bins, range=[self.hist_low, self.hist_high])
-            plt.figure()
-            plt.plot(bins_high[:-1], hist_high)
-            plt.savefig("high%s.png"%c)
-
-            plt.figure()
-            plt.plot(bins_low[:-1], hist_low)
-            plt.savefig("low%s.png"%c)
-
-            plt.imshow(gt_c.max(0))
-            plt.savefig("gt%s.png"%c)
-
-            plt.imshow(prediction_c.max(0))
-            plt.savefig("prediction%s.png"%c)
+            hist_high, bins_high = np.histogram(im_gt_high, self.hist_bins, range=[0,1])
+            hist_low, bins_low = np.histogram(im_gt_low, self.hist_bins, range=[0,1])
 
             histograms[c] = {"hist_high": hist_high.tolist(), "bins_high": bins_high.tolist(), "hist_low": hist_low.tolist(), "bins_low": bins_low.tolist()}
         return histograms

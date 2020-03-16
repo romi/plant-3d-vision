@@ -126,6 +126,7 @@ class Backprojection():
         if self.dtype == np.float32 and mask.dtype == np.uint8:
             logger.debug("type is uint8")
             mask = mask / 255
+        logger.critical(self.dtype)
         if self.log and self.dtype == np.float32:
             mask = np.log(eps + mask)
         intrinsics_h = np.ascontiguousarray(intrinsics).astype(np.float32)

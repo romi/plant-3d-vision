@@ -83,6 +83,9 @@ class Voxels(RomiTask):
 
   
         vol = sc.process_fileset(masks_fileset, use_colmap_poses=self.use_colmap_poses)#, images)
+        if self.log:
+            vol = np.exp(vol)
+            vol[vol > 1] = 1.0
         logger.debug("size = %i" % vol.size)
         outfs = self.output().get()
         outfile = self.output_file()
