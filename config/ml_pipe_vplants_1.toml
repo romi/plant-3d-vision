@@ -21,7 +21,7 @@ scan_id = "models"
 [Segmentation2D]
 upstream_task = "ImagesFilesetExists"
 query = "{\"channel\":\"rgb\"}"
-model_id = "tmp_epoch10"
+model_id = "Resnetdataset_gl_png_896_896_epoch50"
 resize = true
 
 Sx = 896

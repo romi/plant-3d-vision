@@ -21,7 +21,7 @@ scan_id = "models"
 [Segmentation2D]
 upstream_task = "Undistorted"
 query = "{\"channel\":\"rgb\"}"
-model_id = "tmp_epoch20"
+model_id = "tmp_epoch10"
 resize = true
 
 Sx = 896

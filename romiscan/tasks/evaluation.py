@@ -269,34 +269,62 @@ class VoxelsEvaluation(EvaluationTask):
         prediction_file = self.upstream_task().output().get().get_files()[0]
         gt_file = self.ground_truth().output().get().get_files()[0]
 
-        predictions = io.read_npz(prediction_file)
+        voxels = io.read_npz(prediction_file)
         gts = io.read_npz(gt_file)
 
-        channels = list(gts.keys())
         histograms = {}
         from matplotlib import pyplot as plt
 
-        for c in channels:
+        l = list(gts.keys())
+        res = np.zeros((*voxels[l[0]].shape, len(l)))
+        for i in range(len(l)):
+            res[:,:,:,i] = voxels[l[i]]
+        res_idx = np.argmax(res, axis=3)
+
+        for i, c in enumerate(l):
             if c == "background":
                 continue
 
-            prediction_c = predictions[c]
+            prediction_c = res_idx == i
+
+            pred_no_c = np.copy(res)
+            pred_no_c = np.max(np.delete(res, i, axis=3), axis=3)
+            pred_c = res[:,:,:,i]
+
+            prediction_c = prediction_c * (pred_c > (10 * pred_no_c))
+            
             gt_c = gts[c]
-
-            maxval = np.max(prediction_c)
-            minval = np.min(prediction_c)
-
-
             gt_c = gt_c[0:prediction_c.shape[0],0:prediction_c.shape[1] ,0:prediction_c.shape[2]]
+
+            fig = plt.figure()
+            plt.subplot(2,1,1)
+            plt.imshow(prediction_c.max(0))
+
+            plt.subplot(2,1,2)
+            plt.imshow(gt_c.max(0))
+
+            fig.canvas.draw()
+            x = fig.canvas.renderer.buffer_rgba()
+
+            outfs = self.output().get()
+            f = outfs.create_file("img_" + c)
+            io.write_image(f, x, "png")
+
+
+
+
+            # maxval = np.max(prediction_c)
+            # minval = np.min(prediction_c)
+
             logger.critical(gt_c.shape)
             logger.critical(prediction_c.shape)
-            im_gt_high = prediction_c[gt_c > 0.5]
-            im_gt_low = prediction_c[gt_c < 0.5]
 
-            hist_high, bins_high = np.histogram(im_gt_high, self.hist_bins, range=[0,1])
-            hist_low, bins_low = np.histogram(im_gt_low, self.hist_bins, range=[0,1])
+            tp = np.sum(prediction_c[gt_c > 0.5])
+            fn = np.sum(1-prediction_c[gt_c > 0.5])
+            fp = np.sum(prediction_c[gt_c < 0.5])
+            tn = np.sum(1-prediction_c[gt_c < 0.5])
 
-            histograms[c] = {"hist_high": hist_high.tolist(), "bins_high": bins_high.tolist(), "hist_low": hist_low.tolist(), "bins_low": bins_low.tolist()}
+            histograms[c] = {"tp": tp.tolist(), "fp" : fp.tolist(), "tn" : tn.tolist(), "fn": fn.tolist()}
         return histograms
 
 

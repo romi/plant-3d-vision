@@ -24,7 +24,6 @@ class Voxels(RomiTask):
     type = luigi.Parameter()
     multiclass = luigi.BoolParameter(default=False)
     log = luigi.BoolParameter(default=True)
-    blur = luigi.FloatParameter(default=0.0)
 
     def requires(self):
         if self.use_colmap_poses:
@@ -79,7 +78,7 @@ class Voxels(RomiTask):
         origin = np.array([x_min, y_min, z_min])
 
         sc = cl.Backprojection(
-            [nx, ny, nz], [x_min, y_min, z_min], self.voxel_size, type=self.type, multiclass=self.multiclass, log=self.log, blur=self.blur)
+            [nx, ny, nz], [x_min, y_min, z_min], self.voxel_size, type=self.type, multiclass=self.multiclass, log=self.log)
 
   
         vol = sc.process_fileset(masks_fileset, use_colmap_poses=self.use_colmap_poses)#, images)
