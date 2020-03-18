@@ -49,7 +49,6 @@ class VoxelGroundTruth(RomiTask):
             min= np.min(x.vertices, axis=0)
             max = np.max(x.vertices, axis=0)
             arr_size = np.asarray((max-min) / cl.Voxels().voxel_size + 1, dtype=np.int)+ 1
-            logger.critical(arr_size)
             for k in x.meshes.keys():
                 t = open3d.geometry.TriangleMesh()
                 t.triangles = open3d.utility.Vector3iVector(np.asarray(x.meshes[k].faces))
@@ -123,7 +122,7 @@ class PointCloudGroundTruth(RomiTask):
                 pcd.colors = color
 
                 res = res + pcd
-                point_labels += [k] * len(pcd.points)
+                point_labels += [class_name] * len(pcd.points)
 
             io.write_point_cloud(self.output_file(), res)
             self.output_file().set_metadata({'labels' : point_labels})
@@ -170,6 +169,49 @@ class ClusteredMeshGroundTruth(RomiTask):
                     f = output_fileset.create_file("%s_%03d"%(class_name, j))
                     io.write_triangle_mesh(f, newt)
                     f.set_metadata("label", class_name)
+
+class PointCloudSegmentationEvaluation(EvaluationTask):
+    upstream_task = luigi.TaskParameter(default=proc3d.PointCloud)
+    ground_truth = luigi.TaskParameter(default=PointCloudGroundTruth)
+    max_distance = luigi.FloatParameter(default=2)
+
+    def evaluate(self):
+        import open3d
+        import tqdm
+        source = io.read_point_cloud(self.upstream_task().output_file())
+        target = io.read_point_cloud(self.ground_truth().output_file())
+        labels_gt = self.ground_truth().output_file().get_metadata('labels')
+        labels = self.upstream_task().output_file().get_metadata('labels')
+        pcd_tree = open3d.geometry.KDTreeFlann(target)
+        res = {}
+        unique_labels = set(labels_gt)
+        for l in unique_labels:
+            res[l] = {
+                "tp" : 0,
+                "fp" : 0,
+                "tn" : 0,
+                "fn" : 0
+            }
+        for i, p in enumerate(source.points):
+            [k, idx, _] = pcd_tree.search_knn_vector_3d(p, 1)
+            if labels_gt[idx[0]] == labels[i]:
+                for l in unique_labels:
+                    if l == labels[i]:
+                        res[l]["tp"] += 1
+                    else:
+                        res[l]["tn"] += 1
+            else:
+                for l in unique_labels:
+                    if l == labels[i]:
+                        res[l]["fp"] += 1
+                    elif l == labels_gt[idx[0]]:
+                        res[l]["fn"] += 1
+                    else:
+                        res[l]["tn"] += 1
+        for l in unique_labels:
+            res[l]["precision"] = res[l]["tp"]  /( res[l]["tp"] + res[l]["fp"])
+            res[l]["recall"] = res[l]["tp"]  / (res[l]["tp"] + res[l]["fn"])
+        return res
 
 
 class PointCloudEvaluation(EvaluationTask):
@@ -235,7 +277,6 @@ class Segmentation2DEvaluation(EvaluationTask):
 
             
             for pred in preds:
-                logger.critical(pred.id)
                 ground_truth = gt_fileset.get_files(query = {'channel': c, 'shot_id': pred.get_metadata('shot_id')})[0]
                 im_pred = io.read_image(pred)
                 im_gt = io.read_image(ground_truth)
@@ -316,8 +357,6 @@ class VoxelsEvaluation(EvaluationTask):
             # maxval = np.max(prediction_c)
             # minval = np.min(prediction_c)
 
-            logger.critical(gt_c.shape)
-            logger.critical(prediction_c.shape)
 
             tp = np.sum(prediction_c[gt_c > 0.5])
             fn = np.sum(1-prediction_c[gt_c > 0.5])

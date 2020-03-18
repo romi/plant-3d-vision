@@ -7,7 +7,6 @@ from romidata import io
 from romiscan.tasks.cl import Voxels
 from romiscan.tasks.colmap import Colmap
 from romiscan.tasks.proc2d import Segmentation2D
-from romiscan.tasks.evaluation import PointCloudGroundTruth, VoxelGroundTruth
 from romiscan import proc3d
 from romiscan.tasks import config
 
@@ -24,6 +23,7 @@ class PointCloud(RomiTask):
     level_set_value = luigi.FloatParameter(default=0.0)
     log = luigi.BoolParameter(default=False)
     background_prior = luigi.FloatParameter(default=1.0)
+    min_contrast = luigi.FloatParameter(default=10.0)
 
     def run(self):
         from romiscan import proc3d
@@ -43,7 +43,6 @@ class PointCloud(RomiTask):
 
 
             # bg = voxels["background"] > voxels["background"].max() - 10
-            # logger.critical(voxels["background"].max())
 
             res_idx = np.argmax(res, axis=3)
             # res_value = np.amax(res, axis=3)
@@ -60,7 +59,12 @@ class PointCloud(RomiTask):
 
             for i in range(len(l)):
                 if l[i] != 'background':
-                    out = proc3d.vol2pcd(res_idx == i, origin, voxel_size, self.level_set_value)
+                    pred_no_c = np.copy(res)
+                    pred_no_c = np.max(np.delete(res, i, axis=3), axis=3)
+                    pred_c = res[:,:,:,i]
+                    pred_c = (res_idx == i) * (pred_c > (self.min_contrast * pred_no_c))
+
+                    out = proc3d.vol2pcd(pred_c, origin, voxel_size, self.level_set_value)
                     color = np.zeros((len(out.points), 3))
                     if l[i] in colors:
                         color[:] = np.asarray(colors[l[i]])
@@ -76,7 +80,6 @@ class PointCloud(RomiTask):
 
         else:
             voxels = io.read_volume(ifile)
-            logger.critical(voxels.sum())
 
             origin = np.array(ifile.get_metadata('origin'))
             voxel_size = float(ifile.get_metadata('voxel_size'))
@@ -211,8 +214,6 @@ class ClusteredMesh(RomiTask):
         all_colors = np.asarray(x.colors)
 
         labels = self.input_file().get_metadata("labels")
-        logger.critical(len(labels))
-        logger.critical(len(x.points))
 
         geometries = []
         output_fileset = self.output().get()
@@ -220,7 +221,6 @@ class ClusteredMesh(RomiTask):
         for l in set(labels):
             pcd = open3d.geometry.PointCloud()
             idx = [i for i in range(len(labels)) if labels[i] == l]
-            logger.critical("%s, %i"%(l, len(idx)))
             points = all_points[idx, :]
             normals = all_normals[idx, :]
             colors = all_colors[idx, :]
