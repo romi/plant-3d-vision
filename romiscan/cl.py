@@ -60,12 +60,11 @@ class Backprojection():
         default value when initializing the voxels (defaults to 0)
     """
 
-    def __init__(self, shape, origin, voxel_size, type="carving", default_value=0, multiclass=False, log=False):
+    def __init__(self, shape, origin, voxel_size, type="carving", default_value=0, labels=None, log=False, label_single_class=None):
         self.shape = shape
         self.origin = origin
         self.voxel_size = voxel_size
         self.default_value = default_value
-        self.multiclass = multiclass
         self.log = log
 
         self.type = type
@@ -75,7 +74,7 @@ class Backprojection():
         elif type == "averaging":
             self.dtype = np.float32
             self.kernel = backprojection_kernels.average
-
+        self.labels = labels
         self.init_buffers()
 
     def init_buffers(self):
@@ -152,20 +151,20 @@ class Backprojection():
         cl.enqueue_copy(queue, self.values_h, self.values_d)
         return self.values_h
 
-    def process_fileset(self, fs, use_colmap_poses=False):
-        if self.multiclass:
-            labels = self.get_labels(fs)
+    def process_fileset(self, fs, use_colmap_poses=False, invert=False):
+        if self.labels is not None:
+            labels = self.labels
             logger.debug("labels: ")
             logger.debug(labels)
             result = np.zeros((len(labels), *self.shape))
             for i,l in enumerate(labels):
-                result[i, :] = self.process_label(fs, l, use_colmap_poses)
+                result[i, :] = self.process_label(fs, l, use_colmap_poses, invert=invert)
             return result
         else:
-            return self.process_label(fs, use_colmap_poses=use_colmap_poses)
+            return self.process_label(fs, use_colmap_poses=use_colmap_poses, invert=invert)
 
 
-    def process_label(self, fs, label=None, use_colmap_poses=False):
+    def process_label(self, fs, label=None, use_colmap_poses=False, invert=False):
         """
         Processes a whole fileset.
 
@@ -204,20 +203,16 @@ class Backprojection():
             rot = sum(cam['rotmat'], [])
             tvec = cam['tvec']
             mask = io.read_image(fi)
+            if invert and mask.dtype==np.uint8:
+                mask = 255 - mask
+            if invert and mask.dtype == np.float32:
+                mask = 1.0 - mask
 
             self.process_view(intrinsics, rot, tvec, mask)
 
         result = self.values()
         result = result.reshape(self.shape)
         return result
-
-    def get_labels(self, fs):
-        labels = set()
-        for fi in fs.get_files():
-            label = fi.get_metadata('channel')
-            if label is not None:
-                labels.add(label)
-        return list(labels)
 
     def clear(self):
         self.values_h = self.default_value * \

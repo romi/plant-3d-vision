@@ -22,8 +22,11 @@ class Voxels(RomiTask):
 
     voxel_size = luigi.FloatParameter()
     type = luigi.Parameter()
-    multiclass = luigi.BoolParameter(default=False)
     log = luigi.BoolParameter(default=True)
+
+    invert = luigi.BoolParameter(default=False)
+    labels = luigi.ListParameter(default=[])
+
 
     def requires(self):
         if self.use_colmap_poses:
@@ -34,6 +37,10 @@ class Voxels(RomiTask):
     def run(self):
         from romiscan import cl
         masks_fileset = self.input()['masks'].get()
+        if len(self.labels) == 0:
+            labels = masks_fileset.get_metadata("label_names")
+        else:
+            labels = list(self.labels)
 
         bounding_box = self.output().get().scan.get_metadata("bounding_box")
 
@@ -78,10 +85,10 @@ class Voxels(RomiTask):
         origin = np.array([x_min, y_min, z_min])
 
         sc = cl.Backprojection(
-            [nx, ny, nz], [x_min, y_min, z_min], self.voxel_size, type=self.type, multiclass=self.multiclass, log=self.log)
+            [nx, ny, nz], [x_min, y_min, z_min], self.voxel_size, type=self.type, labels=labels, log=self.log)
 
   
-        vol = sc.process_fileset(masks_fileset, use_colmap_poses=self.use_colmap_poses)#, images)
+        vol = sc.process_fileset(masks_fileset, use_colmap_poses=self.use_colmap_poses, invert=self.invert)#, images)
         if self.log:
             vol = np.exp(vol)
             vol[vol > 1] = 1.0
@@ -89,12 +96,11 @@ class Voxels(RomiTask):
         outfs = self.output().get()
         outfile = self.output_file()
         
-        if self.multiclass:
-            out = {}
-            for i, label in enumerate(sc.get_labels(masks_fileset)):
-                out[label] = vol[i, :]
-            io.write_npz(outfile, out)
-        else:
-            io.write_volume(outfile, vol)
+        out = {}
+        for i, label in enumerate(labels):
+            out[label] = vol[i, :]
+        logger.critical(labels)
+        io.write_npz(outfile, out)
+
         outfile.set_metadata({'voxel_size' : self.voxel_size, 'origin' : origin.tolist() })
 

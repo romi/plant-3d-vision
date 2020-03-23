@@ -85,9 +85,11 @@ class ModelFileset(FilesetExists):
     fileset_id = "models"
 
 
-class Segmentation2D(RomiTask):
+class Segmentation2D(Masks):
     """
     Segment images by class"""
+    type =None
+    parameters = None
 
     upstream_task = luigi.TaskParameter(default=Undistorted)
     model_fileset = luigi.TaskParameter(default=ModelFileset)
@@ -98,7 +100,9 @@ class Segmentation2D(RomiTask):
     Sx = luigi.IntParameter(default=896)
     Sy = luigi.IntParameter(default=896)
 
-    single_label = luigi.Parameter(default="")
+    labels = luigi.ListParameter(default=[])
+    inverted_labels = luigi.ListParameter(default=["background"])
+
     resize = luigi.BoolParameter(default=False)
 
     def requires(self):
@@ -113,6 +117,7 @@ class Segmentation2D(RomiTask):
         import appdirs
         from skimage import transform
         import PIL
+        from romiscan import proc2d
 
         images_fileset = self.input()["images"].get().get_files(query=self.query)
         model_file = self.input()["model"].get().get_file(self.model_id)
@@ -120,6 +125,10 @@ class Segmentation2D(RomiTask):
             raise IOError("unable to find model: %s"%self.model_id)
 
         labels = model_file.get_metadata("label_names")
+        if len(self.labels) > 0:
+            label_range = [labels.index(x) for x in self.labels]
+        else:
+            label_range = range(len(labels))
 
         #APPLY SEGMENTATION
         images_segmented, id_im = segmentation(self.Sx, self.Sy, images_fileset, model_file, self.resize)
@@ -127,21 +136,20 @@ class Segmentation2D(RomiTask):
 
         #Save class prediction as images, one by one, class per class
         logger.debug("Saving the .astype(np.uint8)segmented images, takes around 15 s")
-        if self.single_label == "":
-            for i in range(images_segmented.shape[0]):
-                for j in range(len(labels)):
-                    f = output_fileset.create_file('%03d_%s'%(i, labels[j]))
-                    im = (images_segmented[i, j, :, :].cpu().numpy() * 255).astype(np.uint8)
-                    io.write_image(f, im, 'png' )
-                    orig_metadata = images_fileset[i].get_metadata()
-                    f.set_metadata({'image_id' : id_im[i][0], **orig_metadata, 'channel' : labels[j]})
-        else:
-            for i in range(images_segmented.shape[0]):
-                j = labels.index(self.single_label)
+        for i in range(images_segmented.shape[0]):
+            for j in label_range:
                 f = output_fileset.create_file('%03d_%s'%(i, labels[j]))
-                im = (images_segmented[i, j, :, :].cpu().numpy() * 255).astype(np.uint8)
-                io.write_image(f, im, 'png' )
+                im = images_segmented[i, j, :, :].cpu().numpy()
+                if labels[j] in self.inverted_labels:
+                    im = 1.0 - im
+                if self.binarize:
+                    im = im > self.threshold
+                    if self.dilation > 0:
+                        im = proc2d.dilation(im, self.dilation)
+                im = (im * 255).astype(np.uint8)
+                if labels[j] in self.inverted_labels:
+                    im = 255 - im
+                io.write_image(f, im, 'png')
                 orig_metadata = images_fileset[i].get_metadata()
                 f.set_metadata({'image_id' : id_im[i][0], **orig_metadata, 'channel' : labels[j]})
-
-        
+            output_fileset.set_metadata("label_names",[labels[j] for j in label_range])

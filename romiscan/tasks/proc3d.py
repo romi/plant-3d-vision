@@ -24,13 +24,24 @@ class PointCloud(RomiTask):
     log = luigi.BoolParameter(default=False)
     background_prior = luigi.FloatParameter(default=1.0)
     min_contrast = luigi.FloatParameter(default=10.0)
+    min_score = luigi.FloatParameter(default=0.2)
 
     def run(self):
         from romiscan import proc3d
         ifile = self.input_file()
-        if Voxels().multiclass:
-            import open3d
+
+        try:
             voxels = io.read_npz(ifile)
+            if (len(voxels.keys()) == 1):
+                multiclass = False
+                voxels = voxels[list(voxels.keys())[0]]
+            else:
+                multiclass = True
+        except:
+            voxels = io.read_volume(ifile)
+            multiclass = False
+        if multiclass:
+            import open3d
             l = list(voxels.keys())
             # background_idx = l.index("background")
             # l.remove("background")
@@ -58,11 +69,15 @@ class PointCloud(RomiTask):
             colors = config.PointCloudColorConfig().colors
 
             for i in range(len(l)):
+                logger.debug(f"label = {l[i]}")
                 if l[i] != 'background':
                     pred_no_c = np.copy(res)
                     pred_no_c = np.max(np.delete(res, i, axis=3), axis=3)
                     pred_c = res[:,:,:,i]
-                    pred_c = (res_idx == i) * (pred_c > (self.min_contrast * pred_no_c))
+                    pred_c = (res_idx == i)
+                    if self.min_contrast > 1.0:
+                        pred_c *= (pred_c > (self.min_contrast * pred_no_c))
+                    pred_c *= (pred_c > self.min_score)
 
                     out = proc3d.vol2pcd(pred_c, origin, voxel_size, self.level_set_value)
                     color = np.zeros((len(out.points), 3))
@@ -79,8 +94,6 @@ class PointCloud(RomiTask):
             self.output_file().set_metadata({'labels' : point_labels})        
 
         else:
-            voxels = io.read_volume(ifile)
-
             origin = np.array(ifile.get_metadata('origin'))
             voxel_size = float(ifile.get_metadata('voxel_size'))
             out = proc3d.vol2pcd(voxels, origin, voxel_size, self.level_set_value)
@@ -93,7 +106,6 @@ class SegmentedPointCloud(RomiTask):
     upstream_task = luigi.TaskParameter(default=Colmap)
     upstream_segmentation = luigi.TaskParameter(default=Segmentation2D)
     use_colmap_poses = luigi.BoolParameter(default=True)
-    blur = luigi.FloatParameter(default=0.0)
 
 
 
@@ -124,6 +136,7 @@ class SegmentedPointCloud(RomiTask):
             if label is not None:
                 labels.add(label)
         labels = list(labels)
+        logger.critical(labels)
         labels.remove('background')
         if 'rgb' in labels:
             labels.remove('rgb')
@@ -157,8 +170,6 @@ class SegmentedPointCloud(RomiTask):
             for label_idx, l in enumerate(labels):
                 f = fs.get_files(query = {"shot_id" : shot_id, "channel" : l})[0]
                 mask = io.read_image(f)
-                if (self.blur > 0):
-                    mask = gaussian_filter(mask, sigma=self.blur)
                 for i, px in enumerate(pixels):
                     if self.is_in_pict(px, mask.shape):
                         scores[shot_idx, label_idx, i] = mask[px[1], px[0]]
@@ -257,3 +268,36 @@ class CurveSkeleton(RomiTask):
 
         io.write_json(self.output_file(), out)
 
+
+class VoxelsWithPrior(RomiTask):
+    """
+    Assign class to voxel adjusting for the possibility that
+    projection can be wrongly labeled.
+    """
+    upstream_task = luigi.TaskParameter(default=Voxels)
+    recall = luigi.DictParameter(default={})
+    specificity = luigi.DictParameter(default={})
+    n_views = luigi.IntParameter()
+
+    def run(self):
+        prediction_file = self.upstream_task().output().get().get_files()[0]
+        voxels = io.read_npz(prediction_file)
+        out = {}
+        l = list(voxels.keys())
+        for c in l:
+            if c in self.recall:
+                recall = self.recall[c]
+            else:
+                continue
+            if c in self.specificity:
+                specificity = self.specificity[c]
+            else:
+                continue
+            l0 = (self.n_views - voxels[c]) * np.log(specificity) + voxels[c] * np.log(1 - specificity)
+            l1 = (self.n_views - voxels[c]) * np.log(1 - recall) + voxels[c] * np.log(recall)
+            out[c] = l1 - l0
+
+        outfs = self.output().get()
+        outfile = self.output_file()
+        io.write_npz(outfile, out)
+        outfile.set_metadata(prediction_file.get_metadata())
