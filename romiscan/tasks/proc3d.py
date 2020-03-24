@@ -141,24 +141,20 @@ class SegmentedPointCloud(RomiTask):
         if 'rgb' in labels:
             labels.remove('rgb')
 
-        shot_ids = set()
+        scores = np.zeros((len(labels), len(pts)))
+
         for fi in fs.get_files():
-            shot_id = fi.get_metadata('shot_id')
-            if shot_id is not None:
-                shot_ids.add(shot_id)
-        shot_ids = list(shot_ids)
+            label = fi.get_metadata("channel")
+            if label not in labels:
+                continue
 
-        scores = np.zeros((len(shot_ids), len(labels), len(pts)))
-
-        for shot_idx, shot_id in enumerate(shot_ids):
-            f = fs.get_files(query = {"shot_id" : shot_id, "channel" : labels[0]})[0]
             if self.use_colmap_poses:
-                camera = f.get_metadata("colmap_camera")
+                camera = fi.get_metadata("colmap_camera")
             else:
-                camera = f.get_metadata("camera")
+                camera = fi.get_metadata("camera")
 
             if camera is None:
-                logger.warning("No pose for image %s"%shot_id)
+                logger.warning("Could not get camera pose for view, skipping...")
                 continue
 
             rotmat = np.array(camera["rotmat"])
@@ -167,19 +163,22 @@ class SegmentedPointCloud(RomiTask):
             intrinsics = camera["camera_model"]["params"]
             K = np.array([[intrinsics[0], 0, intrinsics[2]], [0, intrinsics[1], intrinsics[3]], [0, 0, 1]])
             pixels = np.asarray(proc3d.backproject_points(pts, K, rotmat, tvec) + 0.5, dtype=int)
-            for label_idx, l in enumerate(labels):
-                f = fs.get_files(query = {"shot_id" : shot_id, "channel" : l})[0]
-                mask = io.read_image(f)
-                for i, px in enumerate(pixels):
-                    if self.is_in_pict(px, mask.shape):
-                        scores[shot_idx, label_idx, i] = mask[px[1], px[0]]
-        scores = np.sum(np.log(scores + 0.1), axis=0)
+
+            label_idx = labels.index(label)
+            mask = io.read_image(fi)
+            for i, px in enumerate(pixels):
+                if self.is_in_pict(px, mask.shape):
+                    scores[label_idx, i] += mask[px[1], px[0]]
+
         pts_labels = np.argmax(scores, axis=0).flatten()
 
         colors = config.PointCloudColorConfig().colors
         color_array = np.zeros((len(pts), 3))
         point_labels = [""] * len(pts)
+        logger.critical(labels)
+        logger.critical(colors)
         for i in range(len(labels)):
+            logger.critical((pts_labels==i).sum())
             if labels[i] in colors:
                 color_array[pts_labels==i, :] = np.asarray(colors[labels[i]])
             else:
@@ -188,8 +187,6 @@ class SegmentedPointCloud(RomiTask):
             for u in l:
                 point_labels[u] = labels[i]
         pcd.colors = open3d.utility.Vector3dVector(color_array)
-
-
         out = self.output_file()
         io.write_point_cloud(out, pcd)
         out.set_metadata("labels", point_labels)
