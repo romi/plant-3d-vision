@@ -121,7 +121,7 @@ class SegmentedPointCloud(RomiTask):
             return io.read_point_cloud(x)
 
     def is_in_pict(self, px, shape):
-        return px[0] > 0 and px[0] < shape[0] and px[1] > 0 and px[1] < shape[1]
+        return px[0] >= 0 and px[0] < shape[1] and px[1] >= 0 and px[1] < shape[0]
 
 
     def run(self):
@@ -163,6 +163,8 @@ class SegmentedPointCloud(RomiTask):
             intrinsics = camera["camera_model"]["params"]
             K = np.array([[intrinsics[0], 0, intrinsics[2]], [0, intrinsics[1], intrinsics[3]], [0, 0, 1]])
             pixels = np.asarray(proc3d.backproject_points(pts, K, rotmat, tvec) + 0.5, dtype=int)
+
+            logger.critical(pixels.shape)
 
             label_idx = labels.index(label)
             mask = io.read_image(fi)
