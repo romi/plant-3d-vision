@@ -21,28 +21,34 @@ scan_id = "models"
 [Segmentation2D]
 upstream_task = "Undistorted"
 query = "{\"channel\":\"rgb\"}"
-model_id = "tmp_epoch10"
+model_id = "Resnetdataset_gl_png_896_896_epoch50.cache_896_896_finetune_epoch20"
 resize = true
-
+binarize = true
+dilation = 1
 Sx = 896
 Sy = 896
 epochs = 1
 batch = 1
 learning_rate = 0.0001
-
+threshold = 0.0035
 [Voxels]
 upstream_mask = "Segmentation2D"
-multiclass = true
-voxel_size = 1.0
+labels = "[\"background\"]"
+voxel_size = 0.01
 type = "averaging"
-log = false
+invert = true
 use_colmap_poses = true
-blur = 2.0
+log = true
 
 [PointCloud]
 level_set_value = 0.1
 background_prior= 0.5
 log = false
+
+[SegmentedPointCloud]
+upstream_segmentation = "Segmentation2D"
+upstream_task = "PointCloud"
+use_colmap_poses = true
 
 [PointCloudGroundTruth]
 pcd_size = 10000
@@ -57,10 +63,6 @@ mesh_source = "delaunay"
 
 [PointCloudEvaluation]
 max_distance = 0.2
-
-[SegmentedPointCloud]
-upstream_segmentation = "Segmentation2D"
-blur = 2.0
 
 [AnglesAndInternodes]
 upstream_task = "ClusteredMesh"

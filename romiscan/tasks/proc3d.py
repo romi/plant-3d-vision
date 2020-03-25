@@ -91,7 +91,8 @@ class PointCloud(RomiTask):
                     point_labels = point_labels + [l[i]] * len(out.points)
 
             io.write_point_cloud(self.output_file(), pcd)
-            self.output_file().set_metadata({'labels' : point_labels})        
+            self.output_file().set_metadata({'labels' : point_labels})
+            
 
         else:
             origin = np.array(ifile.get_metadata('origin'))
@@ -99,6 +100,7 @@ class PointCloud(RomiTask):
             out = proc3d.vol2pcd(voxels, origin, voxel_size, self.level_set_value)
 
             io.write_point_cloud(self.output_file(), out)
+            self.output_file().set_metadata({'voxel_size': voxel_size})
 
 class SegmentedPointCloud(RomiTask):
     """ Segments an existing point cloud using 2D pictures
@@ -129,6 +131,7 @@ class SegmentedPointCloud(RomiTask):
         fs = self.upstream_segmentation().output().get()
         pcd = self.load_point_cloud()
         pts = np.asarray(pcd.points)
+        ifile = self.input_file()
 
         labels = set()
         for fi in fs.get_files():
@@ -136,7 +139,6 @@ class SegmentedPointCloud(RomiTask):
             if label is not None:
                 labels.add(label)
         labels = list(labels)
-        logger.critical(labels)
         labels.remove('background')
         if 'rgb' in labels:
             labels.remove('rgb')
@@ -163,14 +165,14 @@ class SegmentedPointCloud(RomiTask):
             intrinsics = camera["camera_model"]["params"]
             K = np.array([[intrinsics[0], 0, intrinsics[2]], [0, intrinsics[1], intrinsics[3]], [0, 0, 1]])
             pixels = np.asarray(proc3d.backproject_points(pts, K, rotmat, tvec) + 0.5, dtype=int)
-
-            logger.critical(pixels.shape)
-
+            
             label_idx = labels.index(label)
             mask = io.read_image(fi)
             for i, px in enumerate(pixels):
                 if self.is_in_pict(px, mask.shape):
+                    
                     scores[label_idx, i] += mask[px[1], px[0]]
+
 
         pts_labels = np.argmax(scores, axis=0).flatten()
 
