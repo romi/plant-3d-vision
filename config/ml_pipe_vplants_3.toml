@@ -66,3 +66,8 @@ use_colmap_poses = false
 [AnglesAndInternodes]
 upstream_task = "ClusteredMesh"
 
+[PointCloudSegmentationEvaluation]
+upstream_task = "SegmentedPointCloud"
+
+[Segmentation2DEvaluation]
+tol_px = 1

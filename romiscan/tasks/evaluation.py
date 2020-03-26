@@ -173,7 +173,6 @@ class ClusteredMeshGroundTruth(RomiTask):
 class PointCloudSegmentationEvaluation(EvaluationTask):
     upstream_task = luigi.TaskParameter(default=proc3d.PointCloud)
     ground_truth = luigi.TaskParameter(default=PointCloudGroundTruth)
-    max_distance = luigi.FloatParameter(default=2)
 
     def evaluate(self):
         import open3d
@@ -193,21 +192,20 @@ class PointCloudSegmentationEvaluation(EvaluationTask):
                 "fn" : 0
             }
         for i, p in enumerate(source.points):
+            li = labels[i]
             [k, idx, _] = pcd_tree.search_knn_vector_3d(p, 1)
-            if labels_gt[idx[0]] == labels[i]:
-                for l in unique_labels:
-                    if l == labels[i]:
+            for l in unique_labels:
+                if li == l: # Positive cases
+                    if li == labels_gt[idx[0]]:
                         res[l]["tp"] += 1
                     else:
-                        res[l]["tn"] += 1
-            else:
-                for l in unique_labels:
-                    if l == labels[i]:
                         res[l]["fp"] += 1
-                    elif l == labels_gt[idx[0]]:
-                        res[l]["fn"] += 1
-                    else:
+                else: # Negative cases
+                    if li == labels_gt[idx[0]]:
                         res[l]["tn"] += 1
+                    else:
+                        res[l]["fn"] += 1
+
         for l in unique_labels:
             res[l]["precision"] = res[l]["tp"]  /( res[l]["tp"] + res[l]["fp"])
             res[l]["recall"] = res[l]["tp"]  / (res[l]["tp"] + res[l]["fn"])
@@ -258,8 +256,10 @@ class Segmentation2DEvaluation(EvaluationTask):
     upstream_task = luigi.TaskParameter(default = proc2d.Segmentation2D)
     ground_truth = luigi.TaskParameter(default = ImagesFilesetExists)
     hist_bins = luigi.IntParameter(default = 100)
+    tol_px = luigi.IntParameter()
 
     def evaluate(self):
+        from scipy.ndimage.morphology import distance_transform_edt, binary_dilation
         
         prediction_fileset = self.upstream_task().output().get()
         gt_fileset = self.ground_truth().output().get()
@@ -271,6 +271,9 @@ class Segmentation2DEvaluation(EvaluationTask):
         res = {}
 
         for c in channels:
+
+            if (c == "background"):
+                continue
 
             preds = prediction_fileset.get_files(query = {'channel' : c})
             # hist_high, disc = np.histogram(np.array([]), self.hist_bins, range=(0,1))
@@ -287,31 +290,42 @@ class Segmentation2DEvaluation(EvaluationTask):
                 ground_truth = gt_fileset.get_files(query = {'channel': c, 'shot_id': pred.get_metadata('shot_id')})[0]
                 im_pred = io.read_image(pred)
                 im_gt = io.read_image(ground_truth)
-                logger.critical(im_pred.max())
+                for i in range(self.tol_px):
+                    im_gt_tol = binary_dilation(im_gt > 0)
+
+                tp = int(np.sum(im_gt_tol * (im_pred > 0)))
+                fn = int(np.sum(im_gt_tol * (im_pred == 0)))
+                tn = int(np.sum((im_gt == 0) * (im_pred == 0)))
+                fp = int(np.sum((im_gt == 0) * (im_pred > 0)))
+
+                res[c]["tp"] += tp
+                res[c]["fp"] += fp
+                res[c]["tn"] += tn
+                res[c]["fn"] += fn
 
 
-                if c == "background":
-                    threshold = 254
-                else:
-                    threshold = 0
+        #         if c == "background":
+        #             threshold = 254
+        #         else:
+        #             threshold = 0
      
 
-                res[c]["tp"] += int(np.sum((im_gt > threshold) * (im_pred > 128)))
-                res[c]["fp"] += int(np.sum((im_gt <= threshold) * (im_pred > 128)))
-                res[c]["tn"] += int(np.sum((im_gt <= threshold) * (im_pred <= 128)))
-                res[c]["fn"] += int(np.sum((im_gt > threshold) * (im_pred <= 128)))
+        #         res[c]["tp"] += int(np.sum((im_gt > threshold) * (im_pred > 128)))
+        #         res[c]["fp"] += int(np.sum((im_gt <= threshold) * (im_pred > 128)))
+        #         res[c]["tn"] += int(np.sum((im_gt <= threshold) * (im_pred <= 128)))
+        #         res[c]["fn"] += int(np.sum((im_gt > threshold) * (im_pred <= 128)))
 
-                # im_gt_high = im_pred[im_gt > threshold] / 255
-                # im_gt_low = im_pred[1-im_gt < threshold] / 255
+        #         # im_gt_high = im_pred[im_gt > threshold] / 255
+        #         # im_gt_low = im_pred[1-im_gt < threshold] / 255
 
 
-                # hist_high_pred, bins_high = np.histogram(im_gt_high, self.hist_bins, range=(0,1))
-                # hist_low_pred, bins_low = np.histogram(im_gt_low, self.hist_bins, range=(0,1))
-                # hist_high += hist_high_pred
-                # hist_low += hist_low_pred
-            if res[c]["tp"] + res[c]["fp"] == 0:
-                res.pop(c, None)
-                continue
+        #         # hist_high_pred, bins_high = np.histogram(im_gt_high, self.hist_bins, range=(0,1))
+        #         # hist_low_pred, bins_low = np.histogram(im_gt_low, self.hist_bins, range=(0,1))
+        #         # hist_high += hist_high_pred
+        #         # hist_low += hist_low_pred
+        #     if res[c]["tp"] + res[c]["fp"] == 0:
+        #         res.pop(c, None)
+        #         continue
 
             res[c]["precision"] = res[c]["tp"]  /( res[c]["tp"] + res[c]["fp"])
 
@@ -320,8 +334,8 @@ class Segmentation2DEvaluation(EvaluationTask):
                 continue
 
             res[c]["recall"] = res[c]["tp"]  / (res[c]["tp"] + res[c]["fn"])
-            # histograms[c] = {"hist_high": hist_high.tolist(), "bins_high": bins_high.tolist(), "hist_low": hist_low.tolist(), "bins_low": bins_low.tolist()}
-        # return histograms
+        #     # histograms[c] = {"hist_high": hist_high.tolist(), "bins_high": bins_high.tolist(), "hist_low": hist_low.tolist(), "bins_low": bins_low.tolist()}
+        # # return histograms
         return res
 
 class VoxelsEvaluation(EvaluationTask):
