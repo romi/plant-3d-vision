@@ -2,7 +2,7 @@ import luigi
 import numpy as np
 import logging
 
-from romidata.task import  RomiTask, FileByFileTask, ImagesFilesetExists
+from romidata.task import RomiTask, FileByFileTask, ImagesFilesetExists
 from romidata import io
 
 from romiscan.filenames import *
@@ -11,12 +11,29 @@ from romiscanner.lpy import VirtualPlant
 from ..log import logger
 
 
-
 class Colmap(RomiTask):
-    """Runs colmap on the "images" fileset
+    """ Runs colmap on a given scan, the "images" fileset.
+
+    Module: romiscan.tasks.colmap
+    Default upstream tasks: Scan
+    Upstream task format: Fileset with image files
+    Output fileset format: images.json, cameras.json, points3D.json, sparse.ply [, dense.ply]
+
+    Parameters
+    ----------
+    matcher : Parameter, default="exhaustive"
+        either "exhaustive" or "sequential" (TODO: see colmap documentation)
+    compute_dense : BoolParameter
+        whether to run the dense colmap to obtain a dense point cloud
+    cli_args : DictParameter
+        parameters for colmap command line prompts (TODO: see colmap documentation)
+    align_pcd : BoolParameter, default=True
+        align point cloud on calibrated or metadata poses ?
+    calibration_scan_id : Parameter, default=""
+        ID of the calibration scan.
+
     """
     upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)
-
     matcher = luigi.Parameter(default="exhaustive")
     compute_dense = luigi.BoolParameter()
     cli_args = luigi.DictParameter()
@@ -25,7 +42,6 @@ class Colmap(RomiTask):
 
     def find_bounding_box(self):
         images_fileset = self.input().get()
-
         # print("cli_args = %s"%self.cli_args)
         # cli_args = json.loads(self.cli_args.replace("'", '"'))
         bounding_box = images_fileset.get_metadata("bounding_box")
@@ -33,15 +49,16 @@ class Colmap(RomiTask):
             bounding_box = images_fileset.scan.get_metadata('workspace')
         if bounding_box is None:
             try:
-                bounding_box = images_fileset.scan.get_metadata('scanner')['workspace']
+                bounding_box = images_fileset.scan.get_metadata('scanner')[
+                    'workspace']
             except:
                 bounding_box = None
         if bounding_box is None:
-            raise IOError("Cannot find suitable bounding box for object in metadata")
+            raise IOError(
+                "Cannot find suitable bounding box for object in metadata")
         return bounding_box
 
     def run(self):
-
         from romiscan import colmap
         import os
         images_fileset = self.input().get()
@@ -50,9 +67,11 @@ class Colmap(RomiTask):
         if self.calibration_scan_id != "":
             db = images_fileset.scan.db
             calibration_scan = db.get_scan(self.calibration_scan_id)
-            colmap_fs = matching = [s for s in calibration_scan.get_filesets() if "Colmap" in s.id]
+            colmap_fs = matching = [s for s in calibration_scan.get_filesets()
+                                    if "Colmap" in s.id]
             if len(colmap_fs) == 0:
-                raise Exception("Could not find Colmap fileset in calibration scan")
+                raise Exception(
+                    "Could not find Colmap fileset in calibration scan")
             else:
                 colmap_fs = colmap_fs[0]
             calib_poses = []
@@ -66,21 +85,22 @@ class Colmap(RomiTask):
             for i, fi in enumerate(calibration_images_fileset.get_files()):
                 if i >= len(images_fileset.get_files()):
                     break
-
                 key = None
                 for k in poses.keys():
                     if os.path.splitext(poses[k]['name'])[0] == fi.id:
                         key = k
                         break
                 if key is None:
-                    raise Exception("Could not find pose of image in calibration scan")
+                    raise Exception(
+                        "Could not find pose of image in calibration scan")
 
                 rot = np.matrix(poses[key]['rotmat'])
                 tvec = np.matrix(poses[key]['tvec'])
-                pose = -rot.transpose()*(tvec.transpose())
+                pose = -rot.transpose() * (tvec.transpose())
                 pose = np.array(pose).flatten().tolist()
 
-                images_fileset.get_files()[i].set_metadata("calibrated_pose", pose)
+                images_fileset.get_files()[i].set_metadata("calibrated_pose",
+                                                           pose)
 
         use_calibration = self.calibration_scan_id != ""
 
@@ -91,7 +111,8 @@ class Colmap(RomiTask):
             self.cli_args,
             self.align_pcd,
             use_calibration,
-            bounding_box)
+            bounding_box
+        )
 
         points, images, cameras, sparse, dense, bounding_box = colmap_runner.run()
 

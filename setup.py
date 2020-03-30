@@ -1,10 +1,6 @@
-import subprocess
-import romiscan
+from setuptools import setup, find_packages
 
-from shutil import copyfile
-from setuptools import setup, Extension, find_packages
-
-s = setup(
+opts = dict(
     name='romiscan',
     packages=find_packages(),
     scripts=[],
@@ -22,7 +18,7 @@ s = setup(
         'romidata',
         'imageio',
         'opencv-python',
-        'luigi',
+        'luigi>=2.8.11',
         'pybind11',
         'colorlog',
         'scikit-image',
@@ -30,5 +26,9 @@ s = setup(
         'pywavefront',
         'trimesh'
     ],
-    include_package_data=True,
+    # If True, include any files specified by your MANIFEST.in:
+    include_package_data=True
 )
+
+if __name__ == '__main__':
+    setup(**opts)

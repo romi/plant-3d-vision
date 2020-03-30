@@ -17,7 +17,13 @@ logger = logging.getLogger('romiscan')
 
 
 class PointCloud(RomiTask):
-    """Computes a point cloud
+    """ Computes a point cloud from volumetric voxel data (either single or multiclass).
+
+    Module: romiscan.tasks.proc3d
+    Default upstream tasks: Voxels
+    Upstream task format: npz file with as many 3D array as classes
+    Output task format: single point cloud in ply. Metadata may include label name if multiclass.
+
     """
     upstream_task = luigi.TaskParameter(default=Voxels)
     level_set_value = luigi.FloatParameter(default=0.0)
@@ -198,7 +204,15 @@ class SegmentedPointCloud(RomiTask):
 
 
 class TriangleMesh(RomiTask):
-    """Computes a mesh
+    """ Triangulates input point cloud.
+
+    Currently ignores class data and needs only one connected component.
+
+    Module: romiscan.tasks.proc3d
+    Default upstream tasks: PointCloud
+    Upstream task format: ply file
+    Output task format: ply triangle mesh file
+
     """
     upstream_task = luigi.TaskParameter(default=PointCloud)
 
@@ -256,7 +270,13 @@ class ClusteredMesh(RomiTask):
                     f.set_metadata("label", l)
 
 class CurveSkeleton(RomiTask):
-    """Computes a 3D curve skeleton
+    """ Creates a 3D curve skeleton.
+
+    Module: romiscan.tasks.proc3d
+    Default upstream tasks: TriangleMesh
+    Upstream task format: ply triangle mesh
+    Output task format: json with two entries "points" and "lines" (TODO: precise)
+
     """
     upstream_task = luigi.TaskParameter(default=TriangleMesh)
 

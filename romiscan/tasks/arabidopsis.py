@@ -10,7 +10,13 @@ from romiscan.tasks.cl import Voxels
 from romiscan.log import logger
 
 class TreeGraph(RomiTask):
-    """Computes a tree graph of the plant.
+    """ Creates a tree graph of the plant
+
+    Module: romiscan.tasks.arabidopsis
+    Default upstream tasks: CurveSkeleton
+    Upstream task format: json
+    Output task format: json (TODO: precise)
+
     """
     upstream_task = luigi.TaskParameter(default=CurveSkeleton)
 
@@ -24,7 +30,13 @@ class TreeGraph(RomiTask):
         io.write_graph(self.output_file(), t)
 
 class AnglesAndInternodes(RomiTask):
-    """Computes angles and internodes from skeleton
+    """ Computes angles and internodes from skeleton
+
+    Module: romiscan.tasks.arabidopsis
+    Default upstream tasks: TreeGraph
+    Upstream task format: json
+    Output task format: json (TODO: precise)
+
     """
     upstream_task = luigi.TaskParameter(default=TreeGraph)
 
