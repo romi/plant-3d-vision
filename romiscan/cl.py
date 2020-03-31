@@ -47,7 +47,7 @@ class Backprojection():
     This class implements backprojection onto a voxel volume.
 
     Parameters
-    __________
+    ----------
     shape: list
         shape of the voxel volume
     origin: list
