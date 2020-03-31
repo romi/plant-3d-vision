@@ -7,7 +7,7 @@ from romidata import io
 
 from romiscan.filenames import *
 
-from romiscanner.lpy import VirtualPlant
+from romiscanner.tasks.lpy import VirtualPlant
 from ..log import logger
 
 

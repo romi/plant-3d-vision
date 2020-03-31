@@ -26,18 +26,28 @@ class Voxels(RomiTask):
 
     Parameters
     ----------
-    use_colmap_poses : BoolParameter, default=True
-        Either use precomputed camera poses or output from the Colmap task
-    voxel_size : FloatParameter
+    voxel_size : luigi.FloatParameter
         size of one side of voxels
-    type : Parameter
-        "carving" or "averaging" (TODO: See 3D documentation)
-    multiclass : BoolParameter, default=False
-        whether input data is single class or multiclass (e.g as an output of
-        Segmentation2D)
-    log : BoolParameter, default=True
+    type : luigi.Parameter in {"carving", "averaging"}
+        Type of backprojection to performs. (TODO: See 3D documentation)
+    labels : luigi.ListParameter
+        ???
+    use_colmap_poses : luigi.BoolParameter, optional
+        Either use precomputed camera poses or output from the Colmap task,
+        default=True
+    log : luigi.BoolParameter, optional
         in the case of "averaging" type, whether to apply log when averaging
-         values.
+        values, default=True.
+    invert : luigi.BoolParameter, optional
+        ???, default=True
+    multiclass : luigi.BoolParameter, optional
+        whether input data is single class or multiclass (e.g as an output of
+        Segmentation2D), default=False
+        DEPRECATED ? Not used in the code...
+
+    See Also
+    --------
+    cl.Backprojection: The class implementing the Backprojection method.
 
     """
     upstream_task = None
@@ -45,7 +55,6 @@ class Voxels(RomiTask):
     upstream_colmap = luigi.TaskParameter(default=Colmap)
 
     use_colmap_poses = luigi.BoolParameter(default=True)
-
     voxel_size = luigi.FloatParameter()
     type = luigi.Parameter()
     log = luigi.BoolParameter(default=True)
@@ -84,28 +93,24 @@ class Voxels(RomiTask):
                 "bounding_box")
 
         logger.debug(f"Bounding box : {bounding_box}")
-
         x_min, x_max = bounding_box["x"]
         y_min, y_max = bounding_box["y"]
         z_min, z_max = bounding_box["z"]
 
         try:
+            scan = masks_fileset.scan
             displacement = scan.get_metadata("displacement")
-
             x_min += displacement["dx"]
             x_max += displacement["dx"]
-
             y_min += displacement["dy"]
             y_max += displacement["dy"]
-
             z_min += displacement["dz"]
             z_max += displacement["dz"]
-
         except:
             logger.info("")
 
-        center = [(x_max + x_min) / 2, (y_max + y_min) / 2, (z_max + z_min) / 2]
-        widths = [x_max - x_min, y_max - y_min, z_max - z_min]
+        # center = [(x_max + x_min) / 2, (y_max + y_min) / 2, (z_max + z_min) / 2]
+        # widths = [x_max - x_min, y_max - y_min, z_max - z_min]
 
         nx = int((x_max - x_min) / self.voxel_size) + 1
         ny = int((y_max - y_min) / self.voxel_size) + 1
@@ -126,9 +131,11 @@ class Voxels(RomiTask):
             vol = np.exp(vol)
             vol[vol > 1] = 1.0
         logger.debug("size = %i" % vol.size)
-        outfs = self.output().get()
+        # outfs = self.output().get()
         outfile = self.output_file()
 
+        logger.debug("sc.get_labels(masks_fileset):")
+        logger.debug(sc.get_labels(masks_fileset))
         out = {}
         for i, label in enumerate(labels):
             out[label] = vol[i, :]

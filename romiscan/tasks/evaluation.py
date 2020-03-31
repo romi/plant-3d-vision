@@ -10,7 +10,7 @@ from romidata.task import FilesetExists, RomiTask, FilesetTarget, \
 
 from romiscan.log import logger
 from romiscan.tasks import config
-from romiscanner.lpy import VirtualPlant
+from romiscanner.tasks.lpy import VirtualPlant
 from romiscan.tasks import proc2d, cl, proc3d
 
 

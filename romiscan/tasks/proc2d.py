@@ -50,16 +50,16 @@ class Masks(FileByFileTask):
     
     Parameters
     ----------
-    type : Parameter
+    type : luigi.Parameter
         "linear", "excess_green", "vesselness", "invert" (TODO: see segmentation documentation)
-    parameters : ListParameter
+    parameters : luigi.ListParameter
         list of scalar parmeters, depends on type
-    dilation : IntParameter
+    dilation : luigi.IntParameter
         by how much to dilate masks if binary
-    binarize : BoolParameter, default=True
-        binarize the masks
-    threshold : FloatParameter, default=0.0
-        threshold for binarization
+    binarize : luigi.BoolParameter, optional
+        binarize the masks, default=True
+    threshold : luigi.FloatParameter, optional
+        threshold for binarization, default=0.0
 
     """
     upstream_task = luigi.TaskParameter(default=Undistorted)

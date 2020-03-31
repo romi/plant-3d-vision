@@ -165,11 +165,10 @@ class Backprojection():
 
 
     def process_label(self, fs, label=None, use_colmap_poses=False, invert=False):
-        """
-        Processes a whole fileset.
+        """         Processes a whole fileset.
 
         Parameters
-        __________
+        ----------
         fs : romidata.DB.Fileset
         camera_model: dict
         poses: dict
