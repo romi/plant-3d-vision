@@ -2,9 +2,8 @@ import luigi
 import logging
 import numpy as np
 
-from romidata.task import RomiTask, FileByFileTask, ImagesFilesetExists, \
-    FilesetExists
-from romidata import io
+from romidata.tasks.db import FilesetExists, ImagesFilesetExists, FileByFileTask
+from romidata import io, RomiTask
 from romiscan.tasks.colmap import Colmap
 
 logger = logging.getLogger('romiscan')

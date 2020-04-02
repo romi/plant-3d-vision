@@ -1,8 +1,8 @@
 import luigi
 import numpy as np
 
-from romidata.task import  RomiTask, FileByFileTask
-from romidata import io
+from romidata.tasks.db import FileByFileTask
+from romidata import io, RomiTask
 
 from romiscan.tasks.proc3d import CurveSkeleton, ClusteredMesh
 from romiscan.tasks.cl import Voxels

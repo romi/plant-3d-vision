@@ -1,8 +1,8 @@
 import luigi
 import numpy as np
 
-from romidata.task import  RomiTask, FileByFileTask
-from romidata import io
+from romidata.tasks.db import FileByFileTask
+from romidata import io, RomiTask
 
 from romiscan.tasks.cl import Voxels
 from romiscan.tasks.colmap import Colmap

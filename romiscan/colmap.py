@@ -191,7 +191,7 @@ class ColmapRunner():
             logger.debug('Running subprocess: ' + ' '.join(process))
             subprocess.run(process, check=True, stdout=colmap_log_file)
         else:
-            raise ColmapError('Unknown matcher type')
+            raise ValueError(f"Unknown matcher '{self.matcher}!")
 
     def colmap_mapper(self):
         if 'mapper' in self.all_cli_args:
