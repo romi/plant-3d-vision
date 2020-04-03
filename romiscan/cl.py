@@ -111,7 +111,7 @@ class Backprojection():
         Process a new view.
 
         Parameters
-        __________
+        ----------
         intrinsics: list
             [f_x, f_y, c_x, c_y]
         rot: list of list

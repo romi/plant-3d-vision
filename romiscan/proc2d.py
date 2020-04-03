@@ -20,7 +20,7 @@ def undistort(img, camera):
     Uses opencv to undistort an image.
 
     Parameters
-    __________
+    ----------
     img: np.ndarray
     camera: dict
         camera['parameters'] contains the opencv camera parameters.
@@ -38,12 +38,12 @@ def excess_green(img):
     Excess green function (EG = 2*g-r-b)
 
     Parameters
-    __________
+    ----------
     img: np.ndarray
         NxMx3 RGB image
 
     Returns
-    _______
+    -------
     np.ndarray
         NxM excess green image
     """
@@ -58,12 +58,12 @@ def hessian_eigvals_abs_sorted(volume):
     Returns Hessian eigenvalues sorted by increasing absolute value.
 
     Parameters
-    __________
+    ----------
     volume: np.ndarray
         n dimensional array
 
     Returns
-    _______
+    -------
     list of np.ndarray
     """
     N = volume.ndim
@@ -85,14 +85,14 @@ def vesselness(image, scale):
     Returns 2D vesselness image
 
     Parameters
-    __________
+    ----------
     image: np.ndarray
         NxM input image
     scale: float
         size of vessels
 
     Returns
-    _______
+    -------
     np.ndarray
         NxM vesselness image.
     """
@@ -109,14 +109,14 @@ def dilation(img, n):
     Dilates a binary image by n pixels
 
     Parameters
-    __________
+    ----------
     img: np.ndarray
         input image
     n: int
         number of pixels
 
     Returns
-    _______
+    -------
     np.ndarray
     """
     for i in range(n):

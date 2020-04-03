@@ -130,7 +130,7 @@ class ColmapRunner():
                        bounding_box):
         """
         Parameters
-        __________
+        ----------
         fileset : db.Fileset
             fileset containing source images
         matcher : str
@@ -264,7 +264,7 @@ class ColmapRunner():
         """Run colmap CLI commands
 
         Returns
-        _______
+        -------
         points : dict
         images : dict
         cameras : dict

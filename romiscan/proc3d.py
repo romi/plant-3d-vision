@@ -48,7 +48,7 @@ def index2point(indexes, origin, voxel_size):
     """Converts discrete nd indexes to a 3d points
 
     Parameters
-    __________
+    ----------
     indexes : np.ndarray
         Nxd array of indices
     origin : np.ndarray
@@ -57,7 +57,7 @@ def index2point(indexes, origin, voxel_size):
         size of voxels
 
     Returns
-    _______
+    -------
     np.ndarray
         Nxd array of points
     """
@@ -67,7 +67,7 @@ def point2index(points, origin, voxel_size):
     """Converts discrete nd indexes to a 3d points
 
     Parameters
-    __________
+    ----------
     points : np.ndarray
         Nxd array of points
     origin : np.ndarray
@@ -76,7 +76,7 @@ def point2index(points, origin, voxel_size):
         size of voxels
 
     Returns
-    _______
+    -------
     np.ndarray (dtype=int)
         Nxd array of indices
     """
@@ -87,12 +87,12 @@ def pcd2mesh(pcd):
     with normals.
 
     Parameters
-    __________
+    ----------
     pcd: open3d.geometry.PointCloud
         input point cloud (must have normals)
 
     Returns
-    _______
+    -------
     open3d.geometry.TriangleMesh
     """
     assert(pcd.has_normals)
@@ -112,7 +112,7 @@ def pcd2vol(pcd, voxel_size, zero_padding=0):
     of points in the corresponding cube.
 
     Parameters
-    __________
+    ----------
     pcd : open3d.geometry.PointCloud
         input point cloud
     voxel_size : float
@@ -121,7 +121,7 @@ def pcd2vol(pcd, voxel_size, zero_padding=0):
         number of zero padded values on every side of the volume (default = 0)
 
     Returns
-    _______
+    -------
     vol : np.ndarray
     origin : list
     """
@@ -143,12 +143,12 @@ def skeletonize(mesh):
     with normals.
 
     Parameters
-    __________
+    ----------
     mesh: open3d.geometry.TriangleMesh
         input mesh
 
     Returns
-    _______
+    -------
     json
     """
     points, lines = cgal.skeletonize_mesh(
@@ -160,14 +160,14 @@ def knn_graph(pcd, k):
     """Computes weighted graph connecting points to their k nearest neighbours.
 
     Parameters
-    __________
+    ----------
     pcd : open3d.geometry.PointCloud
         input point cloud
 
     k : number of neighbours to keep
 
     Returns
-    _______
+    -------
     nx.Graph
         undirected graph
     """
@@ -185,7 +185,7 @@ def radius_graph(pcd, r):
     """Computes weighted graph connecting points to neighbours in a radius.
 
     Parameters
-    __________
+    ----------
     pcd : open3d.geometry.PointCloud
         input point cloud
 
@@ -193,7 +193,7 @@ def radius_graph(pcd, r):
         radius
 
     Returns
-    _______
+    -------
     nx.Graph
         undirected graph
     """
@@ -213,7 +213,7 @@ def connect_graph(g, pcd, root_index):
     to the connected component.
 
     Parameters
-    __________
+    ----------
     g : nx.Graph
         knn graph
     pcd : open3d.geometry.PointCloud
@@ -266,7 +266,7 @@ def distance_to_root_clusters(g, root_index, pcd, bin_size):
     clusters in a graph.
 
     Parameters
-    __________
+    ----------
     g : nx.Graph
         graph of point cloud
     pcd : open3d.geometry.PointCloud
@@ -275,7 +275,7 @@ def distance_to_root_clusters(g, root_index, pcd, bin_size):
         size of clusters (in terms of distance to root)
 
     Returns
-    _______
+    -------
     nx.Grah
         cluster graph
     dict
@@ -331,7 +331,7 @@ def draw_pcd_graph(g):
     Draw graph in 3D
 
     Parameters
-    __________
+    ----------
     g: nx.Graph
         graph with "center" attribute as a 3 element array
     """
@@ -354,7 +354,7 @@ def draw_distance_to_root_clusters(cluster_graph, cluster_values, pcd):
     Draw point cloud with clusters as well as skeleton graph.
 
     Parameters
-    __________
+    ----------
     cluster_graph: nx.Graph
         Skeleton graphj
     cluster_valuies: dict
@@ -414,7 +414,7 @@ def vol2pcd(volume, origin, voxel_size, level_set_value=0, quiet=False):
     Converts a binary volume into a point cloud with normals.
 
     Parameters
-    __________
+    ----------
     volume : np.ndarray
         NxMxP 3D binary numpy array
     voxel_size: float
@@ -423,7 +423,7 @@ def vol2pcd(volume, origin, voxel_size, level_set_value=0, quiet=False):
         distance of the level set on which the points are sampled
 
     Returns
-    _______
+    -------
     open3d.geometry.PointCloud
     """
     volume = 1.0*(volume>0.5) # variable level ?
@@ -472,14 +472,14 @@ def crop_point_cloud(point_cloud, bounding_box):
     """
     Crops a point cloud by keeping only points inside bouding box.
     Parameters
-    __________
+    ----------
     point_cloud : PointCloud
         input point cloud
     bounding_box : dict
         {"x" : [xmin, xmax], "y" : [ymin, ymax], "z" : [zmin, zmax]}
 
     Returns
-    _______
+    -------
     PointCloud
     """
     x_bounds = bounding_box['x']

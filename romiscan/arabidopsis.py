@@ -29,14 +29,14 @@ def get_main_stem_and_nodes(G, root_node):
     Get main stem and branching nodes from graph.
 
     Parameters
-    __________
+    ----------
     G : networkx.graph
         input graph
     root_node : int
         index of the root node
 
     Returns
-    _______
+    -------
     nodes
     """
     # Get main stem as shortest path to point furthest from root
@@ -66,7 +66,7 @@ def compute_mst(G, main_stem, nodes):
     a bit more!!!
 
     Parameters
-    __________
+    ----------
     G : nx.Graph
         input graph
     main_stem : list
@@ -75,7 +75,7 @@ def compute_mst(G, main_stem, nodes):
         list of branching  points on the main stem.
 
     Returns
-    _______
+    -------
     nx.Graph
     """
     # Set weights proportional to distance to node
@@ -109,14 +109,14 @@ def build_graph(vertices, edges):
     Buils a networkx graph from a list of vertices and edges.
 
     Parameters
-    __________
+    ----------
     vertices : np.ndarray
         Input Nx3 array of points
     edges : np.ndarray
         Input Mx2 array of lines between points (dtype = int)
 
     Returns
-    _______
+    -------
     nx.Graph
     """
     G = nx.Graph()
@@ -144,7 +144,7 @@ def nx_to_tx(T, attributes, root_id):
     a treex tree.
 
     Parameters
-    __________
+    ----------
     T: networkx graph
         input graph (must be a tree).
     attributes: list of dict
@@ -176,7 +176,7 @@ def label_fruit(G, branching_fruit_id, fruit_id):
     Labels fruits in a treex tree object.
 
     Parameters
-    __________
+    ----------
     T: treex.tree.Tree
         input tree which root is the branching node
     """
@@ -200,7 +200,7 @@ def compute_tree_graph(points, lines, stem_axis, stem_direction):
     of the points.
 
     Parameters
-    __________
+    ----------
     points: np.ndarray
         Nx3 position of points
     lines: np.ndarray
@@ -211,7 +211,7 @@ def compute_tree_graph(points, lines, stem_axis, stem_direction):
         direction of the stem along the specified axis (+1 or -1)
 
     Returns
-    _______
+    -------
     nx.Graph
     """
     points, lines = np.asarray(points), np.asarray(lines)
@@ -257,12 +257,12 @@ def get_nodes_by_label(G, label):
     must exist in the data of each node.
 
     Parameters
-    __________
+    ----------
     G : nx.Graph
     label: str
 
     Returns
-    _______
+    -------
     list
     """
     return [i for i in G.nodes if label in G.nodes[i]["labels"]]
@@ -469,7 +469,7 @@ def compute_angles_and_internodes(T, n_neighbours=5):
     Get angle and internodes from graph
 
     Parameters
-    __________
+    ----------
     T : nx.Graph
         input tree as a networkx graph
     n_neighbours : int
@@ -477,7 +477,7 @@ def compute_angles_and_internodes(T, n_neighbours=5):
         for plane estimation
 
     Returns
-    _______
+    -------
     dict
     """
 
