@@ -5,8 +5,7 @@ import os
 from scipy.ndimage.filters import gaussian_filter
 
 from romidata import io, DatabaseConfig, RomiTask
-from romidata.task import FilesetTarget
-from romidata.tasks.db import FilesetExists, ImagesFilesetExists
+from romidata.task import FilesetTarget, FilesetExists, ImagesFilesetExists
 
 from romiscan.log import logger
 from romiscan.tasks import config

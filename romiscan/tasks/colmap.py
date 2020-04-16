@@ -2,7 +2,7 @@ import luigi
 import numpy as np
 import logging
 
-from romidata.tasks.db import ImagesFilesetExists, FileByFileTask
+from romidata.task import ImagesFilesetExists, FileByFileTask
 from romidata import io, RomiTask
 
 from romiscan.filenames import *

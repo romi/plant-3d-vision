@@ -1,0 +1,16 @@
+# -*- coding: utf-8 -*-
+appdirs
+toml
+tqdm
+imageio
+opencv-python
+pybind11
+colorlog
+scikit-image
+scikit-learn
+pywavefront
+trimesh
+pyopencl
+romidata
+luigi >= 2.8.11
+open3d == 0.9.0.0

@@ -26,7 +26,6 @@ dilation = 5
 binarize = true
 threshold = 0.3
 
-
 [Voxels]
 upstream_mask = "Masks"
 multiclass = false

@@ -2,8 +2,9 @@ import luigi
 import logging
 import numpy as np
 
-from romidata.tasks.db import FilesetExists, ImagesFilesetExists, FileByFileTask
-from romidata import io, RomiTask
+from romidata.task import FilesetExists, ImagesFilesetExists, FileByFileTask
+from romidata import io
+from romidata import RomiTask
 from romiscan.tasks.colmap import Colmap
 
 logger = logging.getLogger('romiscan')
@@ -11,6 +12,7 @@ logger = logging.getLogger('romiscan')
 
 class Undistorted(FileByFileTask):
     """ Undistorts images using computed intrinsic camera parameters
+
     Module: romiscan.tasks.proc2d
     Default upstream tasks: Scan, Colmap
     Upstream task format: Fileset with image files
@@ -23,6 +25,7 @@ class Undistorted(FileByFileTask):
         return self.upstream_task().output()
 
     def requires(self):
+        # return [Colmap(), Scan(), self.upstream_task()]
         return [Colmap(), self.upstream_task()]
 
     def f(self, fi, outfs):
@@ -30,10 +33,8 @@ class Undistorted(FileByFileTask):
         camera = fi.get_metadata('colmap_camera')
         if camera is not None:
             camera_model = camera['camera_model']
-
             x = io.read_image(fi)
             x = proc2d.undistort(x, camera_model)
-
             outfi = outfs.create_file(fi.id)
             io.write_image(outfi, x)
             return outfi
@@ -65,6 +66,7 @@ class Masks(FileByFileTask):
 
     type = luigi.Parameter()
     parameters = luigi.ListParameter(default=[])
+    logger.debug(f"Parameters: {parameters}")
     dilation = luigi.IntParameter()
 
     binarize = luigi.BoolParameter(default=True)
@@ -73,7 +75,9 @@ class Masks(FileByFileTask):
     def f_raw(self, x):
         from romiscan import proc2d
         x = np.asarray(x, dtype=np.float)
+        logger.debug(f"x shape: {x.shape}")
         x = proc2d.rescale_intensity(x, out_range=(0, 1))
+        logger.debug(f"x shape: {x.shape}")
         if self.type == "linear":
             coefs = self.parameters
             return (coefs[0] * x[:, :, 0] + coefs[1] * x[:, :, 1] +
@@ -91,6 +95,7 @@ class Masks(FileByFileTask):
 
     def f(self, fi, outfs):
         from romiscan import proc2d
+        logger.debug(f"Loading file: {fi.filename}")
         x = io.read_image(fi)
         x = self.f_raw(x)
         if self.binarize:
@@ -108,9 +113,8 @@ class Masks(FileByFileTask):
 
 
 class ModelFileset(FilesetExists):
-    scan_id = luigi.Parameter()
+    # scan_id = luigi.Parameter()
     fileset_id = "models"
-
 
 class Segmentation2D(Masks):
     """ Compute masks using trained deep learning models.
@@ -135,6 +139,7 @@ class Segmentation2D(Masks):
         Input pictures are cropped in the center to this size.
     model_segmentation_name : str??
         name of ".pt" file. Can be found at `https://db.romi-project.eu/models`
+
     """
     type = None
     parameters = None
