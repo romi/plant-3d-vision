@@ -20,6 +20,7 @@ scan_id = "models"
 
 [Masks]
 upstream_task = "ImagesFilesetExists"
+#upstream_task = "Undistorted"  # other option
 type = "linear"
 parameters = "[0,1,0]"
 dilation = 5
@@ -37,6 +38,9 @@ log = false
 [PointCloud]
 level_set_value = 1.0
 background_prior= -200
+
+[AnglesAndInternodes]
+upstream_task = "TreeGraph"
 
 [PointCloudGroundTruth]
 pcd_size = 10000
