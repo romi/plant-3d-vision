@@ -54,3 +54,5 @@ max_distance = 0.2
 [SegmentedPointCloud]
 upstream_segmentation = "Segmentation2D"
 
+[Clean]
+no_confirm = true
