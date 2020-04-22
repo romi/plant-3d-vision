@@ -1,0 +1,30 @@
+{
+    "bounding_box": {
+        "x": [
+            -7.560905933380127,
+            0.22889100015163422
+        ],
+        "y": [
+            -6.943872928619385,
+            0.6086582541465759
+        ],
+        "z": [
+            -0.02684416063129902,
+            24.995281219482422
+        ]
+    },
+    "channels": [
+        "rgb",
+        "flower",
+        "leaf",
+        "pedicel",
+        "stem",
+        "fruit",
+        "background"
+    ],
+    "task_params": {
+        "fileset_id": "images",
+        "output_file_id": "out",
+        "scan_id": ""
+    }
+}
