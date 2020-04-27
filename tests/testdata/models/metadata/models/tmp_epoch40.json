@@ -1,0 +1,11 @@
+{
+    "label_names": [
+        "background",
+        "flower",
+        "fruit",
+        "leaf",
+        "pedicel",
+        "stem"
+    ],
+    "model_id": "tmp_epoch40"
+}
