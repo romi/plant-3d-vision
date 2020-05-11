@@ -1,5 +1,5 @@
-FROM colmap/colmap
-# colmap/colmap is based on nvidia/cuda:10.2-devel-ubuntu18.04
+FROM geki/colmap
+# geki/colmap is based on nvidia/cuda:10.1-devel-ubuntu18.04
 
 RUN apt-get update \
 	&& apt-get -y install python3.7
@@ -15,16 +15,13 @@ RUN apt-get update \
 
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.7 10
 
-# nvidia-container-runtime
-ENV NVIDIA_VISIBLE_DEVICES all
-ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
-
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ocl-icd-libopencl1 opencl-headers\
         clinfo && \
 		apt-get clean && \
 		rm -rf /var/lib/apt/lists/*
 
+#Todo : use ldconfig
 RUN ln -s /usr/lib/x86_64-linux-gnu/libOpenCL.so.1 /usr/lib/libOpenCL.so
 
 RUN git clone https://github.com/inducer/pyopencl && \
@@ -34,12 +31,20 @@ RUN git clone https://github.com/inducer/pyopencl && \
 	./configure.py --cl-pretend-version=1.2 && \
 	python3.7 setup.py install
 
+RUN mkdir -p /etc/OpenCL/vendors && \
+    echo "libnvidia-opencl.so.1" > /etc/OpenCL/vendors/nvidia.icd
+
+# nvidia-container-runtime
+ENV NVIDIA_VISIBLE_DEVICES all
+ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
+
 RUN cd .. && \
 	git clone https://github.com/romi/data-storage.git && \
 	cd data-storage/ && \
 	git checkout dev && \
 	python3.7 setup.py develop
 
+# TODO : voir si c'est essentiel ou pas?
 RUN cd .. && \
 	git clone https://github.com/romi/lettucethink-python && \
 	cd lettucethink-python/ && \
