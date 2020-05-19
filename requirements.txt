@@ -6,7 +6,7 @@ imageio
 opencv-python
 pybind11
 colorlog
-scikit-image
+scikit-image == 0.16.2
 scikit-learn
 pywavefront
 trimesh
