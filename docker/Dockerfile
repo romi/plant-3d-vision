@@ -77,4 +77,6 @@ RUN cd .. && \
 	python3.7 -m pip install -r requirements.txt && \
 	python3.7 setup.py develop
 
+ENV DB_LOCATION="/home/${SETUSER}/db_test"
+
 CMD ["/bin/bash", "-c", "source ~/.bashrc && cd Scan3D/tests/ && ./check_pipe.sh"]
