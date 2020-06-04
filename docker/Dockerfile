@@ -43,25 +43,27 @@ ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
 
 RUN git clone https://github.com/romi/data-storage.git && \
     cd data-storage/ && \
-    git checkout dev && \
+    git checkout dev-v0.6-scan3d-compatible && \
     python -m pip install .
 
 RUN git clone https://github.com/romi/cgal_bindings_skeletonization && \
     cd cgal_bindings_skeletonization/ && \
+	git checkout v0.6-scan3d-compatible && \
     python -m pip install .
 
 RUN git clone https://github.com/romi/Segmentation && \
     cd Segmentation/ && \
-    git checkout dev && \
+    git checkout dev-v0.6-scan3d-compatible && \
     python -m pip install .
 
 RUN git clone https://github.com/romi/romiscanner.git && \
     cd romiscanner/ && \
+	git checkout v0.6-scan3d-compatible && \
     python -m pip install .
 
 RUN git clone https://github.com/romi/Scan3D && \
     cd Scan3D/ && \
-    git checkout dev && \
+    git checkout v0.6 && \
     python -m pip install -r requirements.txt && \
     python -m pip install .
 
