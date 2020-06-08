@@ -1,4 +1,4 @@
-# Scan3D v0.5 (dev)
+# romiscan v0.6 (dev)
 
 ## Installation instructions
 
@@ -23,7 +23,7 @@ python -c 'import romiscan'
 1. Clone the sources:
     ```bash
     git clone https://github.com/romi/conda_recipes.git
-    git clone https://github.com/romi/Scan3D.git
+    git clone https://github.com/romi/romiscan.git
     ```
 2. Create a conda environment:
     ```bash
@@ -32,7 +32,7 @@ python -c 'import romiscan'
 3. Install sources:
    ```bash
    conda activate romiscan_dev
-   cd Scan3D
+   cd romiscan
    python setup.py develop
    ```
 4. Test `romiscan` library:
