@@ -41,8 +41,8 @@ USER ${SETUSER}
 ENV NVIDIA_VISIBLE_DEVICES all
 ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
 
-RUN git clone https://github.com/romi/data-storage.git && \
-    cd data-storage/ && \
+RUN git clone https://github.com/romi/romidata.git && \
+    cd romidata/ && \
     git checkout dev && \
     python -m pip install .
 
@@ -50,8 +50,8 @@ RUN git clone https://github.com/romi/cgal_bindings_skeletonization && \
     cd cgal_bindings_skeletonization/ && \
     python -m pip install .
 
-RUN git clone https://github.com/romi/Segmentation && \
-    cd Segmentation/ && \
+RUN git clone https://github.com/romi/romiseg && \
+    cd romiseg/ && \
     git checkout dev && \
     python -m pip install .
 
@@ -59,8 +59,8 @@ RUN git clone https://github.com/romi/romiscanner.git && \
     cd romiscanner/ && \
     python -m pip install .
 
-RUN git clone https://github.com/romi/Scan3D && \
-    cd Scan3D/ && \
+RUN git clone https://github.com/romi/romiscan && \
+    cd romiscan/ && \
     git checkout dev && \
     python -m pip install -r requirements.txt && \
     python -m pip install .
