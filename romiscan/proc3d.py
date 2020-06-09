@@ -17,7 +17,7 @@ from warnings import warn
 logger = logging.getLogger('romiscan')
 
 try:
-    import cgal_skel as cgal
+    import romicgal as cgal
 except:
     logger.warning("Could not load CGAL bindings, some methods will be unavailable")
 
