@@ -4,3 +4,6 @@
 [submodule "romiseg"]
 	path = romiseg
 	url = https://github.com/romi/romiseg.git
+[submodule "romiscanner"]
+	path = romiscanner
+	url = https://github.com/romi/romiscanner.git
