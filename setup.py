@@ -2,7 +2,8 @@ from setuptools import setup, find_packages
 
 opts = dict(
     name='romiscan',
-    packages=find_packages(),
+    packages=find_packages(include=['romidata', 'romiseg', 'romiscanner', 'romicgal']),
+	version='0.6.99',
     scripts=[],
     author='Timothée Wintz',
     author_email='timothee@timwin.fr',
