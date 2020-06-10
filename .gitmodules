@@ -1,0 +1,3 @@
+[submodule "romidata"]
+	path = romidata
+	url = https://github.com/romi/romidata.git
