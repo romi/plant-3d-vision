@@ -1,3 +1,6 @@
 [submodule "romidata"]
 	path = romidata
 	url = https://github.com/romi/romidata.git
+[submodule "romiseg"]
+	path = romiseg
+	url = https://github.com/romi/romiseg.git
