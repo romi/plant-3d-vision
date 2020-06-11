@@ -1,6 +1,10 @@
 FROM geki/colmap
 # geki/colmap is based on nvidia/cuda:10.1-devel-ubuntu18.04
 
+ARG USER_NAME
+ARG USER_ID
+ARG GROUP_ID
+
 USER root
 RUN apt-get update && apt-get install -y \
     python3.7 python3.7-dev python3-pip wget && \
@@ -14,16 +18,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     rm -rf /var/lib/apt/lists/* && \
     ln -s /usr/lib/x86_64-linux-gnu/libOpenCL.so.1 /usr/lib/libOpenCL.so
 
-# Set non-root user name:
-ENV SETUSER=scanner
 # Create a non-root user and give it rights over its "home folder"
-RUN useradd -m ${SETUSER} && \
-    chown -R ${SETUSER}: /home/${SETUSER}
+# Create a non-root user and give it rights over its "home folder"
+RUN addgroup --gid $GROUP_ID $USER_NAME && \
+    adduser --disabled-password --gecos '' --uid $USER_ID --gid $GROUP_ID $SETU$
+    chown -R ${USER_NAME}: /home/${USER_NAME}
 
 # Change to non-root user:
-USER ${SETUSER}
+USER ${USER_NAME}
 # Change working directory:
-WORKDIR /home/${SETUSER}
+WORKDIR /home/${USER_NAME}
 
 RUN git clone https://github.com/inducer/pyopencl && \
     cd pyopencl/ && \
@@ -36,7 +40,7 @@ USER root
 RUN mkdir -p /etc/OpenCL/vendors && \
     echo "libnvidia-opencl.so.1" > /etc/OpenCL/vendors/nvidia.icd
 
-USER ${SETUSER}
+USER ${USER_NAME}
 # nvidia-container-runtime
 ENV NVIDIA_VISIBLE_DEVICES all
 ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
@@ -65,7 +69,7 @@ RUN git clone https://github.com/romi/romiscan && \
     python -m pip install -r requirements.txt && \
     python -m pip install .
 
-ENV DB_LOCATION="/home/${SETUSER}/db_test"
-ENV PATH=$PATH:"/home/${SETUSER}/.local/bin/"
+ENV DB_LOCATION="/home/${USER_NAME}/db_test"
+ENV PATH=$PATH:"/home/${USER_NAME}/.local/bin/"
 
 CMD ["/bin/bash", "-c", "cd .."]
