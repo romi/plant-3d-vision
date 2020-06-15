@@ -49,10 +49,14 @@ RUN git clone https://github.com/romi/romiscan && \
     git checkout dev && \
 	git submodule init && \
 	git submodule update && \
+    python -m pip install -e ./romidata/ && \
+    python -m pip install -e ./romiseg/ && \
+    python -m pip install -e ./romiscanner/ && \
+    python -m pip install -e ./romicgal/ && \
     python -m pip install -r requirements.txt && \
     python -m pip install .
 
-ENV DB_LOCATION="/home/${USER_NAME}/db_test"
-ENV PATH=$PATH:"/home/${USER_NAME}/.local/bin/"
+ENV DB_LOCATION="/home/${SETUSER}/db_test"
+ENV PATH=$PATH:"/home/${SETUSER}/.local/bin"
 
 CMD ["/bin/bash", "-c", "cd .."]
