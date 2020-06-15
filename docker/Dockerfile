@@ -19,7 +19,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ln -s /usr/lib/x86_64-linux-gnu/libOpenCL.so.1 /usr/lib/libOpenCL.so
 
 # Create a non-root user and give it rights over its "home folder"
-# Create a non-root user and give it rights over its "home folder"
 RUN addgroup --gid $GROUP_ID $USER_NAME && \
     adduser --disabled-password --gecos '' --uid $USER_ID --gid $GROUP_ID $SETU$
     chown -R ${USER_NAME}: /home/${USER_NAME}

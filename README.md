@@ -68,20 +68,23 @@ Note that:
 
 
 ### Running the container
-On the AWS server, mount your database directory to `db_test` and optionally the config: 
+On the server, mount your database directory to `db_test` and optionally the config: 
 ```bash
 docker run -it \
-    -v /home/scanner/database_jlegrand:/home/scanner/db_test \
+    -v /home/scanner/database_<user>:/home/scanner/db_test \
     -v /home/scanner/configs/:/home/scanner/config/ \
     --env PYOPENCL_CTX='0' \
     --gpus all romiscan:<tag> bash
 ```
-Don't forget to set the `<tag>` to match the one used to build!
+Don't forget to:
 
-Note that:
+- set the `<tag>` to match the one used to build!
+- change the database path `database_<user>` with yours!
+
+Also, note that:
 
 - you are using the docker image `romiscan:0.6`
-- you mount the host directory `~/database_jlegrand` "inside" the running container in the `~/db_test` directory
+- you mount the host directory `~/database_<user>` "inside" the running container in the `~/db_test` directory
 - you mount the host directory `~/configs` "inside" the running container in the `~/config` directory
 - you activate all GPUs within the container with `--gpus all`
 - declaring the environment variable `PYOPENCL_CTX='0'` select the first CUDA GPU capable
