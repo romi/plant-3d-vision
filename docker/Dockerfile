@@ -56,7 +56,7 @@ RUN git clone https://github.com/romi/romiscan && \
     python -m pip install -r requirements.txt && \
     python -m pip install .
 
-ENV DB_LOCATION="/home/${SETUSER}/db_test"
-ENV PATH=$PATH:"/home/${SETUSER}/.local/bin"
+ENV DB_LOCATION="/home/${USER_NAME}/db_test"
+ENV PATH=$PATH:"/home/${USER_NAME}/.local/bin"
 
 CMD ["/bin/bash", "-c", "cd .."]
