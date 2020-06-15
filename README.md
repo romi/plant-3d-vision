@@ -71,8 +71,8 @@ Note that:
 On the server, mount your database directory to `db_test` and optionally the config: 
 ```bash
 docker run -it \
-    -v /home/scanner/database_<user>:/home/scanner/db_test \
-    -v /home/scanner/configs/:/home/scanner/config/ \
+    -v /home/${USER}/database_<user>:/home/${USER}/db_test \
+    -v /home/${USER}/configs/:/home/${USER}/config/ \
     --env PYOPENCL_CTX='0' \
     --gpus all romiscan:<tag> bash
 ```
