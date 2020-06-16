@@ -49,11 +49,11 @@ RUN git clone https://github.com/romi/romidata.git && \
     git checkout dev && \
     python -m pip install .
 
-RUN git clone https://github.com/romi/romicgal && \
-    cd cgal_bindings_skeletonization/ && \
+RUN git clone https://github.com/romi/romicgal.git && \
+    cd romicgal/ && \
     python -m pip install .
 
-RUN git clone https://github.com/romi/romiseg && \
+RUN git clone https://github.com/romi/romiseg.git && \
     cd romiseg/ && \
     git checkout dev && \
     python -m pip install .
@@ -62,7 +62,7 @@ RUN git clone https://github.com/romi/romiscanner.git && \
     cd romiscanner/ && \
     python -m pip install .
 
-RUN git clone https://github.com/romi/romiscan && \
+RUN git clone https://github.com/romi/romiscan.git && \
     cd romiscan/ && \
     git checkout dev && \
     python -m pip install -r requirements.txt && \
