@@ -49,7 +49,7 @@ RUN git clone https://github.com/romi/romidata.git && \
     git checkout dev && \
     python -m pip install .
 
-RUN git clone https://github.com/romi/cgal_bindings_skeletonization && \
+RUN git clone https://github.com/romi/romicgal && \
     cd cgal_bindings_skeletonization/ && \
     python -m pip install .
 
