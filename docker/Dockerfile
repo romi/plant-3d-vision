@@ -20,7 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Create a non-root user and give it rights over its "home folder"
 RUN addgroup --gid $GROUP_ID $USER_NAME && \
-    adduser --disabled-password --gecos '' --uid $USER_ID --gid $GROUP_ID $SETU$ && \
+    adduser --disabled-password --gecos '' --uid $USER_ID --gid $GROUP_ID $USER_NAME && \
     chown -R ${USER_NAME}: /home/${USER_NAME}
 
 # Change to non-root user:
