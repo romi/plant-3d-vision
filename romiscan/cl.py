@@ -104,8 +104,7 @@ class Backprojection():
             ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=np.array(
                 self.shape, dtype=np.int32)
         )
-        logger.debug("buffer size = ")
-        logger.debug(self.shape)
+        logger.debug(f"buffer size = {self.shape}")
 
     def process_view(self, intrinsics, rot, tvec, mask):
         """
