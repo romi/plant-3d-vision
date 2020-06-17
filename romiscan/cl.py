@@ -76,16 +76,6 @@ class Backprojection():
             self.kernel = backprojection_kernels.average
         self.labels = labels
 
-        logger.debug("Initialized Backprojection with:")
-        logger.debug(f" - shape: {self.shape}")
-        logger.debug(f" - origin: {self.origin}")
-        logger.debug(f" - voxel_size: {self.voxel_size}")
-        logger.debug(f" - default_value: {self.default_value}")
-        logger.debug(f" - type: {self.type}")
-        logger.debug(f" - dtype: {self.dtype}")
-        logger.debug(f" - kernel: {self.kernel}")
-        logger.debug(f" - labels: {self.labels}")
-
         self.init_buffers()
 
     def init_buffers(self):
