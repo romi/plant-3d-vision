@@ -84,6 +84,8 @@ class Backprojection():
         logger.debug(f" - dtype: {self.dtype}")
         logger.debug(f" - kernel: {self.kernel}")
         logger.debug(f" - labels: {self.labels}")
+        import time
+        time.sleep(5)
         self.init_buffers()
 
     def init_buffers(self):
