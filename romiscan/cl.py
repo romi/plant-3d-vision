@@ -92,6 +92,17 @@ class Backprojection():
         """
         Helper function to initialize OpenCL buffers.
         """
+        logger.debug("Initialized Backprojection with:")
+        logger.debug(f" - shape: {self.shape}")
+        logger.debug(f" - origin: {self.origin}")
+        logger.debug(f" - voxel_size: {self.voxel_size}")
+        logger.debug(f" - default_value: {self.default_value}")
+        logger.debug(f" - type: {self.type}")
+        logger.debug(f" - dtype: {self.dtype}")
+        logger.debug(f" - kernel: {self.kernel}")
+        logger.debug(f" - labels: {self.labels}")
+        import time
+        time.sleep(5)
         self.values_h = self.default_value * \
             np.ones(self.shape).astype(self.dtype)
 
