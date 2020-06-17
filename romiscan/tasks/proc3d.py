@@ -124,6 +124,7 @@ class SegmentedPointCloud(RomiTask):
     def is_in_pict(self, px, shape):
         return px[0] >= 0 and px[0] < shape[1] and px[1] >= 0 and px[1] < shape[0]
 
+
     def run(self):
         import open3d
         fs = self.upstream_segmentation().output().get()
@@ -175,14 +176,16 @@ class SegmentedPointCloud(RomiTask):
                     scores[label_idx, i] += mask[px[1], px[0]]
 
         pts_labels = np.argmax(scores, axis=0).flatten()
+        logger.critical(f"Processed following labels: {labels}")
 
         colors = config.PointCloudColorConfig().colors
+        logger.critical(f"Associated colors: {colors}")
+
         color_array = np.zeros((len(pts), 3))
         point_labels = [""] * len(pts)
-        logger.critical(labels)
-        logger.critical(colors)
         for i in range(len(labels)):
-            logger.critical((pts_labels == i).sum())
+            nlab_pts = (pts_labels == i).sum()
+            logger.critical(f"Number of points associated to label '{labels[i]}': {nlab_pts}")
             if labels[i] in colors:
                 color_array[pts_labels == i, :] = np.asarray(colors[labels[i]])
             else:
