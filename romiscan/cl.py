@@ -75,6 +75,7 @@ class Backprojection():
             self.dtype = np.float32
             self.kernel = backprojection_kernels.average
         self.labels = labels
+
         logger.debug("Initialized Backprojection with:")
         logger.debug(f" - shape: {self.shape}")
         logger.debug(f" - origin: {self.origin}")
@@ -84,37 +85,25 @@ class Backprojection():
         logger.debug(f" - dtype: {self.dtype}")
         logger.debug(f" - kernel: {self.kernel}")
         logger.debug(f" - labels: {self.labels}")
-        import time
-        time.sleep(5)
+
         self.init_buffers()
 
     def init_buffers(self):
         """
         Helper function to initialize OpenCL buffers.
         """
-        logger.debug("Initialized Backprojection with:")
-        logger.debug(f" - shape: {self.shape}")
-        logger.debug(f" - origin: {self.origin}")
-        logger.debug(f" - voxel_size: {self.voxel_size}")
-        logger.debug(f" - default_value: {self.default_value}")
-        logger.debug(f" - type: {self.type}")
-        logger.debug(f" - dtype: {self.dtype}")
-        logger.debug(f" - kernel: {self.kernel}")
-        logger.debug(f" - labels: {self.labels}")
-        import time
-        time.sleep(5)
         self.values_h = self.default_value * \
-            np.ones(self.shape).astype(self.dtype)
+            np.ones(self.shape, dtype=self.dtype)
 
         self.values_d = cl.Buffer(
             ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=self.values_h)
 
         self.intrinsics_d = cl.Buffer(
-            ctx, mf.READ_ONLY, np.zeros(4).astype(np.float32).nbytes)
+            ctx, mf.READ_ONLY, np.zeros(4, dtype=np.float32).nbytes)
         self.rot_d = cl.Buffer(
-            ctx, mf.READ_ONLY, np.zeros(9).astype(np.float32).nbytes)
+            ctx, mf.READ_ONLY, np.zeros(9, dtype=np.float32).nbytes)
         self.tvec_d = cl.Buffer(
-            ctx, mf.READ_ONLY, np.zeros(3).astype(np.float32).nbytes)
+            ctx, mf.READ_ONLY, np.zeros(3, dtype=np.float32).nbytes)
 
         self.volinfo_d = cl.Buffer(
             ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=np.array(
