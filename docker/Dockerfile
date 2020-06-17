@@ -20,7 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Create a non-root user and give it rights over its "home folder"
 RUN addgroup --gid $GROUP_ID $USER_NAME && \
-    adduser --disabled-password --gecos '' --uid $USER_ID --gid $GROUP_ID $SETU$
+    adduser --disabled-password --gecos '' --uid $USER_ID --gid $GROUP_ID $USER_NAME && \
     chown -R ${USER_NAME}: /home/${USER_NAME}
 
 # Change to non-root user:
@@ -47,8 +47,8 @@ ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
 RUN git clone https://github.com/romi/romiscan && \
     cd romiscan/ && \
     git checkout dev && \
-	git submodule init && \
-	git submodule update && \
+    git submodule init && \
+    git submodule update && \
     python -m pip install -e ./romidata/ && \
     python -m pip install -e ./romiseg/ && \
     python -m pip install -e ./romiscanner/ && \
