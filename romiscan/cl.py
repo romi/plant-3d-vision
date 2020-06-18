@@ -82,6 +82,9 @@ class Backprojection():
         """
         Helper function to initialize OpenCL buffers.
         """
+        buff_size = np.prod(self.shape) * (4 if self.dtype == np.int32 else 8)
+        logger.info(f"Buffer array is {buff_size} bytes!")
+
         self.values_h = self.default_value * \
             np.ones(self.shape, dtype=self.dtype)
 
