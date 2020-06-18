@@ -220,7 +220,7 @@ class TriangleMesh(RomiTask):
 
 
 class ClusteredMesh(RomiTask):
-    upstream_task = luigi.TaskParameter(default=PointCloud)
+    upstream_task = luigi.TaskParameter(default=SegmentedPointCloud)
     min_vol = luigi.FloatParameter(default=1.0)
     min_length = luigi.FloatParameter(default=10.0)
 
