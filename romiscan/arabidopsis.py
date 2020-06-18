@@ -459,7 +459,7 @@ def angles_from_meshes(input_fileset, characteristic_length, number_nn, stem_axi
             lg.append(fruits[i]["mesh"])
 
 
-    open3d.visualization.draw_geometries([ls, *gs, stem_mesh, *lg])
+    # open3d.visualization.draw_geometries([ls, *gs, stem_mesh, *lg])
     return { "angles" : angles }
 
 
