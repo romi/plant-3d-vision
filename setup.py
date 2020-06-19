@@ -3,8 +3,10 @@ from setuptools import setup, find_packages
 opts = dict(
     name='romiscan',
     packages=find_packages(),
-	version='0.6.99',
-    scripts=[],
+    version='0.6.99',
+    scripts=[
+        'bin/romi_run_task',
+    ],
     author='Timothée Wintz',
     author_email='timothee@timwin.fr',
     description='A plant scanner',
