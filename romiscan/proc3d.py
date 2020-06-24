@@ -387,12 +387,8 @@ def draw_distance_to_root_clusters(cluster_graph, cluster_values, pcd):
     open3d.visualization.draw_geometries([pcd, line_set])
 
 
-
-    
-
-
-def skeleton_from_distance_to_root_clusters(pcd, root_index,
-                                            binsize, k, connect_all_points=True):
+def skeleton_from_distance_to_root_clusters(pcd, root_index, binsize, k,
+                                            connect_all_points=True):
     """
     The infamous XU method.
     Xu, Hui et al. "Knowledge and heuristic-based modeling of laser-scanned trees" 
@@ -401,17 +397,14 @@ def skeleton_from_distance_to_root_clusters(pcd, root_index,
     if connect_all_points:
         connect_graph(g, pcd, root_index)
 
-    cluster_graph, cluster_values = distance_to_root_clusters(g, root_index, pcd, bin_size)
+    cluster_graph, cluster_values = distance_to_root_clusters(g, root_index, pcd, binsize)
     cluster_graph = nx.to_undirected(cluster_graph)
     cluster_graph = nx.minimum_spanning_tree(cluster_graph)
     return cluster_graph, cluster_values
-        
 
 
-
-def vol2pcd(volume, origin, voxel_size, level_set_value=0, quiet=False):
-    """
-    Converts a binary volume into a point cloud with normals.
+def vol2pcd(volume, origin, voxel_size, level_set_value=0):
+    """Converts a binary volume into a point cloud with normals.
 
     Parameters
     ----------
@@ -429,8 +422,8 @@ def vol2pcd(volume, origin, voxel_size, level_set_value=0, quiet=False):
     volume = 1.0*(volume>0.5) # variable level ?
     dist = distance_transform_edt(volume)
     mdist = distance_transform_edt(1-volume)
-    logger.critical(dist.max())
-    logger.critical(dist.min())
+    logger.critical(f"Max distance transform: {dist.max()}")
+    logger.critical(f"Min distance transform: {dist.min()}")
     dist = np.where(dist > 0.5, dist - 0.5, -mdist + 0.5)
 
     gx, gy, gz = np.gradient(dist)
@@ -440,12 +433,11 @@ def vol2pcd(volume, origin, voxel_size, level_set_value=0, quiet=False):
 
     on_edge = (dist > -level_set_value) * (dist <= -level_set_value+np.sqrt(3))
     x, y, z = np.nonzero(on_edge)
+    logger.debug("number of points = %d" % len(x))
 
-    if not quiet:
-        logger.debug("number of points = %d" % len(x))
     pts = np.zeros((0, 3))
     normals = np.zeros((0,3))
-    for i in range(len(x)):
+    for i in tqdm(range(len(x)), desc="Computing normals"):
         grad = np.array([gx[x[i], y[i], z[i]],
                          gy[x[i], y[i], z[i]],
                          gz[x[i], y[i], z[i]]])

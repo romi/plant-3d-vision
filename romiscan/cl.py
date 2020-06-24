@@ -42,57 +42,98 @@ with open(os.path.join(prg_dir, 'fim.c')) as f:
     fim_kernels = cl.Program(ctx, f.read()).build(options="-I%s" % prg_dir)
 
 
-class Backprojection():
+class Backprojection(object):
     """
     This class implements backprojection onto a voxel volume.
 
-    Parameters
+    Attributes
     ----------
     shape: list
-        shape of the voxel volume
+        Shape of the voxel volume.
     origin: list
-        location of the origin of the voxel space
+        Location of the origin of the voxel space.
     voxel_size: float
-        size of voxels
-    type: str
-        "carving" or "averaging" (defaults to carving)
+        Size of voxels.
     default_value: float
-        default value when initializing the voxels (defaults to 0)
+        Default value when initializing the voxels (defaults to 0).
+    log: bool
+        If `True`, default `False`, convert the mask to logarithmic values.
+    labels: list
+        List of labels to use in case of ML pipeline, can be `None`.
+    dtype: {numpy.int32, numpy.float32}
+        Data type used for the buffer, depends on initialization `type`.
+    kernel: fun
+        Kernel to use for backprojection, depends on initialization `type`.
+
+    See Also
+    --------
+    kernel.backprojection.c
+
     """
 
-    def __init__(self, shape, origin, voxel_size, type="carving", default_value=0, labels=None, log=False, label_single_class=None):
+    def __init__(self, shape, origin, voxel_size, type="carving",
+                 default_value=0, labels=None, log=False):
+        """
+        Parameters
+        ----------
+        shape: list
+            Shape of the voxel volume.
+        origin: list
+            Location of the origin of the voxel space.
+        voxel_size: float
+            Size of voxels.
+        type: {'carving', 'averaging'}
+            Method to use for backprojection, defaults to "carving".
+        default_value: float
+            Default value when initializing the voxels (defaults to 0).
+        labels: list
+            List of labels to use in case of ML pipeline, can be `None`.
+        log: bool
+            If `True`, default `False`, convert the mask to logarithmic values.
+
+        """
         self.shape = shape
         self.origin = origin
         self.voxel_size = voxel_size
         self.default_value = default_value
         self.log = log
-
-        self.type = type
+        self.labels = labels
+        # Defines `dtype` & `kernel` attributes based on initialization `type`.
         if type == "carving":
             self.dtype = np.int32
             self.kernel = backprojection_kernels.carve
         elif type == "averaging":
             self.dtype = np.float32
             self.kernel = backprojection_kernels.average
-        self.labels = labels
+        # Print info about buffer array size and associated memory cost:
+        buff_size = np.prod(self.shape) * 4
+        logger.info(f"Buffer shape is {self.shape}")
+        logger.info(f"Required memory for buffer is {buff_size} bytes!")
+        # Defines attributes used to initialize OpenCL buffers:
+        self.values_h = None
+        self.values_d = None
+        self.intrinsics_d = None
+        self.rot_d = None
+        self.tvec_d = None
+        self.volinfo_d = None
+        self.shape_d = None
+        # Set attributes values for OpenCL buffers:
         self.init_buffers()
 
     def init_buffers(self):
-        """
-        Helper function to initialize OpenCL buffers.
-        """
+        """Helper function to initialize OpenCL buffers."""
         self.values_h = self.default_value * \
-            np.ones(self.shape).astype(self.dtype)
+                        np.ones(self.shape, dtype=self.dtype)
 
         self.values_d = cl.Buffer(
             ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=self.values_h)
 
         self.intrinsics_d = cl.Buffer(
-            ctx, mf.READ_ONLY, np.zeros(4).astype(np.float32).nbytes)
+            ctx, mf.READ_ONLY, np.zeros(4, dtype=np.float32).nbytes)
         self.rot_d = cl.Buffer(
-            ctx, mf.READ_ONLY, np.zeros(9).astype(np.float32).nbytes)
+            ctx, mf.READ_ONLY, np.zeros(9, dtype=np.float32).nbytes)
         self.tvec_d = cl.Buffer(
-            ctx, mf.READ_ONLY, np.zeros(3).astype(np.float32).nbytes)
+            ctx, mf.READ_ONLY, np.zeros(3, dtype=np.float32).nbytes)
 
         self.volinfo_d = cl.Buffer(
             ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=np.array(
@@ -103,12 +144,9 @@ class Backprojection():
             ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=np.array(
                 self.shape, dtype=np.int32)
         )
-        logger.debug("buffer size = ")
-        logger.debug(self.shape)
 
     def process_view(self, intrinsics, rot, tvec, mask):
-        """
-        Process a new view.
+        """Process a new view.
 
         Parameters
         ----------
@@ -120,6 +158,7 @@ class Backprojection():
             translation vector of the camera pose
         mask: np.ndarray
             mask array (or float array if type is averaging)
+
         """
         if self.dtype == np.float32 and mask.dtype == np.uint8:
             logger.debug("type is uint8")
@@ -130,7 +169,7 @@ class Backprojection():
         intrinsics_h = np.ascontiguousarray(intrinsics).astype(np.float32)
         rot_h = np.ascontiguousarray(rot).astype(np.float32)
         tvec_h = np.ascontiguousarray(tvec).astype(np.float32)
-        logger.debug("mask max: %.2f"%(mask.max()))
+        logger.debug("mask max: %.2f" % (mask.max()))
         mask_h = np.ascontiguousarray(mask).astype(self.dtype)
 
         mask_d = cl.image_from_array(ctx, mask_h, 1)
@@ -145,43 +184,64 @@ class Backprojection():
         queue.finish()
 
     def values(self):
-        """
-        Gets computed values from the OpenCL device.
-        """
+        """Gets computed values from the OpenCL device."""
         cl.enqueue_copy(queue, self.values_h, self.values_d)
         return self.values_h
 
     def process_fileset(self, fs, use_colmap_poses=False, invert=False):
-        if self.labels is not None:
-            labels = self.labels
-            logger.debug("labels: ")
-            logger.debug(labels)
-            result = np.zeros((len(labels), *self.shape))
-            for i,l in enumerate(labels):
-                result[i, :] = self.process_label(fs, l, use_colmap_poses, invert=invert)
-            return result
-        else:
-            return self.process_label(fs, use_colmap_poses=use_colmap_poses, invert=invert)
-
-
-    def process_label(self, fs, label=None, use_colmap_poses=False, invert=False):
-        """         Processes a whole fileset.
+        """Processes a whole fileset.
 
         Parameters
         ----------
         fs : romidata.DB.Fileset
-        camera_model: dict
-        poses: dict
-            poses file computed by colmap
+            Fileset to process.
+        use_colmap_poses: bool
+            If `True` use the poses estimated by colmap (metadata `colmap_camera`),
+            else should be defined in metadata `camera`. Default is `False`
+        invert: bool
+            If `True`, default `False`, invert the values of the mask file to
+            process.
+
+        """
+        if self.labels is not None:
+            labels = self.labels
+            logger.debug(f"labels: {labels}")
+            result = np.zeros((len(labels), *self.shape))
+            for i, l in enumerate(labels):
+                result[i, :] = self.process_label(fs, l, use_colmap_poses,
+                                                  invert=invert)
+            return result
+        else:
+            return self.process_label(fs, use_colmap_poses=use_colmap_poses,
+                                      invert=invert)
+
+    def process_label(self, fs, label=None, use_colmap_poses=False,
+                      invert=False):
+        """Processes a whole fileset for given label.
+
+        Parameters
+        ----------
+        fs : romidata.DB.Fileset
+            Fileset to process.
+        label: str
+            Name of the label to process, can be `None`.
+        use_colmap_poses: bool
+            If `True` use the poses estimated by colmap (metadata `colmap_camera`),
+            else should be defined in metadata `camera`. Default is `False`
+        invert: bool
+            If `True`, default `False`, invert the values of the mask file to
+            process.
+
         """
         self.clear()
-        logger.debug("processing label %s"%label)
-
+        if label is not None:
+            logger.debug("processing label %s" % label)
 
         for fi in fs.get_files():
+            # Skip file if not of the right label (when defined)
             if label is not None and fi.get_metadata("channel") != label:
                 continue
-            logger.debug("processing file %s"%fi.id)
+            logger.debug("processing file %s" % fi.id)
 
             if use_colmap_poses:
                 cam = fi.get_metadata('colmap_camera')
@@ -189,11 +249,11 @@ class Backprojection():
                 cam = fi.get_metadata('camera')
 
             if cam is None:
-                logger.warning("Could not get camera pose for view, skipping...")
+                logger.warning(
+                    "Could not get camera pose for view, skipping...")
                 continue
 
             camera_model = cam["camera_model"]
-
 
             width = camera_model['width']
             height = camera_model['height']
@@ -202,7 +262,7 @@ class Backprojection():
             rot = sum(cam['rotmat'], [])
             tvec = cam['tvec']
             mask = io.read_image(fi)
-            if invert and mask.dtype==np.uint8:
+            if invert and mask.dtype == np.uint8:
                 mask = 255 - mask
             if invert and mask.dtype == np.float32:
                 mask = 1.0 - mask
@@ -214,8 +274,9 @@ class Backprojection():
         return result
 
     def clear(self):
+        """Clear computed values from the OpenCL device."""
         self.values_h = self.default_value * \
-            np.ones(self.shape).astype(self.dtype)
+                        np.ones(self.shape).astype(self.dtype)
         cl.enqueue_copy(queue, self.values_d, self.values_h)
 
 
