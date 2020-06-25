@@ -50,7 +50,7 @@ pcd_size = 10000
 
 [Visualization]
 max_image_size = 1500
-max_pcd_size = 10000
+max_point_cloud_size = 10000
 thumbnail_size = 150
 pcd_source = "vox2pcd"
 mesh_source = "delaunay"
