@@ -96,7 +96,7 @@ def parsing():
                         help="defines level of message logging.")
 
     parser.add_argument('--local-scheduler', dest='ls', action="store_true",
-                        default=False,
+                        default=True,
                         help='Luigi CLI argument')
     return parser
 
