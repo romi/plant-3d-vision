@@ -1,0 +1,73 @@
+[Colmap]
+matcher = "exhaustive"
+compute_dense = false
+
+[Colmap.cli_args.feature_extractor]
+"--ImageReader.single_camera" = "1"
+"--SiftExtraction.use_gpu" = "1"
+
+[Colmap.cli_args.exhaustive_matcher]
+"--SiftMatching.use_gpu" = "1"
+
+[Colmap.cli_args.model_aligner]
+"--robust_alignment_max_error" = "10"
+
+[accessory]
+calibration_scan_id = "calib_scan_shortpath"
+
+[ModelFileset]
+scan_id = "models"
+
+[Segmentation2D]
+upstream_task = "Undistorted"
+query = "{\"channel\":\"rgb\"}"
+model_id = "Resnetdataset_gl_png_896_896_epoch50"
+resize = true
+binarize = true
+dilation = 1
+Sx = 896
+Sy = 896
+epochs = 1
+batch = 1
+learning_rate = 0.0001
+threshold = 0.01
+
+[Voxels]
+upstream_mask = "Segmentation2D"
+labels = "[\"background\"]"
+voxel_size = 0.6
+type = "averaging"
+invert = false
+use_colmap_poses = true
+log = false
+
+[PointCloud]
+level_set_value = 0.5
+min_score = 0.01
+
+[PointCloudGroundTruth]
+pcd_size = 10000
+
+[Visualization]
+max_image_size = 1500
+max_pcd_size = 10000
+thumbnail_size = 150
+pcd_source = "vox2pcd"
+mesh_source = "delaunay"
+
+[PointCloudEvaluation]
+max_distance = 0.2
+
+[SegmentedPointCloud]
+upstream_segmentation = "Segmentation2D"
+upstream_task = "PointCloud"
+use_colmap_poses = true
+
+[AnglesAndInternodes]
+upstream_task = "ClusteredMesh"
+
+[PointCloudSegmentationEvaluation]
+upstream_task = "SegmentedPointCloud"
+
+[Segmentation2DEvaluation]
+tol_px = 1
