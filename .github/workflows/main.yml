@@ -1,0 +1,43 @@
+# This workflow will build the Docker image, run python unit tests and checks if main features of the pipe are not broken
+
+name: CI
+
+on:
+    push:
+        branches: [dev]
+    pull_request:
+        branches: [dev]
+
+jobs:
+    docker build:
+        runs-on: self-hosted
+
+        steps:
+         - uses: action/checkout@v2
+         - name: Build Dockerfile
+           run: |
+            docker build -t romiscan:latest docker/Dockerfile
+    
+    unit tests:
+        runs-on: self-hosted
+        needs: docker build
+        
+        steps:
+         - name: Run Unit Tests
+           run: |
+            docker run --gpus all -it --rm romiscan:latest bash
+            pytest romiscan/
+            exit
+    
+    feature tests:
+        runs-on: self-hosted
+        needs: docker build
+        
+        steps:
+         - name: Check Pipe
+           run: |
+            docker run --gpus all -it --rm romiscan:latest bash
+            cd romiscan/tests/
+            ./check_pipe.sh
+            exit
+           
