@@ -9,7 +9,7 @@ on:
         branches: [dev]
 
 jobs:
-    docker build:
+    docker-build:
         runs-on: self-hosted
 
         steps:
@@ -18,9 +18,9 @@ jobs:
            run: |
             docker build -t romiscan:latest docker/Dockerfile
     
-    unit tests:
+    unit-tests:
         runs-on: self-hosted
-        needs: docker build
+        needs: docker-build
         
         steps:
          - name: Run Unit Tests
@@ -29,9 +29,9 @@ jobs:
             pytest romiscan/
             exit
     
-    feature tests:
+    feature-tests:
         runs-on: self-hosted
-        needs: docker build
+        needs: docker-build
         
         steps:
          - name: Check Pipe
