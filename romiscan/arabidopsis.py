@@ -272,6 +272,7 @@ def get_fruit(G, i):
     x = get_nodes_by_label(G, "fruit")
     return [j for j in x if G.nodes[j]["fruit_id"] == i]
 
+
 def angles_from_meshes(input_fileset, characteristic_length, number_nn, stem_axis, stem_axis_inverted, min_elongation_ratio, min_fruit_size):
     import open3d
     from romidata import io
@@ -347,7 +348,7 @@ def angles_from_meshes(input_fileset, characteristic_length, number_nn, stem_axi
     ls.points = open3d.utility.Vector3dVector(pts)
     ls.lines = open3d.utility.Vector2iVector(lines)
 
-    # open3d.visualization.draw_geometries([ls, *gs])#, stem_mesh])
+    open3d.visualization.draw_geometries([ls, *gs])#, stem_mesh])
     # open3d.visualization.draw_geometries([stem_mesh])
 
     # peduncle_meshes = [io.read_triangle_mesh(f) for f in input_fileset.get_files(query={"label": "pedicel"})]
@@ -399,7 +400,7 @@ def angles_from_meshes(input_fileset, characteristic_length, number_nn, stem_axi
     fruits.sort(key = lambda x: x["center"][stem_axis] if not stem_axis_inverted else -x["center"][stem_axis])
     for i in range(len(fruits)):
         print(i)
-        stem_loc = fruits[i]["center"][stem_axis] 
+        stem_loc = fruits[i]["center"][stem_axis]
         closest_frame = int((stem_loc - stem_axis_min) / (stem_axis_max - stem_axis_min) * len(stem_frame_axis))
         if closest_frame < 0:
             closest_frame = 0
@@ -459,7 +460,7 @@ def angles_from_meshes(input_fileset, characteristic_length, number_nn, stem_axi
             lg.append(fruits[i]["mesh"])
 
 
-    # open3d.visualization.draw_geometries([ls, *gs, stem_mesh, *lg])
+    open3d.visualization.draw_geometries([ls, *gs, stem_mesh, *lg])
     return { "angles" : angles }
 
 
@@ -482,15 +483,25 @@ def compute_angles_and_internodes(T, n_neighbours=5):
     """
 
     main_stem = get_nodes_by_label(T, "stem")
-    branching_points = get_nodes_by_label(T, "node")
-    angles = np.zeros(len(branching_points) - 1)
-    internodes = np.zeros(len(branching_points) - 1)
-    plane_vectors = np.zeros((len(branching_points) -1, 3, 3))
+    unordered_branching_points = get_nodes_by_label(T, "node")
+    angles = np.zeros(len(unordered_branching_points) - 1)
+    internodes = np.zeros(len(unordered_branching_points) - 1)
+    plane_vectors = np.zeros((len(unordered_branching_points) -1, 3, 3))
     all_fruit_points = []
+
+    # order nodes in z direction
+    nodes_dict = {}
+    for ubp in unordered_branching_points:
+        nodes_dict[ubp] = T.nodes[ubp]["position"][2]
+    branching_points = [k for k, v in sorted(nodes_dict.items(), key=lambda item: item[1])][::-1]
 
     for i in range(len(branching_points) - 1):
         node_point = np.array(T.nodes[branching_points[i]]["position"])
         node_next_point = np.array(T.nodes[branching_points[i+1]]["position"])
+
+        print("********")
+        print("node point : ", node_point)
+        print("node next point : ", node_next_point)
 
         neighbour_nodes = nx.algorithms.traversal.breadth_first_search.bfs_tree(
             T, branching_points[i], depth_limit=n_neighbours)
