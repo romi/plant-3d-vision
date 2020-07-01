@@ -499,10 +499,6 @@ def compute_angles_and_internodes(T, n_neighbours=5):
         node_point = np.array(T.nodes[branching_points[i]]["position"])
         node_next_point = np.array(T.nodes[branching_points[i+1]]["position"])
 
-        print("********")
-        print("node point : ", node_point)
-        print("node next point : ", node_next_point)
-
         neighbour_nodes = nx.algorithms.traversal.breadth_first_search.bfs_tree(
             T, branching_points[i], depth_limit=n_neighbours)
 
