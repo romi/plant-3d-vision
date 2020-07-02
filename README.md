@@ -1,14 +1,49 @@
-# romiscan v0.6 (dev)
+# romiscan v0.7 (dev)
 
-## Installation instructions
+Documentation about the "Plant Scanner" project can be found [here](https://docs.romi-project.eu/Scanner/home/).
 
-You can find installation instructions in the [documentation](https://romi.github.io/html/romiscan.html#installation)
+## Install from sources in conda environment:
+In this install instructions, we leverage the `git submodule` functionality to clone the required ROMI libraries.
 
-## Documentation
+1. Clone the `romiscan` sources:
+    ```bash
+    git clone https://github.com/romi/romiscan.git
+    ```
+2. Create a conda environment named `scan_0.7` with Python3.7:
+    ```bash
+    conda create --name scan_0.7 python=3.7
+    ```
+3. Install sources and submodules in activated environment:
+    ```bash
+    conda activate scan_0.7
+    cd romiscan
+    git checkout dev
+    git submodule init
+    git submodule update
+    python -m pip install -r requirements.txt
+    python -m pip install -e ./romidata/
+    python -m pip install -e ./romiseg/
+    python -m pip install -e ./romiscanner/
+    python -m pip install -e ./romicgal/
+    python -m pip install .
+    ```
+4. Test `romiscan` library:
+    ```bash
+    conda activate scan_0.7
+    python -c 'import romiscan'
+    ```
 
-All documentation is [here](https://romi.github.io/html/romiscan.html)
 
-## Install `romiscan` conda package:
+## Conda packaging
+
+### Build `romiscan` conda package:
+From the `base` conda environment, run:
+```bash
+conda build conda_recipes/romiscan/ -c romi-eu -c open3d-admin -c conda-forge --user romi-eu
+```
+
+
+### Install `romiscan` conda package:
 ```bash
 conda create -n romiscan romiscan -c romi-eu -c open3d-admin --force
 ```
@@ -18,34 +53,6 @@ conda activate romiscan
 python -c 'import romiscan'
 ```
 
-## Install from sources in conda environment:
-
-1. Clone the sources:
-    ```bash
-    git clone https://github.com/romi/conda_recipes.git
-    git clone https://github.com/romi/romiscan.git
-    ```
-2. Create a conda environment:
-    ```bash
-    conda env create -n romiscan_dev -f conda_recipes/environments/romiscan_0.5.yaml
-    ```
-3. Install sources:
-   ```bash
-   conda activate romiscan_dev
-   cd romiscan
-   python setup.py develop
-   ```
-4. Test `romiscan` library:
-   ```bash
-   conda activate romiscan_dev
-   python -c 'import romiscan'
-   ```
-
-## Build `romiscan` conda package:
-From the `base` conda environment, run:
-```bash
-conda build conda_recipes/romiscan/ -c romi-eu -c open3d-admin -c conda-forge --user romi-eu
-```
 
 ## Docker
 
