@@ -16,7 +16,13 @@ In addition you will need:
 - git
 - python3-pip
 - python3-wheel
-- wget, eigen3, gmp, mprf & pkg-config are required by `romicgal`
+
+As you will be using the `romicgal` library, which is a minimal wrapper for CGAL 5.0 using `pybind11` you will also need:
+- wget
+- eigen3
+- gmp
+- mprf
+- pkg-config
 
 On Debian and Ubuntu, you can install them with:
 ```bash
@@ -25,13 +31,13 @@ sudo apt-get update && apt-get install -y \
     git python3-wheel python3-pip \
     wget pkg-config libeigen3-dev libgmp3-dev libmpfr-dev
 ```
-You may need to make a symbolic link to `libOpenCL.so`, if you get an error with `/usr/bin/ld: cannot find -lOpenCL`:
-```bash
-ln -s /usr/lib/x86_64-linux-gnu/libOpenCL.so.1 /usr/lib/libOpenCL.so
-```
 
 **Troubleshooting**:
 
+- `/usr/bin/ld: cannot find -lOpenCL` can be fixed with a symbolic link to `libOpenCL.so`:
+    ```bash
+    ln -s /usr/lib/x86_64-linux-gnu/libOpenCL.so.1 /usr/lib/libOpenCL.so
+    ```
 - `ImportError: libGL.so.1: cannot open shared object file: No such file or directory` can be fixed with:
     ```bash
     apt-get install libgl1-mesa-glx
