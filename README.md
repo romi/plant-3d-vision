@@ -81,8 +81,8 @@ In this install instructions, we leverage the `git submodule` functionality to c
     ```bash
     cd tests/
     bash check_pipe.sh
-    rm testdata/models/metadata/models/Resnetdataset_gl_png_896_896_epoch50.pt
-    rm testdata/models/metadata/models/tmp_epoch40.pt
+    rm testdata/models/models/Resnetdataset_gl_png_896_896_epoch50.pt
+    rm testdata/models/models/tmp_epoch40.pt
     ```
 
 ## Conda packaging
