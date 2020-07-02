@@ -348,7 +348,7 @@ def angles_from_meshes(input_fileset, characteristic_length, number_nn, stem_axi
     ls.points = open3d.utility.Vector3dVector(pts)
     ls.lines = open3d.utility.Vector2iVector(lines)
 
-    open3d.visualization.draw_geometries([ls, *gs])#, stem_mesh])
+    # open3d.visualization.draw_geometries([ls, *gs])#, stem_mesh])
     # open3d.visualization.draw_geometries([stem_mesh])
 
     # peduncle_meshes = [io.read_triangle_mesh(f) for f in input_fileset.get_files(query={"label": "pedicel"})]
@@ -460,7 +460,7 @@ def angles_from_meshes(input_fileset, characteristic_length, number_nn, stem_axi
             lg.append(fruits[i]["mesh"])
 
 
-    open3d.visualization.draw_geometries([ls, *gs, stem_mesh, *lg])
+    # open3d.visualization.draw_geometries([ls, *gs, stem_mesh, *lg])
     return { "angles" : angles }
 
 
