@@ -2,6 +2,24 @@
 
 Documentation about the "Plant Scanner" project can be found [here](https://docs.romi-project.eu/Scanner/home/).
 
+## Install requirements
+This library use `pyopencl` and thus require the following system libraries:
+
+- ocl-icd-libopencl1
+- opencl-headers
+- clinfo
+
+On Ubuntu, you can install them with:
+```bash
+sudo apt-get update && apt-get install -y \
+    ocl-icd-libopencl1 opencl-headers clinfo
+```
+You may need to make a symbolic link:
+```bash
+ln -s /usr/lib/x86_64-linux-gnu/libOpenCL.so.1 /usr/lib/libOpenCL.so
+```
+
+
 ## Install from sources in conda environment:
 In this install instructions, we leverage the `git submodule` functionality to clone the required ROMI libraries.
 
