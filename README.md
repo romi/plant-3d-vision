@@ -3,22 +3,43 @@
 Documentation about the "Plant Scanner" project can be found [here](https://docs.romi-project.eu/Scanner/home/).
 
 ## Install requirements
+Colmap is required to run the reconstruction tasks, follow the official install instructions for linux [here](https://colmap.github.io/install.html#linux).
+
 This library use `pyopencl` and thus require the following system libraries:
 
 - ocl-icd-libopencl1
 - opencl-headers
 - clinfo
 
-On Ubuntu, you can install them with:
+In addition you will need:
+
+- git
+- python3-pip
+- python3-wheel
+- wget, eigen3, gmp, mprf & pkg-config are required by `romicgal`
+
+On Debian and Ubuntu, you can install them with:
 ```bash
 sudo apt-get update && apt-get install -y \
-    ocl-icd-libopencl1 opencl-headers clinfo
+    ocl-icd-libopencl1 opencl-headers clinfo \
+    git python3-wheel python3-pip \
+    wget pkg-config libeigen3-dev libgmp3-dev libmpfr-dev
 ```
-You may need to make a symbolic link:
+You may need to make a symbolic link to `libOpenCL.so`, if you get an error with `/usr/bin/ld: cannot find -lOpenCL`:
 ```bash
 ln -s /usr/lib/x86_64-linux-gnu/libOpenCL.so.1 /usr/lib/libOpenCL.so
 ```
 
+**Troubleshooting**:
+
+- `ImportError: libGL.so.1: cannot open shared object file: No such file or directory` can be fixed with:
+    ```bash
+    apt-get install libgl1-mesa-glx
+    ```
+- `ImportError: libSM.so.6: cannot open shared object file: No such file or directory` can be fixed with:
+    ```bash
+    apt-get install libsm6 libxext6 libxrender-dev
+    ```
 
 ## Install from sources in conda environment:
 In this install instructions, we leverage the `git submodule` functionality to clone the required ROMI libraries.
@@ -38,19 +59,25 @@ In this install instructions, we leverage the `git submodule` functionality to c
     git checkout dev
     git submodule init
     git submodule update
-    python -m pip install -r requirements.txt
-    python -m pip install -e ./romidata/
-    python -m pip install -e ./romiseg/
-    python -m pip install -e ./romiscanner/
-    python -m pip install -e ./romicgal/
-    python -m pip install .
+    python3.7 -m pip install -r requirements.txt
+    python3.7 -m pip install -e ./romidata/
+    python3.7 -m pip install -e ./romiseg/
+    python3.7 -m pip install -e ./romiscanner/
+    python3.7 -m pip install -e ./romicgal/
+    python3.7 -m pip install .
     ```
-4. Test `romiscan` library:
+4. Test import of `romiscan` library:
     ```bash
     conda activate scan_0.7
-    python -c 'import romiscan'
+    python3 -c 'import romiscan'
     ```
-
+5. Longer tests using shipped "test dataset":
+    ```bash
+    cd tests/
+    bash check_pipe.sh
+    rm testdata/models/metadata/models/Resnetdataset_gl_png_896_896_epoch50.pt
+    rm testdata/models/metadata/models/tmp_epoch40.pt
+    ```
 
 ## Conda packaging
 
