@@ -16,7 +16,8 @@ jobs:
          - uses: actions/checkout@v2
          - name: Build Dockerfile
            run: |
-            docker build -t romiscan:latest -f docker/Dockerfile
+            cd docker/
+            docker build -t romiscan:latest .
     
     unit-tests:
         runs-on: self-hosted
