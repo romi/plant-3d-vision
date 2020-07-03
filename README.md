@@ -26,7 +26,7 @@ As you will be using the `romicgal` library, which is a minimal wrapper for CGAL
 
 On Debian and Ubuntu, you can install them with:
 ```bash
-sudo apt-get update && apt-get install -y \
+sudo apt-get update && sudo apt-get install -y \
     ocl-icd-libopencl1 opencl-headers clinfo \
     git python3-wheel python3-pip \
     wget pkg-config libeigen3-dev libgmp3-dev libmpfr-dev
@@ -84,6 +84,7 @@ In this install instructions, we leverage the `git submodule` functionality to c
     rm testdata/models/models/Resnetdataset_gl_png_896_896_epoch50.pt
     rm testdata/models/models/tmp_epoch40.pt
     ```
+
 
 ## Conda packaging
 
