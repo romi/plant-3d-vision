@@ -26,8 +26,8 @@ jobs:
         steps:
          - name: Run Unit Tests
            run: |
-            docker run --gpus all -it --rm romiscan:latest bash
-            pytest romiscan/
+            docker run --gpus all -t --rm romiscan:latest bash
+            pytest romiscan/tests/
             exit
     
     feature-tests:
@@ -37,7 +37,7 @@ jobs:
         steps:
          - name: Check Pipe
            run: |
-            docker run --gpus all -it --rm romiscan:latest bash
+            docker run --gpus all -t --rm romiscan:latest bash
             cd romiscan/tests/
             ./check_pipe.sh
             exit
