@@ -70,7 +70,7 @@ In this install instructions, we leverage the `git submodule` functionality to c
     python3.7 -m pip install -e ./romiseg/
     python3.7 -m pip install -e ./romiscanner/
     python3.7 -m pip install -e ./romicgal/
-    python3.7 -m pip install .
+    python3.7 -m pip install -e .
     ```
 4. Test import of `romiscan` library:
     ```bash
