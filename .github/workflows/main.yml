@@ -27,18 +27,3 @@ jobs:
          - name: Run Unit Tests
            run: |
             docker run --gpus all -t --rm romiscan:latest bash
-            pytest romiscan/tests/
-            exit
-    
-    feature-tests:
-        runs-on: self-hosted
-        needs: docker-build
-        
-        steps:
-         - name: Check Pipe
-           run: |
-            docker run --gpus all -t --rm romiscan:latest bash
-            cd romiscan/tests/
-            ./check_pipe.sh
-            exit
-           
