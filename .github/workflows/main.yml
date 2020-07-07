@@ -27,3 +27,12 @@ jobs:
 #         - name: Run Unit Tests
 #           run: |
 #            docker run --gpus all --env PYOPENCL_CTX='0' --rm romiscan:latest cd romiscan/tests/ && python -m unittest
+
+   feature-tests:
+       runs-on: self-hosted
+       needs: docker-build
+        
+       steps:
+        - name: Run Feature Tests
+          run: |
+           docker run -v /home/${USER}/ML_models:/home/${USER}/romiscan/tests/testData/models/models --gpus all --env PYOPENCL_CTX='0' --rm romiscan:latest cd romiscan/tests/ && ./check_pipe.sh
