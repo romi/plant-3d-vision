@@ -17,7 +17,7 @@ jobs:
          - name: Build Dockerfile
            run: |
             cd docker/
-            docker build -t romiscan:latest --build-arg USER_NAME=$(id -n -u) --build-arg USER_ID=$(id -u) --build-arg GROUP_ID=$(id -g) .
+            docker build --no-cache -t romiscan:latest --build-arg USER_NAME=$(id -n -u) --build-arg USER_ID=$(id -u) --build-arg GROUP_ID=$(id -g) .
     
 #    unit-tests:
 #        runs-on: self-hosted
