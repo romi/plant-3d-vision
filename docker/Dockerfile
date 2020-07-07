@@ -4,6 +4,7 @@ FROM geki/colmap
 ARG USER_NAME
 ARG USER_ID
 ARG GROUP_ID
+ARG ROMISCAN_BRANCH=dev
 
 USER root
 RUN apt-get update && apt-get install -y \
@@ -46,7 +47,7 @@ ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
 
 RUN git clone https://github.com/romi/romiscan && \
     cd romiscan/ && \
-    git checkout dev && \
+    git checkout $ROMISCAN_BRANCH && \
     git submodule init && \
     git submodule update && \
     python -m pip install -e ./romidata/ && \
