@@ -28,7 +28,7 @@ jobs:
 #           run: |
 #            docker run --gpus all --env PYOPENCL_CTX='0' --rm romiscan:latest cd romiscan/tests/ && python -m unittest
 
-   feature-tests:
+    feature-tests:
        runs-on: self-hosted
        needs: docker-build
         
