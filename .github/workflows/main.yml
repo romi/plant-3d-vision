@@ -19,11 +19,11 @@ jobs:
             cd docker/
             docker build -t romiscan:latest --build-arg USER_NAME=$(id -n -u) --build-arg USER_ID=$(id -u) --build-arg GROUP_ID=$(id -g) .
     
-    unit-tests:
-        runs-on: self-hosted
-        needs: docker-build
+#    unit-tests:
+#        runs-on: self-hosted
+#        needs: docker-build
         
-        steps:
-         - name: Run Unit Tests
-           run: |
-            docker run --gpus all -t --rm romiscan:latest bash
+#        steps:
+#         - name: Run Unit Tests
+#           run: |
+#            docker run --gpus all --env PYOPENCL_CTX='0' --rm romiscan:latest cd romiscan/tests/ && python -m unittest
