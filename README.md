@@ -1,4 +1,4 @@
-# romiscan v0.7 (dev)
+# romiscan v0.7
 
 Documentation about the "Plant Scanner" project can be found [here](https://docs.romi-project.eu/Scanner/home/).
 
