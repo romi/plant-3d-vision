@@ -2,7 +2,11 @@
 
 name: CI
 
-on: push
+on:
+  push:
+    branches:
+        - dev
+        - v*
 
 jobs:
     docker-build:
