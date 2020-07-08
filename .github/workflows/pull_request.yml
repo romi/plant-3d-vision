@@ -13,7 +13,7 @@ jobs:
          - name: Build Dockerfile
            run: |
             cd docker/
-            docker build --no-cache -t romiscan:${{ github.ref }} --build-arg USER_NAME=$(id -n -u) --build-arg USER_ID=$(id -u) --build-arg GROUP_ID=$(id -g) --build-arg ROMISCAN_BRANCH=${{ github.head_ref }} .
+            docker build --no-cache -t romiscan:${{ github.sha }} --build-arg USER_NAME=$(id -n -u) --build-arg USER_ID=$(id -u) --build-arg GROUP_ID=$(id -g) --build-arg ROMISCAN_BRANCH=${{ github.head_ref }} .
     
 #    unit-tests:
 #        runs-on: self-hosted
@@ -22,7 +22,7 @@ jobs:
 #        steps:
 #         - name: Run Unit Tests
 #           run: |
-#            docker run --gpus all --env PYOPENCL_CTX='0' --rm romiscan:${{ github.ref }} /bin/sh -c 'cd romiscan/tests/; python -m unittest'
+#            docker run --gpus all --env PYOPENCL_CTX='0' --rm romiscan:${{ github.sha }} /bin/sh -c 'cd romiscan/tests/; python -m unittest'
 
     feature-tests:
        runs-on: self-hosted
@@ -31,7 +31,7 @@ jobs:
        steps:
         - name: Run Feature Tests
           run: |
-           docker run -v /home/${USER}/ML_models:/home/${USER}/romiscan/tests/testdata/models/models --gpus all --env PYOPENCL_CTX='0' --rm romiscan:${{ github.ref }} /bin/sh -c 'cd romiscan/tests/; ./check_pipe.sh'
+           docker run -v /home/${USER}/ML_models:/home/${USER}/romiscan/tests/testdata/models/models --gpus all --env PYOPENCL_CTX='0' --rm romiscan:${{ github.sha }} /bin/sh -c 'cd romiscan/tests/; ./check_pipe.sh'
 
     docker-clean:
        runs-on: self-hosted
@@ -39,6 +39,7 @@ jobs:
         
        steps:
         - name: Kill container et remove image
+          if: succeeded() || failed()
           run: |
-            docker kill romiscan:${{ github.ref }}
-            docker image rm romiscan:${{ github.ref }}
+            docker kill romiscan:${{ github.sha }}
+            docker image rm romiscan:${{ github.sha }}
