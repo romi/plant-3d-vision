@@ -38,8 +38,7 @@ jobs:
        needs: feature-tests
         
        steps:
-        - name: Kill container et remove image
+        - name: Remove Docker Image
           if: always()
           run: |
-            docker kill romiscan:${{ github.sha }}
             docker image rm romiscan:${{ github.sha }}
