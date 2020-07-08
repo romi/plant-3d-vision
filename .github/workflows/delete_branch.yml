@@ -1,0 +1,15 @@
+# This workflow will build the Docker image, run python unit tests and checks if main features of the pipe are not broken
+
+name: CI
+
+on: delete
+
+jobs:
+    docker-clean:
+        runs-on: self-hosted
+
+        steps:
+         - name: Kill container et remove image
+           run: |
+            docker kill romiscan/${GITHUB_REF##*/}
+            docker image rm romiscan/${GITHUB_REF##*/}
