@@ -13,7 +13,7 @@ jobs:
          - name: Build Dockerfile
            run: |
             cd docker/
-            docker build --no-cache -t romiscan/${{ github.ref }} --build-arg USER_NAME=$(id -n -u) --build-arg USER_ID=$(id -u) --build-arg GROUP_ID=$(id -g) --build-arg ROMISCAN_BRANCH=${{ github.head_ref }} .
+            docker build --no-cache -t romiscan/${{ github.head_ref }} --build-arg USER_NAME=$(id -n -u) --build-arg USER_ID=$(id -u) --build-arg GROUP_ID=$(id -g) --build-arg ROMISCAN_BRANCH=${{ github.head_ref }} .
     
 #    unit-tests:
 #        runs-on: self-hosted
