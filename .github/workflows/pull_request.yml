@@ -1,0 +1,34 @@
+# This workflow will build the Docker image, run python unit tests and checks if main features of the pipe are not broken
+
+name: CI
+
+on: pull_request
+
+jobs:
+    docker-build:
+        runs-on: self-hosted
+
+        steps:
+         - uses: actions/checkout@v2
+         - name: Build Dockerfile
+           run: |
+            cd docker/
+            docker build --no-cache -t romiscan/${{ github.ref }} --build-arg USER_NAME=$(id -n -u) --build-arg USER_ID=$(id -u) --build-arg GROUP_ID=$(id -g) --build-arg ROMISCAN_BRANCH=${{ github.head_ref }} .
+    
+#    unit-tests:
+#        runs-on: self-hosted
+#        needs: docker-build
+        
+#        steps:
+#         - name: Run Unit Tests
+#           run: |
+#            docker run --gpus all --env PYOPENCL_CTX='0' --rm romiscan/${{ github.ref }} /bin/sh -c 'cd romiscan/tests/; python -m unittest'
+
+    feature-tests:
+       runs-on: self-hosted
+       needs: docker-build
+        
+       steps:
+        - name: Run Feature Tests
+          run: |
+           docker run -v /home/${USER}/ML_models:/home/${USER}/romiscan/tests/testdata/models/models --gpus all --env PYOPENCL_CTX='0' --rm romiscan/${{ github.head_ref }} /bin/sh -c 'cd romiscan/tests/; ./check_pipe.sh'
