@@ -39,7 +39,7 @@ jobs:
         
        steps:
         - name: Kill container et remove image
-          if: succeeded() || failed()
+          if: always()
           run: |
             docker kill romiscan:${{ github.sha }}
             docker image rm romiscan:${{ github.sha }}
