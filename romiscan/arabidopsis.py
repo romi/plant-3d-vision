@@ -489,10 +489,10 @@ def compute_angles_and_internodes(T, n_neighbours=5):
     plane_vectors = np.zeros((len(unordered_branching_points) -1, 3, 3))
     all_fruit_points = []
 
-    # order nodes in z direction
+    # re order nodes
     nodes_dict = {}
     for ubp in unordered_branching_points:
-        nodes_dict[ubp] = T.nodes[ubp]["position"][2]
+        nodes_dict[ubp] = T.nodes[ubp]["fruit_id"]
     branching_points = [k for k, v in sorted(nodes_dict.items(), key=lambda item: item[1])][::-1]
 
     for i in range(len(branching_points) - 1):
@@ -540,6 +540,10 @@ def compute_angles_and_internodes(T, n_neighbours=5):
             angle = 2*np.pi - angle
         angles[i-1] = angle
         internodes[i-1] = np.linalg.norm(p2 - p1)
+
+    # dirty hack to get the salient angle
+    if np.median(angles) > 3.8:
+        angles = (2 * np.pi) - angles
 
     return {
         "angles" : angles.tolist(),
