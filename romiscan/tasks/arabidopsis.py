@@ -21,7 +21,7 @@ class TreeGraph(RomiTask):
     upstream_task = luigi.TaskParameter(default=CurveSkeleton)
 
     z_axis =  luigi.IntParameter(default=2)
-    z_orientation =  luigi.IntParameter(default=1)
+    z_orientation =  luigi.FloatParameter(default=1)
 
     def run(self):
         from romiscan import arabidopsis
@@ -54,7 +54,7 @@ class AnglesAndInternodes(RomiTask):
         x = self.input().get().get_files()
         if len(x) == 1: # Assume it's a graph
             t = io.read_graph(self.input_file())
-            measures = arabidopsis.compute_angles_and_internodes(t)
+            measures = arabidopsis.compute_angles_and_internodes(t, self.stem_axis_inverted)
             io.write_json(self.output_file(), measures)
         else: # Assume it's meshes
             measures = arabidopsis.angles_from_meshes(self.input().get(), self.characteristic_length, self.number_nn,
