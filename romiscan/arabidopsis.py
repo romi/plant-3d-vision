@@ -17,6 +17,7 @@ try:
     from open3d.geometry import LineSet
     from open3d.io import read_point_cloud
     from open3d.utility import Vector3dVector, Vector2iVector
+
 except:
     from open3d.open3d.geometry import LineSet
     from open3d.open3d.io import read_point_cloud
@@ -54,8 +55,8 @@ def get_main_stem_and_nodes(G, root_node):
     n_neighbors = np.array([len(list(nx.neighbors(G, g)))
                             for g in main_stem], dtype=int)
     nodes = main_stem[n_neighbors > 2]
-    nodes = nodes[::-1]
-    return main_stem[::-1], nodes
+    nodes = nodes
+    return main_stem, nodes
 
 
 def compute_mst(G, main_stem, nodes):
@@ -87,7 +88,8 @@ def compute_mst(G, main_stem, nodes):
 
     distance_to_node = {}
     for n in G.nodes():
-        distance_to_node[n] = min(distances[i][n] for i in nodes)
+
+        distance_to_node[n] = min(distances[i][n] for i in nodes if i in distances)
 
     def node_penalty(u, v):
         if u in main_stem or v in main_stem:
@@ -240,6 +242,9 @@ def compute_tree_graph(points, lines, stem_axis, stem_direction):
 
     for i, n_i in enumerate(branching_points):
         attributes[n_i]["fruit_id"] = i
+
+    for i, n_i in enumerate(main_stem):
+        attributes[n_i]["main_stem_id"] = i
 
     # Compute the minimum spanning tree
     T = compute_mst(G, main_stem, branching_points)
@@ -465,7 +470,7 @@ def angles_from_meshes(input_fileset, characteristic_length, number_nn, stem_axi
 
 
 
-def compute_angles_and_internodes(T, n_neighbours=5):
+def compute_angles_and_internodes(T, stem_axis_inverted, n_nodes_fruit = 5, n_nodes_stem = 5):
     """
     Get angle and internodes from graph
 
@@ -482,7 +487,7 @@ def compute_angles_and_internodes(T, n_neighbours=5):
     dict
     """
 
-    main_stem = get_nodes_by_label(T, "stem")
+    unordered_main_stem = get_nodes_by_label(T, "stem")
     unordered_branching_points = get_nodes_by_label(T, "node")
     angles = np.zeros(len(unordered_branching_points) - 1)
     internodes = np.zeros(len(unordered_branching_points) - 1)
@@ -493,35 +498,45 @@ def compute_angles_and_internodes(T, n_neighbours=5):
     nodes_dict = {}
     for ubp in unordered_branching_points:
         nodes_dict[ubp] = T.nodes[ubp]["fruit_id"]
-    branching_points = [k for k, v in sorted(nodes_dict.items(), key=lambda item: item[1])][::-1]
+    branching_points = [k for k, v in sorted(nodes_dict.items(), key=lambda item: item[1])]
+
+    # re order main stem
+    stem_dict = {}
+    for umn in unordered_main_stem:
+        stem_dict[umn] = T.nodes[umn]["main_stem_id"]
+    main_stem = [k for k, v in sorted(stem_dict.items(), key=lambda item: item[1])]
 
     for i in range(len(branching_points) - 1):
         node_point = np.array(T.nodes[branching_points[i]]["position"])
         node_next_point = np.array(T.nodes[branching_points[i+1]]["position"])
 
-        neighbour_nodes = nx.algorithms.traversal.breadth_first_search.bfs_tree(
-            T, branching_points[i], depth_limit=n_neighbours)
+        node_fruit_points = [np.array(T.nodes[n]["position"]) for n in get_fruit(T, i)]
 
-        points = np.vstack([np.array(T.nodes[n]["position"]) for n in neighbour_nodes])
-        _, v1, v2 = fit_plane(points)
+        if len(node_fruit_points):
+            vertices_fruit_plane_est = node_fruit_points[0:n_nodes_fruit]
+            idx = main_stem.index(branching_points[i])
+            stem_neighbors_id = main_stem[idx - n_nodes_stem // 2:idx + n_nodes_stem // 2]
+            vertices_node_plane_est = [T.nodes[stem_id]["position"] for stem_id in stem_neighbors_id]
 
-        fruit_points = np.vstack([np.array(T.nodes[n]["position"]) for n in get_fruit(T, i)])
-        fruit_mean = fruit_points.mean(axis=0)
-        all_fruit_points.append(fruit_points.tolist())
+            points = np.vstack([vertices_fruit_plane_est, vertices_node_plane_est])
+            _, v1, v2 = fit_plane(points)
 
-        new_v1 = fruit_mean - node_point
-        new_v1 = new_v1.dot(v1) * v1 + new_v1.dot(v2) * v2
-        new_v1 /= np.linalg.norm(new_v1)
+            fruit_points = np.vstack(node_fruit_points)
+            fruit_mean = fruit_points.mean(axis=0)
+            all_fruit_points.append(fruit_points.tolist())
 
-        # Set v1 as the fruit direction and v2 as the stem direction
-        v1, v2 = new_v1, v2 - v2.dot(new_v1)*new_v1
-        if v2.dot(node_next_point - node_point) < 0:
-            v2 = - v2
+            new_v1 = fruit_mean - node_point
+            new_v1 = new_v1.dot(v1) * v1 + new_v1.dot(v2) * v2
+            new_v1 /= np.linalg.norm(new_v1)
 
-        plane_vectors[i, 0, :] = node_point
-        plane_vectors[i, 1, :] = v1
-        plane_vectors[i, 2, :] = v2
+            # Set v1 as the fruit direction and v2 as the stem direction
+            v1, v2 = new_v1, v2 - v2.dot(new_v1)*new_v1
+            if v2.dot(node_next_point - node_point) < 0:
+                v2 = - v2
 
+            plane_vectors[i, 0, :] = node_point
+            plane_vectors[i, 1, :] = v1
+            plane_vectors[i, 2, :] = v2
 
     for i in range(1, len(plane_vectors)):
         n1 = np.cross(plane_vectors[i-1, 1, :], plane_vectors[i-1, 2, :])
@@ -535,15 +550,11 @@ def compute_angles_and_internodes(T, n_neighbours=5):
         # Angle between the planes, between 0 and PI
         angle = np.arccos(np.dot(n1, n2))
 
-        # IF basis is direct, then angle is positive
-        if np.linalg.det([v1, v2, v3]) < 0:
+        # IF basis is direct, then angle is positive (depends on stem axis invertion ?)
+        if np.linalg.det([v1, v2, v3]) < 0 and not stem_axis_inverted or np.linalg.det([v1, v2, v3]) > 0 and stem_axis_inverted:
             angle = 2*np.pi - angle
         angles[i-1] = angle
         internodes[i-1] = np.linalg.norm(p2 - p1)
-
-    # dirty hack to get the salient angle
-    if np.median(angles) > 3.8:
-        angles = (2 * np.pi) - angles
 
     return {
         "angles" : angles.tolist(),
