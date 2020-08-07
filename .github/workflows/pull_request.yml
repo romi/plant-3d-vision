@@ -35,7 +35,7 @@ jobs:
 
     docker-clean:
        runs-on: self-hosted
-       needs: feature-tests
+       needs: [feature-tests, unit-tests]
         
        steps:
         - name: Remove Docker Image
