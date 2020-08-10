@@ -62,9 +62,13 @@ class Visualization(RomiTask):
         # POSES
         colmap_fileset = self.upstream_colmap().output().get()
         images = io.read_json(colmap_fileset.get_file(COLMAP_IMAGES_ID))
+        camera = io.read_json(colmap_fileset.get_file(COLMAP_CAMERAS_ID))
         f = output_fileset.get_file(COLMAP_IMAGES_ID, create=True)
+        f_cam = output_fileset.get_file(COLMAP_CAMERAS_ID, create=True)
         io.write_json(f, images)
+        io.write_json(f_cam, camera)
         files_metadata["poses"] = f.id
+        files_metadata["camera"] = f_cam.id
 
 
         # ZIP
