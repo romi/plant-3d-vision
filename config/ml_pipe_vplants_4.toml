@@ -71,3 +71,6 @@ upstream_task = "SegmentedPointCloud"
 
 [Segmentation2DEvaluation]
 tol_px = 1
+
+[Clean]
+no_confirm = true
