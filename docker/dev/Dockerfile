@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
     python3.7 python3.7-dev python3-pip wget && \
     update-alternatives --install /usr/bin/python python /usr/bin/python3.7 10 && \
     apt-get update && apt-get install -y --no-install-recommends \
-    ocl-icd-libopencl1 opencl-headers clinfo && \
+    ocl-icd-libopencl1 opencl-headers clinfo \
     nano && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
