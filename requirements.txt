@@ -3,7 +3,7 @@ appdirs
 toml
 tqdm
 imageio
-opencv-python
+opencv-python == 4.3.0.36
 pybind11
 colorlog
 scikit-image == 0.16.2
