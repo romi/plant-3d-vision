@@ -1,10 +1,9 @@
 FROM geki/colmap
 # geki/colmap is based on nvidia/cuda:10.1-devel-ubuntu18.04
 
-ARG USER_NAME
-ARG USER_ID
-ARG GROUP_ID
-ARG ROMISCAN_BRANCH=dev
+ARG USER_NAME=romi
+ARG USER_ID=1000
+ARG GROUP_ID=1000
 
 USER root
 RUN apt-get update && apt-get install -y \
@@ -41,20 +40,8 @@ USER ${USER_NAME}
 ENV NVIDIA_VISIBLE_DEVICES all
 ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
 
-RUN git clone https://github.com/romi/romiscan && \
-    cd romiscan/ && \
-    git checkout $ROMISCAN_BRANCH && \
-    git submodule init && \
-    git submodule update && \
-    python -m pip install -e ./romiseg/ && \
-    python -m pip install -e ./romicgal/ && \
-    python -m pip install -e ./romidata/ && \
-    python -m pip install -e ./romiscanner/ && \
-    python -m pip install -r requirements.txt && \
-    python -m pip install . && \
-    python -m pip cache purge
+RUN git clone --branch dev https://github.com/romi/romiseg && \
+    git clone https://github.com/romi/romicgal && \
+    python -m pip install -e ./romiseg/ --no-cache-dir && \
+    python -m pip install -e ./romicgal/ --no-cache-dir
 
-ENV DB_LOCATION="/home/${USER_NAME}/db_test"
-ENV PATH=$PATH:"/home/${USER_NAME}/.local/bin"
-
-CMD ["/bin/bash", "-c", "cd .."]
