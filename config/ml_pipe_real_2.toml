@@ -69,3 +69,6 @@ upstream_task = "ClusteredMesh"
 
 [ClusteredMesh]
 upstream_task = "SegmentedPointCloud"
+
+[Clean]
+no_confirm = true
