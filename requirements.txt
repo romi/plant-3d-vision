@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
 appdirs
+colorlog
+imageio
+luigi>= 2.8.11
+open3d== 0.9.0.0
+opencv-python== 4.2.0.34
+pybind11
+pyopencl
+pywavefront
+scikit-image== 0.16.2
+scikit-learn
 toml
 tqdm
-imageio
-opencv-python == 4.2.0.34
-pybind11
-colorlog
-scikit-image == 0.16.2
-scikit-learn
-pywavefront
 trimesh
-pyopencl
-luigi >= 2.8.11
-open3d == 0.9.0.0
