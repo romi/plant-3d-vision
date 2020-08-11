@@ -15,34 +15,39 @@ compute_dense = false
 [accessory]
 calibration_scan_id = "calib_scan_shortpath"
 
-[ModelFileset]
-scan_id = "models"
-
-[Segmentation2D]
+[Masks]
 upstream_task = "ImagesFilesetExists"
-query = "{\"channel\":\"rgb\"}"
-model_id = "tmp_epoch20"
-resize = true
-
-Sx = 896
-Sy = 896
-epochs = 1
-batch = 1
-learning_rate = 0.0001
+#upstream_task = "Undistorted"  # other option
+type = "linear"
+parameters = "[0,1,0]"
+dilation = 5
+binarize = true
+threshold = 0.3
 
 [Voxels]
-upstream_mask = "Segmentation2D"
-multiclass = true
+upstream_mask = "Masks"
+multiclass = false
 voxel_size = 1.0
 type = "averaging"
 use_colmap_poses = true
+log = false
 
 [PointCloud]
+upstream_task = "Voxels"
 level_set_value = 0.5
 background_prior= -200
 
-[PointCloudGroundTruth]
-pcd_size = 10000
+[TriangleMesh]
+upstream_task = "PointCloud"
+
+[CurveSkeleton]
+upstream_task = "TriangleMesh"
+
+[TreeGraph]
+upstream_task = "CurveSkeleton"
+
+[AnglesAndInternodes]
+upstream_task = "TreeGraph"
 
 [Visualization]
 max_image_size = 1500
@@ -51,12 +56,5 @@ thumbnail_size = 150
 pcd_source = "vox2pcd"
 mesh_source = "delaunay"
 
-[PointCloudEvaluation]
-max_distance = 0.2
-
-[SegmentedPointCloud]
-upstream_segmentation = "Segmentation2D"
-
-[AnglesAndInternodes]
-upstream_task = "ClusteredMesh"
-
+[Clean]
+no_confirm = true

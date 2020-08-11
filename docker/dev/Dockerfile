@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y \
     update-alternatives --install /usr/bin/python python /usr/bin/python3.7 10 && \
     apt-get update && apt-get install -y --no-install-recommends \
     ocl-icd-libopencl1 opencl-headers clinfo && \
+    nano && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
     ln -s /usr/lib/x86_64-linux-gnu/libOpenCL.so.1 /usr/lib/libOpenCL.so && \
@@ -44,4 +45,4 @@ RUN git clone https://github.com/romi/romiscan && \
 ENV DB_LOCATION="/home/${USER_NAME}/db_test"
 ENV PATH=$PATH:"/home/${USER_NAME}/.local/bin"
 
-CMD ["/bin/bash", "-c", "cd .."]
+CMD ["/bin/bash", "-c", "cd romiscan/tests/ && ./check_pipe.sh"]
