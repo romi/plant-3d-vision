@@ -26,6 +26,7 @@ threshold = 0.3
 
 [Voxels]
 upstream_mask = "Masks"
+upstream_colmap = "Colmap"
 multiclass = false
 voxel_size = 1.0
 type = "averaging"
