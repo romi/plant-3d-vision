@@ -11,31 +11,12 @@ import tempfile
 from warnings import warn
 
 import toml
+from romiscan.modules import MODULES, TASKS
 
 LUIGI_CMD = "luigi"
 LOGLEV = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
-HELP_URL = "https://docs.romi-project.eu/Scanner/How-To/basics/#pipelines"
+HELP_URL = "https://docs.romi-project.eu/Scanner/user_guide/pipelines/"
 
-MODULES = {
-    "Scan": "romiscanner.scan",
-    "VirtualScan": "romiscanner.scan",
-    "CalibrationScan": "romiscanner.scan",
-    "Colmap": "romiscan.tasks.colmap",
-    "Undistorted": "romiscan.tasks.proc2d",
-    "Masks": "romiscan.tasks.proc2d",
-    "Segmentation2D": "romiscan.tasks.proc2d",
-    "Voxels": "romiscan.tasks.cl",
-    "PointCloud": "romiscan.tasks.proc3d",
-    "SegmentedPointCloud": "romiscan.tasks.proc3d",
-    "TriangleMesh": "romiscan.tasks.proc3d",
-    "CurveSkeleton": "romiscan.tasks.proc3d",
-    "TreeGraph": "romiscan.tasks.arabidopsis",
-    "AnglesAndInternodes": "romiscan.tasks.arabidopsis",
-    "Visualization": "romiscan.tasks.visualization",
-    "Clean": "romidata.task",
-    "VirtualPlant": "romiscanner.lpy"
-}
-TASKS = list(MODULES.keys())
 LOGGING_CFG = """
     [loggers]
     keys=root
