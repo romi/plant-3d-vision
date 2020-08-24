@@ -17,7 +17,7 @@ class Colmap(RomiTask):
     Module: romiscan.tasks.colmap
     Default upstream tasks: Scan
     Upstream task format: Fileset with image files
-    Output fileset format: images.json, cameras.json, points3D.json, sparse.ply [, dense.ply]
+    Output fileset format: images.json, cameras.json, points3d.json, sparse.ply [, dense.ply]
 
     Parameters
     ----------
