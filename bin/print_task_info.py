@@ -266,8 +266,7 @@ if __name__ == "__main__":
     md_path = os.path.join(args.db_path, 'metadata')
     json_list = [f for f in os.listdir(md_path) if f.startswith(args.task) and f.endswith('.json')]
     if json_list == []:
-        print("Could not find the JSON metadata file associated to task '{}' in dataset '{}'!".format(args.task, args.db_path))
-        raise IOError
+        raise IOError("Could not find the JSON metadata file associated to task '{}' in dataset '{}'!".format(args.task, args.db_path))
     elif len(json_list) == 1:
         md_json = json_list[0]
         print("Found a JSON metadata file associated to task '{}' in dataset '{}'!".format(args.task, args.db_path))
