@@ -255,7 +255,7 @@ if __name__ == "__main__":
 
     config = toml.load(os.path.join(args.db_path, "pipeline.toml"))
     # conf_tasks = list_configured_tasks(config)
-
+    print(f"# -- Summary of task {args.task}:")
     print("# - Used TOML configuration:")
     try:
         print(config[args.task])
