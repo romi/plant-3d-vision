@@ -9,6 +9,7 @@ import argparse
 import json
 import os
 
+import numpy as np
 import toml
 from romiscan.modules import TASKS
 
@@ -29,6 +30,11 @@ def parsing():
                         help='FSDB scan dataset to process (path).')
 
     return parser
+
+
+def get_dataset_size(db_path):
+    return len([f for f in os.listdir(os.path.join(db_path, 'images')) if os.path.splitext(f)[1] in ['.jpg', '.png']])
+
 
 def json_metadata(task, task_id, db_path):
     """ Get task metadata JSON.
@@ -90,6 +96,20 @@ def pointcloud_info(task, task_id, db_path):
     print(f" - pointcloud dimensions (x, y, z): {ply.get_max_bound() - ply.get_min_bound()}")
 
 
+def segmented_pointcloud_info(task, task_id, db_path):
+    """Print info about SegmentedPointCloud task output."""
+    from romidata.io import read_point_cloud, dbfile_from_local_file
+    ply_f = os.path.join(db_path, task_id, f"{task}.ply")
+    ply = read_point_cloud(dbfile_from_local_file(ply_f))
+    if ply.is_empty():
+        print(f"PLY file for task '{task_id}' is empty!")
+    else:
+        print(f"Found PLY file for task '{task_id}':")
+    print(f" - {len(ply.points)} points")
+    print(f" - {len(np.unique(np.asarray(ply.colors), axis=0))} unique colors")
+    print(f" - pointcloud dimensions (x, y, z): {ply.get_max_bound() - ply.get_min_bound()}")
+
+
 def triangle_mesh_info(task, task_id, db_path):
     """Print info about TriangleMesh task output."""
     from romidata.io import read_triangle_mesh, dbfile_from_local_file
@@ -106,21 +126,21 @@ def triangle_mesh_info(task, task_id, db_path):
 
 def segmentation2d_info(task, task_id, db_path):
     """Print info about ClusteredMesh task output."""
-    from romidata.io import read_triangle_mesh, dbfile_from_local_file
     out_dir = os.path.join(db_path, task_id)
     files = os.listdir(out_dir)
     png_files = [f for f in files if f.endswith('.png')]
     organs = {}
     for png in png_files:
-        png_f = os.path.join(db_path, task_id, png)
         organ = os.path.splitext(png.split('_')[1])[0]
         if organ in organs.keys():
             organs[organ] += 1
         else:
             organs[organ] = 1
 
-    print(f"{task_id} organ reconstruction:\n - ", end="")
-    print("\n - ".join([f"{v}x {k}" for k, v in organs.items()]))
+    n_imgs = get_dataset_size(db_path)
+    print(f"{task_id} detected the following organs in RGB images: {', '.join(list(organs.keys()))}")
+    print(f"{task_id} organ detected:\n - ", end="")
+    print("\n - ".join([f"{v}/{n_imgs} for {k}" for k, v in organs.items()]))
 
 
 def clustered_mesh_info(task, task_id, db_path):
@@ -203,9 +223,9 @@ def info_from_task(task, task_id, db_path):
         return undistorted_info(task, task_id, db_path)
     ## - ML pipeline specific tasks:
     elif task == "Segmentation2D":
-        return metadata_info(task, task_id, db_path)
+        return segmentation2d_info(task, task_id, db_path)
     elif task == "SegmentedPointCloud":
-        return metadata_info(task, task_id, db_path)
+        return segmented_pointcloud_info(task, task_id, db_path)
     elif task == "ClusteredMesh":
         return clustered_mesh_info(task, task_id, db_path)
     else:
