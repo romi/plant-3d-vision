@@ -9,7 +9,8 @@ romi_run_task --config ../config/original_pipe_1.toml AnglesAndInternodes testda
 echo ""
 print_task_info Colmap testdata/real_plant/
 echo "
-"print_task_info PointCloud testdata/real_plant/
+"
+print_task_info PointCloud testdata/real_plant/
 echo "
 "
 print_task_info AnglesAndInternodes testdata/real_plant/
