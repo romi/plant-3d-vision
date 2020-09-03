@@ -9,7 +9,7 @@ opts = dict(
     version='0.7.99',
     scripts=[
         'bin/romi_run_task',
-        'bin/print_task_info.py',
+        'bin/print_task_info',
     ],
     author='Timothée Wintz',
     author_email='timothee@timwin.fr',
