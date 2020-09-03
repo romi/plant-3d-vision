@@ -55,7 +55,6 @@ RUN git clone --branch dev https://github.com/romi/romiseg && \
     python -m pip install -r ./romiscan/requirements.txt --no-cache-dir && \
     python -m pip install -e ./romiscan/ --no-cache-dir
 
-
 # Change shell to 'bash', default is 'sh'
 SHELL ["/bin/bash", "-c"]
 ENV DB_LOCATION="/home/${USER_NAME}/db_test"
