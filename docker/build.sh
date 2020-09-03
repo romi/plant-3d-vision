@@ -65,11 +65,11 @@ while [ "$1" != "" ]; do
     ;;
   --uid)
     shift
-    user=$1
+    uid=$1
     ;;
   --gid)
     shift
-    user=$1
+    gid=$1
     ;;
   -b | --romiscan)
     shift
