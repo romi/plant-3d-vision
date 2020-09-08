@@ -44,7 +44,7 @@ class Colmap(RomiTask):
         images_fileset = self.input().get()
         # print("cli_args = %s"%self.cli_args)
         # cli_args = json.loads(self.cli_args.replace("'", '"'))
-        bounding_box = images_fileset.get_metadata("bounding_box")
+        bounding_box = images_fileset.get_metadata("workspace")
         if bounding_box is None:
             bounding_box = images_fileset.scan.get_metadata('workspace')
         if bounding_box is None:

@@ -63,6 +63,7 @@ class Visualization(RomiTask):
         colmap_fileset = self.upstream_colmap().output().get()
         images = io.read_json(colmap_fileset.get_file(COLMAP_IMAGES_ID))
         camera = io.read_json(colmap_fileset.get_file(COLMAP_CAMERAS_ID))
+        camera["bounding_box"] = colmap_fileset.get_metadata("bounding_box")
         f = output_fileset.get_file(COLMAP_IMAGES_ID, create=True)
         f_cam = output_fileset.get_file(COLMAP_CAMERAS_ID, create=True)
         io.write_json(f, images)
@@ -144,6 +145,12 @@ class Visualization(RomiTask):
 
             files_metadata["images"].append(image_id)
             files_metadata["thumbnails"].append(thumbnail_id)
+
+        # MEASURES
+        measures = scan.get_measures()
+        f_measures = output_fileset.create_file("measures")
+        io.write_json(f_measures, measures)
+        files_metadata["measures"] = "measures"
 
         # DESCRIPTION OF FILES
         output_fileset.set_metadata("files", files_metadata)
