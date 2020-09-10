@@ -5,6 +5,12 @@ ARG USER_NAME=scanner
 ARG USER_ID=1000
 ARG GROUP_ID=1000
 
+# Change shell to 'bash', default is 'sh'
+SHELL ["/bin/bash", "-c"]
+
+ENV DB_LOCATION="/home/${USER_NAME}/db"
+ENV PATH=$PATH:"/home/${USER_NAME}/.local/bin"
+
 USER root
 RUN apt-get update && apt-get install -y \
     python3.7 python3.7-dev python3-pip wget && \
@@ -17,7 +23,8 @@ RUN apt-get update && apt-get install -y \
     # Create a non-root user and give it rights over its "home folder"
     addgroup --gid $GROUP_ID $USER_NAME && \
     adduser --disabled-password --gecos '' --uid $USER_ID --gid $GROUP_ID $USER_NAME && \
-    chown -R ${USER_NAME}: /home/${USER_NAME}
+    chown -R ${USER_NAME}: /home/${USER_NAME} && \
+    mkdir $DB_LOCATION
 
 # Change to non-root user:
 USER ${USER_NAME}
