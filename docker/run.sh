@@ -15,7 +15,7 @@
 # 4. Run container using 'debug' image tag & start a ROMI Task:
 # $ ./run.sh -t debug -p "/data/ROMI/DB" -c "romi_run_task AnglesAndInternodes ~/db/2019-02-01_10-56-33 --config ~/romiscan/config/original_pipe_0.toml"
 
-user='scanner'
+user=$USER
 db_path=''
 vtag="latest"
 cmd=''
@@ -38,7 +38,7 @@ usage() {
     Docker image tag to use, default to '$vtag'.
     "
   echo "  -p, --database_path
-    Path to the host database to mount inside docker container.
+    Path to the host database to mount inside docker container, requires '--user' if not defautl.
     "
   echo "  -u, --user
     User used during docker image build, default to '$user'.
