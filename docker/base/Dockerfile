@@ -1,7 +1,7 @@
 FROM geki/colmap
 # geki/colmap is based on nvidia/cuda:10.1-devel-ubuntu18.04
 
-ARG USER_NAME=romi
+ARG USER_NAME=scanner
 ARG USER_ID=1000
 ARG GROUP_ID=1000
 
@@ -39,3 +39,8 @@ USER ${USER_NAME}
 # nvidia-container-runtime
 ENV NVIDIA_VISIBLE_DEVICES all
 ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
+
+RUN git clone --branch dev https://github.com/romi/romiseg && \
+    git clone --branch master https://github.com/romi/romicgal && \
+    python -m pip install -e ./romiseg/ --no-cache-dir && \
+    python -m pip install -e ./romicgal/ --no-cache-dir

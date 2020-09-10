@@ -3,16 +3,16 @@
 ###############################################################################
 # Example usages:
 ###############################################################################
-# 1. Default build options will create `roboticsmicrofarms/romiscan:latest`:
+# 1. Default build options will create `roboticsmicrofarms/romiscan_base:latest`:
 # $ ./build.sh
 #
-# 2. Build image with 'debug' image tag & another 'romiscan' branch options:
-# $ ./build.sh -t debug -b 'feature/faster_docker'
+# 2. Build image for a 'githubrunner' user and specify user & group id value:
+# $ ./build.sh -u githubrunner --uid 1005 --gid 1005
 
+user=$USER
+uid=$(id -u)
+gid=$(id -g)
 vtag="latest"
-romidata_branch='dev'
-romiscan_branch='dev'
-romiscanner_branch='master'
 docker_opts=""
 
 usage() {
@@ -21,21 +21,21 @@ usage() {
     "
 
   echo "DESCRIPTION:"
-  echo "  Build a docker image named 'roboticsmicrofarms/romiscan' using Dockerfile in same location.
+  echo "  Build a docker image named 'roboticsmicrofarms/romiscan_base' using Dockerfile in same location.
     "
 
   echo "OPTIONS:"
   echo "  -t, --tag
     Docker image tag to use, default to '$vtag'.
     "
-  echo "  -b, --romiscan
-    Git branch to use for cloning 'romiscan' inside docker image, default to '$romiscan_branch'.
+  echo "  -u, --user
+    User name to create inside docker image, default to '$user'.
     "
-  echo "  --romidata
-    Git branch to use for cloning 'romidata' inside docker image, default to '$romidata_branch'.
+  echo "  --uid
+    User id to use with 'user' inside docker image, default to '$uid'.
     "
-  echo "  --romiscanner
-    Git branch to use for cloning 'romiscanner' inside docker image, default to '$romiscanner_branch'.
+  echo "  --gid
+    Group id to use with 'user' inside docker image, default to '$gid'.
     "
   # Docker options:
   echo "  --no-cache
@@ -56,17 +56,17 @@ while [ "$1" != "" ]; do
     shift
     vtag=$1
     ;;
-  -b | --romiscan)
+  -u | --user)
     shift
-    romiscan_branch=$1
+    user=$1
     ;;
-  --romidata)
+  --uid)
     shift
-    romidata_branch=$1
+    uid=$1
     ;;
-  --romiscanner)
+  --gid)
     shift
-    romiscanner_branch=$1
+    gid=$1
     ;;
   --no-cache)
     shift
@@ -91,11 +91,11 @@ done
 # Get the date to estimate docker image build time:
 start_time=`date +%s`
 
-# Start the docker image build:
-docker build -t roboticsmicrofarms/romiscan:$vtag $docker_opts \
-  --build-arg ROMISCAN_BRANCH=$romiscan_branch \
-  --build-arg ROMIDATA_BRANCH=$romidata_branch \
-  --build-arg ROMISCANNER_BRANCH=$romiscanner_branch \
+# Start the docker build:
+docker build -t roboticsmicrofarms/romiscan_base:$vtag $docker_opts \
+  --build-arg USER_NAME=$user \
+  --build-arg USER_ID=$uid \
+  --build-arg GROUP_ID=$gid \
   .
 
 # Print docker image build time:
