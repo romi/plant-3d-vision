@@ -14,5 +14,5 @@ RUN git clone --branch $ROMISCAN_BRANCH https://github.com/romi/romiscan && \
 
 # Change shell to 'bash', default is 'sh'
 SHELL ["/bin/bash", "-c"]
-ENV DB_LOCATION="/home/${USER_NAME}/db_test"
+ENV DB_LOCATION="/home/${USER_NAME}/db"
 ENV PATH=$PATH:"/home/${USER_NAME}/.local/bin"
