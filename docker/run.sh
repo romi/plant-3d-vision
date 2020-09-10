@@ -16,14 +16,13 @@
 # $ ./run.sh -t debug -p "/data/ROMI/DB" -c "romi_run_task AnglesAndInternodes ~/db/2019-02-01_10-56-33 --config ~/romiscan/config/original_pipe_0.toml"
 
 user='scanner'
+db_path=''
 vtag="latest"
 cmd=''
 pipeline_cmd="source .profile && cd romiscan/tests/ && ./check_pipe.sh"
 geom_pipeline_cmd="source .profile && cd romiscan/tests/ && ./check_geom_pipe.sh"
 ml_pipeline_cmd="source .profile && cd romiscan/tests/ && ./check_ml_pipe.sh"
 gpu_cmd="nvidia-smi"
-
-path=''
 
 usage() {
   echo "USAGE:"
