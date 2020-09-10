@@ -15,7 +15,7 @@
 # 4. Run container using 'debug' image tag & start a ROMI Task:
 # $ ./run.sh -t debug -p "/data/ROMI/DB" -c "romi_run_task AnglesAndInternodes ~/db/2019-02-01_10-56-33 --config ~/romiscan/config/original_pipe_0.toml"
 
-user=$USER
+user='scanner'
 vtag="latest"
 cmd=''
 pipeline_cmd="source .profile && cd romiscan/tests/ && ./check_pipe.sh"
@@ -23,7 +23,7 @@ geom_pipeline_cmd="source .profile && cd romiscan/tests/ && ./check_geom_pipe.sh
 ml_pipeline_cmd="source .profile && cd romiscan/tests/ && ./check_ml_pipe.sh"
 gpu_cmd="nvidia-smi"
 
-mount_option=''
+path=''
 
 usage() {
   echo "USAGE:"
@@ -78,7 +78,7 @@ while [ "$1" != "" ]; do
     ;;
   -p | --database_path)
     shift
-    mount_option="-v $1:/home/$user/db"
+    db_path=$1
     ;;
   -c | --cmd)
     shift
@@ -107,6 +107,15 @@ while [ "$1" != "" ]; do
   esac
   shift
 done
+
+# Use 'host database path' & 'docker user' to create a bind mount:
+if [ "$db_path" != "" ]
+then
+  mount_option="-v $db_path:/home/$user/db"
+else
+  mount_option=""
+fi
+
 
 if [ "$cmd" = "" ]
 then
