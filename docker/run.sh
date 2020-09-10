@@ -19,9 +19,9 @@ user='scanner'
 db_path=''
 vtag="latest"
 cmd=''
-pipeline_cmd="source .profile && cd romiscan/tests/ && ./check_pipe.sh"
-geom_pipeline_cmd="source .profile && cd romiscan/tests/ && ./check_geom_pipe.sh"
-ml_pipeline_cmd="source .profile && cd romiscan/tests/ && ./check_ml_pipe.sh"
+pipeline_cmd="cd romiscan/tests/ && ./check_pipe.sh"
+geom_pipeline_cmd="cd romiscan/tests/ && ./check_geom_pipe.sh"
+ml_pipeline_cmd="cd romiscan/tests/ && ./check_ml_pipe.sh"
 gpu_cmd="nvidia-smi"
 
 usage() {
