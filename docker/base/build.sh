@@ -6,8 +6,11 @@
 # 1. Default build options will create `roboticsmicrofarms/romiscan_base:latest`:
 # $ ./build.sh
 #
-# 2. Build image for a 'githubrunner' user and specify user & group id value:
-# $ ./build.sh -u githubrunner --uid 1005 --gid 1005
+# 2. Build image for a 'scanner' user and specify user & group id value:
+# $ ./build.sh -u scanner --uid 1003 --gid 1003
+#
+# 3. Build image for a 'githubrunner' user and specify user & group id value:
+# $ ./build.sh -u githubrunner --uid 1004 --gid 1003
 
 user=$USER
 uid=$(id -u)
