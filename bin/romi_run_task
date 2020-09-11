@@ -137,7 +137,7 @@ if __name__ == "__main__":
     if os.path.isfile(pipeline_last_cfg):
         # Raise an IOError when task 'Scan' is required in a folder with a backup of a processing pipeline
         # This probably means that you are trying to use a datasets that is not EMPTY!
-        if args.task in ["Scan", "VirtualScan"]:
+        if args.task in ["Scan", "VirtualScan", "CalibrationScan"]:
             print(
                 f"WARNING: task '{args.task}' was called in a datasets folder with a backup of a processing pipeline!")
             print(f"WARNING: datasets folder is '{args.db_path}'")
@@ -186,7 +186,7 @@ if __name__ == "__main__":
     #  - if a "Scan" or "VirtualScan" tasks is required, a directory should be created
     #  - else, check it exists
     d = args.db_path
-    if args.task == "Scan" or args.task == 'VirtualScan':
+    if args.task == "Scan" or args.task == 'VirtualScan' or args.task == 'CalibrationScan':
         try:
             os.mkdir(d)
         except FileExistsError as e:

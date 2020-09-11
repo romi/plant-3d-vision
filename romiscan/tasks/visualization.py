@@ -5,6 +5,7 @@ from romiscan.tasks.arabidopsis import *
 
 logger = logging.getLogger('__name__')
 
+
 class Visualization(RomiTask):
     """Prepares files for visualization
     """
@@ -20,7 +21,6 @@ class Visualization(RomiTask):
     max_image_size = luigi.IntParameter()
     max_point_cloud_size = luigi.IntParameter()
     thumbnail_size = luigi.IntParameter()
-
 
     def __init__(self):
         super().__init__()
@@ -44,25 +44,28 @@ class Visualization(RomiTask):
             if img.shape[i] <= max_size:
                 return img
             if i == 0:
-                new_shape = [max_size, int(max_size * img.shape[1]/img.shape[0])]
+                new_shape = [max_size, int(max_size * img.shape[1] / img.shape[0])]
             else:
-                new_shape = [int(max_size * img.shape[0]/img.shape[1]), max_size]
+                new_shape = [int(max_size * img.shape[0] / img.shape[1]), max_size]
             return resize(img, new_shape)
 
         output_fileset = self.output().get()
-        files_metadata = { "zip" : None,
-                         "angles" : None,
-                         "skeleton" : None,
-                         "mesh" : None,
-                         "point_cloud" : None,
-                         "images" : None,
-                         "poses" : None,
-                         "thumbnails" : None}
+        files_metadata = {
+            "zip": None,
+            "angles": None,
+            "skeleton": None,
+            "mesh": None,
+            "point_cloud": None,
+            "images": None,
+            "poses": None,
+            "thumbnails": None
+        }
 
         # POSES
         colmap_fileset = self.upstream_colmap().output().get()
         images = io.read_json(colmap_fileset.get_file(COLMAP_IMAGES_ID))
         camera = io.read_json(colmap_fileset.get_file(COLMAP_CAMERAS_ID))
+        camera["bounding_box"] = colmap_fileset.get_metadata("bounding_box")
         f = output_fileset.get_file(COLMAP_IMAGES_ID, create=True)
         f_cam = output_fileset.get_file(COLMAP_CAMERAS_ID, create=True)
         io.write_json(f, images)
@@ -70,17 +73,16 @@ class Visualization(RomiTask):
         files_metadata["poses"] = f.id
         files_metadata["camera"] = f_cam.id
 
-
         # ZIP
         scan = self.output().scan
         basedir = scan.db.basedir
-        logger.debug("basedir = %s"%basedir)
+        logger.debug("basedir = %s" % basedir)
         with tempfile.TemporaryDirectory() as tmpdir:
             shutil.make_archive(os.path.join(tmpdir, "scan"), "zip",
                                 os.path.join(basedir, scan.id))
             f = output_fileset.get_file('scan', create=True)
             f.import_file(os.path.join(tmpdir, 'scan.zip'))
-        files_metadata["zip"]  = 'scan'
+        files_metadata["zip"] = 'scan'
 
         # ANGLES
         if self.upstream_angles().complete():
@@ -114,7 +116,7 @@ class Visualization(RomiTask):
                 try:
                     point_cloud_lowres = open3d.geometry.uniform_down_sample(point_cloud, len(point_cloud.points) // self.max_point_cloud_size + 1)
                 except:
-                    point_cloud_lowres = point_cloud.voxel_down_sample( len(point_cloud.points) // self.max_point_cloud_size + 1)
+                    point_cloud_lowres = point_cloud.voxel_down_sample(len(point_cloud.points) // self.max_point_cloud_size + 1)
             io.write_point_cloud(f, point_cloud)
             files_metadata["point_cloud"] = point_cloud_file.id
 
@@ -127,12 +129,12 @@ class Visualization(RomiTask):
             data = io.read_image(img)
             # remove alpha channel
             if data.shape[2] == 4:
-                data = data[:,:,:3]
+                data = data[:, :, :3]
             image = resize_to_max(data, self.max_image_size)
             thumbnail = resize_to_max(data, self.thumbnail_size)
 
-            image_id = "image_%s"%img.id
-            thumbnail_id = "thumbnail_%s"%img.id
+            image_id = "image_%s" % img.id
+            thumbnail_id = "thumbnail_%s" % img.id
 
             f = output_fileset.create_file(image_id)
             io.write_image(f, image)
@@ -145,6 +147,11 @@ class Visualization(RomiTask):
             files_metadata["images"].append(image_id)
             files_metadata["thumbnails"].append(thumbnail_id)
 
+        # MEASURES
+        measures = scan.get_measures()
+        f_measures = output_fileset.create_file("measures")
+        io.write_json(f_measures, measures)
+        files_metadata["measures"] = "measures"
+
         # DESCRIPTION OF FILES
         output_fileset.set_metadata("files", files_metadata)
-
