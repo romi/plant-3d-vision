@@ -22,8 +22,7 @@ class TestColmap(DBTestCase):
             }
         }
         fileset = self.get_test_db().get_scan("arabidopsis000").get_fileset("images")
-        toto = "toto"
-        runner = colmap.ColmapRunner(fileset, matcher, compute_dense, all_cli_args, align_pcd, True, fileset.scan.get_metadata("scanner")["workspace"], toto)
+        runner = colmap.ColmapRunner(fileset, matcher, compute_dense, all_cli_args, align_pcd, True, fileset.scan.get_metadata("scanner")["workspace"])
         runner.run()
 
 
