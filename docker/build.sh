@@ -42,7 +42,7 @@ usage() {
     Do not use cache when building the image, (re)start from scratch.
     "
   echo "  --pull
-    Always attempt to pull a newer version of the image.
+    Always attempt to pull a newer version of the parent image.
     "
   # General options:
   echo "  -h, --help
