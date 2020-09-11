@@ -82,7 +82,7 @@ class Visualization(RomiTask):
                                 os.path.join(basedir, scan.id))
             f = output_fileset.get_file('scan', create=True)
             f.import_file(os.path.join(tmpdir, 'scan.zip'))
-        files_metadata["zip"] = scan.id
+        files_metadata["zip"] = 'scan'
 
         # ANGLES
         if self.upstream_angles().complete():
