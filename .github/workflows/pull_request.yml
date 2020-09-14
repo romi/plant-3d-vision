@@ -36,9 +36,9 @@ jobs:
     docker-clean:
        runs-on: self-hosted
        needs: [feature-tests, unit-tests]
-        
+       if: always()
+
        steps:
         - name: Remove Docker Image
-          if: always()
           run: |
             docker image rm romiscan:${{ github.sha }}
