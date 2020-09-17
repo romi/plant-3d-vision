@@ -16,6 +16,7 @@
 # $ ./run.sh -t debug -p "/data/ROMI/DB" -c "romi_run_task AnglesAndInternodes ~/db/2019-02-01_10-56-33 --config ~/romiscan/config/original_pipe_0.toml"
 
 user=$USER
+use_uidgid_mapping="true"
 db_path=''
 vtag="latest"
 cmd=''
@@ -30,7 +31,7 @@ usage() {
     "
 
   echo "DESCRIPTION:"
-  echo "  Run 'roboticsmicrofarms/romiscan:<vtag>' container with a mounted local (host) database.
+  echo "  Run 'romiscan:<vtag>' container with a mounted local (host) database.
     "
 
   echo "OPTIONS:"
@@ -43,7 +44,9 @@ usage() {
   echo "  -u, --user
     User used during docker image build, default to '$user'.
     "
-
+  echo " --use_uidgid_mapping
+    If true, the docker image will be run with local user privilege.
+    "
   echo "  -c, --cmd
     Defines the command to run at docker startup, by default start an interactive container with a bash shell.
     "
@@ -74,6 +77,10 @@ while [ "$1" != "" ]; do
   -u | --user)
     shift
     user=$1
+    ;;
+  --use_uidgid_mapping)
+    shift
+    use_uidgid_mapping="true"
     ;;
   -p | --database_path)
     shift
@@ -115,17 +122,26 @@ else
   mount_option=""
 fi
 
+# Use uer id ang group id mapping (host <-> image)
+if [ "$use_uidgid_mapping" = "true" ]
+then
+  uidgid=$(id -u):$(id -g)
+else
+  uidgid=""
+fi
 
 if [ "$cmd" = "" ]
 then
   # Start in interactive mode:
   docker run --runtime=nvidia --gpus all $mount_option \
     --env PYOPENCL_CTX='0' \
-    -it roboticsmicrofarms/romiscan:$vtag
+    $uidgid \
+    -it romiscan:$vtag
 else
   # Start in non-interactive mode (run the command):
   docker run --runtime=nvidia --gpus all $mount_option \
     --env PYOPENCL_CTX='0' \
-    roboticsmicrofarms/romiscan:$vtag \
+    $uidgid \
+    romiscan:$vtag \
     bash -c "$cmd"
 fi
