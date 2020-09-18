@@ -16,7 +16,7 @@
 # $ ./run.sh -t debug -p "/data/ROMI/DB" -c "romi_run_task AnglesAndInternodes ~/db/2019-02-01_10-56-33 --config ~/romiscan/config/original_pipe_0.toml"
 
 user=$USER
-use_uidgid_mapping="true"
+use_uidgid_mapping="false"
 db_path=''
 vtag="latest"
 cmd=''
