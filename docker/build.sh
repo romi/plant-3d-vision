@@ -1,8 +1,5 @@
 #!/bin/bash
 
-#Important to CI/CD pipeline : It makes the script return a non-zero code if one command fails
-set -eo pipefail
-
 ###############################################################################
 # Example usages:
 ###############################################################################
@@ -122,6 +119,14 @@ docker build -t romiscan:$vtag $docker_opts \
   --build-arg GROUP_ID=$gid \
   .
 
+# Important to CI/CD pipeline to track docker build failure
+if  [ $? != 0 ]
+then
+  docker_build_status = $?
+fi
+
 # Print docker image build time:
 echo
 echo Build time is $(expr `date +%s` - $start_time) s
+
+exit docker_build_status
