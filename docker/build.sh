@@ -110,8 +110,6 @@ done
 # Get the date to estimate docker image build time:
 start_time=`date +%s`
 
-docker_build_status=0
-
 # Start the docker image build:
 docker build -t romiscan:$vtag $docker_opts \
   --build-arg ROMISCAN_BRANCH=$romiscan_branch \
@@ -121,11 +119,12 @@ docker build -t romiscan:$vtag $docker_opts \
   --build-arg GROUP_ID=$gid \
   .
 
+docker_build_status=$?
+
 # Important to CI/CD pipeline to track docker build failure
-if  [ $? != 0 ]
+if  [ $docker_build_status != 0 ]
 then
-  docker_build_status=$?
-  echo "docker_build_status = $docker_build_status"
+  echo "docker build failed with $docker_build_status code"
 fi
 
 # Print docker image build time:
