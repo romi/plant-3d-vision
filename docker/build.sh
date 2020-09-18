@@ -1,5 +1,8 @@
 #!/bin/bash
 
+#Important to CI/CD pipeline : It makes the script return a non-zero code if one command fails
+set -euo pipefail
+
 ###############################################################################
 # Example usages:
 ###############################################################################
