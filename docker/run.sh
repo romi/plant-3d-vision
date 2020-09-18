@@ -25,6 +25,7 @@ pipeline_cmd="cd romiscan/tests/ && ./check_pipe.sh"
 geom_pipeline_cmd="cd romiscan/tests/ && ./check_geom_pipe.sh"
 ml_pipeline_cmd="cd romiscan/tests/ && ./check_ml_pipe.sh"
 gpu_cmd="nvidia-smi"
+mount_option=""
 
 usage() {
   echo "USAGE:"
@@ -109,6 +110,10 @@ while [ "$1" != "" ]; do
   --gpu_test)
     cmd=$gpu_cmd
     ;;
+  -v)
+    shift
+    mount_option=$1
+    ;;
   -h | --help)
     usage
     exit
@@ -121,12 +126,16 @@ while [ "$1" != "" ]; do
   shift
 done
 
+# Check if there is another volume to mount
+if [ "$mount_option" != ""]
+then
+  mount_option="-v $mount_option"
+fi
+
 # Use 'host database path' & 'docker user' to create a bind mount:
 if [ "$db_path" != "" ]
 then
-  mount_option="-v $db_path:/home/$user/db"
-else
-  mount_option=""
+  mount_option="$mount_option -v $db_path:/home/$user/db"
 fi
 
 # Use uer id ang group id mapping (host <-> image)
@@ -149,6 +158,7 @@ else
   docker run --runtime=nvidia --gpus all $mount_option \
     --env PYOPENCL_CTX='0' \
     $uidgid \
+    --rm \
     romiscan:$vtag \
     bash -c "$cmd"
 fi
