@@ -20,6 +20,7 @@ use_uidgid_mapping="true"
 db_path=''
 vtag="latest"
 cmd=''
+unittest_cmd="cd romiscan/tests/ && python -m unittest"
 pipeline_cmd="cd romiscan/tests/ && ./check_pipe.sh"
 geom_pipeline_cmd="cd romiscan/tests/ && ./check_geom_pipe.sh"
 ml_pipeline_cmd="cd romiscan/tests/ && ./check_ml_pipe.sh"
@@ -49,6 +50,9 @@ usage() {
     "
   echo "  -c, --cmd
     Defines the command to run at docker startup, by default start an interactive container with a bash shell.
+    "
+  echo " --unittest_cmd
+    Runs unit tests defined in romiscan.
     "
   echo "  --pipeline_test
     Test pipelines (geometric & ML based) in docker container with CI test.
@@ -89,6 +93,9 @@ while [ "$1" != "" ]; do
   -c | --cmd)
     shift
     cmd=$1
+    ;;
+  --unittest_cmd)
+    cmd=$unittest_cmd
     ;;
   --pipeline_test)
     cmd=$pipeline_cmd
