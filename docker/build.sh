@@ -125,6 +125,7 @@ docker build -t romiscan:$vtag $docker_opts \
 if  [ $? != 0 ]
 then
   docker_build_status=$?
+  echo "docker_build_status = $docker_build_status"
 fi
 
 # Print docker image build time:
