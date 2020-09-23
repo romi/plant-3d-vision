@@ -501,12 +501,10 @@ def compute_angles_and_internodes(T, stem_axis_inverted, n_nodes_fruit=5, n_node
         v3 = plane_vectors[i, 0, :] - plane_vectors[i - 1, 0, :]
 
         # Angle between the planes, between 0 and PI
-        angle = np.arccos(np.dot(n1, n2))
+        cos_ang = np.dot(n1, n2)
+        sin_ang = np.linalg.norm(np.cross(n1, n2))
+        angle = np.arctan2(sin_ang, cos_ang)
 
-        # IF basis is direct, then angle is positive (depends on stem axis inversion ?)
-        # if np.linalg.det([v1, v2, v3]) < 0 and not stem_axis_inverted or np.linalg.det([v1, v2, v3]) > 0 and stem_axis_inverted:
-        # if np.linalg.det([v1, v2, v3]) > 0 and stem_axis_inverted:
-        #    angle = 2 * np.pi - angle
         angles[i - 1] = angle
         internodes[i - 1] = np.linalg.norm(p2 - p1)
 
