@@ -47,7 +47,7 @@ class AnglesAndInternodes(RomiTask):
     stem_axis_inverted = luigi.BoolParameter(default=False)
 
     min_elongation_ratio = luigi.FloatParameter(default=2.0)
-    min_fruit_size = luigi.FloatParameter(default=0.1)
+    min_fruit_size = luigi.FloatParameter(default=2)
 
     def run(self):
         from romiscan import arabidopsis
@@ -57,7 +57,6 @@ class AnglesAndInternodes(RomiTask):
             measures = arabidopsis.compute_angles_and_internodes(t, self.stem_axis_inverted)
             io.write_json(self.output_file(), measures)
         else: # Assume it's meshes
-            measures = arabidopsis.angles_from_meshes(self.input().get(), self.characteristic_length, self.number_nn,
-                    self.stem_axis, self.stem_axis_inverted, self.min_elongation_ratio, self.min_fruit_size)
+            measures = arabidopsis.angles_from_meshes(self.input().get(), self.stem_axis_inverted,  self.min_fruit_size)
             io.write_json(self.output_file(), measures)
 
