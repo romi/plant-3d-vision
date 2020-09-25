@@ -1,8 +1,5 @@
 #!/bin/bash
 
-#Important to CI/CD pipeline : It makes the script return a non-zero code if one command fails
-set -euxo pipefail
-
 ###############################################################################
 # Example usages:
 ###############################################################################
@@ -19,7 +16,6 @@ set -euxo pipefail
 # $ ./run.sh -t debug -p "/data/ROMI/DB" -c "romi_run_task AnglesAndInternodes ~/db/2019-02-01_10-56-33 --config ~/romiscan/config/original_pipe_0.toml"
 
 user=$USER
-use_uidgid_mapping="false"
 db_path=''
 vtag="latest"
 cmd=''
@@ -48,9 +44,6 @@ usage() {
     "
   echo "  -u, --user
     User used during docker image build, default to '$user'.
-    "
-  echo " --use_uidgid_mapping
-    If true, the docker image will be run with local user privilege.
     "
   echo "  -c, --cmd
     Defines the command to run at docker startup, by default start an interactive container with a bash shell.
@@ -85,10 +78,6 @@ while [ "$1" != "" ]; do
   -u | --user)
     shift
     user=$1
-    ;;
-  --use_uidgid_mapping)
-    shift
-    use_uidgid_mapping="true"
     ;;
   -p | --database_path)
     shift
@@ -141,26 +130,16 @@ then
   mount_option="$mount_option -v $db_path:/home/$user/db"
 fi
 
-# Use uer id ang group id mapping (host <-> image)
-if [ "$use_uidgid_mapping" = "true" ]
-then
-  uidgid=$(id -u):$(id -g)
-else
-  uidgid=""
-fi
-
 if [ "$cmd" = "" ]
 then
   # Start in interactive mode:
   docker run --runtime=nvidia --gpus all $mount_option \
     --env PYOPENCL_CTX='0' \
-    $uidgid \
     -it romiscan:$vtag
 else
   # Start in non-interactive mode (run the command):
   docker run --runtime=nvidia --gpus all $mount_option \
     --env PYOPENCL_CTX='0' \
-    $uidgid \
     --rm \
     romiscan:$vtag \
     bash -c "$cmd"
