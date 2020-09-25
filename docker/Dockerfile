@@ -37,7 +37,7 @@ RUN git clone https://github.com/inducer/pyopencl && \
     cd pyopencl/ && \
     git submodule update --init && \
     python -m pip install pybind11 --no-cache-dir && \
-    ./configure.py --cl-pretend-version=1.2 && \
+    #./configure.py --cl-pretend-version=1.2 && \
     python -m pip install . --no-cache-dir
 
 USER root
