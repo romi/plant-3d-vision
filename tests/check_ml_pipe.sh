@@ -24,6 +24,5 @@ fi
 # 2. clean
 romi_run_task --config ../config/ml_pipe_vplants_4.toml Clean testdata/virtual_plant/ --local-scheduler
 # 3. run pipeline
-romi_run_task --config ../config/ml_pipe_vplants_4.toml AnglesAndInternodes testdata/virtual_plant/ --local-scheduler
-print_task_info PointCloud testdata/real_plant/
-print_task_info AnglesAndInternodes testdata/virtual_plant/
+romi_run_task --config ../config/ml_pipe_vplants_4.toml PointCloud testdata/virtual_plant/ --local-scheduler
+print_task_info PointCloud testdata/virtual_plant/
