@@ -22,6 +22,7 @@ jobs:
         steps:
          - name: Run Unit Tests
            run: |
+            cd docker/
             ./run.sh -t ${{ github.sha }} --unittest_cmd
 
     feature-tests:
@@ -31,6 +32,7 @@ jobs:
        steps:
         - name: Run Feature Tests
           run: |
+           cd docker/ 
            ./run.sh -v /home/${USER}/ML_models:/home/${USER}/romiscan/tests/testdata/models/models -t ${{ github.sha }} --pipeline_test
 
     docker-clean:
