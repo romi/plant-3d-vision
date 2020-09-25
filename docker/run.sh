@@ -119,7 +119,7 @@ while [ "$1" != "" ]; do
 done
 
 # Check if there is another volume to mount
-if [ "$mount_option" != ""]
+if [ "$mount_option" != "" ]
 then
   mount_option="-v $mount_option"
 fi
