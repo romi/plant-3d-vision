@@ -88,7 +88,7 @@ def compute_mst(G, main_stem, nodes):
 
     distance_to_node = {}
     for n in G.nodes():
-        distance_to_node[n] = min(distances[i][n] for i in nodes if i in distances)
+        distance_to_node[n] = min(distances[i][n] for i in nodes)
 
     def node_penalty(u, v):
         if u in main_stem or v in main_stem:
