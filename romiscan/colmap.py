@@ -2,6 +2,7 @@ import logging
 import os
 import subprocess
 import tempfile
+from os.path import splitext
 
 import imageio
 import numpy as np
@@ -25,10 +26,13 @@ from romiscan import proc3d
 
 from romidata import io
 
+#: List of valid colmap executable values:
 ALL_COLMAP_EXE = ['colmap', 'geki/colmap']
+
 # - Try to get colmap executable to use from '$COLMAP_EXE' environment variable, or set it to use docker container by default:
 COLMAP_EXE = os.environ.get('COLMAP_EXE', 'geki/colmap')
 
+# - Performs some verifications prior to using system install of COLMAP:
 if COLMAP_EXE == 'colmap':
     # Check `colmap` is available system-wide:
     try:
@@ -43,13 +47,8 @@ if COLMAP_EXE == 'colmap':
         except AssertionError:
             raise ValueError("Colmap >= 3.6 is required!")
 
+# - Performs some verifications prior to using docker image with COLMAP:
 if COLMAP_EXE == 'geki/colmap':
-    # Check `docker` is available system-wide:
-    # try:
-    #     out = subprocess.getoutput(['docker', 'version'])
-    # except AssertionError:
-    #     raise ValueError("Docker is not installed on your system!")
-    # else:
     import docker
     client = docker.from_env()
     image_name = 'geki/colmap'
@@ -60,7 +59,7 @@ if COLMAP_EXE == 'geki/colmap':
     except FileNotFoundError:
         raise ValueError("nvidia-smi is not installed on your system!")
     else:
-        # nvidia-smi utility might be installed bu GPU or driver unreachable!
+        # `nvidia-smi` utility might be installed but GPU or driver unreachable!
         if 'failed' in out:
             raise ValueError(out)
         try:
@@ -70,6 +69,19 @@ if COLMAP_EXE == 'geki/colmap':
             raise ValueError("nvidia-container-runtime is not installed on your system!")
         else:
             gpu_device = docker.types.DeviceRequest(count=-1, capabilities=[['gpu']])
+
+def _has_nvidia_gpu():
+    """Returns ``True`` if an NVIDIA GPU is reachable, else ``False``."""
+    try:
+        out = subprocess.getoutput('nvidia-smi')
+    except FileNotFoundError:
+        raise ValueError("nvidia-smi is not installed on your system!")
+    else:
+        # `nvidia-smi` utility might be installed but GPU or driver unreachable!
+        if 'failed' in out:
+            return False
+        else:
+            return True
 
 def colmap_cameras_to_json(cameras):
     res = {}
@@ -158,7 +170,7 @@ def cameras_model_to_opencv(cameras):
     return cameras
 
 class ColmapRunner():
-    """Class for running colmap on a fileset."""
+    """Class for running COLMAP on an image fileset."""
 
     def __init__(self, fileset, matcher, compute_dense, all_cli_args, align_pcd,
                  use_calibration, bounding_box=None):
@@ -183,22 +195,40 @@ class ColmapRunner():
 
         Examples
         --------
+        >>> import os
+        >>> # os.environ['COLMAP_EXE'] = "geki/colmap"  # Use this to manually switch between local COLMAP install or use of docker container
+        >>> import time
         >>> from romiscan.colmap import ColmapRunner
         >>> from romidata import FSDB
         >>> db = FSDB("/data/ROMI/DB")
         >>> db.connect()
-        >>> dataset = db.get_scan("2018-12-17_17-05-35")
+        >>> dataset = db.get_scan("arabido_test2")
 
         >>> fs = dataset.get_fileset('images')
-        >>> cli_args = {"feature_extractor": {"--ImageReader.single_camera": "0", "--SiftExtraction.use_gpu": "0"}, "exhaustive_matcher": {"--SiftMatching.use_gpu": "0"}, "model_aligner": {"--robust_alignment_max_error": "10"}}
         >>> bbox = fs.get_metadata("bounding_box")
         >>> if bbox is None: bbox = fs.scan.get_metadata('workspace')
-        >>> if bbox is None: bbox = fs.scan.get_metadata('scanner')['workspace']
         >>> bbox
-        >>> colmap = ColmapRunner(fs, "exhaustive", False, cli_args, True, "", bbox)
 
+        >>> # - If you have an NVIDIA GPU this should be much faster than the next block:
+        >>> cli_args = {"feature_extractor": {"--ImageReader.single_camera": "1"}, "model_aligner": {"--robust_alignment_max_error": "10"}}
+        >>> colmap = ColmapRunner(fs, "exhaustive", False, cli_args, True, "", bbox)
+        >>> t_start = time.time()
         >>> colmap.colmap_feature_extractor()
+        >>> print(f"Feature Extraction - Elapsed time on GPU: {round(time.time() - t_start, 2)}s")
+        >>> t_start = time.time()
         >>> colmap.colmap_matcher()
+        >>> print(f"Feature Matching - Elapsed time on GPU: {round(time.time() - t_start, 2)}s")
+
+        >>> # - This should run on CPU and be much slower than the previous block:
+        >>> cli_args = {"feature_extractor": {"--ImageReader.single_camera": "1", "--SiftExtraction.use_gpu": "0"}, "exhaustive_matcher": {"--SiftMatching.use_gpu": "0"}, "model_aligner": {"--robust_alignment_max_error": "10"}}
+        >>> colmap = ColmapRunner(fs, "exhaustive", False, cli_args, True, "", bbox)
+        >>> t_start = time.time()
+        >>> colmap.colmap_feature_extractor()
+        >>> print(f"Feature Extraction - Elapsed time on CPU: {round(time.time() - t_start, 2)}s")
+        >>> t_start = time.time()
+        >>> colmap.colmap_matcher()
+        >>> print(f"Feature Matching - Elapsed time on CPU: {round(time.time() - t_start, 2)}s")
+
         >>> colmap.colmap_mapper()
         >>> colmap.colmap_model_aligner()
 
@@ -268,34 +298,54 @@ class ColmapRunner():
         return self.colmap_ws
 
     def _colmap_cmd(self, colmap_exe, method, args, cli_args):
-        """Create the colmap command to execute.
+        """
+        Create & call the COLMAP command to execute.
+
+        Adapt the COLMAP command to local COLMAP install or use of docker container.
+        Deactivate calls to use GPU if not available (test `nvidia-smi`).
 
         Parameters
         ----------
-        colmap_exe : str in COLMAP_EXE
-            Colmap executable to use.
+        colmap_exe : {'colmap', 'geki/colmap'}
+            COLMAP executable to use.
         method : str
-            Colmap method to use, *e.g.* 'feature_extractor'.
+            COLMAP method to use, e.g. 'feature_extractor'.
+        args : list
+            List of arguments to use with COLMAP, usually from parent function.
+        cli_args : dict
+            Dictionary of arguments to use with COLMAP, usually from TOML configuration.
 
-        Returns
-        -------
-        list
-            Colmap process to call with subprocess.
+        Raises
+        ------
+        ValueError
+            If `colmap_exe` is not in ``ALL_COLMAP_EXE``.
+
+        See Also
+        --------
+        ALL_COLMAP_EXE
+        _has_nvidia_gpu
 
         """
         try:
             assert colmap_exe in ALL_COLMAP_EXE
         except AssertionError:
-            raise ValueError("Unknown colmap executable!")
-        # - Colmap method to execute
+            raise ValueError("Unknown COLMAP executable!")
+
+        # - COLMAP method to execute
         process = ['colmap', method]
-        # - Extend with colmap method arguments list
+        # - Extend with COLMAP method arguments list
         process.extend(args)
-        # - Extend with colmap method command-line arguments dict
+        # - Deactivate GPU if not available:
+        if method == 'feature_extractor' and not _has_nvidia_gpu():
+            cli_args["--SiftExtraction.use_gpu"] = '0'
+            logger.warning('No NVIDIA GPU detected, using CPU for feature extraction!')
+        if method in ["exhaustive_matcher", "sequential_matcher"] and not _has_nvidia_gpu():
+            cli_args["--SiftMatching.use_gpu"] = '0'
+            logger.warning('No NVIDIA GPU detected, using CPU for feature matching!')
+        # - Extend with COLMAP method command-line arguments dict:
         for x in cli_args.keys():
             process.extend([x, cli_args[x]])
 
-        # - If command is run in docker...
         if colmap_exe == 'geki/colmap':
             # Initialize docker client manager:
             client = docker.from_env()
@@ -311,8 +361,8 @@ class ColmapRunner():
             client.containers.prune()
             # Run the command & catch the output:
             out = client.containers.run('geki/colmap', cmd, environment=varenv, mounts=[mount],
-                                        device_requests=gpu_device)
-            # Add the output of the colmap process to the log file:
+                                        device_requests=[gpu_device])
+            # Add the output of the COLMAP process to the log file:
             self.log_file.writelines(out.decode('utf8'))
         else:
             logger.debug('Running subprocess: ' + ' '.join(process))
@@ -468,9 +518,8 @@ class ColmapRunner():
             key = None
             # mask = None
             for k in images.keys():
-                if os.path.splitext(images[k]['name'])[0] == fi.id or \
-                        os.path.splitext(images[k]['name'])[
-                            0] == fi.get_metadata('image_id'):
+                if splitext(images[k]['name'])[0] == fi.id or \
+                        splitext(images[k]['name'])[0] == fi.get_metadata('image_id'):
                     # mask = io.read_image(fi)
                     key = k
                     break
