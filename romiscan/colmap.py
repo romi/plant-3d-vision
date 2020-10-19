@@ -333,6 +333,9 @@ class ColmapRunner():
         if method in ["exhaustive_matcher", "sequential_matcher"] and not _has_nvidia_gpu():
             cli_args["--SiftMatching.use_gpu"] = '0'
             logger.warning('No NVIDIA GPU detected, using CPU for feature matching!')
+        if method in ["model_aligner"]:
+            if "--robust_alignment_max_error" not in cli_args:
+                cli_args["--robust_alignment_max_error"] = "10"
         # - Extend with COLMAP method command-line arguments dict:
         for x in cli_args.keys():
             process.extend([x, cli_args[x]])
@@ -396,7 +399,7 @@ class ColmapRunner():
            '--input_path', f'{self.colmap_ws}/sparse/0',
            '--output_path', f'{self.colmap_ws}/sparse/0'
         ]
-        cli_args = self.all_cli_args.get('model_aligner', {})
+        cli_args = self.all_cli_args.get('model_aligner', {"--robust_alignment_max_error": "10"})
         self._colmap_cmd(COLMAP_EXE, 'model_aligner', args, cli_args)
 
     def colmap_image_undistorter(self):

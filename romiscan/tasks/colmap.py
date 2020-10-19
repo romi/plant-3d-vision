@@ -43,8 +43,8 @@ class Colmap(RomiTask):
     """
     upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)
     matcher = luigi.Parameter(default="exhaustive")
-    compute_dense = luigi.BoolParameter()
-    cli_args = luigi.DictParameter()
+    compute_dense = luigi.BoolParameter(default=False)
+    cli_args = luigi.DictParameter(default={})
     align_pcd = luigi.BoolParameter(default=True)
     calibration_scan_id = luigi.Parameter(default="")
     bounding_box = luigi.DictParameter(default=None)
