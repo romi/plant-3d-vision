@@ -122,7 +122,7 @@ class ColmapRunner():
     """Class for running colmap on a fileset."""
 
     def __init__(self, fileset, matcher, compute_dense, all_cli_args, align_pcd,
-                 use_calibration, bounding_box):
+                 use_calibration, bounding_box=None):
         """
         Parameters
         ----------
@@ -138,8 +138,9 @@ class ColmapRunner():
             align point cloud to known location in image metadata
         use_calibration : bool
             use "calibrated_pose" instead of "pose" metadata for alignment
-        bounding_box : dict
-            { "x" : [xmin, xmax], "y" : [ymin, ymax], "z" : [zmin, zmax]}
+        bounding_box : dict, optional
+            If specified, crop the sparse pointcloud with given volume dictionary.
+            {"x" : [xmin, xmax], "y" : [ymin, ymax], "z" : [zmin, zmax]}
 
         Examples
         --------
