@@ -324,7 +324,8 @@ class ColmapRunner():
         process = ['colmap', method]
         # - Extend with COLMAP method arguments list
         process.extend(args)
-        cli_args = cli_args.get_wrapped()  # Convert luigi FrozenOrderedDict to a Dict instance
+        if not isinstance(cli_args, dict):
+            cli_args = cli_args.get_wrapped()  # Convert luigi FrozenOrderedDict to a Dict instance
         # - Deactivate GPU if not available:
         if method == 'feature_extractor' and not _has_nvidia_gpu():
             cli_args["--SiftExtraction.use_gpu"] = '0'
