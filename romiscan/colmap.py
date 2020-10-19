@@ -32,6 +32,20 @@ ALL_COLMAP_EXE = ['colmap', 'geki/colmap']
 # - Try to get colmap executable to use from '$COLMAP_EXE' environment variable, or set it to use docker container by default:
 COLMAP_EXE = os.environ.get('COLMAP_EXE', 'geki/colmap')
 
+def _has_nvidia_gpu():
+    """Returns ``True`` if an NVIDIA GPU is reachable, else ``False``."""
+    try:
+        out = subprocess.getoutput('nvidia-smi')
+    except FileNotFoundError:
+        print("nvidia-smi is not installed on your system!")
+    else:
+        # `nvidia-smi` utility might be installed but GPU or driver unreachable!
+        if 'failed' in out:
+            print(out)
+            return False
+        else:
+            return True
+
 # - Performs some verifications prior to using system install of COLMAP:
 if COLMAP_EXE == 'colmap':
     # Check `colmap` is available system-wide:
@@ -54,34 +68,9 @@ if COLMAP_EXE == 'geki/colmap':
     image_name = 'geki/colmap'
     client.images.pull(image_name, tag='latest')
     gpu_device = None
-    try:
-        out = subprocess.getoutput('nvidia-smi')
-    except FileNotFoundError:
-        raise ValueError("nvidia-smi is not installed on your system!")
-    else:
-        # `nvidia-smi` utility might be installed but GPU or driver unreachable!
-        if 'failed' in out:
-            raise ValueError(out)
-        try:
-            out = subprocess.getoutput('which nvidia-container-runtime-hook')
-            assert out != ''
-        except AssertionError:
-            raise ValueError("nvidia-container-runtime is not installed on your system!")
-        else:
-            gpu_device = docker.types.DeviceRequest(count=-1, capabilities=[['gpu']])
+    if _has_nvidia_gpu():
+        gpu_device = docker.types.DeviceRequest(count=-1, capabilities=[['gpu']])
 
-def _has_nvidia_gpu():
-    """Returns ``True`` if an NVIDIA GPU is reachable, else ``False``."""
-    try:
-        out = subprocess.getoutput('nvidia-smi')
-    except FileNotFoundError:
-        raise ValueError("nvidia-smi is not installed on your system!")
-    else:
-        # `nvidia-smi` utility might be installed but GPU or driver unreachable!
-        if 'failed' in out:
-            return False
-        else:
-            return True
 
 def colmap_cameras_to_json(cameras):
     res = {}
@@ -335,6 +324,7 @@ class ColmapRunner():
         process = ['colmap', method]
         # - Extend with COLMAP method arguments list
         process.extend(args)
+        cli_args = cli_args.get_wrapped()  # Convert luigi FrozenOrderedDict to a Dict instance
         # - Deactivate GPU if not available:
         if method == 'feature_extractor' and not _has_nvidia_gpu():
             cli_args["--SiftExtraction.use_gpu"] = '0'
@@ -360,8 +350,10 @@ class ColmapRunner():
             # Remove stopped container:
             client.containers.prune()
             # Run the command & catch the output:
-            out = client.containers.run('geki/colmap', cmd, environment=varenv, mounts=[mount],
-                                        device_requests=[gpu_device])
+            if gpu_device is not None:
+                out = client.containers.run('geki/colmap', cmd, environment=varenv, mounts=[mount], device_requests=[gpu_device])
+            else:
+                out = client.containers.run('geki/colmap', cmd, environment=varenv, mounts=[mount])
             # Add the output of the COLMAP process to the log file:
             self.log_file.writelines(out.decode('utf8'))
         else:
