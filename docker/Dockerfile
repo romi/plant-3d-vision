@@ -12,6 +12,7 @@ SHELL [ "/bin/bash", "-c" ]
 
 ENV DB_LOCATION="/home/${USER_NAME}/db_test"
 ENV PATH=$PATH:"/home/${USER_NAME}/.local/bin"
+ENV COLMAP_EXE='colmap'
 
 USER root
 RUN apt-get update && apt-get install -y \
