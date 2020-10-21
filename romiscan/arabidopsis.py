@@ -189,7 +189,8 @@ def label_fruit(G, branching_fruit_id, fruit_id):
                 node_data["fruit_id"] = fruit_id
                 Q.append(new_id)
 
-def compute_tree_graph(points, lines, stem_axis, stem_direction):
+
+def compute_tree_graph(points, lines, stem_axis, stem_axis_inverted):
     """
     Returns a networkx tree object from the curve skeleton.
     Labels include segmentation of main stem and organs,as well as position in space
@@ -203,8 +204,8 @@ def compute_tree_graph(points, lines, stem_axis, stem_direction):
         Nx2 lines between points (dtype=int)
     stem_axis: int
         axis to use for stem orientation to get the root node
-    stem_direction: int
-        direction of the stem along the specified axis (+1 or -1)
+    stem_axis_inverted: bool
+        direction of the stem along the specified axis inverted or not
 
     Returns
     -------
@@ -214,12 +215,10 @@ def compute_tree_graph(points, lines, stem_axis, stem_direction):
     G = build_graph(points, lines)
 
     # Get the root node
-    if stem_direction == 1:
-        root_node = np.argmax(points[:, stem_axis])
-    elif stem_direction == -1:
+    if stem_axis_inverted:
         root_node = np.argmin(points[:, stem_axis])
     else:
-        raise ValueError("stem direction must be +-1")
+        root_node = np.argmax(points[:, stem_axis])
 
     # Get the main stem and node locations
     main_stem, branching_points = get_main_stem_and_nodes(G, root_node)
