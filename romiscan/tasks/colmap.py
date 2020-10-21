@@ -30,6 +30,7 @@ def use_calibrated_poses(images_fileset, calibration_scan):
         This suppose the `images_fileset` & `calibration_scan` were acquired using the same ``ScanPath``!
 
     """
+    # TODO: Add a check, based on metadata, that the two `ScanPath` are the same!
     # - Check a Colmap task has been performed for the calibration scan:
     colmap_fs = [s for s in calibration_scan.get_filesets() if "Colmap" in s.id]
     if len(colmap_fs) == 0:
