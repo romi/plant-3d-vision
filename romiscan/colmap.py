@@ -39,6 +39,7 @@ def _has_nvidia_gpu():
         out = subprocess.getoutput('nvidia-smi')
     except FileNotFoundError:
         print("nvidia-smi is not installed on your system!")
+        return False
     else:
         # `nvidia-smi` utility might be installed but GPU or driver unreachable!
         if 'failed' in out:
@@ -46,33 +47,6 @@ def _has_nvidia_gpu():
             return False
         else:
             return True
-
-
-# - Performs some verifications prior to using system install of COLMAP:
-if COLMAP_EXE == 'colmap':
-    # Check `colmap` is available system-wide:
-    try:
-        out = subprocess.getoutput(['colmap', '-h'])
-    except FileNotFoundError:
-        raise ValueError("Colmap is not installed on your system!")
-    else:
-        try:
-            # If previous try/except worked first line should be something like:
-            # COLMAP 3.6 -- Structure-from-Motion and Multi-View Stereo
-            assert float(out[7:10]) >= 3.6
-        except AssertionError:
-            raise ValueError("Colmap >= 3.6 is required!")
-
-# - Performs some verifications prior to using docker image with COLMAP:
-if COLMAP_EXE == 'geki/colmap':
-    import docker
-
-    client = docker.from_env()
-    image_name = 'geki/colmap'
-    client.images.pull(image_name, tag='latest')
-    gpu_device = None
-    if _has_nvidia_gpu():
-        gpu_device = docker.types.DeviceRequest(count=-1, capabilities=[['gpu']])
 
 
 def colmap_cameras_to_dict(cameras_bin):
@@ -264,7 +238,8 @@ class ColmapRunner(object):
 
     """
 
-    def __init__(self, fileset, matcher_method="exhaustive", compute_dense=False, all_cli_args={}, align_pcd=False, use_calibration=False, bounding_box=None):
+    def __init__(self, fileset, matcher_method="exhaustive", compute_dense=False, all_cli_args={}, align_pcd=False, use_calibration=False, bounding_box=None,
+                 colmap_exe=COLMAP_EXE):
         """
         Parameters
         ----------
@@ -337,7 +312,8 @@ class ColmapRunner(object):
 
         >>> # -- Examples of a step-by-step SfM reconstruction:
         >>> from romiscan.colmap import colmap_cameras_to_dict, colmap_images_to_dict, colmap_points_to_pcd
-        >>> colmap = ColmapRunner(fs)
+        >>> args = {"feature_extractor": {"--ImageReader.single_camera": "1"}}
+        >>> colmap = ColmapRunner(fs, all_cli_args=args)
         >>> colmap.feature_extractor()  #1 - Extract features from images
         >>> colmap.matcher()  #2 - Match extracted features from images, requires `feature_extractor()`
         >>> colmap.mapper()  #3 - Sparse pointcloud reconstruction, requires `matcher()`
@@ -389,6 +365,8 @@ class ColmapRunner(object):
         self._init_poses()
         # - File object used for logging COLMAP outputs:
         self.log_file = open(f"{self.colmap_ws}/colmap_log.txt", mode="w")
+        # - Check COLMAP executable to use:
+        self._init_exe(colmap_exe)
 
     def _init_directories(self):
         """Initialize 'images', 'sparse' & 'dense' reconstruction directory."""
@@ -444,6 +422,31 @@ class ColmapRunner(object):
                 posefile.write(s)
         posefile.close()
 
+    def _init_exe(self, colmap_exe):
+        # - Performs some verifications prior to using system install of COLMAP:
+        if colmap_exe == 'colmap':
+            # Check `colmap` is available system-wide:
+            try:
+                out = subprocess.getoutput(['colmap', '-h'])
+            except FileNotFoundError:
+                raise ValueError("Colmap is not installed on your system!")
+            else:
+                try:
+                    # If previous try/except worked first line should be something like:
+                    # COLMAP 3.6 -- Structure-from-Motion and Multi-View Stereo
+                    assert float(out[7:10]) >= 3.6
+                except AssertionError:
+                    raise ValueError("Colmap >= 3.6 is required!")
+        # - Performs some verifications prior to using docker image with COLMAP:
+        elif colmap_exe == 'geki/colmap':
+            import docker
+
+            client = docker.from_env()
+            image_name = 'geki/colmap'
+            client.images.pull(image_name, tag='latest')
+        else:
+            raise ValueError("Unknown COLMAP executable!")
+
     def get_workdir(self):
         return self.colmap_ws
 
@@ -475,15 +478,45 @@ class ColmapRunner(object):
         ALL_COLMAP_EXE
         _has_nvidia_gpu
 
-        """
-        try:
-            assert colmap_exe in ALL_COLMAP_EXE
-        except AssertionError:
-            raise ValueError("Unknown COLMAP executable!")
+        Examples
+        --------
+        >>> from romiscan.colmap import ColmapRunner
+        >>> from romidata import FSDB
+        >>> # - Connect to a ROMI databse to access an 'images' fileset to reconstruct with COLMAP:
+        >>> db = FSDB("/data/ROMI/DB")
+        >>> db.connect()
+        >>> # - Select the dataset to reconstruct:
+        >>> dataset = db.get_scan("arabido_test4")
+        >>> # - Get the corresponding 'images' fileset:
+        >>> fs = dataset.get_fileset('images')
 
-        # - COLMAP method to execute
+        >>> # -- Examples of a step-by-step SfM reconstruction:
+        >>> from romiscan.colmap import ColmapRunner
+        >>> from romiscan.colmap import colmap_cameras_to_dict, colmap_images_to_dict, colmap_points_to_pcd
+        >>> cli_args = {"feature_extractor": {"--ImageReader.single_camera": "1"}}
+        >>> colmap = ColmapRunner(fs, all_cli_args=cli_args)
+
+        >>> method = 'feature_extractor'
+        >>> process = ['colmap', method]
+        >>> args = ['--database_path', f'{colmap.colmap_ws}/database.db', '--image_path', f'{colmap.colmap_ws}/images']
+        >>> process.extend(args)
+        >>> for x in cli_args[method].keys(): process.extend([x, cli_args[method][x]])
+
+        >>> import docker
+        >>> client = docker.from_env()
+        >>> varenv = {'PYOPENCL_CTX': os.environ.get('PYOPENCL_CTX', '0')}
+        >>> mount = docker.types.Mount(colmap.colmap_ws, colmap.colmap_ws, type='bind')
+        >>> cmd = " ".join(process)
+        >>> print('Docker subprocess: ' + cmd)
+        >>> # Remove stopped container:
+        >>> client.containers.prune()
+        >>> gpu_device = docker.types.DeviceRequest(count=-1, capabilities=[['gpu']])
+        >>> out = client.containers.run('geki/colmap', cmd, environment=varenv, mounts=[mount], device_requests=[gpu_device])
+
+        """
+        # - COLMAP method to execute:
         process = ['colmap', method]
-        # - Extend with COLMAP method arguments list
+        # - Extend with COLMAP method arguments list:
         process.extend(args)
         if not isinstance(cli_args, dict):
             cli_args = cli_args.get_wrapped()  # Convert luigi FrozenOrderedDict to a Dict instance
@@ -502,6 +535,7 @@ class ColmapRunner(object):
             process.extend([x, cli_args[x]])
 
         if colmap_exe == 'geki/colmap':
+            import docker
             # Initialize docker client manager:
             client = docker.from_env()
             # Defines environment variables:
@@ -515,7 +549,8 @@ class ColmapRunner(object):
             # Remove stopped container:
             client.containers.prune()
             # Run the command & catch the output:
-            if gpu_device is not None:
+            if _has_nvidia_gpu():
+                gpu_device = docker.types.DeviceRequest(count=-1, capabilities=[['gpu']])
                 out = client.containers.run('geki/colmap', cmd, environment=varenv, mounts=[mount], device_requests=[gpu_device])
             else:
                 out = client.containers.run('geki/colmap', cmd, environment=varenv, mounts=[mount])
