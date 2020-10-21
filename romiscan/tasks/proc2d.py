@@ -70,7 +70,7 @@ class Masks(FileByFileTask):
     dilation = luigi.IntParameter(default=0)
 
     binarize = luigi.BoolParameter(default=True)
-    threshold = luigi.FloatParameter(default=0.0)
+    threshold = luigi.FloatParameter(default=0.3)
 
     def f_raw(self, x):
         from romiscan import proc2d
