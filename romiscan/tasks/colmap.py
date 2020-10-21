@@ -1,44 +1,100 @@
+import logging
 from os.path import splitext
 
 import luigi
 import numpy as np
-import logging
-
-from romidata.task import ImagesFilesetExists, FileByFileTask
-from romidata import io, RomiTask
+from romidata import RomiTask
+from romidata import io
+from romidata.task import ImagesFilesetExists
 from romiscan.colmap import ColmapRunner
-
-from romiscan.filenames import *
-
-from romiscanner.tasks.lpy import VirtualPlant
+from romiscan.filenames import COLMAP_CAMERAS_ID
+from romiscan.filenames import COLMAP_DENSE_ID
+from romiscan.filenames import COLMAP_IMAGES_ID
+from romiscan.filenames import COLMAP_POINTS_ID
+from romiscan.filenames import COLMAP_SPARSE_ID
 
 logger = logging.getLogger('romiscan')
 
 
-class Colmap(RomiTask):
-    """ Runs colmap on a given scan, the "images" fileset.
-
-    Module: romiscan.tasks.colmap
-    Default upstream tasks: Scan
-    Upstream task format: Fileset with image files
-    Output fileset format: images.json, cameras.json, points3d.json, sparse.ply [, dense.ply]
+def use_calibrated_poses(images_fileset, calibration_scan):
+    """Use a calibration scan to add its 'calibrated_pose' to an 'images' fileset.
 
     Parameters
     ----------
-    matcher : Parameter, default="exhaustive"
+    images_fileset : db.Fileset
+        Fileset containing source images to use for reconstruction.
+    calibration_scan : db.Fileset
+        Fileset containing calibrated poses to use for reconstruction.
+
+    .. warning::
+        This suppose the `images_fileset` & `calibration_scan` were acquired using the same ``ScanPath``!
+
+    """
+    # - Check a Colmap task has been performed for the calibration scan:
+    colmap_fs = [s for s in calibration_scan.get_filesets() if "Colmap" in s.id]
+    if len(colmap_fs) == 0:
+        raise Exception(f"Could not find a 'Colmap' fileset in calibration scan '{calibration_scan.id}'!")
+    else:
+        colmap_fs = colmap_fs[0]
+        # TODO: What happens if we have more than one 'Colmap' job ?!
+        if len(colmap_fs) > 1:
+            logger.warning(f"More than one 'Colmap' job has been performed on calibration scan '{calibration_scan.id}'!")
+    # - Read the JSON file with calibrated poses:
+    poses = io.read_json(colmap_fs.get_file(COLMAP_IMAGES_ID))
+    # - Get the 'images' fileset for the calibration scan
+    calibration_images_fileset = calibration_scan.get_fileset("images")
+    # - Assign the calibrated pose of the i-th calibration image to the i-th image of the fileset to reconstruct
+    for i, fi in enumerate(calibration_images_fileset.get_files()):
+        if i >= len(images_fileset.get_files()):
+            break  # break the loop if more images in calibration than fileset to reconstruct (sic!)
+        # - Search the calibrated poses (from JSON) matching the calibration image id:
+        key = None
+        for k in poses.keys():
+            if splitext(poses[k]['name'])[0] == fi.id:
+                key = k
+                break
+        # - Raise an error if previous search failed!
+        if key is None:
+            raise Exception(f"Could not find pose of image '{fi.id}' in calibration scan!")
+        # - Compute the 'calibrated_pose':
+        rot = np.array(poses[key]['rotmat'])
+        tvec = np.array(poses[key]['tvec'])
+        pose = -rot.transpose() * (tvec.transpose())
+        pose = np.array(pose).flatten().tolist()
+        # - Assign this calibrated pose to the metadata of the image of the fileset to reconstruct
+        # Assignment is order based...
+        images_fileset.get_files()[i].set_metadata("calibrated_pose", pose)
+
+    return images_fileset
+
+
+class Colmap(RomiTask):
+    """
+    Task performing a COLMAP SfM reconstruction on the "images" fileset of a dataset.
+
+    Attributes
+    ----------
+    upstream_task : luigi.TaskParameter, default=``ImagesFilesetExists``
+        Task upstream of this task.
+    matcher : luigi.Parameter, default="exhaustive"
         either "exhaustive" or "sequential" (TODO: see colmap documentation)
-    compute_dense : BoolParameter
+    compute_dense : luigi.BoolParameter
         whether to run the dense colmap to obtain a dense point cloud
-    cli_args : DictParameter
+    cli_args : luigi.DictParameter
         parameters for colmap command line prompts (TODO: see colmap documentation)
-    align_pcd : BoolParameter, default=True
+    align_pcd : luigi.BoolParameter, default=True
         align point cloud on calibrated or metadata poses ?
-    calibration_scan_id : Parameter, default=""
-        ID of the calibration scan.
-    bounding_box : DictParameter, optional
-        Volume dictionary used to crop-out the background from the point-cloud after colmap reconstruction and keep only points associated to the plant.
+    calibration_scan_id : luigi.Parameter, default=""
+        ID of the calibration scan used to replace the "approximate poses" from the Scan task by the "exact poses" from the CalibrationScan task.
+    bounding_box : luigi.DictParameter, optional
+        Volume dictionary used to crop the point-cloud after colmap reconstruction and keep only points associated to the plant.
         By default, it uses the scanner workspace defined in the 'images' fileset.
         Defined as `{'x': [int, int], 'y': [int, int], 'z': [int, int]}`.
+
+    Notes
+    -----
+    Upstream task format: Fileset with image files.
+    Output fileset format: images.json, cameras.json, points3d.json, sparse.ply [, dense.ply]
 
     """
     upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)
@@ -103,34 +159,7 @@ class Colmap(RomiTask):
             logger.info(f"Using calibration scan: {self.calibration_scan_id}...")
             db = images_fileset.scan.db
             calibration_scan = db.get_scan(self.calibration_scan_id)
-            colmap_fs = [s for s in calibration_scan.get_filesets() if "Colmap" in s.id]
-            if len(colmap_fs) == 0:
-                raise Exception("Could not find Colmap fileset in calibration scan!")
-            else:
-                colmap_fs = colmap_fs[0]
-
-            poses = colmap_fs.get_file(COLMAP_IMAGES_ID)
-            poses = io.read_json(poses)
-
-            calibration_images_fileset = calibration_scan.get_fileset("images")
-
-            for i, fi in enumerate(calibration_images_fileset.get_files()):
-                if i >= len(images_fileset.get_files()):
-                    break
-                key = None
-                for k in poses.keys():
-                    if splitext(poses[k]['name'])[0] == fi.id:
-                        key = k
-                        break
-                if key is None:
-                    raise Exception("Could not find pose of image in calibration scan!")
-
-                rot = np.array(poses[key]['rotmat'])
-                tvec = np.array(poses[key]['tvec'])
-                pose = -rot.transpose() * (tvec.transpose())
-                pose = np.array(pose).flatten().tolist()
-
-                images_fileset.get_files()[i].set_metadata("calibrated_pose", pose)
+            images_fileset = use_calibrated_poses(images_fileset, calibration_scan)
         else:
             logger.info("No calibration scan defined!")
 

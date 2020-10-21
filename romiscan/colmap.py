@@ -20,6 +20,7 @@ try:  # 0.7 -> 0.8 breaking
     Vector3dVector = open3d.utility.Vector3dVector
 except:
     Vector3dVector = open3d.Vector3dVector
+# TODO: remove open3d < 0.8 support, requirements.txt want open3d>=0.9.0 !
 
 from romiscan.thirdparty import read_model
 from romiscan import proc3d
@@ -377,7 +378,7 @@ class ColmapRunner(object):
     def _init_poses(self):
         """Initialize the `poses.txt` file for COLMAP.
 
-        If use of calibration is required, initialize a file of "calibrated poses".
+        If use of calibration is required, this will initialize a file of "calibrated poses".
         Else, if 'pose' is found in one of the files from the 'images' fileset, initialize a file of "exact poses".
         Else (try) to initialize a file of "approximate poses".
 
@@ -413,7 +414,7 @@ class ColmapRunner(object):
             if self.use_calibration:
                 p = file.get_metadata('calibrated_pose')
             elif exact_poses:
-                p = file.get_metadata('pose')
+                p = file.get_metadata('pose')  # VirtualScan case!
             else:
                 p = file.get_metadata('approximate_pose')
             # - If a 'pose' (calibrated/exact/approximate) was found for the file, add it to the COLMAP poses file:
