@@ -341,6 +341,12 @@ class ColmapRunner(object):
         >>> # - Try to get a defined 'workspace' from the fileset metadata (typically from a ROMI ``Scan`` task)
         >>> bbox = fs.scan.get_metadata('workspace')
 
+        >>> # -- Examples of WRONG bounding-box definition:
+        >>> bbox = {"x" : [2200, 2600], "y" : [2200, 2600], "z" : [-2200, 2200]}
+        >>> args = {"feature_extractor": {"--ImageReader.single_camera": "1"}}
+        >>> colmap = ColmapRunner(fs, all_cli_args=args, bounding_box=bbox)
+        >>> points, images, cameras, sparse_pcd, dense_pcd, bounding_box = colmap.run()
+
         """
         # -- Initialize attributes:
         self.fileset = fileset  # FSDB.db.fileset
@@ -391,7 +397,7 @@ class ColmapRunner(object):
         # - File object containing COLMAP camera poses:
         posefile = open(f"{self.colmap_ws}/poses.txt", mode='w')
         # - Search if 'pose' is in one of the files from the 'images' fileset:
-        # If found, that mean we have "exact poses" (as opposed to approximates)!
+        # If found, that mean we have "exact poses" (from VirtualScan)!
         # TODO: shouldn't we make sure that 'pose' is in ALL of the files from the 'images' fileset instead?!
         exact_poses = False
         for f in self.fileset.get_files():

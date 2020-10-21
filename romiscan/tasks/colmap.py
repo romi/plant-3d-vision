@@ -23,8 +23,8 @@ def use_calibrated_poses(images_fileset, calibration_scan):
     ----------
     images_fileset : db.Fileset
         Fileset containing source images to use for reconstruction.
-    calibration_scan : db.Fileset
-        Fileset containing calibrated poses to use for reconstruction.
+    calibration_scan : db.dataset
+        Dataset containing calibrated poses to use for reconstruction.
 
     .. warning::
         This suppose the `images_fileset` & `calibration_scan` were acquired using the same ``ScanPath``!
@@ -190,11 +190,10 @@ class Colmap(RomiTask):
         outfile = self.output_file(COLMAP_CAMERAS_ID)
         io.write_json(outfile, cameras)
         # - Save sparse reconstruction if not empty:
-        if len(sparse.points) > 0:
-            outfile = self.output_file(COLMAP_SPARSE_ID)
-            io.write_point_cloud(outfile, sparse)
+        outfile = self.output_file(COLMAP_SPARSE_ID)
+        io.write_point_cloud(outfile, sparse)
         # - Save dense reconstruction if not empty:
-        if dense is not None and len(dense.points) > 0:
+        if dense is not None:
             outfile = self.output_file(COLMAP_DENSE_ID)
             io.write_point_cloud(outfile, dense)
         # - Save the point-cloud bounding-box in task metadata
