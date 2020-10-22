@@ -34,13 +34,6 @@ USER ${USER_NAME}
 # Change working directory:
 WORKDIR /home/${USER_NAME}
 
-RUN git clone https://github.com/inducer/pyopencl && \
-    cd pyopencl/ && \
-    git submodule update --init && \
-    python -m pip install pybind11 --no-cache-dir && \
-    #./configure.py --cl-pretend-version=1.2 && \
-    python -m pip install . --no-cache-dir
-
 USER root
 RUN mkdir -p /etc/OpenCL/vendors && \
     echo "libnvidia-opencl.so.1" > /etc/OpenCL/vendors/nvidia.icd
@@ -62,4 +55,4 @@ RUN git clone https://github.com/romi/romiscan && \
     python -m pip install -r requirements.txt --no-cache-dir && \
     python -m pip install . --no-cache-dir
 
-CMD ["/bin/bash", "-c", "cd .."]
+CMD ["/bin/bash"]
