@@ -40,7 +40,7 @@ usage() {
     Docker image tag to use, default to '$vtag'.
     "
   echo "  -p, --database_path
-    Path to the host database to mount inside docker container, requires '--user' if not default.
+    Path to the host database to mount inside docker container, requires '--user' if not defautl.
     "
   echo "  -u, --user
     User used during docker image build, default to '$user'.
