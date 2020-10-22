@@ -55,4 +55,4 @@ RUN git clone https://github.com/romi/romiscan && \
     python -m pip install -r requirements.txt --no-cache-dir && \
     python -m pip install . --no-cache-dir
 
-CMD ["/bin/bash"]
+CMD ["/bin/bash", "-c", "romi_run_task -h"]
