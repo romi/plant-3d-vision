@@ -40,7 +40,7 @@ usage() {
     User id to use with 'user' inside docker image, default to '$uid'.
     "
   echo "  -g, --group
-    Group name to create inside docker image, default to 'group'.
+    Group name to create inside docker image, default to '$group'.
     "
   echo "  --gid
     Group id to use with 'user' inside docker image, default to '$gid'.
