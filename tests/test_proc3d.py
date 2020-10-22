@@ -1,7 +1,8 @@
 import unittest
 
 import numpy as np
-import open3d as o3d
+import open3d
+
 from romiscan import proc3d
 
 class TestProc2D(unittest.TestCase):
@@ -30,9 +31,9 @@ class TestProc2D(unittest.TestCase):
         np.random.seed(0)
         x = 0.5 - np.random.rand(n_pts, 3)
         x = x / np.linalg.norm(x, axis=1)[:, np.newaxis]
-        pcd = o3d.geometry.PointCloud()
-        pcd.points = o3d.utility.Vector3dVector(x)
-        pcd.normals = o3d.utility.Vector3dVector(x)
+        pcd = open3d.geometry.PointCloud()
+        pcd.points = open3d.utility.Vector3dVector(x)
+        pcd.normals = open3d.utility.Vector3dVector(x)
         mesh = proc3d.pcd2mesh(pcd)
         assert(len(mesh.vertices)> 0)
 
@@ -40,8 +41,8 @@ class TestProc2D(unittest.TestCase):
         pts = np.zeros((2,3))
         pts[0, :] = 0,0,0
         pts[1, :] = 1,1,1
-        pcd = o3d.geometry.PointCloud()
-        pcd.points = o3d.utility.Vector3dVector(pts)
+        pcd = open3d.geometry.PointCloud()
+        pcd.points = open3d.utility.Vector3dVector(pts)
         vol, origin = proc3d.pcd2vol(pcd, 1)
         assert(vol.sum() == 2)
         assert(origin.tolist() == [0,0,0])
@@ -49,7 +50,7 @@ class TestProc2D(unittest.TestCase):
         assert(vol[1,1,1] == 1)
 
     def test_skeletonize(self):
-        mesh = o3d.io.read_triangle_mesh("testdata/cylinder.ply")
+        mesh = open3d.io.read_triangle_mesh("testdata/cylinder.ply")
         skel = proc3d.skeletonize(mesh)
         assert(len(skel["points"]) > 0)
         assert(len(skel["lines"]) > 0)
@@ -66,8 +67,8 @@ class TestProc2D(unittest.TestCase):
         pts = np.zeros((2,3))
         pts[0, :] = 0.5
         pts[1, :] = -0.5
-        pcd = o3d.geometry.PointCloud()
-        pcd.points = o3d.utility.Vector3dVector(pts)
+        pcd = open3d.geometry.PointCloud()
+        pcd.points = open3d.utility.Vector3dVector(pts)
         newpcd = proc3d.crop_point_cloud(pcd, bounding_box)
         assert(len(newpcd.points) ==  1)
 
