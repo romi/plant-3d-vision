@@ -1,9 +1,16 @@
-from romiscan.tasks.colmap import *
-from romiscan.tasks.proc2d import *
-from romiscan.tasks.proc3d import *
-from romiscan.tasks.arabidopsis import *
-
-logger = logging.getLogger('__name__')
+import luigi
+import numpy as np
+from romidata import RomiTask
+from romidata import io
+from romiscan.filenames import COLMAP_CAMERAS_ID
+from romiscan.filenames import COLMAP_IMAGES_ID
+from romiscan.log import logger
+from romiscan.tasks.arabidopsis import AnglesAndInternodes
+from romiscan.tasks.colmap import Colmap
+from romiscan.tasks.proc2d import Undistorted
+from romiscan.tasks.proc3d import CurveSkeleton
+from romiscan.tasks.proc3d import PointCloud
+from romiscan.tasks.proc3d import TriangleMesh
 
 
 class Visualization(RomiTask):
@@ -33,10 +40,6 @@ class Visualization(RomiTask):
         import tempfile
         import shutil
         import os
-        try:
-            from open3d import open3d
-        except:
-            import open3d
         from skimage.transform import resize
 
         def resize_to_max(img, max_size):
@@ -78,8 +81,7 @@ class Visualization(RomiTask):
         basedir = scan.db.basedir
         logger.debug("basedir = %s" % basedir)
         with tempfile.TemporaryDirectory() as tmpdir:
-            shutil.make_archive(os.path.join(tmpdir, "scan"), "zip",
-                                os.path.join(basedir, scan.id))
+            shutil.make_archive(os.path.join(tmpdir, "scan"), "zip", os.path.join(basedir, scan.id))
             f = output_fileset.get_file('scan', create=True)
             f.import_file(os.path.join(tmpdir, 'scan.zip'))
         files_metadata["zip"] = 'scan'
@@ -113,12 +115,9 @@ class Visualization(RomiTask):
             if len(point_cloud.points) < self.max_point_cloud_size:
                 point_cloud_lowres = point_cloud
             else:
-                try:
-                    point_cloud_lowres = open3d.geometry.uniform_down_sample(point_cloud, len(point_cloud.points) // self.max_point_cloud_size + 1)
-                except:
-                    point_cloud_lowres = point_cloud.voxel_down_sample(len(point_cloud.points) // self.max_point_cloud_size + 1)
-            io.write_point_cloud(f, point_cloud)
-            files_metadata["point_cloud"] = point_cloud_file.id
+                point_cloud_lowres = point_cloud.voxel_down_sample(len(point_cloud.points) // self.max_point_cloud_size + 1)
+            io.write_point_cloud(f, point_cloud_lowres)
+            files_metadata["point_cloud"] = point_cloud_lowres.id
 
         # IMAGES
         images_fileset = self.upstream_images().output().get()

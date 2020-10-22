@@ -3,10 +3,10 @@
 
 MODULES = {
     # Scanning modules:
-    "Scan": "romiscanner.scan",
-    "VirtualPlant": "romiscanner.lpy",
-    "VirtualScan": "romiscanner.scan",
-    "CalibrationScan": "romiscanner.scan",
+    "Scan": "romiscanner.tasks.scan",
+    "VirtualPlant": "romiscanner.tasks.lpy",
+    "VirtualScan": "romiscanner.tasks.scan",
+    "CalibrationScan": "romiscanner.tasks.scan",
     # Geometric reconstruction modules:
     "Colmap": "romiscan.tasks.colmap",
     "Undistorted": "romiscan.tasks.proc2d",
