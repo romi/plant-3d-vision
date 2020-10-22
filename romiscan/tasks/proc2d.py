@@ -1,13 +1,13 @@
 import luigi
-import logging
 import numpy as np
-
-from romidata.task import FilesetExists, ImagesFilesetExists, FileByFileTask
 from romidata import io
-from romidata import RomiTask
+from romidata.task import FileByFileTask
+from romidata.task import FilesetExists
+from romidata.task import ImagesFilesetExists
+from romiscan.log import logger
+from romiscan.proc2d import vesselness
 from romiscan.tasks.colmap import Colmap
-
-logger = logging.getLogger('romiscan')
+from skimage.exposure import rescale_intensity
 
 
 class Undistorted(FileByFileTask):
@@ -76,7 +76,7 @@ class Masks(FileByFileTask):
         from romiscan import proc2d
         x = np.asarray(x, dtype=np.float)
         logger.debug(f"x shape: {x.shape}")
-        x = proc2d.rescale_intensity(x, out_range=(0, 1))
+        x = rescale_intensity(x, out_range=(0, 1))
         logger.debug(f"x shape: {x.shape}")
         if self.type == "linear":
             coefs = self.parameters
@@ -87,7 +87,7 @@ class Masks(FileByFileTask):
         elif self.type == "vesselness":
             scale = self.parameters['scale']
             channel = self.parameters['channel']
-            return proc2d.vesselness_2D(x, scale, channel=channel)
+            return vesselness(x, scale, channel=channel)
         elif self.type == "invert":
             return 1 - x
         else:
@@ -104,7 +104,7 @@ class Masks(FileByFileTask):
                 x = proc2d.dilation(x, self.dilation)
         else:
             x[x < self.threshold] = 0
-            x = proc2d.rescale_intensity(x, out_range=(0, 1))
+            x = rescale_intensity(x, out_range=(0, 1))
         x = np.array(255 * x, dtype=np.uint8)
 
         outfi = outfs.create_file(fi.id)
@@ -166,9 +166,6 @@ class Segmentation2D(Masks):
 
     def run(self):
         from romiseg.Segmentation2D import segmentation
-        import appdirs
-        from skimage import transform
-        import PIL
         from romiscan import proc2d
 
         images_fileset = self.input()["images"].get().get_files(

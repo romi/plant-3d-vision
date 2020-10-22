@@ -11,16 +11,12 @@ The two main functionalities are:
 Geodesic computing is still in a very experimental stage.
 """
 import os
+
 import numpy as np
 import pyopencl as cl
-import logging
-
-from romiscan.proc3d import point2index
 from romidata import io
-from skimage.morphology import binary_dilation
-from scipy.ndimage import gaussian_filter
-
-from .log import logger
+from romiscan.log import logger
+from romiscan.proc3d import point2index
 
 ctx = cl.create_some_context()
 queue = cl.CommandQueue(ctx)

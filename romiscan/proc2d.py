@@ -5,15 +5,16 @@ romiscan.proc2d
 This module contains all functions for processing of 2D data.
 
 """
+import cv2
 import numpy as np
 from scipy.special import betainc
+from skimage.feature import hessian_matrix
+from skimage.feature import hessian_matrix_eigvals
 from skimage.filters import gaussian
 from skimage.morphology import binary_dilation
-from skimage.feature import hessian_matrix, hessian_matrix_eigvals
-from skimage.exposure import rescale_intensity
-import cv2
 
 EPS = 1e-9
+
 
 def undistort(img, camera):
     """
@@ -33,6 +34,7 @@ def undistort(img, camera):
     undistorted_data = cv2.undistort(img, mat, undistort_parameters)
     return undistorted_data
 
+
 def excess_green(img):
     """
     Excess green function (EG = 2*g-r-b)
@@ -51,7 +53,8 @@ def excess_green(img):
     r = img[:, :, 0] / s
     g = img[:, :, 1] / s
     b = img[:, :, 2] / s
-    return (2*g - r - b)
+    return (2 * g - r - b)
+
 
 def hessian_eigvals_abs_sorted(volume):
     """
@@ -80,6 +83,7 @@ def hessian_eigvals_abs_sorted(volume):
         res.append(newL)
     return res
 
+
 def vesselness(image, scale):
     """
     Returns 2D vesselness image
@@ -104,6 +108,7 @@ def vesselness(image, scale):
         np.abs(L1) / (np.abs(L2) + EPS))
     return res
 
+
 def dilation(img, n):
     """
     Dilates a binary image by n pixels
@@ -122,6 +127,7 @@ def dilation(img, n):
     for i in range(n):
         img = binary_dilation(img)
     return img
+
 
 def colmap_stitch(cameras, images, points):
     """

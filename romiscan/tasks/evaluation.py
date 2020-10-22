@@ -1,16 +1,20 @@
+import os
+import tempfile
+
 import luigi
 import numpy as np
-import tempfile
-import os
-from scipy.ndimage.filters import gaussian_filter
-
-from romidata import io, DatabaseConfig, RomiTask
-from romidata.task import FilesetTarget, FilesetExists, ImagesFilesetExists
-
+import open3d as o3d
+from romidata import DatabaseConfig
+from romidata import RomiTask
+from romidata import io
+from romidata.task import FilesetTarget
+from romidata.task import ImagesFilesetExists
 from romiscan.log import logger
+from romiscan.tasks import cl
 from romiscan.tasks import config
+from romiscan.tasks import proc2d
+from romiscan.tasks import proc3d
 from romiscanner.tasks.lpy import VirtualPlant
-from romiscan.tasks import proc2d, cl, proc3d
 
 
 class EvaluationTask(RomiTask):
@@ -37,7 +41,6 @@ class VoxelGroundTruth(RomiTask):
 
     def run(self):
         import pywavefront
-        import open3d
         import trimesh
         x = self.input_file()
         mtl_file = self.input().get().get_file(x.id + "_mtl")
@@ -53,13 +56,13 @@ class VoxelGroundTruth(RomiTask):
             arr_size = np.asarray((max - min) / cl.Voxels().voxel_size + 1,
                                   dtype=np.int) + 1
             for k in x.meshes.keys():
-                t = open3d.geometry.TriangleMesh()
-                t.triangles = open3d.utility.Vector3iVector(
+                t = o3d.geometry.TriangleMesh()
+                t.triangles = o3d.utility.Vector3iVector(
                     np.asarray(x.meshes[k].faces))
-                t.vertices = open3d.utility.Vector3dVector(
+                t.vertices = o3d.utility.Vector3dVector(
                     np.asarray(x.vertices))
                 t.compute_triangle_normals()
-                open3d.io.write_triangle_mesh(os.path.join(tmpdir, "tmp.stl"),
+                o3d.io.write_triangle_mesh(os.path.join(tmpdir, "tmp.stl"),
                                               t)
                 m = trimesh.load(os.path.join(tmpdir, "tmp.stl"))
                 v = m.voxelized(cl.Voxels().voxel_size)
@@ -92,8 +95,6 @@ class PointCloudGroundTruth(RomiTask):
 
     def run(self):
         import pywavefront
-        import open3d
-        import trimesh
         x = self.input_file()
         mtl_file = self.input().get().get_file(x.id + "_mtl")
         outfs = self.output().get()
@@ -103,14 +104,14 @@ class PointCloudGroundTruth(RomiTask):
             io.to_file(x, os.path.join(tmpdir, "plant.mtl"))
             x = pywavefront.Wavefront(os.path.join(tmpdir, "plant.obj"),
                                       collect_faces=True, create_materials=True)
-            res = open3d.geometry.PointCloud()
+            res = o3d.geometry.PointCloud()
             point_labels = []
 
             for i, k in enumerate(x.meshes.keys()):
-                t = open3d.geometry.TriangleMesh()
-                t.triangles = open3d.utility.Vector3iVector(
+                t = o3d.geometry.TriangleMesh()
+                t.triangles = o3d.utility.Vector3iVector(
                     np.asarray(x.meshes[k].faces))
-                t.vertices = open3d.utility.Vector3dVector(
+                t.vertices = o3d.utility.Vector3dVector(
                     np.asarray(x.vertices))
                 t.compute_triangle_normals()
 
@@ -121,14 +122,14 @@ class PointCloudGroundTruth(RomiTask):
                 pcd_pts = np.asarray(pcd.points)
                 pcd_pts = pcd_pts[:, [0, 2, 1]]
                 pcd_pts[:, 1] *= -1
-                pcd.points = open3d.utility.Vector3dVector(pcd_pts)
+                pcd.points = o3d.utility.Vector3dVector(pcd_pts)
 
                 color = np.zeros((len(pcd.points), 3))
                 if class_name in colors:
                     color[:] = np.asarray(colors[class_name])
                 else:
                     color[:] = np.random.rand(3)
-                color = open3d.utility.Vector3dVector(color)
+                color = o3d.utility.Vector3dVector(color)
                 pcd.colors = color
 
                 res = res + pcd
@@ -143,8 +144,6 @@ class ClusteredMeshGroundTruth(RomiTask):
 
     def run(self):
         import pywavefront
-        import open3d
-        import trimesh
         x = self.input_file()
         mtl_file = self.input().get().get_file(x.id + "_mtl")
         outfs = self.output().get()
@@ -155,19 +154,19 @@ class ClusteredMeshGroundTruth(RomiTask):
             io.to_file(x, os.path.join(tmpdir, "plant.mtl"))
             x = pywavefront.Wavefront(os.path.join(tmpdir, "plant.obj"),
                                       collect_faces=True, create_materials=True)
-            res = open3d.geometry.PointCloud()
+            res = o3d.geometry.PointCloud()
             point_labels = []
 
             for i, k in enumerate(x.meshes.keys()):
-                t = open3d.geometry.TriangleMesh()
-                t.triangles = open3d.utility.Vector3iVector(
+                t = o3d.geometry.TriangleMesh()
+                t.triangles = o3d.utility.Vector3iVector(
                     np.asarray(x.meshes[k].faces))
 
                 pts = np.asarray(x.vertices)
                 pts = pts[:, [0, 2, 1]]
                 pts[:, 1] *= -1
 
-                t.vertices = open3d.utility.Vector3dVector(pts)
+                t.vertices = o3d.utility.Vector3dVector(pts)
                 t.compute_triangle_normals()
 
                 class_name = x.meshes[k].materials[0].name
@@ -176,9 +175,8 @@ class ClusteredMeshGroundTruth(RomiTask):
                 k = np.asarray(k)
                 tri_np = np.asarray(t.triangles)
                 for j in range(len(cc)):
-                    newt = open3d.geometry.TriangleMesh(t.vertices,
-                                                        open3d.utility.Vector3iVector(
-                                                            tri_np[k == j, :]))
+                    newt = o3d.geometry.TriangleMesh(t.vertices,
+                                                     o3d.utility.Vector3iVector(tri_np[k == j, :]))
                     newt.vertex_colors = t.vertex_colors
                     newt.remove_unreferenced_vertices()
 
@@ -192,13 +190,11 @@ class PointCloudSegmentationEvaluation(EvaluationTask):
     ground_truth = luigi.TaskParameter(default=PointCloudGroundTruth)
 
     def evaluate(self):
-        import open3d
-        import tqdm
         source = io.read_point_cloud(self.upstream_task().output_file())
         target = io.read_point_cloud(self.ground_truth().output_file())
         labels_gt = self.ground_truth().output_file().get_metadata('labels')
         labels = self.upstream_task().output_file().get_metadata('labels')
-        pcd_tree = open3d.geometry.KDTreeFlann(target)
+        pcd_tree = o3d.geometry.KDTreeFlann(target)
         res = {}
         unique_labels = set(labels_gt)
         for l in unique_labels:
@@ -235,7 +231,6 @@ class PointCloudEvaluation(EvaluationTask):
     max_distance = luigi.FloatParameter(default=2)
 
     def evaluate(self):
-        import open3d
         source = io.read_point_cloud(self.upstream_task().output_file())
         target = io.read_point_cloud(self.ground_truth().output_file())
         labels = self.upstream_task().output_file().get_metadata('labels')
@@ -246,11 +241,11 @@ class PointCloudEvaluation(EvaluationTask):
                 idx = [i for i in range(len(labels)) if labels[i] == l]
                 idx_gt = [i for i in range(len(labels_gt)) if labels_gt[i] == l]
 
-                subpcd_source = open3d.geometry.PointCloud()
-                subpcd_source.points = open3d.utility.Vector3dVector(
+                subpcd_source = o3d.geometry.PointCloud()
+                subpcd_source.points = o3d.utility.Vector3dVector(
                     np.asarray(source.points)[idx])
-                subpcd_target = open3d.geometry.PointCloud()
-                subpcd_target.points = open3d.utility.Vector3dVector(
+                subpcd_target = o3d.geometry.PointCloud()
+                subpcd_target.points = o3d.utility.Vector3dVector(
                     np.asarray(target.points)[idx_gt])
 
                 if len(subpcd_target.points) == 0:
@@ -259,14 +254,14 @@ class PointCloudEvaluation(EvaluationTask):
                 logger.debug("label : %s" % l)
                 logger.debug("gt points: %i" % len(subpcd_target.points))
                 logger.debug("pcd points: %i" % len(subpcd_source.points))
-                res = open3d.registration.evaluate_registration(subpcd_source,
+                res = o3d.registration.evaluate_registration(subpcd_source,
                                                                 subpcd_target,
                                                                 self.max_distance)
                 eval[l] = {
                     "fitness": res.fitness,
                     "inlier_rmse": res.inlier_rmse
                 }
-        res = open3d.registration.evaluate_registration(source, target,
+        res = o3d.registration.evaluate_registration(source, target,
                                                         self.max_distance)
         eval["all"] = {
             "fitness": res.fitness,
@@ -282,8 +277,7 @@ class Segmentation2DEvaluation(EvaluationTask):
     tol_px = luigi.IntParameter()
 
     def evaluate(self):
-        from scipy.ndimage.morphology import distance_transform_edt, \
-            binary_dilation
+        from scipy.ndimage.morphology import binary_dilation
 
         prediction_fileset = self.upstream_task().output().get()
         gt_fileset = self.ground_truth().output().get()
