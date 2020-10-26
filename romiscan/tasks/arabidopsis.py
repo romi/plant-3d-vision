@@ -41,7 +41,7 @@ class AnglesAndInternodes(RomiTask):
     upstream_task = luigi.TaskParameter(default=TreeGraph)
 
     characteristic_length = luigi.FloatParameter(default=1.0)
-    organ_type = luigi.IntParameter(default="fruit")
+    organ_type = luigi.Parameter(default="fruit")
 
     stem_axis = luigi.IntParameter(default=2)
     stem_axis_inverted = luigi.BoolParameter(default=False)
