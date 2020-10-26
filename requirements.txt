@@ -13,3 +13,5 @@ scikit-learn
 toml
 tqdm
 trimesh
+pyopencl
+docker
