@@ -1,0 +1,51 @@
+{
+    "Clean": {
+        "prev_task" : "",
+        "comp_func" : ""
+    },
+
+    "Colmap": {
+        "prev_task" : "",
+        "comp_func" : "compare_colmap"
+    },
+
+    "Undistorted": {
+        "prev_task" : "Colmap",
+        "comp_func" : "compare_undistorted"
+    },
+
+    "Masks": {
+        "prev_task" : "Undistorted",
+        "comp_func" : "compare_masks"
+    },
+
+    "Voxels": {
+        "prev_task" : "Masks",
+        "comp_func" : "compare_voxels"
+    },
+
+    "PointCloud": {
+        "prev_task" : "Voxels",
+        "comp_func" : "compare_pointCloud"
+    },
+
+    "TriangleMesh": {
+        "prev_task" : "PointCloud",
+        "comp_func" : "compare_triangleMesh"
+    },
+
+    "CurveSkeleton": {
+        "prev_task" : "TriangleMesh",
+        "comp_func" : "compare_curveSkeleton"
+    },
+
+    "TreeGraph": {
+        "prev_task" : "CurveSkeleton",
+        "comp_func" : "compare_treeGraph"
+    },
+
+    "AnglesAndInternodes": {
+        "prev_task" : "TreeGraph",
+        "comp_func" : "compare_anglesAndInternodes"
+    }
+}
