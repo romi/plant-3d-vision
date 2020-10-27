@@ -47,7 +47,7 @@ def use_calibrated_poses(images_fileset, calibration_scan):
     # - Assign the calibrated pose of the i-th calibration image to the i-th image of the fileset to reconstruct
     for i, fi in enumerate(calibration_images_fileset.get_files()):
         if i >= len(images_fileset.get_files()):
-            break  # break the loop if more images in calibration than fileset to reconstruct (sic!)
+            break  # break the loop if more images in calibration than fileset to reconstruct (should be the two `Line` paths, see `romiscanner.path.CalibrationPath`)
         # - Search the calibrated poses (from JSON) matching the calibration image id:
         key = None
         for k in poses.keys():
