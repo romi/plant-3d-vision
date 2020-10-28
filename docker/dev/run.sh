@@ -14,6 +14,7 @@
 #
 # 4. Run container using 'debug' image tag & start a ROMI Task:
 # $ ./run.sh -t debug -p "/data/ROMI/DB" -c "romi_run_task AnglesAndInternodes ~/db/2019-02-01_10-56-33 --config ~/romiscan/config/original_pipe_0.toml"
+# $ ./run.sh -t debug -p "/data/ROMI/DB/" -v "/data/ROMI/configs/:/home/jonathan/configs" --update -c "romi_run_task AnglesAndInternodes db/arabido_test4 --config configs/original_pipe_0.toml && print_task_info AnglesAndInternodes db/arabido_test4"
 
 user=$USER
 db_path=''
@@ -87,13 +88,12 @@ while [ "$1" != "" ]; do
     shift
     db_path=$1
     ;;
-  --update)
-    shift
-    update="cd romiscan && git pull && cd ../romiscanner  && git pull  && cd ../romidata && git pull && cd .. && "
-    ;;
   -c | --cmd)
     shift
     cmd=$1
+    ;;
+  --update)
+    update="cd romiscan && git pull && cd ../romiscanner  && git pull  && cd ../romidata && git pull && cd .. && "
     ;;
   --unittest_cmd)
     cmd=$unittest_cmd
@@ -119,6 +119,9 @@ while [ "$1" != "" ]; do
     exit
     ;;
   *)
+    echo
+    echo "UNKNOWN option '$1'!"
+    echo
     usage
     exit 1
     ;;
