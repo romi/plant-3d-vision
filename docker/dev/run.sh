@@ -34,7 +34,7 @@ usage() {
     "
 
   echo "DESCRIPTION:"
-  echo "  Run 'romiscan:<vtag>' container with a mounted local (host) database.
+  echo "  Run 'roboticsmicrofarms/romiscan_dev:<vtag>' container with a mounted local (host) database.
     "
 
   echo "OPTIONS:"
@@ -42,7 +42,7 @@ usage() {
     Docker image tag to use, default to '$vtag'.
     "
   echo "  -p, --database_path
-    Path to the host database to mount inside docker container, requires '--user' if not defautl.
+    Path to the host database to mount inside docker container, requires '--user' if not default.
     "
   echo "  -u, --user
     User used during docker image build, default to '$user'.
