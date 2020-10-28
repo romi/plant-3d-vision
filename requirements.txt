@@ -8,9 +8,7 @@ open3d>= 0.9.0.0  # open3d== 0.9.0.0
 opencv-python== 4.2.0.34
 pybind11
 pyopencl
-pywavefront
-scikit-image  # scikit-image== 0.16.2
-scikit-learn
+# pywavefront  # Changed to optional as only used in romiscan/romiscan/tasks/evaluation.py
 toml
 tqdm
-trimesh
+# trimesh  # Changed to optional as only used once in romiscan/romiscan/tasks/evaluation.py
