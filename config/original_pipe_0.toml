@@ -25,7 +25,7 @@ type = "linear"
 parameters = "[0,1,0]"
 dilation = 5
 binarize = true
-threshold = 0.3
+threshold = 0.2
 
 [Voxels]
 upstream_mask = "Masks"
