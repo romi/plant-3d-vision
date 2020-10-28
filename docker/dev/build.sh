@@ -42,7 +42,7 @@ usage() {
     Git branch to use for cloning 'romiscan' inside docker image, default to '$romiscan_branch'.
     "
   # Docker options:
-  echo "  --no-cache
+  echo "  -nc, --no-cache
     Do not use cache when building the image, (re)start from scratch.
     "
   echo "  --pull
@@ -72,7 +72,7 @@ while [ "$1" != "" ]; do
     shift
     romiscanner_branch=$1
     ;;
-  --no-cache)
+  -nc | --no-cache)
     shift
     docker_opts="$docker_opts --no-cache"
     ;;

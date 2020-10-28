@@ -47,6 +47,9 @@ usage() {
   echo "  -u, --user
     User used during docker image build, default to '$user'.
     "
+  echo "  -v, --volume
+    Volume mapping for docker, e.g. '/abs/host/dir:/abs/container/dir'. Multiple use is allowed.
+    "
   echo "  --update
     Update the git branches for ROMI repositories before running the command.
     "
@@ -112,7 +115,12 @@ while [ "$1" != "" ]; do
     ;;
   -v)
     shift
-    mount_option=$1
+    if [ "$mount_option" == "" ]
+    then
+      mount_option="-v $1"
+    else
+      mount_option="$mount_option -v $1"  # append
+    fi
     ;;
   -h | --help)
     usage
@@ -128,12 +136,6 @@ while [ "$1" != "" ]; do
   esac
   shift
 done
-
-# Check if there is another volume to mount
-if [ "$mount_option" != "" ]
-then
-  mount_option="-v $mount_option"
-fi
 
 # Use 'host database path' & 'docker user' to create a bind mount:
 if [ "$db_path" != "" ]
