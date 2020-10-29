@@ -22,7 +22,7 @@ class PointCloud(RomiTask):
 
     """
     upstream_task = luigi.TaskParameter(default=Voxels)
-    level_set_value = luigi.FloatParameter(default=0.0)
+    level_set_value = luigi.FloatParameter(default=1.0)
     log = luigi.BoolParameter(default=False)
     background_prior = luigi.FloatParameter(default=1.0)
     min_contrast = luigi.FloatParameter(default=10.0)

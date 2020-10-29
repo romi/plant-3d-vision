@@ -23,11 +23,11 @@ class Visualization(RomiTask):
     upstream_colmap = luigi.TaskParameter(default=Colmap)
     upstream_angles = luigi.TaskParameter(default=AnglesAndInternodes)
     upstream_skeleton = luigi.TaskParameter(default=CurveSkeleton)
-    upstream_images = luigi.TaskParameter(default=Undistorted)
+    upstream_images = luigi.TaskParameter(default=ImagesFilesetExists)
 
-    max_image_size = luigi.IntParameter()
-    max_point_cloud_size = luigi.IntParameter()
-    thumbnail_size = luigi.IntParameter()
+    max_image_size = luigi.IntParameter(default=1500)
+    max_point_cloud_size = luigi.IntParameter(default=10000)
+    thumbnail_size = luigi.IntParameter(default=150)
 
     def __init__(self):
         super().__init__()

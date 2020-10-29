@@ -51,8 +51,8 @@ class Voxels(RomiTask):
     upstream_colmap = luigi.TaskParameter(default=Colmap)
 
     use_colmap_poses = luigi.BoolParameter(default=True)
-    voxel_size = luigi.FloatParameter()
-    type = luigi.Parameter()
+    voxel_size = luigi.FloatParameter(default=1.0)
+    type = luigi.Parameter(default="carving")
     log = luigi.BoolParameter(default=True)
 
     invert = luigi.BoolParameter(default=False)

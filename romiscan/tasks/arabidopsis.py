@@ -16,12 +16,12 @@ class TreeGraph(RomiTask):
     upstream_task = luigi.TaskParameter(default=CurveSkeleton)
 
     z_axis = luigi.IntParameter(default=2)
-    z_orientation = luigi.FloatParameter(default=1)
+    stem_axis_inverted = luigi.BoolParameter(default=False)
 
     def run(self):
         from romiscan import arabidopsis
         f = io.read_json(self.input_file())
-        t = arabidopsis.compute_tree_graph(f["points"], f["lines"], self.z_axis, self.z_orientation)
+        t = arabidopsis.compute_tree_graph(f["points"], f["lines"], self.z_axis, self.stem_axis_inverted)
         io.write_graph(self.output_file(), t)
 
 
