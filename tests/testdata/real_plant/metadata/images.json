@@ -1,0 +1,30 @@
+{
+    "channels": [
+        "rgb"
+    ],
+    "object": {
+        "age": "0",
+        "environment": "Lyon indoor",
+        "experiment_id": "calibration01",
+        "object": "random objects"
+    },
+    "task_params": {
+        "fileset_id": "images",
+        "output_file_id": "out",
+        "scan_id": ""
+    },
+    "workspace": {
+        "x": [
+            100,
+            700
+        ],
+        "y": [
+            100,
+            700
+        ],
+        "z": [
+            -100,
+            300
+        ]
+    }
+}
