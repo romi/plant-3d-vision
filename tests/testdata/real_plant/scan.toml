@@ -1,0 +1,55 @@
+[ScanPath]
+class_name = "Circle"
+
+[retcode]
+already_running = 10
+missing_data = 20
+not_run = 25
+task_failed = 30
+scheduling_error = 35
+unhandled_exception = 40
+
+[ScanPath.kwargs]
+center_x = 375
+center_y = 375
+z = 80
+tilt = 0
+radius = 300
+n_points = 60
+
+[Scan.scanner.camera]
+module = "romiscanner.sony"
+
+[Scan.scanner.gimbal]
+module = "romiscanner.blgimbal"
+
+[Scan.scanner.cnc]
+module = "romiscanner.grbl"
+
+[Scan.metadata.workspace]
+x = [ 100, 700,]
+y = [ 100, 700,]
+z = [ -100, 300,]
+
+[Scan.metadata.object]
+age = "0"
+environment = "Lyon indoor"
+experiment_id = "calibration01"
+object = "random objects"
+
+[Scan.scanner.camera.kwargs]
+device_ip = "192.168.122.1"
+api_port = "10000"
+postview = true
+use_flashair = false
+rotation = 270
+
+[Scan.scanner.gimbal.kwargs]
+port = "/dev/ttyACM3"
+has_tilt = false
+zero_pan = 0
+invert_rotation = true
+
+[Scan.scanner.cnc.kwargs]
+homing = true
+port = "/dev/ttyACM2"
