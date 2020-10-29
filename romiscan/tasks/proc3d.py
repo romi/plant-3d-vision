@@ -1,16 +1,15 @@
 import luigi
-import logging
 import numpy as np
+import open3d as o3d
 
-from romidata import io
 from romidata import RomiTask
+from romidata import io
+from romiscan import proc3d
+from romiscan.log import logger
+from romiscan.tasks import config
 from romiscan.tasks.cl import Voxels
 from romiscan.tasks.colmap import Colmap
 from romiscan.tasks.proc2d import Segmentation2D
-from romiscan import proc3d
-from romiscan.tasks import config
-
-logger = logging.getLogger('romiscan')
 
 
 class PointCloud(RomiTask):
@@ -42,7 +41,6 @@ class PointCloud(RomiTask):
             voxels = io.read_volume(ifile)
             multiclass = False
         if multiclass:
-            import open3d
             l = list(voxels.keys())
             # background_idx = l.index("background")
             # l.remove("background")
@@ -61,7 +59,7 @@ class PointCloud(RomiTask):
             # threshold= np.quantile(res_value.flatten(), 0.99)
             # res_idx[res_value < threshold] = background_idx # low scores belong to background
 
-            pcd = open3d.geometry.PointCloud()
+            pcd = o3d.geometry.PointCloud()
             origin = np.array(ifile.get_metadata('origin'))
 
             voxel_size = float(ifile.get_metadata('voxel_size'))
@@ -86,7 +84,7 @@ class PointCloud(RomiTask):
                         color[:] = np.asarray(colors[l[i]])
                     else:
                         color[:] = np.random.rand(3)
-                    color = open3d.utility.Vector3dVector(color)
+                    color = o3d.utility.Vector3dVector(color)
                     out.colors = color
                     pcd = pcd + out
                     point_labels = point_labels + [l[i]] * len(out.points)
@@ -124,9 +122,7 @@ class SegmentedPointCloud(RomiTask):
     def is_in_pict(self, px, shape):
         return px[0] >= 0 and px[0] < shape[1] and px[1] >= 0 and px[1] < shape[0]
 
-
     def run(self):
-        import open3d
         fs = self.upstream_segmentation().output().get()
         pcd = self.load_point_cloud()
         pts = np.asarray(pcd.points)
@@ -193,7 +189,7 @@ class SegmentedPointCloud(RomiTask):
             l = np.nonzero(pts_labels == i)[0].tolist()
             for u in l:
                 point_labels[u] = labels[i]
-        pcd.colors = open3d.utility.Vector3dVector(color_array)
+        pcd.colors = o3d.utility.Vector3dVector(color_array)
         out = self.output_file()
         io.write_point_cloud(out, pcd)
         out.set_metadata("labels", point_labels)
@@ -225,7 +221,6 @@ class ClusteredMesh(RomiTask):
     min_length = luigi.FloatParameter(default=10.0)
 
     def run(self):
-        import open3d
         x = io.read_point_cloud(self.input_file())
         all_points = np.asarray(x.points)
         all_normals = np.asarray(x.normals)
@@ -234,24 +229,23 @@ class ClusteredMesh(RomiTask):
         labels = self.input_file().get_metadata("labels")
         output_fileset = self.output().get()
         for l in set(labels):
-            pcd = open3d.geometry.PointCloud()
+            pcd = o3d.geometry.PointCloud()
             idx = [i for i in range(len(labels)) if labels[i] == l]
             points = all_points[idx, :]
             normals = all_normals[idx, :]
             colors = all_colors[idx, :]
             if len(points > 0):
-                pcd.points = open3d.utility.Vector3dVector(points)
-                pcd.normals = open3d.utility.Vector3dVector(normals)
-                pcd.colors = open3d.utility.Vector3dVector(colors)
-                t, _ = open3d.geometry.TriangleMesh.create_from_point_cloud_poisson(pcd)
+                pcd.points = o3d.utility.Vector3dVector(points)
+                pcd.normals = o3d.utility.Vector3dVector(normals)
+                pcd.colors = o3d.utility.Vector3dVector(colors)
+                t, _ = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(pcd)
                 t.compute_adjacency_list()
                 k, cc, _ = t.cluster_connected_triangles()
                 k = np.asarray(k)
                 tri_np = np.asarray(t.triangles)
                 for j in range(len(cc)):
-                    newt = open3d.geometry.TriangleMesh(t.vertices,
-                                                        open3d.utility.Vector3iVector(
-                                                            tri_np[k == j, :]))
+                    newt = o3d.geometry.TriangleMesh(t.vertices,
+                                                     o3d.utility.Vector3iVector(tri_np[k == j, :]))
                     newt.vertex_colors = t.vertex_colors
                     newt.remove_unreferenced_vertices()
 
@@ -273,11 +267,8 @@ class CurveSkeleton(RomiTask):
 
     def run(self):
         from romiscan import proc3d
-
         mesh = io.read_triangle_mesh(self.input_file())
-
         out = proc3d.skeletonize(mesh)
-
         io.write_json(self.output_file(), out)
 
 

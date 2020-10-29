@@ -9,22 +9,12 @@ from its curve skeleton. The two main functionalities are:
     * Estimating the angle between successive fruits from the tree.
 """
 import collections
-
 import operator
-import numpy as np
+
 import networkx as nx
-
-try:
-    from open3d.geometry import LineSet
-    from open3d.io import read_point_cloud
-    from open3d.utility import Vector3dVector, Vector2iVector
-
-except:
-    from open3d.open3d.geometry import LineSet
-    from open3d.open3d.io import read_point_cloud
-    from open3d.open3d.utility import Vector3dVector, Vector2iVector
-
+import numpy as np
 from romiscan.log import logger
+
 
 def get_main_stem_and_nodes(G, root_node):
     """
@@ -58,6 +48,7 @@ def get_main_stem_and_nodes(G, root_node):
     nodes = main_stem[n_neighbors > 2]
     nodes = nodes
     return main_stem, nodes
+
 
 def compute_mst(G, main_stem, nodes):
     """
@@ -104,6 +95,7 @@ def compute_mst(G, main_stem, nodes):
     T = nx.minimum_spanning_tree(G)
     return T
 
+
 def build_graph(vertices, edges):
     """
     Buils a networkx graph from a list of vertices and edges.
@@ -127,6 +119,7 @@ def build_graph(vertices, edges):
                    weight=np.linalg.norm(vertices[edges[i, 0], :] - vertices[edges[i, 1], :]))
     return G
 
+
 def fit_plane(points):
     """
     Fit a plane to a set of points. Points is Nx3
@@ -135,6 +128,7 @@ def fit_plane(points):
     points = points - m[np.newaxis, :]
     u, s, v = np.linalg.svd(points)
     return m, v[0, :], v[1, :]
+
 
 def nx_to_tx(T, attributes, root_id):
     """
@@ -167,6 +161,7 @@ def nx_to_tx(T, attributes, root_id):
                     new_T.add_attribute_to_id(k, attributes[child_id][k])
                 Q.append((child_id, new_T))
     return TT
+
 
 def label_fruit(G, branching_fruit_id, fruit_id):
     """
@@ -248,6 +243,7 @@ def compute_tree_graph(points, lines, stem_axis, stem_axis_inverted):
 
     return T
 
+
 def get_nodes_by_label(G, label):
     """
     Get all nodes in a graph which have the given label. The key "labels"
@@ -264,16 +260,18 @@ def get_nodes_by_label(G, label):
     """
     return [i for i in G.nodes if label in G.nodes[i]["labels"]]
 
+
 def get_fruit(G, i):
     x = get_nodes_by_label(G, "fruit")
     return [j for j in x if G.nodes[j]["fruit_id"] == i]
 
+
 def angles_from_meshes(input_fileset, characteristic_length, number_nn, stem_axis, stem_axis_inverted,
                        min_elongation_ratio, min_fruit_size):
-    import open3d
+    import open3d as o3d
     from romidata import io
     stem_meshes = [io.read_triangle_mesh(f) for f in input_fileset.get_files(query={"label": "stem"})]
-    stem_mesh = open3d.geometry.TriangleMesh()
+    stem_mesh = o3d.geometry.TriangleMesh()
     for m in stem_meshes:
         stem_mesh = stem_mesh + m
 
@@ -288,12 +286,12 @@ def angles_from_meshes(input_fileset, characteristic_length, number_nn, stem_axi
     stem_frame_axis = np.arange(stem_axis_min, stem_axis_max, characteristic_length)
     stem_frame = np.zeros((len(stem_frame_axis), 3, 4))
 
-    kdtree = open3d.geometry.KDTreeFlann(stem_mesh)
+    kdtree = o3d.geometry.KDTreeFlann(stem_mesh)
 
     point = stem_points[idx_min]
     test = []
 
-    ls = open3d.geometry.LineSet()
+    ls = o3d.geometry.LineSet()
     lines = [[i, i + 1] for i in range(len(stem_frame_axis) - 1)]
     pts = np.zeros((len(stem_frame_axis), 3))
     prev_axis = np.eye(3)
@@ -333,24 +331,24 @@ def angles_from_meshes(input_fileset, characteristic_length, number_nn, stem_axi
         visu_trans[:3, 3] = mean
         visu_trans[3, 3] = 1.0
 
-        f = open3d.geometry.TriangleMesh.create_coordinate_frame(size=1)
+        f = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1)
         f.transform(visu_trans)
         gs.append(f)
 
         point = mean
         pts[i, :] = mean
 
-    ls.points = open3d.utility.Vector3dVector(pts)
-    ls.lines = open3d.utility.Vector2iVector(lines)
+    ls.points = o3d.utility.Vector3dVector(pts)
+    ls.lines = o3d.utility.Vector2iVector(lines)
 
-    # open3d.visualization.draw_geometries([ls, *gs])#, stem_mesh])
-    # open3d.visualization.draw_geometries([stem_mesh])
+    # o3d.visualization.draw_geometries([ls, *gs])#, stem_mesh])
+    # o3d.visualization.draw_geometries([stem_mesh])
 
     # peduncle_meshes = [io.read_triangle_mesh(f) for f in input_fileset.get_files(query={"label": "pedicel"})]
     fruits = []
     for f in input_fileset.get_files(query={"label": "fruit"}):
         m = io.read_triangle_mesh(f)
-        bb = open3d.geometry.OrientedBoundingBox.create_from_points(m.vertices)
+        bb = o3d.geometry.OrientedBoundingBox.create_from_points(m.vertices)
 
         minb = bb.get_min_bound()
         maxb = bb.get_max_bound()
@@ -435,7 +433,7 @@ def angles_from_meshes(input_fileset, characteristic_length, number_nn, stem_axi
             logger.debug("angle = %i" % (180 * angle / np.pi))
             angles.append(angle * 180 / np.pi)
 
-            ls = open3d.geometry.LineSet()
+            ls = o3d.geometry.LineSet()
 
             pts = np.zeros((3, 3))
             lines = [[0, 1], [0, 2]]
@@ -444,8 +442,8 @@ def angles_from_meshes(input_fileset, characteristic_length, number_nn, stem_axi
             pts[2, :] = [0, *v1]
             pts *= 10
             # pts = (rot.transpose() @ pts.transpose() - rot.transpose() @ tvec).transpose()
-            ls.points = open3d.utility.Vector3dVector(pts)
-            ls.lines = open3d.utility.Vector2iVector(lines)
+            ls.points = o3d.utility.Vector3dVector(pts)
+            ls.lines = o3d.utility.Vector2iVector(lines)
             frame_viz = np.zeros((4, 4))
             frame_viz[:3, :] = frame
             frame_viz[3, 3] = 1
@@ -453,8 +451,9 @@ def angles_from_meshes(input_fileset, characteristic_length, number_nn, stem_axi
             lg.append(ls)
             lg.append(fruits[i]["mesh"])
 
-    # open3d.visualization.draw_geometries([ls, *gs, stem_mesh, *lg])
+    # o3d.visualization.draw_geometries([ls, *gs, stem_mesh, *lg])
     return {"angles": angles}
+
 
 def compute_angles_and_internodes(T, stem_axis_inverted, n_nodes_fruit=5, n_nodes_stem=5):
     """

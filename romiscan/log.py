@@ -21,7 +21,7 @@
     License along with romiscanner.  If not, see
     <https://www.gnu.org/licenses/>.
 
-"""    
+"""
 import logging
 
 logger = logging.getLogger('romiscan')

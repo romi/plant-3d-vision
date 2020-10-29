@@ -1,15 +1,11 @@
 import luigi
-import logging
 import numpy as np
-
-from romidata.task import ImagesFilesetExists, FileByFileTask
-from romidata import io, RomiTask
-
+from romidata import RomiTask
+from romidata import io
+from romidata.task import ImagesFilesetExists
+from romiscan.log import logger
 from romiscan.tasks.colmap import Colmap
 from romiscan.tasks.proc2d import Masks
-from romiscan.filenames import *
-
-logger = logging.getLogger('romiscan')
 
 
 class Voxels(RomiTask):

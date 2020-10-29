@@ -1,4 +1,3 @@
-import logging
 import os
 import subprocess
 import tempfile
@@ -6,26 +5,11 @@ from os.path import splitext
 
 import imageio
 import numpy as np
-
-logger = logging.getLogger('romiscan')
-
-try:
-    from open3d import open3d
-    from open3d.open3d.geometry import PointCloud, TriangleMesh
-except:
-    import open3d
-    from open3d.geometry import PointCloud, TriangleMesh
-
-try:  # 0.7 -> 0.8 breaking
-    Vector3dVector = open3d.utility.Vector3dVector
-except:
-    Vector3dVector = open3d.Vector3dVector
-# TODO: remove open3d < 0.8 support, requirements.txt want open3d>=0.9.0 !
-
-from romiscan.thirdparty import read_model
-from romiscan import proc3d
-
+import open3d as o3d
 from romidata import io
+from romiscan import proc3d
+from romiscan.log import logger
+from romiscan.thirdparty import read_model
 
 #: List of valid colmap executable values:
 ALL_COLMAP_EXE = ['colmap', 'geki/colmap']
@@ -48,7 +32,6 @@ def _has_nvidia_gpu():
             return False
         else:
             return True
-
 
 def colmap_cameras_to_dict(cameras_bin):
     """Convert COLMAP cameras binary file to a dictionary of camera model.
@@ -129,9 +112,9 @@ def colmap_points_to_pcd(points_bin):
         points_array[i, :] = points[key].xyz
         colors_array[i, :] = points[key].rgb
     pass
-    pcd = PointCloud()
-    pcd.points = Vector3dVector(points_array)
-    pcd.colors = Vector3dVector(colors_array / 255.0)
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(points_array)
+    pcd.colors = o3d.utility.Vector3dVector(colors_array / 255.0)
     return pcd
 
 
@@ -742,7 +725,7 @@ class ColmapRunner(object):
             # - Performs coloring of the dense pointcloud:
             self.stereo_fusion()
             # - Read the colored dense pointcloud:
-            dense_pcd = open3d.io.read_point_cloud(f'{self.dense_dir}/fused.ply')
+            dense_pcd = o3d.io.read_point_cloud(f'{self.dense_dir}/fused.ply')
 
         # -- PointCloud(s) cropping by bounding-box & minimal bounding-box estimation:
         # - Try to crop the sparse pointcloud by bounding-box (if any):

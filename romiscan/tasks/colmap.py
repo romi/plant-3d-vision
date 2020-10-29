@@ -1,4 +1,3 @@
-import logging
 from os.path import splitext
 
 import luigi
@@ -12,8 +11,7 @@ from romiscan.filenames import COLMAP_DENSE_ID
 from romiscan.filenames import COLMAP_IMAGES_ID
 from romiscan.filenames import COLMAP_POINTS_ID
 from romiscan.filenames import COLMAP_SPARSE_ID
-
-logger = logging.getLogger('romiscan')
+from romiscan.log import logger
 
 
 def use_calibrated_poses(images_fileset, calibration_scan):
