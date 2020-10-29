@@ -13,7 +13,10 @@ from optparse import OptionParser
 from collections import Counter
 import matplotlib.pyplot as plt
 
-CONF_FILE = "conf_robustness_comparison.json"
+import os
+dirname, filename = os.path.split(os.path.abspath(__file__))
+
+CONF_FILE = os.path.join(dirname, "conf_robustness_comparison.json")
 
 
 def save_data_repartition(data, data_type, db):
