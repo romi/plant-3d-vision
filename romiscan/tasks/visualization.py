@@ -117,7 +117,7 @@ class Visualization(RomiTask):
             else:
                 point_cloud_lowres = point_cloud.voxel_down_sample(len(point_cloud.points) // self.max_point_cloud_size + 1)
             io.write_point_cloud(f, point_cloud_lowres)
-            files_metadata["point_cloud"] = point_cloud_lowres.id
+            files_metadata["point_cloud"] = point_cloud_file.id
 
         # IMAGES
         images_fileset = self.upstream_images().output().get()
