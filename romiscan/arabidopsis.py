@@ -319,8 +319,33 @@ def get_organ_features(organ_bb, stem_skeleton):
 
 def angles_from_meshes(input_fileset, characteristic_length, organ_type, stem_axis, stem_axis_inverted,
                        min_elongation_ratio, min_fruit_size):
+    """
+    Get angles and internodes from mesh
+    Parameters
+    ----------
+    input_fileset : list
+        list of files containing the meshes
+    characteristic_length : float
+        distance between 2 elements for the "stem skeletonization"
+    organ_type : str
+        organ on which to calculate the angles and internodes (fruit, pedicel, etc.)
+    stem_axis : int
+        [0,1,2] for the projection of the stem on the x, y or z axis
+    stem_axis_inverted : bool
+        whether or not the stem is inverted
+    min_elongation_ratio : float
+        minimum elongation ratio for the organ to be considered for the angles and internodes calculation
+    min_fruit_size : float
+        minimum fruit size
+
+    Returns
+    -------
+    {dict}
+        list of angles, internodes and fruit points
+    """
     import open3d
     from romidata import io
+
     stem_meshes = [io.read_triangle_mesh(f) for f in input_fileset.get_files(query={"label": "stem"})]
     stem_mesh = open3d.geometry.TriangleMesh()
     for m in stem_meshes:
@@ -360,38 +385,33 @@ def angles_from_meshes(input_fileset, characteristic_length, organ_type, stem_ax
         stem_skeleton[i, :] = mean
 
     unique_stem_skeleton = np.unique(stem_skeleton, axis=0)
-
+    # order the stem skeleton with the distance to the root
     ordered_stem_skeleton = sorted(unique_stem_skeleton, key=lambda p: np.linalg.norm(p - root))
-
     if stem_axis_inverted:
         ordered_stem_skeleton = ordered_stem_skeleton[::-1]
 
-    stem_skel = open3d.geometry.PointCloud()
-    stem_skel.points = open3d.utility.Vector3dVector(ordered_stem_skeleton)
-    stem_skel.paint_uniform_color([0, 0, 1])
-
     # stem_mesh.paint_uniform_color([0.5, 0.5, 0.5])
-
-    main_f = open3d.geometry.TriangleMesh.create_coordinate_frame(size=20, origin=root)
-
+    # main_f = open3d.geometry.TriangleMesh.create_coordinate_frame(size=20, origin=root)
     # open3d.visualization.draw_geometries([ls, *gs, stem_mesh, main_f])
-    # open3d.visualization.draw_geometries([stem_mesh, stem_skel])
-    # a = 1/0
+
+    # calculate features as direction and corresponding node id for each organ
     organs_features_list = []
     for i, o in enumerate(organ_meshes):
         bb = open3d.geometry.OrientedBoundingBox.create_from_points(o.vertices)
         organ_features = get_organ_features(bb, ordered_stem_skeleton)
         organ_features["points"] = np.asarray(o.vertices).tolist()
         elongation_ratio = np.linalg.norm(organ_features["direction"]) / np.linalg.norm(organ_features["width"])
+        # if the organ does not fit to the minimal fruit size and elongation ratio it is not taken into account
         if np.linalg.norm(organ_features["direction"]) > min_fruit_size and elongation_ratio > min_elongation_ratio:
             organs_features_list.append(organ_features)
 
     angles = []
     internodes = []
     fruit_points = []
-    lg = []
     ordered_organs = sorted(organs_features_list, key=lambda p: p["node_id"])
+    # initialization for the first organ
     current_organ = ordered_organs[0]
+    fruit_points.append(np.asarray(current_organ["points"]).tolist())
     for next_organ in ordered_organs[1:]:
         # main stem direction
         node = ordered_stem_skeleton[current_organ["node_id"]]
@@ -404,7 +424,6 @@ def angles_from_meshes(input_fileset, characteristic_length, organ_type, stem_ax
                 n = ordered_stem_skeleton[current_organ["node_id"] + 1] - node
         else:
             n = next_node - node
-
         n /= np.linalg.norm(n)
 
         # projection on the plane normal to the main stem direction
@@ -414,6 +433,7 @@ def angles_from_meshes(input_fileset, characteristic_length, organ_type, stem_ax
         n1 = current_organ_projection / np.linalg.norm(current_organ_projection)
         n2 = next_organ_projection / np.linalg.norm(next_organ_projection)
 
+        # angle calculation
         a = np.dot(np.cross(n2, n1), n)
         b = np.dot(n1, n2)
         angle = np.arctan2(a, b)
@@ -421,13 +441,15 @@ def angles_from_meshes(input_fileset, characteristic_length, organ_type, stem_ax
             angle = 2 * np.pi + angle
 
         internode = np.linalg.norm(node - next_node)
-        f_points = np.asarray(current_organ["points"]).tolist()
 
         angles.append(angle)
         internodes.append(internode)
-        fruit_points.append(f_points)
+        fruit_points.append(np.asarray(next_organ["points"]).tolist())
 
         current_organ = next_organ
+
+    # as the angles are always calculated anticlockwise, this part takes the complementary angle if it is not the case
+    # for the plant
     if np.median(angles) > np.pi:
         angles = 2 * np.pi - np.array(angles)
         angles = angles.tolist()
