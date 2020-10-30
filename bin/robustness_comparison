@@ -1,21 +1,19 @@
 #!/usr/bin/env python3
-
-import os
-import json
-import tempfile
+import argparse
 import datetime
+import filecmp
+import json
+import os
+import pathlib
 import shutil
 import subprocess
-import filecmp
-import numpy as np
-import pathlib
-from optparse import OptionParser
+import tempfile
 from collections import Counter
+
 import matplotlib.pyplot as plt
+import numpy as np
 
-import os
 dirname, filename = os.path.split(os.path.abspath(__file__))
-
 CONF_FILE = os.path.join(dirname, "conf_robustness_comparison.json")
 
 
@@ -27,10 +25,8 @@ def save_data_repartition(data, data_type, db):
     ----------
     data : list
         list of data to plot
-
     data_type : string
         angles or internodes
-
     db : pathlib.Path
         folder in which register the graphs
 
@@ -53,7 +49,6 @@ def angles_and_internodes_comparison(task_folder_output_list, results_folder):
     ----------
     task_folder_output_list : pathlib.Path list
         list of task output path to compare
-
     results_folder : pathlib.Path
         path to put the potential results files
 
@@ -112,9 +107,9 @@ def get_task_folder(scan, task_name):
     Look for the output folder of a task in the files.json file of a scan
     returns name as a string of a task output folder
     """
-    files = json.load(open(str(scan/"files.json")))
+    files = json.load(open(str(scan / "files.json")))
     task_folders = [d["id"] for d in files["filesets"] if task_name in d["id"]]
-    return task_folders[0] # shame ...
+    return task_folders[0]  # shame ...
 
 
 def compare_task_output(scan_list, task_name, previous_task, results_folder):
@@ -126,13 +121,10 @@ def compare_task_output(scan_list, task_name, previous_task, results_folder):
     ----------
     path_db : string
         path of the database
-
     scan_list : list
         list of scans path to compare
-
     task_name : string
         name of the task to test
-
     previous_task : string
         name of the task which is the comparison point
 
@@ -157,23 +149,18 @@ def fill_test_db(test_folder, scan, previous_task, config_file, nb):
     ----------
     test_folder : pathlib.Path
         name of the folder into which copy the tests scans
-
     scan : pathlib.Path
         path of the initial scan
-
-
     previous_task : string
         comparison point task
-
     config_file : string
         path of the config file
-
     nb : int
         number of time the scan is replicated
 
     Returns
-    ----------
-    created_copied_scans : list
+    -------
+    list
         list of pathlib.Path of created scans
 
     """
@@ -239,7 +226,6 @@ def compute_repeatability_test(scan, task, nb):
     ----------
     scan : pathlib.Path
         contains information on database
-
     task : task object
 
     nb : int
@@ -261,20 +247,17 @@ def set_task(name, config, full_pipe, previous_task):
     ----------
     name : string
         class name, must be a key in the CONF_FILE
-
     config : string
         name of the configuration file to run the pipeline
-
     full_pipe : bool
         whether or not compute repeatability from the start
-
     previous_task : string
         name of the previous class in the pipeline, either None for the full pipe or the one linked to the class name
         in CONF_FILE (comparison point task)
 
     Returns
     ----------
-    task : dict
+    dict
         dict containing features of the task to test
     """
     task = {
@@ -292,32 +275,35 @@ if __name__ == "__main__":
     """
     creates a test db at the root of the db linked to the scan to analyze
     """
-    usage = "usage: %prog db"
-    parser = OptionParser(usage=usage)
-
-    parser.add_option("-s", "--scan", dest="scan",
-                      help="scan to analyze", default=1)
-    parser.add_option("-c", "--config_file", dest="config_file",
-                      help="path to the config file")
-    parser.add_option("-n", "--replicate_number", dest="replicate_number",
-                      help="number of replicate for a scan", default=2)
-    parser.add_option("-t", "--task", dest="task",
-                      help="task to test", default="AnglesAndInternodes")
-    parser.add_option("-f", "--full_pipe", dest="full_pipe",
-                      action="store_true",
-                      help="run the test for the whole pipe", default=False)
-
-    (options, args) = parser.parse_args()
-
+    DESC = """ROMI pipeline repeatability test.
+    Analyse the repeatability of a pipeline by repeating the task to test and comparing the results.
+    Comparison can be done at the scale of the files but also with metrics if a reference can be set. 
+    """
+    # - Load the JSON config file of the script:
     c = json.load(open(CONF_FILE))
+    valid_tasks = list(c.keys())
 
-    task_to_test = options.task
-    test_full_pipe = options.full_pipe
-    replicate_number = int(options.replicate_number)
-    initial_scan_path = pathlib.Path(options.scan).expanduser()
+    parser = argparse.ArgumentParser(description=DESC)
 
-    if task_to_test in c.keys():
-        task_dict = set_task(task_to_test, options.config_file, test_full_pipe, c[task_to_test]["prev_task"])
-        compute_repeatability_test(initial_scan_path, task_dict, replicate_number)
-    else:
-        print("unknown task")
+    parser.add_argument("scan",
+                        help="scan to use for repeatability analysis")
+    parser.add_argument("task", default="AnglesAndInternodes",
+                        help=f"task to test, should be in: {', '.join(valid_tasks)}")
+    parser.add_argument("config_file",
+                        help="path to the TOML config file for the pipeline")
+    parser.add_argument("-n", "--replicate_number", default=2,
+                        help="number of replicate for a scan")
+    parser.add_argument("-f", "--full_pipe", action="store_true", default=False,
+                        help="run the test for the whole pipe (similar to use of 'AnglesAndInternodes' as task)")
+
+    # - Parse the input agruments to variables:
+    args = parser.parse_args()
+    task2test = args.task
+    replicate_number = int(args.replicate_number)
+    initial_scan_path = pathlib.Path(args.scan).expanduser()
+    # - Test the task to test in valid:
+    if task2test not in valid_tasks:
+        raise ValueError(f"UNKNOWN task: '{task2test}', choose among: {', '.join(valid_tasks)}")
+
+    task_dict = set_task(task2test, args.config_file, args.full_pipe, c[task2test]["prev_task"])
+    compute_repeatability_test(initial_scan_path, task_dict, replicate_number)
