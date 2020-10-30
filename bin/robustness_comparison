@@ -14,6 +14,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import logging
 
+from romidata.io import read_point_cloud
+
 dirname, filename = os.path.split(os.path.abspath(__file__))
 logger = logging.getLogger(f'{filename}')
 
@@ -39,8 +41,52 @@ def save_data_repartition(data, data_type, db):
     ax.boxplot(list(np.array(data).transpose()))
     fig.savefig(db / f"repeat_results_{data_type}.png")
 
+def chamfer_distance(ref_ply, flo_ply):
+    """
+    Compute the chamfer distance between two point clouds.
 
-def angles_and_internodes_comparison(task_folder_output_list, results_folder):
+    Let T be a template pointcloud and F a flaoting point cloud.
+    Let p2p_dist be the Euclidian distance between two points t & f.
+    The Chamfer distance is:
+    CH_dist = 1/|T| * sum_t(p2p_dist(t, f))
+
+    Parameters
+    ----------
+    ref_ply : str
+        Reference point cloud.
+    flo_ply : str
+        Floating point cloud.
+
+    Returns
+    -------
+    float
+        The chamfer distance.
+
+    """
+    import open3d as o3d
+    ref_pcd = o3d.io.read_point_cloud(ref_ply)
+    flo_pcd = o3d.io.read_point_cloud(flo_ply)
+    p2p_dist = ref_pcd.compute_point_cloud_distance(flo_pcd)
+    chamfer_dist = 1/len(ref_pcd.points) * sum(p2p_dist)
+    return chamfer_dist
+
+
+def compare_pointcloud(task_folder_output_list):
+    """Use the chamfer distance to compare point-cloud for each unique pairs of repetition."""
+    chamfer_dist = {}
+    for t, ref_task in enumerate(task_folder_output_list):
+        ref_pcd_file = ref_task / "PointCloud.ply"
+        if t+1 > len(task_folder_output_list):
+            break
+        for flo_task in task_folder_output_list[t+1:]:
+            flo_pcd_file = flo_task / "PointCloud.ply"
+            chamfer_dist[(ref_task, flo_task)] = chamfer_distance(str(ref_pcd_file), str(flo_pcd_file))
+
+    print("Chamfer distance (lower is better) between pairs of repetitions:")
+    print(chamfer_dist)
+    return
+
+def angles_and_internodes_comparison(task_folder_output_list, test_db):
     """
     Coarse comparison of sequences of angles and internodes
     Prints a dict containing the number of scans for each number of organs indexed, ex : {12:4, 14:6} (4 scans with 12
@@ -52,7 +98,7 @@ def angles_and_internodes_comparison(task_folder_output_list, results_folder):
     ----------
     task_folder_output_list : pathlib.Path list
         list of task output path to compare
-    results_folder : pathlib.Path
+    test_db : pathlib.Path
         path to put the potential results files
 
     """
@@ -76,8 +122,8 @@ def angles_and_internodes_comparison(task_folder_output_list, results_folder):
               if angles_and_internodes[scan_num]["nb_organs"] == max_occurrence_nb_organs]
     internodes = [angles_and_internodes[scan_num]["internodes"] for scan_num in angles_and_internodes
                   if angles_and_internodes[scan_num]["nb_organs"] == max_occurrence_nb_organs]
-    save_data_repartition(angles, "angles", results_folder)
-    save_data_repartition(internodes, "internodes", results_folder)
+    save_data_repartition(angles, "angles", test_db)
+    save_data_repartition(internodes, "internodes", test_db)
 
 
 def file_by_file_comparison(task_folder_output_list):
@@ -123,7 +169,7 @@ def get_task_folder(scan, task_name):
     return task_folders[0]  # shame ...
 
 
-def compare_task_output(scan_list, task_name, previous_task, results_folder):
+def compare_task_output(scan_list, task_name, previous_task, test_db):
     """
     Method to compare outputs of a task
     TODO: one method per task ? in config file?
@@ -141,9 +187,11 @@ def compare_task_output(scan_list, task_name, previous_task, results_folder):
 
     """
     task_folder = get_task_folder(scan_list[0], task_name)
-    folder_task_list = [scan / task_folder for scan in scan_list]
+    folder_task_list = [scan_path / task_folder for scan_path in scan_list]
     if previous_task is None and task_name == "AnglesAndInternodes" and len(folder_task_list):
-        angles_and_internodes_comparison(folder_task_list, results_folder)
+        angles_and_internodes_comparison(folder_task_list, test_db)
+    elif task_name == "PointCloud":
+        compare_pointcloud(folder_task_list)
     elif len(folder_task_list):
         file_by_file_comparison(folder_task_list)
     else:
@@ -349,6 +397,9 @@ if __name__ == "__main__":
     # - Load the JSON config file of the script:
     c = json.load(open(CONF_FILE))
     valid_tasks = list(c.keys())
+
+    # TODO: an option to set a reference (or would that be the job of the Evaluation tasks?!)
+    # TODO: add 'output_folder' argument to re-use previous test DB.
 
     parser = argparse.ArgumentParser(description=DESC)
 

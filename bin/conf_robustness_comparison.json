@@ -26,7 +26,7 @@
 
     "PointCloud": {
         "prev_task" : "Voxels",
-        "comp_func" : "compare_pointCloud"
+        "comp_func" : "compare_pointcloud"
     },
 
     "TriangleMesh": {
