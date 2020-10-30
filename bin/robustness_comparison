@@ -12,8 +12,11 @@ from collections import Counter
 
 import matplotlib.pyplot as plt
 import numpy as np
+import logging
 
 dirname, filename = os.path.split(os.path.abspath(__file__))
+logger = logging.getLogger(f'{filename}')
+
 CONF_FILE = os.path.join(dirname, "conf_robustness_comparison.json")
 
 
@@ -104,8 +107,16 @@ def file_by_file_comparison(task_folder_output_list):
 
 def get_task_folder(scan, task_name):
     """
-    Look for the output folder of a task in the files.json file of a scan
-    returns name as a string of a task output folder
+    Look for the output folder of a task in the files.json file of a scan returns name as a string of a task output folder
+
+    Parameters
+    ----------
+    scan
+    task_name
+
+    Returns
+    -------
+
     """
     files = json.load(open(str(scan / "files.json")))
     task_folders = [d["id"] for d in files["filesets"] if task_name in d["id"]]
@@ -139,7 +150,7 @@ def compare_task_output(scan_list, task_name, previous_task, results_folder):
         print(f"Output files of task {task_name} for db {str(scan_list[0].parent)} are missing")
 
 
-def fill_test_db(test_folder, scan, previous_task, config_file, nb):
+def fill_test_db(test_db, init_scan_path, task_cfg, nb):
     """
     From an initial scan, copy it in temporary folder, cleans it,
     runs the pipe to the comparison point task and copy the scan a certain
@@ -147,16 +158,14 @@ def fill_test_db(test_folder, scan, previous_task, config_file, nb):
 
     Parameters
     ----------
-    test_folder : pathlib.Path
+    test_db : pathlib.Path
         name of the folder into which copy the tests scans
-    scan : pathlib.Path
+    init_scan_path : pathlib.Path
         path of the initial scan
-    previous_task : string
-        comparison point task
-    config_file : string
-        path of the config file
+    task_cfg : dict
+        name of the configuration file to run the pipeline
     nb : int
-        number of time the scan is replicated
+        number time to repeat the same task to evaluate
 
     Returns
     -------
@@ -164,90 +173,148 @@ def fill_test_db(test_folder, scan, previous_task, config_file, nb):
         list of pathlib.Path of created scans
 
     """
-    scan_name = scan.name
+    scan_name = init_scan_path.name
     created_copied_scans = []
+    # Initialize a temporary directory use to store scan dataset before cleaning and running previous tasks to task to analyse:
     with tempfile.TemporaryDirectory() as tmp_dir:
+        # Get the path of the temporary ROMI database
         tmp_path = pathlib.Path(tmp_dir)
-        tmp_scan_folder = tmp_path / f"tmp_{scan_name}"
-        with open(tmp_path / "romidb", 'w'):
+        tmp_scan_folder = pathlib.Path(tmp_path / f"tmp_{scan_name}")
+        logger.info(f"Created a temporary folder '{tmp_scan_folder}'")
+        # Creates the `romidb` marker for active FSDB
+        with open(pathlib.Path(tmp_path / "romidb"), 'w'):
             pass
-        shutil.copytree(str(scan), str(tmp_scan_folder))
-        init_configuration_file = tmp_scan_folder / "pipeline.toml"
+        logger.info("Duplicating the scan dataset to a temporary folder...")
+        # Duplicate the initial scan dataset to the temporary folder
+        shutil.copytree(str(init_scan_path), str(tmp_scan_folder))
+        # Check for previous analysis & if yes, clean the dataset
+        init_configuration_file = pathlib.Path(tmp_scan_folder / "pipeline.toml")
         if init_configuration_file.is_file():
+            logger.info("Using detected configuration pipeline backup file to clean the scan dataset!")
             print(str(init_configuration_file))
             run_pipe(tmp_scan_folder, "Clean", str(init_configuration_file))
-        if previous_task:
-            run_pipe(tmp_scan_folder, previous_task, config_file)
+        # Run the previous task on the temporary copy
+        if task_cfg["previous_task"]:
+            logger.info(f"Running {task_cfg['previous_task']} pipeline on the scan dataset!")
+            run_pipe(tmp_scan_folder, task_cfg["previous_task"], task_cfg["config_file"])
+        logger.info(f"Copying previous run of {task_cfg['previous_task']} pipeline...")
+        # Duplicate the results of the previous task to the test database
         for i in range(nb):
-            copied_scan_name = test_folder / f"{scan_name}_{i}"
+            logger.info(f"Copy #{i}...")
+            copied_scan_name = pathlib.Path(test_db / f"{scan_name}_{i}")
             shutil.copytree(str(tmp_scan_folder), str(copied_scan_name))
             created_copied_scans.append(copied_scan_name)
     return created_copied_scans
 
 
-def get_test_folder_name(db_path, task_name):
+def get_test_db_path(root_location, task_name):
     """
-    Generate output folder's name, ex: 20200803124841_rep_test_TriangleMesh
+    Generate test database name, ex: 20200803124841_rep_test_TriangleMesh
+
+    Parameters
+    ----------
+    root_location : pathlib.Path
+        Root path where to create the test database.
+    task_name : str
+        Name of the task to test.
+
+    Returns
+    -------
+    pathlib.Path
+        Path to the test database.
     """
     now = datetime.datetime.now()
     now_str = now.strftime("%Y%m%d%H%M%S")
-    return pathlib.Path(db_path / f"{now_str}_rep_test_{task_name}")
+    return pathlib.Path(root_location / f"{now_str}_rep_test_{task_name}")
 
 
-def create_test_db(db_path, scan, task_name, previous_task, config_file, nb):
+def create_test_db(root_location, init_scan_path, task_cfg, nb):
     """
-    Creates test db with romdb file in it
+    Creates test db with `romidb` marker file in it.
+
+    Parameters
+    ----------
+    root_location : pathlib.Path
+        Root path where to create the test database.
+    init_scan_path : pathlib.Path
+        Path to the initial source of the scan dataset.
+    task_cfg : dict
+        configuration dict of the task to test
+    nb : int
+        Number of replicates of scan dataset to create.
+
+    Returns
+    -------
+    pathlib.Path
+        Path to the test folder.
+    list(pathlib.Path)
+        List of paths to the test scans.
+
     """
-    test_folder = get_test_folder_name(db_path, task_name)
-    test_folder.mkdir(exist_ok=True)
-    with open(test_folder / "romidb", mode='w'):
+    # Get the path of the ROMI database used to perform the test and creates the directory
+    test_db = get_test_db_path(root_location, task_cfg["name"])
+    test_db.mkdir(exist_ok=True)
+    # Creates the `romidb` marker for active FSDB
+    with open(pathlib.Path(test_db / "romidb"), mode='w'):
         pass
-    test_scans = fill_test_db(test_folder, scan, previous_task, config_file, nb)
-    return test_folder, test_scans
+    # Duplicate the scan dataset as many times as requested
+    test_scans = fill_test_db(test_db, init_scan_path, task_cfg, nb)
+    return test_db, test_scans
 
 
-def run_pipe(scan_path, task_to_run, configuration_file):
+def run_pipe(scan_path, task_name, cfg_file):
     """
-    run pipeline on a scan
+    run confiured pipeline for given task on a scan
+
+    Parameters
+    ----------
+    scan_path : pathlib.Path
+        contains information on database
+    task_name : string
+        task name, must be a key in the CONF_FILE
+    cfg_file : string
+        name of the configuration file to run the pipeline
+
+    Returns
+    -------
+
     """
-    print(" &&&& ")
-    print(task_to_run)
-    scan = str(scan_path)
-    print(scan)
-    cmd = ["romi_run_task", "--config", configuration_file, task_to_run, scan, "--local-scheduler"]
+    logger.info(f"Executing tasks '{task_name}' on scan dataset '{str(scan_path)}'.")
+    # TODO: use luigi.build() instead of subprocess.run call
+    cmd = ["romi_run_task", "--config", cfg_file, task_name, str(scan_path), "--local-scheduler"]
     subprocess.run(cmd, check=True)
 
 
-def compute_repeatability_test(scan, task, nb):
+def compute_repeatability_test(init_scan_path, task_cfg, nb):
     """
     Creates test folder with copies of the input scan and runs repeatability tests on it
 
     Parameters
     ----------
-    scan : pathlib.Path
+    init_scan_path : pathlib.Path
         contains information on database
-    task : task object
-
+    task_cfg : dict
+        configuration dict of the task to test
     nb : int
         number of time the scan in replicated
 
     """
-    initial_db_root = scan.parent.parent
-    test_db, test_scans_list = create_test_db(initial_db_root, scan, task["name"], task["previous_task"], task["config_file"], nb)
+    root_location = init_scan_path.parent.parent
+    test_db, test_scans_list = create_test_db(root_location, init_scan_path, task_cfg, nb)
     for copied_scan in test_scans_list:
-        run_pipe(copied_scan, task["name"], task["config_file"])
-    compare_task_output(test_scans_list, task["name"], task["previous_task"], test_db)
+        run_pipe(copied_scan, task_cfg["name"], task_cfg["config_file"])
+    compare_task_output(test_scans_list, task_cfg["name"], task_cfg["previous_task"], test_db)
 
 
-def set_task(name, config, full_pipe, previous_task):
+def config_task(task_name, cfg_file, full_pipe, previous_task):
     """
-    initialize task features
+    Setup task configuration dictionary.
 
     Parameters
     ----------
-    name : string
-        class name, must be a key in the CONF_FILE
-    config : string
+    task_name : string
+        task name, must be a key in the CONF_FILE
+    cfg_file : string
         name of the configuration file to run the pipeline
     full_pipe : bool
         whether or not compute repeatability from the start
@@ -258,17 +325,17 @@ def set_task(name, config, full_pipe, previous_task):
     Returns
     ----------
     dict
-        dict containing features of the task to test
+        configuration dict of the task to test
     """
-    task = {
-        "name": name,
-        "config_file": config
+    task_cfg = {
+        "name": task_name,
+        "config_file": cfg_file
     }
     if full_pipe:
-        task["previous_task"] = None
+        task_cfg["previous_task"] = None
     else:
-        task["previous_task"] = previous_task
-    return task
+        task_cfg["previous_task"] = previous_task
+    return task_cfg
 
 
 if __name__ == "__main__":
@@ -294,16 +361,18 @@ if __name__ == "__main__":
     parser.add_argument("-n", "--replicate_number", default=2,
                         help="number of replicate for a scan")
     parser.add_argument("-f", "--full_pipe", action="store_true", default=False,
-                        help="run the test for the whole pipe (similar to use of 'AnglesAndInternodes' as task)")
+                        help="run the test for the whole geometric pipeline (similar to use of 'AnglesAndInternodes' as task)")
 
     # - Parse the input agruments to variables:
     args = parser.parse_args()
     task2test = args.task
     replicate_number = int(args.replicate_number)
-    initial_scan_path = pathlib.Path(args.scan).expanduser()
+    init_scan_path = pathlib.Path(args.scan).expanduser()
+    logger.info(f"Got scan path: {init_scan_path}")
+
     # - Test the task to test in valid:
     if task2test not in valid_tasks:
         raise ValueError(f"UNKNOWN task: '{task2test}', choose among: {', '.join(valid_tasks)}")
 
-    task_dict = set_task(task2test, args.config_file, args.full_pipe, c[task2test]["prev_task"])
-    compute_repeatability_test(initial_scan_path, task_dict, replicate_number)
+    task_cfg = config_task(task2test, args.config_file, args.full_pipe, c[task2test]["prev_task"])
+    compute_repeatability_test(init_scan_path, task_cfg, replicate_number)
