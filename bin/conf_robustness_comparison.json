@@ -31,12 +31,12 @@
 
     "TriangleMesh": {
         "prev_task" : "PointCloud",
-        "comp_func" : "compare_triangleMesh"
+        "comp_func" : "compare_trianglemesh_points"
     },
 
     "CurveSkeleton": {
         "prev_task" : "TriangleMesh",
-        "comp_func" : "compare_curveSkeleton"
+        "comp_func" : "compare_curveskeleton_points"
     },
 
     "TreeGraph": {
