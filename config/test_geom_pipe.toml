@@ -11,6 +11,11 @@ calibration_scan_id = ""
 [Colmap.cli_args.model_aligner]
 "--robust_alignment_max_error" = "10"
 
+[Colmap.bounding_box]  # default to None
+x = [250, 550]
+y = [250, 550]
+z = [-200, 200]
+
 [Undistorted]
 upstream_task = "ImagesFilesetExists"
 

@@ -5,15 +5,16 @@ compute_dense = false
 align_pcd = true
 calibration_scan_id = ""
 
-  [Colmap.cli_args.feature_extractor]
-  "--ImageReader.single_camera" = "1" # in colmap default to 0
-  "--SiftExtraction.use_gpu" = "1"
+[Colmap.cli_args.feature_extractor]
+"--ImageReader.single_camera" = "1" # in colmap default to 0
 
-  [Colmap.cli_args.exhaustive_matcher]
-  "--SiftMatching.use_gpu" = "1"
+[Colmap.cli_args.model_aligner]
+"--robust_alignment_max_error" = "10"
 
-  [Colmap.cli_args.model_aligner]
-  "--robust_alignment_max_error" = "10"
+[Colmap.bounding_box]  # default to None
+x = [250, 550]
+y = [250, 550]
+z = [-200, 200]
 
 [Undistorted]
 upstream_task = "ImagesFilesetExists"
