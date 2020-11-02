@@ -130,7 +130,7 @@ def compare_curveskeleton_points(task_folder_output_list):
         if t + 1 > len(task_folder_output_list):
             break
         for flo_task in task_folder_output_list[t + 1:]:
-            # - Read the `TriangleMesh.ply` file
+            # - Read the `CurveSkeleton.json` file
             flo_mesh_file = flo_task / "CurveSkeleton.json"
             with open(str(flo_mesh_file), 'r') as jf:
                 flo_mesh = json.load(jf)
@@ -257,8 +257,7 @@ def compare_task_output(scan_list, task_name, previous_task, test_db):
         print(f"Output files of task {task_name} for db {str(scan_list[0].parent)} are missing")
     # - Load the metric from the JSON configuration file
     c = json.load(open(CONF_FILE))
-    metric = eval(c[task_name]["comp_func"] + "()")
-    metric(folder_task_list)
+    eval(c[task_name]["comp_func"] + "(folder_task_list)")
 
 
 def fill_test_db(test_db, init_scan_path, task_cfg, nb):
@@ -434,9 +433,10 @@ def config_task(task_name, cfg_file, full_pipe, previous_task):
         in CONF_FILE (comparison point task)
 
     Returns
-    ----------
+    -------
     dict
         configuration dict of the task to test
+
     """
     task_cfg = {
         "name": task_name,
