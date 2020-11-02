@@ -13,8 +13,7 @@ from collections import Counter
 import matplotlib.pyplot as plt
 import numpy as np
 import logging
-
-from romidata.io import read_point_cloud
+import open3d as o3d
 
 dirname, filename = os.path.split(os.path.abspath(__file__))
 logger = logging.getLogger(f'{filename}')
@@ -41,7 +40,8 @@ def save_data_repartition(data, data_type, db):
     ax.boxplot(list(np.array(data).transpose()))
     fig.savefig(db / f"repeat_results_{data_type}.png")
 
-def chamfer_distance(ref_ply, flo_ply):
+
+def chamfer_distance(ref_pcd, flo_pcd):
     """
     Compute the chamfer distance between two point clouds.
 
@@ -52,9 +52,9 @@ def chamfer_distance(ref_ply, flo_ply):
 
     Parameters
     ----------
-    ref_ply : str
+    ref_pcd : open3d.geometry.PointCloud
         Reference point cloud.
-    flo_ply : str
+    flo_pcd : open3d.geometry.PointCloud
         Floating point cloud.
 
     Returns
@@ -63,28 +63,86 @@ def chamfer_distance(ref_ply, flo_ply):
         The chamfer distance.
 
     """
-    import open3d as o3d
-    ref_pcd = o3d.io.read_point_cloud(ref_ply)
-    flo_pcd = o3d.io.read_point_cloud(flo_ply)
     p2p_dist = ref_pcd.compute_point_cloud_distance(flo_pcd)
-    chamfer_dist = 1/len(ref_pcd.points) * sum(p2p_dist)
+    chamfer_dist = 1 / len(ref_pcd.points) * sum(p2p_dist)
     return chamfer_dist
 
 
 def compare_pointcloud(task_folder_output_list):
     """Use the chamfer distance to compare point-cloud for each unique pairs of repetition."""
     chamfer_dist = {}
+    # - Double loop to compare all unique pairs of repeats:
     for t, ref_task in enumerate(task_folder_output_list):
+        # - Read the `PointCloud.ply` file
         ref_pcd_file = ref_task / "PointCloud.ply"
-        if t+1 > len(task_folder_output_list):
+        ref_pcd = o3d.io.read_point_cloud(str(ref_pcd_file))
+        if t + 1 > len(task_folder_output_list):
             break
-        for flo_task in task_folder_output_list[t+1:]:
+        for flo_task in task_folder_output_list[t + 1:]:
+            # - Read the `PointCloud.ply` file
             flo_pcd_file = flo_task / "PointCloud.ply"
-            chamfer_dist[(ref_task, flo_task)] = chamfer_distance(str(ref_pcd_file), str(flo_pcd_file))
+            flo_pcd = o3d.io.read_point_cloud(str(flo_pcd_file))
+            # - Compute the Chamfer distance
+            chamfer_dist[(ref_task, flo_task)] = chamfer_distance(ref_pcd, flo_pcd)
 
     print("Chamfer distance (lower is better) between pairs of repetitions:")
     print(chamfer_dist)
     return
+
+
+def compare_trianglemesh_points(task_folder_output_list):
+    """Use the chamfer distance to compare mesh vertice point-cloud for each unique pairs of repetition."""
+    chamfer_dist = {}
+    # - Double loop to compare all unique pairs of repeats:
+    for t, ref_task in enumerate(task_folder_output_list):
+        # - Read the `TriangleMesh.ply` file
+        ref_mesh_file = ref_task / "TriangleMesh.ply"
+        ref_mesh = o3d.io.read_triangle_mesh(str(ref_mesh_file))
+        # - Extract a PointCloud from the mesh vertices
+        ref_pcd = o3d.geometry.PointCloud(ref_mesh.vertices)
+        if t + 1 > len(task_folder_output_list):
+            break
+        for flo_task in task_folder_output_list[t + 1:]:
+            # - Read the `TriangleMesh.ply` file
+            flo_mesh_file = flo_task / "TriangleMesh.ply"
+            flo_mesh = o3d.io.read_triangle_mesh(str(flo_mesh_file))
+            # - Extract a PointCloud from the mesh vertices
+            flo_pcd = o3d.geometry.PointCloud(flo_mesh.vertices)
+            # - Compute the Chamfer distance
+            chamfer_dist[(ref_task, flo_task)] = chamfer_distance(ref_pcd, flo_pcd)
+
+    print("Chamfer distance (lower is better) between pairs of repetitions:")
+    print(chamfer_dist)
+    return
+
+
+def compare_curveskeleton_points(task_folder_output_list):
+    """Use the chamfer distance to compare point-cloud for each unique pairs of repetition."""
+    chamfer_dist = {}
+    # - Double loop to compare all unique pairs of repeats:
+    for t, ref_task in enumerate(task_folder_output_list):
+        # - Read the `CurveSkeleton.json` file
+        ref_mesh_file = ref_task / "CurveSkeleton.json"
+        with open(str(ref_mesh_file), 'r') as jf:
+            ref_mesh = json.load(jf)
+        # - Extract a PointCloud from the skeleton vertices
+        ref_pcd = o3d.geometry.PointCloud(ref_mesh["points"])
+        if t + 1 > len(task_folder_output_list):
+            break
+        for flo_task in task_folder_output_list[t + 1:]:
+            # - Read the `TriangleMesh.ply` file
+            flo_mesh_file = flo_task / "CurveSkeleton.json"
+            with open(str(flo_mesh_file), 'r') as jf:
+                flo_mesh = json.load(jf)
+            # - Extract a PointCloud from the skeleton vertices
+            flo_pcd = o3d.geometry.PointCloud(flo_mesh["points"])
+            # - Compute the Chamfer distance
+            chamfer_dist[(ref_task, flo_task)] = chamfer_distance(ref_pcd, flo_pcd)
+
+    print("Chamfer distance (lower is better) between pairs of repetitions:")
+    print(chamfer_dist)
+    return
+
 
 def angles_and_internodes_comparison(task_folder_output_list, test_db):
     """
@@ -171,31 +229,36 @@ def get_task_folder(scan, task_name):
 
 def compare_task_output(scan_list, task_name, previous_task, test_db):
     """
-    Method to compare outputs of a task
-    TODO: one method per task ? in config file?
+    Method to compare outputs of a task.
 
     Parameters
     ----------
-    path_db : string
-        path of the database
-    scan_list : list
-        list of scans path to compare
+    scan_list : list(pathlib.Path)
+        List of paths to the test scans.
     task_name : string
         name of the task to test
     previous_task : string
         name of the task which is the comparison point
+    test_db : pathlib.Path
+        Path to the test folder.
+
+    Notes
+    -----
+    The behaviour of this method is configured by the JSON file `CONF_FILE`.
 
     """
     task_folder = get_task_folder(scan_list[0], task_name)
     folder_task_list = [scan_path / task_folder for scan_path in scan_list]
     if previous_task is None and task_name == "AnglesAndInternodes" and len(folder_task_list):
         angles_and_internodes_comparison(folder_task_list, test_db)
-    elif task_name == "PointCloud":
-        compare_pointcloud(folder_task_list)
     elif len(folder_task_list):
         file_by_file_comparison(folder_task_list)
     else:
         print(f"Output files of task {task_name} for db {str(scan_list[0].parent)} are missing")
+    # - Load the metric from the JSON configuration file
+    c = json.load(open(CONF_FILE))
+    metric = eval(c[task_name]["comp_func"] + "()")
+    metric(folder_task_list)
 
 
 def fill_test_db(test_db, init_scan_path, task_cfg, nb):
