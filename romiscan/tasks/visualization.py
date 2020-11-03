@@ -2,12 +2,12 @@ import luigi
 import numpy as np
 from romidata import RomiTask
 from romidata import io
+from romidata.task import ImagesFilesetExists
 from romiscan.filenames import COLMAP_CAMERAS_ID
 from romiscan.filenames import COLMAP_IMAGES_ID
 from romiscan.log import logger
 from romiscan.tasks.arabidopsis import AnglesAndInternodes
 from romiscan.tasks.colmap import Colmap
-from romiscan.tasks.proc2d import Undistorted
 from romiscan.tasks.proc3d import CurveSkeleton
 from romiscan.tasks.proc3d import PointCloud
 from romiscan.tasks.proc3d import TriangleMesh
@@ -117,7 +117,7 @@ class Visualization(RomiTask):
             else:
                 point_cloud_lowres = point_cloud.voxel_down_sample(len(point_cloud.points) // self.max_point_cloud_size + 1)
             io.write_point_cloud(f, point_cloud_lowres)
-            files_metadata["point_cloud"] = point_cloud_lowres.id
+            files_metadata["point_cloud"] = point_cloud_file.id
 
         # IMAGES
         images_fileset = self.upstream_images().output().get()

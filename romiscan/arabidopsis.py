@@ -266,14 +266,95 @@ def get_fruit(G, i):
     return [j for j in x if G.nodes[j]["fruit_id"] == i]
 
 
-def angles_from_meshes(input_fileset, characteristic_length, number_nn, stem_axis, stem_axis_inverted,
+def get_organ_features(organ_bb, stem_skeleton):
+    """
+    Compute organ features as its main direction and its node
+
+    Parameters
+    ----------
+    organ_bb : open3d.geometry.OrientedBoundingBox
+        bounding box around the organ
+    stem_skeleton: np.array
+        Nx3 array
+
+    Returns
+    -------
+    dict
+    """
+    # create box around organ (fruit)
+    box_points = np.asarray(organ_bb.get_box_points())
+
+    # among the 8 points of the box, take the first one, find the 2 closest points from it
+    # then the mean of this 2 points to get the middle of the smallest square of the box
+    # then same with the square on the other side of the box in order to have the main direction of the organ
+    first_point = box_points[0]
+    closest_points = sorted(box_points, key=lambda p: np.linalg.norm(p - first_point))
+    first_square_middle = np.add(closest_points[1], closest_points[2]) / 2
+    opposite_square_middle = np.add(closest_points[5], closest_points[6]) / 2
+    width = np.linalg.norm(first_point - closest_points[1])
+
+    # the node with the closest distance between the 2 centers of the smallest squares is
+    # considered as the organ node
+    dist_first = np.sum((stem_skeleton - first_square_middle) ** 2, axis=1)
+    dist_opposite = np.sum((stem_skeleton - opposite_square_middle) ** 2, axis=1)
+
+    if dist_first[np.argmin(dist_first)] <= dist_opposite[np.argmin(dist_opposite)]:
+        node_id = np.argmin(dist_first)
+        direction = opposite_square_middle - first_square_middle
+        fruit_base = first_square_middle
+    else:
+        node_id = np.argmin(dist_opposite)
+        direction = first_square_middle - opposite_square_middle
+        fruit_base = opposite_square_middle
+
+    organ_features = {
+        "node_id": node_id,
+        "direction": direction,
+        "mesh": organ_bb,
+        "fruit_base": fruit_base,
+        "width": width
+    }
+    return organ_features
+
+
+def angles_from_meshes(input_fileset, characteristic_length, organ_type, stem_axis, stem_axis_inverted,
                        min_elongation_ratio, min_fruit_size):
-    import open3d as o3d
+    """
+    Get angles and internodes from mesh
+    Parameters
+    ----------
+    input_fileset : list
+        list of files containing the meshes
+    characteristic_length : float
+        distance between 2 elements for the "stem skeletonization"
+    organ_type : str
+        organ on which to calculate the angles and internodes (fruit, pedicel, etc.)
+    stem_axis : int
+        [0,1,2] for the projection of the stem on the x, y or z axis
+    stem_axis_inverted : bool
+        whether or not the stem is inverted
+    min_elongation_ratio : float
+        minimum elongation ratio for the organ to be considered for the angles and internodes calculation
+    min_fruit_size : float
+        minimum fruit size
+
+    Returns
+    -------
+    {dict}
+        list of angles, internodes and fruit points
+    """
+    import open3d
     from romidata import io
+
     stem_meshes = [io.read_triangle_mesh(f) for f in input_fileset.get_files(query={"label": "stem"})]
-    stem_mesh = o3d.geometry.TriangleMesh()
+    stem_mesh = open3d.geometry.TriangleMesh()
     for m in stem_meshes:
         stem_mesh = stem_mesh + m
+
+    organ_meshes = [io.read_triangle_mesh(f) for f in input_fileset.get_files(query={"label": organ_type})]
+    organ_mesh = open3d.geometry.TriangleMesh()
+    for o in organ_meshes:
+        organ_mesh = organ_mesh + o
 
     stem_points = np.asarray(stem_mesh.vertices)
 
@@ -284,175 +365,97 @@ def angles_from_meshes(input_fileset, characteristic_length, number_nn, stem_axi
     stem_axis_max = stem_points[idx_max, stem_axis]
 
     stem_frame_axis = np.arange(stem_axis_min, stem_axis_max, characteristic_length)
-    stem_frame = np.zeros((len(stem_frame_axis), 3, 4))
 
-    kdtree = o3d.geometry.KDTreeFlann(stem_mesh)
+    kdtree = open3d.geometry.KDTreeFlann(stem_mesh)
 
     point = stem_points[idx_min]
-    test = []
+    root = stem_points[idx_min]
 
-    ls = o3d.geometry.LineSet()
-    lines = [[i, i + 1] for i in range(len(stem_frame_axis) - 1)]
-    pts = np.zeros((len(stem_frame_axis), 3))
-    prev_axis = np.eye(3)
-
-    if stem_axis_inverted:
-        prev_axis[stem_axis, stem_axis] = -1
-
-    gs = []
+    stem_skeleton = np.zeros((len(stem_frame_axis), 3))
 
     for i, axis in enumerate(stem_frame_axis):
         point[stem_axis] = axis
         k, idx, _ = kdtree.search_knn_vector_3d(point, 300)
         vtx = np.asarray(stem_mesh.vertices)[idx]
         mean = vtx.mean(axis=0)
-        mean[stem_axis] = axis
-        u, s, v = np.linalg.svd(vtx - point)
-        print(v[0, :])
-        first_vector = v[0, :]
-        if first_vector[stem_axis] < 0 and not stem_axis_inverted:
-            first_vector = -first_vector
-        elif first_vector[stem_axis] > 0 and stem_axis_inverted:
-            first_vector = -first_vector
-
-        second_vector = prev_axis[1] - np.dot(prev_axis[1], first_vector) * first_vector
-        second_vector = second_vector / np.linalg.norm(second_vector)
-
-        third_vector = np.cross(first_vector, second_vector)
-
-        rot = np.array([first_vector, second_vector, third_vector])
-        prev_axis = rot
-
-        stem_frame[i][0:3, 0:3] = rot.transpose()
-        stem_frame[i][:, 3] = mean
-
-        visu_trans = np.zeros((4, 4))
-        visu_trans[:3, :3] = rot.transpose()
-        visu_trans[:3, 3] = mean
-        visu_trans[3, 3] = 1.0
-
-        f = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1)
-        f.transform(visu_trans)
-        gs.append(f)
+        if i == 0:
+            root = mean
 
         point = mean
-        pts[i, :] = mean
+        stem_skeleton[i, :] = mean
 
-    ls.points = o3d.utility.Vector3dVector(pts)
-    ls.lines = o3d.utility.Vector2iVector(lines)
+    unique_stem_skeleton = np.unique(stem_skeleton, axis=0)
+    # order the stem skeleton with the distance to the root
+    ordered_stem_skeleton = sorted(unique_stem_skeleton, key=lambda p: np.linalg.norm(p - root))
+    if stem_axis_inverted:
+        ordered_stem_skeleton = ordered_stem_skeleton[::-1]
 
-    # o3d.visualization.draw_geometries([ls, *gs])#, stem_mesh])
-    # o3d.visualization.draw_geometries([stem_mesh])
+    # stem_mesh.paint_uniform_color([0.5, 0.5, 0.5])
+    # main_f = open3d.geometry.TriangleMesh.create_coordinate_frame(size=20, origin=root)
+    # open3d.visualization.draw_geometries([ls, *gs, stem_mesh, main_f])
 
-    # peduncle_meshes = [io.read_triangle_mesh(f) for f in input_fileset.get_files(query={"label": "pedicel"})]
-    fruits = []
-    for f in input_fileset.get_files(query={"label": "fruit"}):
-        m = io.read_triangle_mesh(f)
-        bb = o3d.geometry.OrientedBoundingBox.create_from_points(m.vertices)
-
-        minb = bb.get_min_bound()
-        maxb = bb.get_max_bound()
-
-        lines = [[0, 1],
-                 [1, 7],
-                 [7, 2],
-                 [2, 0],
-                 [3, 6],
-                 [6, 4],
-                 [4, 5],
-                 [5, 3],
-                 [0, 3],
-                 [1, 6],
-                 [7, 4],
-                 [2, 5]]
-        pts = np.asarray(bb.get_box_points())
-        maxl = 0.0
-        minl = np.inf
-        maxidx = 0
-        minidx = 0
-        for i, l in enumerate(lines):
-            if np.linalg.norm(pts[l[0]] - pts[l[1]]) > maxl:
-                maxl = np.linalg.norm(pts[l[0]] - pts[l[1]])
-                maxidx = i
-            if np.linalg.norm(pts[l[0]] - pts[l[1]]) < minl:
-                minl = np.linalg.norm(pts[l[0]] - pts[l[1]])
-                minidx = i
-
-        if np.linalg.norm(maxb - minb) > min_fruit_size and maxl / minl > min_elongation_ratio:
-            direction = pts[lines[maxidx][1]] - pts[lines[maxidx][0]]
-            direction /= np.linalg.norm(direction)
-            fruits.append({
-                "mesh": bb,
-                "direction": direction,
-                "center": bb.center
-            })
+    # calculate features as direction and corresponding node id for each organ
+    organs_features_list = []
+    for i, o in enumerate(organ_meshes):
+        bb = open3d.geometry.OrientedBoundingBox.create_from_points(o.vertices)
+        organ_features = get_organ_features(bb, ordered_stem_skeleton)
+        organ_features["points"] = np.asarray(o.vertices).tolist()
+        elongation_ratio = np.linalg.norm(organ_features["direction"]) / np.linalg.norm(organ_features["width"])
+        # if the organ does not fit to the minimal fruit size and elongation ratio it is not taken into account
+        if np.linalg.norm(organ_features["direction"]) > min_fruit_size and elongation_ratio > min_elongation_ratio:
+            organs_features_list.append(organ_features)
 
     angles = []
-    lg = []
-    fruits.sort(key=lambda x: x["center"][stem_axis] if not stem_axis_inverted else -x["center"][stem_axis])
-    for i in range(len(fruits)):
-        print(i)
-        stem_loc = fruits[i]["center"][stem_axis]
-        closest_frame = int((stem_loc - stem_axis_min) / (stem_axis_max - stem_axis_min) * len(stem_frame_axis))
-        if closest_frame < 0:
-            closest_frame = 0
-        if closest_frame >= len(stem_frame_axis):
-            closest_frame = len(stem_frame_axis) - 1
-        frame = stem_frame[closest_frame, :, :]
-        frame[stem_axis, 3] = stem_loc
+    internodes = []
+    fruit_points = []
+    ordered_organs = sorted(organs_features_list, key=lambda p: p["node_id"])
+    # initialization for the first organ
+    current_organ = ordered_organs[0]
+    fruit_points.append(np.asarray(current_organ["points"]).tolist())
+    for next_organ in ordered_organs[1:]:
+        # main stem direction
+        node = ordered_stem_skeleton[current_organ["node_id"]]
+        next_node = ordered_stem_skeleton[next_organ["node_id"]]
+        # ... takes into account organs with the same node at extremities
+        if (node == next_node).all():
+            if current_organ["node_id"] == (len(ordered_stem_skeleton) - 1):
+                n = node - ordered_stem_skeleton[current_organ["node_id"] - 1]
+            else:
+                n = ordered_stem_skeleton[current_organ["node_id"] + 1] - node
+        else:
+            n = next_node - node
+        n /= np.linalg.norm(n)
 
-        rot = frame[0:3, 0:3].transpose()
-        tvec = - rot @ frame[0:3, 3]
+        # projection on the plane normal to the main stem direction
+        current_organ_projection = current_organ["direction"] - (np.dot(current_organ["direction"], n) * n)
+        next_organ_projection = next_organ["direction"] - (np.dot(next_organ["direction"], n) * n)
 
-        avg_rel = rot @ fruits[i]["center"] + tvec
+        n1 = current_organ_projection / np.linalg.norm(current_organ_projection)
+        n2 = next_organ_projection / np.linalg.norm(next_organ_projection)
 
-        direction_rel = rot @ fruits[i]["direction"]
+        # angle calculation
+        a = np.dot(np.cross(n2, n1), n)
+        b = np.dot(n1, n2)
+        angle = np.arctan2(a, b)
+        if angle < 0:
+            angle = 2 * np.pi + angle
 
-        if i > 0:
-            avg_rel_prev = rot @ fruits[i - 1]["center"] + tvec
-            direction_rel_prev = rot @ fruits[i - 1]["direction"]
-            v1 = direction_rel_prev[1:3]
-            v1 = v1 / np.linalg.norm(v1)
-            v2 = direction_rel[1:3]
-            v2 = v2 / np.linalg.norm(v2)
+        internode = np.linalg.norm(node - next_node)
 
-            if v2.dot(avg_rel[1:3]) < 0:
-                v2 *= -1
-            if v1.dot(avg_rel_prev[1:3]) < 0:
-                v1 *= -1
+        angles.append(angle)
+        internodes.append(internode)
+        fruit_points.append(np.asarray(next_organ["points"]).tolist())
 
-            w = np.array([-v1[1], v1[0]])
+        current_organ = next_organ
 
-            c = np.dot(v1, v2)
-            s = np.dot(v2, w)
+    # as the angles are always calculated anticlockwise, this part takes the complementary angle if it is not the case
+    # for the plant
+    if np.median(angles) > np.pi:
+        angles = 2 * np.pi - np.array(angles)
+        angles = angles.tolist()
 
-            logger.critical(c)
-            logger.critical(s)
-
-            angle = np.arctan2(s, c)
-            logger.debug("angle = %i" % (180 * angle / np.pi))
-            angles.append(angle * 180 / np.pi)
-
-            ls = o3d.geometry.LineSet()
-
-            pts = np.zeros((3, 3))
-            lines = [[0, 1], [0, 2]]
-
-            pts[1, :] = [0, *v2]
-            pts[2, :] = [0, *v1]
-            pts *= 10
-            # pts = (rot.transpose() @ pts.transpose() - rot.transpose() @ tvec).transpose()
-            ls.points = o3d.utility.Vector3dVector(pts)
-            ls.lines = o3d.utility.Vector2iVector(lines)
-            frame_viz = np.zeros((4, 4))
-            frame_viz[:3, :] = frame
-            frame_viz[3, 3] = 1
-            ls.transform(frame_viz)
-            lg.append(ls)
-            lg.append(fruits[i]["mesh"])
-
-    # o3d.visualization.draw_geometries([ls, *gs, stem_mesh, *lg])
-    return {"angles": angles}
+    # open3d.visualization.draw_geometries([ls, *gs, stem_mesh, *lg, fruit_mesh, main_f])
+    return {"angles": angles, "internodes": internodes, "fruit_points": fruit_points}
 
 
 def compute_angles_and_internodes(T, stem_axis_inverted, n_nodes_fruit=5, n_nodes_stem=5):

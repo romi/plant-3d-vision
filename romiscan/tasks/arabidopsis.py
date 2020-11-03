@@ -37,13 +37,13 @@ class AnglesAndInternodes(RomiTask):
     upstream_task = luigi.TaskParameter(default=TreeGraph)
 
     characteristic_length = luigi.FloatParameter(default=1.0)
-    number_nn = luigi.IntParameter(default=50)
+    organ_type = luigi.Parameter(default="fruit")
 
     stem_axis = luigi.IntParameter(default=2)
     stem_axis_inverted = luigi.BoolParameter(default=False)
 
     min_elongation_ratio = luigi.FloatParameter(default=2.0)
-    min_fruit_size = luigi.FloatParameter(default=0.1)
+    min_fruit_size = luigi.FloatParameter(default=6)
 
     def run(self):
         from romiscan import arabidopsis
@@ -52,9 +52,8 @@ class AnglesAndInternodes(RomiTask):
             t = io.read_graph(self.input_file())
             measures = arabidopsis.compute_angles_and_internodes(t, self.stem_axis_inverted)
             io.write_json(self.output_file(), measures)
-        else:  # Assume it's meshes
-            measures = arabidopsis.angles_from_meshes(self.input().get(),
-                                                      self.characteristic_length, self.number_nn,
+        else: # Assume it's meshes
+            measures = arabidopsis.angles_from_meshes(self.input().get(), self.characteristic_length, self.organ_type,
                                                       self.stem_axis, self.stem_axis_inverted,
                                                       self.min_elongation_ratio, self.min_fruit_size)
             io.write_json(self.output_file(), measures)
