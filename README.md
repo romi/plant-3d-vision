@@ -9,7 +9,6 @@ This library use `pyopencl` and thus require the following system libraries:
 
 - ocl-icd-libopencl1
 - opencl-headers
-- clinfo
 
 In addition you will need:
 
@@ -27,25 +26,23 @@ As you will be using the `romicgal` library, which is a minimal wrapper for CGAL
 On Debian and Ubuntu, you can install them with:
 ```bash
 sudo apt-get update && sudo apt-get install -y \
-    ocl-icd-libopencl1 opencl-headers clinfo \
-    git python3-wheel python3-pip \
-    wget pkg-config libeigen3-dev libgmp3-dev libmpfr-dev
+    git wget \
+    ocl-icd-libopencl1 opencl-headers \
+    python3-wheel python3-pip \
+    gcc pkg-config \
+    libeigen3-dev libgmp3-dev libmpfr-dev
 ```
 
-**Troubleshooting**:
+If you have an NVIDIA GPU:
+```bash
+mkdir -p /etc/OpenCL/vendors
+echo "libnvidia-opencl.so.1" > /etc/OpenCL/vendors/nvidia.icd
+```
 
-- `/usr/bin/ld: cannot find -lOpenCL` can be fixed with a symbolic link to `libOpenCL.so`:
-    ```bash
-    ln -s /usr/lib/x86_64-linux-gnu/libOpenCL.so.1 /usr/lib/libOpenCL.so
-    ```
-- `ImportError: libGL.so.1: cannot open shared object file: No such file or directory` can be fixed with:
-    ```bash
-    apt-get install libgl1-mesa-glx
-    ```
-- `ImportError: libSM.so.6: cannot open shared object file: No such file or directory` can be fixed with:
-    ```bash
-    apt-get install libsm6 libxext6 libxrender-dev
-    ```
+To avoid troubles during `pyopencl` install, check `/usr/lib/libOpenCL.so` exists, if not add it with:
+```bash
+ln -s /usr/lib/x86_64-linux-gnu/libOpenCL.so.1 /usr/lib/libOpenCL.so
+```
 
 ## Install from sources in conda environment:
 In this install instructions, we leverage the `git submodule` functionality to clone the required ROMI libraries.
@@ -54,27 +51,26 @@ In this install instructions, we leverage the `git submodule` functionality to c
     ```bash
     git clone https://github.com/romi/romiscan.git
     ```
-2. Create a conda environment named `scan_0.7` with Python3.7:
+2. Create a conda environment named `scan_0.8` with Python3.7:
     ```bash
-    conda create --name scan_0.7 python=3.7
+    conda create --name scan_0.8 python=3.7
     ```
 3. Install sources and submodules in activated environment:
     ```bash
-    conda activate scan_0.7
+    conda activate scan_0.8
     cd romiscan
-    git checkout dev
     git submodule init
     git submodule update
-    python3.7 -m pip install -r requirements.txt
-    python3.7 -m pip install -e ./romidata/
-    python3.7 -m pip install -e ./romiseg/
-    python3.7 -m pip install -e ./romiscanner/
-    python3.7 -m pip install -e ./romicgal/
-    python3.7 -m pip install -e .
+    python3 -m pip install -r requirements.txt
+    python3 -m pip install ./romidata/
+    python3 -m pip install ./romiseg/
+    python3 -m pip install ./romiscanner/
+    python3 -m pip install ./romicgal/
+    python3 -m pip install .
     ```
 4. Test import of `romiscan` library:
     ```bash
-    conda activate scan_0.7
+    conda activate scan_0.8
     python3 -c 'import romiscan'
     ```
 5. Longer tests using shipped "test dataset":
@@ -83,6 +79,17 @@ In this install instructions, we leverage the `git submodule` functionality to c
     bash check_pipe.sh
     rm testdata/models/models/Resnetdataset_gl_png_896_896_epoch50.pt
     rm testdata/models/models/tmp_epoch40.pt
+    ```
+
+**Troubleshooting**:
+
+- `ImportError: libGL.so.1: cannot open shared object file: No such file or directory` can be fixed with:
+    ```bash
+    apt-get install libgl1-mesa-glx
+    ```
+- `ImportError: libSM.so.6: cannot open shared object file: No such file or directory` can be fixed with:
+    ```bash
+    apt-get install libsm6 libxext6 libxrender-dev
     ```
 
 

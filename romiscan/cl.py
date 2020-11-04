@@ -101,7 +101,7 @@ class Backprojection(object):
         elif type == "averaging":
             self.dtype = np.float32
             self.kernel = backprojection_kernels.average
-        # Print info about buffer array size and associated memory cost:
+        # Print info about buffer array size and associated memory cost for `self.values_h`:
         buff_size = np.prod(self.shape) * 4
         logger.info(f"Buffer shape is {self.shape}")
         logger.info(f"Required memory for buffer is {buff_size} bytes!")
