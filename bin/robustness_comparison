@@ -454,8 +454,17 @@ if __name__ == "__main__":
     creates a test db at the root of the db linked to the scan to analyze
     """
     DESC = """ROMI pipeline repeatability test.
-    Analyse the repeatability of a pipeline by repeating the task to test and comparing the results.
-    Comparison can be done at the scale of the files but also with metrics if a reference can be set. 
+    Analyse the repeatability of a pipeline by:
+    1. duplicating the scan in a temporary folder (and cleaning it if necessary)
+    2. running the pipeline up to the previous task of the task to test
+    3. copying this result to a new database and replicate the dataset
+    4. repeating the task to test for each replicate
+    5. comparing the results pair by pair.
+
+    Comparison can be done at the scale of the files but also with metrics if a reference can be set.
+    
+    To create fully independent tests, *i.e.* we the whole pipeline in run up to the task to test on each replicate.
+    
     """
     # - Load the JSON config file of the script:
     c = json.load(open(CONF_FILE))
