@@ -39,7 +39,7 @@ usage() {
     Git branch to use for cloning 'romiscan' inside docker image, default to '$romiscan_branch'.
     "
   echo "  --romiscanner
-    Git branch to use for cloning 'romiscan' inside docker image, default to '$romiscan_branch'.
+    Git branch to use for cloning 'romiscan' inside docker image, default to '$romiscanner_branch'.
     "
   # Docker options:
   echo "  -nc, --no-cache

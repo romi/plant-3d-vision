@@ -148,7 +148,7 @@ then
   # Start in interactive mode:
   docker run --runtime=nvidia --gpus all $mount_option \
     --env PYOPENCL_CTX='0' \
-    -it roboticsmicrofarms/romiscan_dev:$vtag
+    -it roboticsmicrofarms/romiscan_dev:$vtag bash
 else
   # Start in non-interactive mode (run the command):
   docker run --runtime=nvidia --gpus all $mount_option \
