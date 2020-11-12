@@ -10,15 +10,26 @@ import subprocess
 import tempfile
 from collections import Counter
 
+import imageio
 import matplotlib.pyplot as plt
 import numpy as np
 import logging
 import open3d as o3d
+from romiscan.metrics import chamfer_distance
+from romiscan.metrics import point_cloud_registration_fitness
+from romiscan.metrics import set_metrics
+from romiscan.metrics import surface_ratio
+from romiscan.metrics import volume_ratio
 
 dirname, filename = os.path.split(os.path.abspath(__file__))
 logger = logging.getLogger(f'{filename}')
 
 CONF_FILE = os.path.join(dirname, "conf_robustness_comparison.json")
+
+
+def print_tests_pairs(pairs_dict: dict):
+    for pairs, test_result in pairs_dict.items():
+        print(f"- {pairs[0].parts[-2]} vs. {pairs[1].parts[-2]}: {test_result}")
 
 
 def save_data_repartition(data, data_type, db):
@@ -41,36 +52,30 @@ def save_data_repartition(data, data_type, db):
     fig.savefig(db / f"repeat_results_{data_type}.png")
 
 
-def chamfer_distance(ref_pcd, flo_pcd):
-    """
-    Compute the chamfer distance between two point clouds.
+def compare_binary_mask(task_folder_output_list):
+    precision, recall = {}, {}
+    for t, ref_task in enumerate(task_folder_output_list):
+        ref_masks = os.listdir(ref_task)
+        for mask_id in ref_masks:
+            mask = imageio.imread(ref_task / mask_id)
+            if t + 1 > len(task_folder_output_list):
+                break
+            for flo_task in task_folder_output_list[t + 1:]:
+                flo_mask = imageio.imread(ref_task / mask_id)
+                _, _, _, _, precision[(ref_task, flo_task)], recall[(ref_task, flo_task)] = set_metrics(mask, flo_mask)
 
-    Let T be a template pointcloud and F a flaoting point cloud.
-    Let p2p_dist be the Euclidian distance between two points t & f.
-    The Chamfer distance is:
-    CH_dist = 1/|T| * sum_t(p2p_dist(t, f))
+    print("\nPrecision (closer to 1.0 is better) between pairs of repetitions:")
+    print_tests_pairs(precision)
+    print("\nRecall (closer to 1.0 is better) between pairs of repetitions:")
+    print_tests_pairs(recall)
+    return
 
-    Parameters
-    ----------
-    ref_pcd : open3d.geometry.PointCloud
-        Reference point cloud.
-    flo_pcd : open3d.geometry.PointCloud
-        Floating point cloud.
-
-    Returns
-    -------
-    float
-        The chamfer distance.
-
-    """
-    p2p_dist = ref_pcd.compute_point_cloud_distance(flo_pcd)
-    chamfer_dist = 1 / len(ref_pcd.points) * sum(p2p_dist)
-    return chamfer_dist
 
 
 def compare_pointcloud(task_folder_output_list):
     """Use the chamfer distance to compare point-cloud for each unique pairs of repetition."""
     chamfer_dist = {}
+    fitness = {}
     # - Double loop to compare all unique pairs of repeats:
     for t, ref_task in enumerate(task_folder_output_list):
         # - Read the `PointCloud.ply` file
@@ -84,15 +89,20 @@ def compare_pointcloud(task_folder_output_list):
             flo_pcd = o3d.io.read_point_cloud(str(flo_pcd_file))
             # - Compute the Chamfer distance
             chamfer_dist[(ref_task, flo_task)] = chamfer_distance(ref_pcd, flo_pcd)
+            fitness[(ref_task, flo_task)] = point_cloud_registration_fitness(ref_pcd, flo_pcd)
 
-    print("Chamfer distance (lower is better) between pairs of repetitions:")
-    print(chamfer_dist)
+    print("\nChamfer distance (lower is better) between pairs of repetitions:")
+    print_tests_pairs(chamfer_dist)
+    print("\nFitness (closer to 1.0 is better) & residuals (inliner RMSE) between pairs of repetitions:")
+    print_tests_pairs(fitness)
     return
 
 
 def compare_trianglemesh_points(task_folder_output_list):
     """Use the chamfer distance to compare mesh vertice point-cloud for each unique pairs of repetition."""
     chamfer_dist = {}
+    surf_ratio = {}
+    vol_ratio = {}
     # - Double loop to compare all unique pairs of repeats:
     for t, ref_task in enumerate(task_folder_output_list):
         # - Read the `TriangleMesh.ply` file
@@ -110,9 +120,15 @@ def compare_trianglemesh_points(task_folder_output_list):
             flo_pcd = o3d.geometry.PointCloud(flo_mesh.vertices)
             # - Compute the Chamfer distance
             chamfer_dist[(ref_task, flo_task)] = chamfer_distance(ref_pcd, flo_pcd)
+            surf_ratio[(ref_task, flo_task)] = surface_ratio(ref_mesh, flo_mesh)
+            vol_ratio[(ref_task, flo_task)] = volume_ratio(ref_mesh, flo_mesh)
 
-    print("Chamfer distance (lower is better) between pairs of repetitions:")
-    print(chamfer_dist)
+    print("\nChamfer distance (lower is better) between pairs of repetitions:")
+    print_tests_pairs(chamfer_dist)
+    print("\nSurface ratio (closer to 1.0 is better) between pairs of repetitions:")
+    print_tests_pairs(surf_ratio)
+    print("\nVolume ratio (closer to 1.0 is better) between pairs of repetitions:")
+    print_tests_pairs(vol_ratio)
     return
 
 
@@ -139,8 +155,8 @@ def compare_curveskeleton_points(task_folder_output_list):
             # - Compute the Chamfer distance
             chamfer_dist[(ref_task, flo_task)] = chamfer_distance(ref_pcd, flo_pcd)
 
-    print("Chamfer distance (lower is better) between pairs of repetitions:")
-    print(chamfer_dist)
+    print("\nChamfer distance (lower is better) between pairs of repetitions:")
+    print_tests_pairs(chamfer_dist)
     return
 
 

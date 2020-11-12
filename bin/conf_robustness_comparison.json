@@ -16,7 +16,7 @@
 
     "Masks": {
         "prev_task" : "Undistorted",
-        "comp_func" : "compare_masks"
+        "comp_func" : "compare_binary_mask"
     },
 
     "Voxels": {
