@@ -27,9 +27,11 @@ logger = logging.getLogger(f'{filename}')
 CONF_FILE = os.path.join(dirname, "conf_robustness_comparison.json")
 
 
-def print_tests_pairs(pairs_dict: dict):
+def _tests_pairs(pairs_dict: dict):
+    tp = {}
     for pairs, test_result in pairs_dict.items():
-        print(f"- {pairs[0].parts[-2]} vs. {pairs[1].parts[-2]}: {test_result}")
+        tp[({pairs[0].parts[-2]}, {pairs[1].parts[-2]})] = test_result
+    return tp
 
 
 def save_data_repartition(data, data_type, db):
@@ -65,9 +67,11 @@ def compare_binary_mask(task_folder_output_list):
                 _, _, _, _, precision[(ref_task, flo_task)], recall[(ref_task, flo_task)] = set_metrics(mask, flo_mask)
 
     print("\nPrecision (closer to 1.0 is better) between pairs of repetitions:")
-    print_tests_pairs(precision)
+    precision = _tests_pairs(precision)
+    print(precision)
+    json.dump({"precision": precision}, out_log)
     print("\nRecall (closer to 1.0 is better) between pairs of repetitions:")
-    print_tests_pairs(recall)
+    _tests_pairs(recall)
     return
 
 
@@ -92,9 +96,9 @@ def compare_pointcloud(task_folder_output_list):
             fitness[(ref_task, flo_task)] = point_cloud_registration_fitness(ref_pcd, flo_pcd)
 
     print("\nChamfer distance (lower is better) between pairs of repetitions:")
-    print_tests_pairs(chamfer_dist)
+    _tests_pairs(chamfer_dist)
     print("\nFitness (closer to 1.0 is better) & residuals (inliner RMSE) between pairs of repetitions:")
-    print_tests_pairs(fitness)
+    _tests_pairs(fitness)
     return
 
 
@@ -124,11 +128,11 @@ def compare_trianglemesh_points(task_folder_output_list):
             vol_ratio[(ref_task, flo_task)] = volume_ratio(ref_mesh, flo_mesh)
 
     print("\nChamfer distance (lower is better) between pairs of repetitions:")
-    print_tests_pairs(chamfer_dist)
+    _tests_pairs(chamfer_dist)
     print("\nSurface ratio (closer to 1.0 is better) between pairs of repetitions:")
-    print_tests_pairs(surf_ratio)
+    _tests_pairs(surf_ratio)
     print("\nVolume ratio (closer to 1.0 is better) between pairs of repetitions:")
-    print_tests_pairs(vol_ratio)
+    _tests_pairs(vol_ratio)
     return
 
 
@@ -156,7 +160,7 @@ def compare_curveskeleton_points(task_folder_output_list):
             chamfer_dist[(ref_task, flo_task)] = chamfer_distance(ref_pcd, flo_pcd)
 
     print("\nChamfer distance (lower is better) between pairs of repetitions:")
-    print_tests_pairs(chamfer_dist)
+    _tests_pairs(chamfer_dist)
     return
 
 
@@ -354,7 +358,7 @@ def get_test_db_path(root_location, task_name):
     return pathlib.Path(root_location / f"{now_str}_rep_test_{task_name}")
 
 
-def create_test_db(root_location, init_scan_path, task_cfg, nb):
+def create_test_db(root_location, task_name):
     """
     Creates test db with `romidb` marker file in it.
 
@@ -362,30 +366,22 @@ def create_test_db(root_location, init_scan_path, task_cfg, nb):
     ----------
     root_location : pathlib.Path
         Root path where to create the test database.
-    init_scan_path : pathlib.Path
-        Path to the initial source of the scan dataset.
-    task_cfg : dict
-        configuration dict of the task to test
-    nb : int
-        Number of replicates of scan dataset to create.
+    task_name : str
+        Name of the task to test.
 
     Returns
     -------
     pathlib.Path
         Path to the test folder.
-    list(pathlib.Path)
-        List of paths to the test scans.
 
     """
     # Get the path of the ROMI database used to perform the test and creates the directory
-    test_db = get_test_db_path(root_location, task_cfg["name"])
+    test_db = get_test_db_path(root_location, task_name)
     test_db.mkdir(exist_ok=True)
     # Creates the `romidb` marker for active FSDB
     with open(pathlib.Path(test_db / "romidb"), mode='w'):
         pass
-    # Duplicate the scan dataset as many times as requested
-    test_scans = fill_test_db(test_db, init_scan_path, task_cfg, nb)
-    return test_db, test_scans
+    return test_db
 
 
 def run_pipe(scan_path, task_name, cfg_file):
@@ -411,22 +407,16 @@ def run_pipe(scan_path, task_name, cfg_file):
     subprocess.run(cmd, check=True)
 
 
-def compute_repeatability_test(init_scan_path, task_cfg, nb):
+def compute_repeatability_test(task_cfg):
     """
     Creates test folder with copies of the input scan and runs repeatability tests on it
 
     Parameters
     ----------
-    init_scan_path : pathlib.Path
-        contains information on database
     task_cfg : dict
         configuration dict of the task to test
-    nb : int
-        number of time the scan in replicated
 
     """
-    root_location = init_scan_path.parent.parent
-    test_db, test_scans_list = create_test_db(root_location, init_scan_path, task_cfg, nb)
     for copied_scan in test_scans_list:
         run_pipe(copied_scan, task_cfg["name"], task_cfg["config_file"])
     compare_task_output(test_scans_list, task_cfg["name"], task_cfg["previous_task"], test_db)
@@ -469,8 +459,9 @@ if __name__ == "__main__":
     """
     creates a test db at the root of the db linked to the scan to analyze
     """
-    DESC = """ROMI pipeline repeatability test.
-    Analyse the repeatability of a pipeline by:
+    DESC = """ROMI reconstruction & analysis pipeline repeatability test procedure.
+
+    Analyse the repeatability of a reconstruction & analysis pipeline by:
     1. duplicating the scan in a temporary folder (and cleaning it if necessary)
     2. running the pipeline up to the previous task of the task to test
     3. copying this result to a new database and replicate the dataset
@@ -496,11 +487,11 @@ if __name__ == "__main__":
     parser.add_argument("task", default="AnglesAndInternodes",
                         help=f"task to test, should be in: {', '.join(valid_tasks)}")
     parser.add_argument("config_file",
-                        help="path to the TOML config file for the pipeline")
+                        help="path to the TOML config file of the analysis pipeline")
     parser.add_argument("-n", "--replicate_number", default=2,
-                        help="number of replicate for a scan")
+                        help="number of replicate to use for repeatability analysis")
     parser.add_argument("-f", "--full_pipe", action="store_true", default=False,
-                        help="run the test for the whole geometric pipeline (similar to use of 'AnglesAndInternodes' as task)")
+                        help="run the analysis pipeline on each replicate independently")
 
     # - Parse the input agruments to variables:
     args = parser.parse_args()
@@ -514,4 +505,12 @@ if __name__ == "__main__":
         raise ValueError(f"UNKNOWN task: '{task2test}', choose among: {', '.join(valid_tasks)}")
 
     task_cfg = config_task(task2test, args.config_file, args.full_pipe, c[task2test]["prev_task"])
-    compute_repeatability_test(init_scan_path, task_cfg, replicate_number)
+
+    root_location = init_scan_path.parent.parent  # FSDB root location
+    test_db = create_test_db(root_location, task_cfg["name"])
+    # Duplicate the scan dataset as many times as requested
+    test_scans = fill_test_db(test_db, init_scan_path, task_cfg, replicate_number)
+
+    compute_repeatability_test(test_db, task_cfg, replicate_number)
+
+    # TODO: create a log file with the comparisons scores.
