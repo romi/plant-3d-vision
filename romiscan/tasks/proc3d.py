@@ -226,32 +226,41 @@ class ClusteredMesh(RomiTask):
         all_normals = np.asarray(x.normals)
         all_colors = np.asarray(x.colors)
 
+        # Get the list of semantic label ('flower', 'fruit', ...) attached to each points of the point cloud
         labels = self.input_file().get_metadata("labels")
         output_fileset = self.output().get()
+        # Loop on the unique set of labels:
         for l in set(labels):
             pcd = o3d.geometry.PointCloud()
+            # Get the index of points matching the semantic label
             idx = [i for i in range(len(labels)) if labels[i] == l]
+            # Select points, normals & colors for those point (to reconstruct a point cloud)
             points = all_points[idx, :]
             normals = all_normals[idx, :]
             colors = all_colors[idx, :]
-            if len(points > 0):
-                pcd.points = o3d.utility.Vector3dVector(points)
-                pcd.normals = o3d.utility.Vector3dVector(normals)
-                pcd.colors = o3d.utility.Vector3dVector(colors)
-                t, _ = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(pcd)
-                t.compute_adjacency_list()
-                k, cc, _ = t.cluster_connected_triangles()
-                k = np.asarray(k)
-                tri_np = np.asarray(t.triangles)
-                for j in range(len(cc)):
-                    newt = o3d.geometry.TriangleMesh(t.vertices,
-                                                     o3d.utility.Vector3iVector(tri_np[k == j, :]))
-                    newt.vertex_colors = t.vertex_colors
-                    newt.remove_unreferenced_vertices()
+            # Skip point cloud reconstruction if no points corresponding to label
+            if len(points == 0):
+                logger.critical(f"No points found for label: '{l}'")
+                continue
+            # Reconstruct colored point cloud with normals:
+            pcd.points = o3d.utility.Vector3dVector(points)
+            pcd.normals = o3d.utility.Vector3dVector(normals)
+            pcd.colors = o3d.utility.Vector3dVector(colors)
+            # Mesh the point cloud (built with the points corresponding to the label)
+            t, _ = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(pcd)
+            t.compute_adjacency_list()
+            k, cc, _ = t.cluster_connected_triangles()
+            k = np.asarray(k)
+            tri_np = np.asarray(t.triangles)
+            for j in range(len(cc)):
+                newt = o3d.geometry.TriangleMesh(t.vertices,
+                                                 o3d.utility.Vector3iVector(tri_np[k == j, :]))
+                newt.vertex_colors = t.vertex_colors
+                newt.remove_unreferenced_vertices()
 
-                    f = output_fileset.create_file("%s_%03d" % (l, j))
-                    io.write_triangle_mesh(f, newt)
-                    f.set_metadata("label", l)
+                f = output_fileset.create_file("%s_%03d" % (l, j))
+                io.write_triangle_mesh(f, newt)
+                f.set_metadata("label", l)
 
 
 class OrganSegmentation(RomiTask):
