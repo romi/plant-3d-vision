@@ -71,6 +71,10 @@ def surface_ratio(ref_tmesh, flo_tmesh):
     flo_tmesh : open3d.geometry.TriangleMesh
         Target mesh for surface comparison.
 
+    Notes
+    -----
+    Requires ``open3d>=0.10.0``.
+
     Returns
     -------
     float
@@ -90,6 +94,10 @@ def volume_ratio(ref_tmesh, flo_tmesh):
         Reference mesh for volume comparison.
     flo_tmesh : open3d.geometry.TriangleMesh
         Target mesh for volume comparison.
+
+    Notes
+    -----
+    Requires ``open3d>=0.11.0``.
 
     Returns
     -------
