@@ -33,7 +33,7 @@ def chamfer_distance(ref_pcd, flo_pcd):
 
 
 def point_cloud_registration_fitness(ref_pcd, flo_pcd, max_distance=2):
-    res = o3d.registration.evaluate_registration(ref_pcd, flo_pcd, max_distance)
+    res = o3d.pipelines.registration.evaluate_registration(ref_pcd, flo_pcd, max_distance)
     return res.fitness, res.inlier_rmse
 
 

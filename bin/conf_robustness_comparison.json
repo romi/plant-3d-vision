@@ -46,6 +46,6 @@
 
     "AnglesAndInternodes": {
         "prev_task" : "TreeGraph",
-        "comp_func" : "compare_anglesAndInternodes"
+        "comp_func" : "angles_and_internodes_comparison"
     }
 }
