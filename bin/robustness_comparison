@@ -669,7 +669,7 @@ if __name__ == "__main__":
     valid_tasks = list(c.keys())
 
     # TODO: an option to set a reference (or would that be the job of the Evaluation tasks?!)
-    # TODO: add 'output_folder' argument to re-use previous teromidbMARKER_FILE_NAMEst DB.
+    # TODO: use the `pipeline.toml` to defines the previous tasks ?
 
     parser = argparse.ArgumentParser(description=DESC)
 
