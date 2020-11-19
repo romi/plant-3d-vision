@@ -298,7 +298,7 @@ class OrganSegmentation(RomiTask):
             A point cloud containing only the points associated to the selected label.
         """
         # Get the index of points matching the semantic label
-        idx_mask = np.where(labels == label)[0]
+        idx_mask = np.where(np.array(labels) == label)[0]
         # Skip point cloud reconstruction if no points corresponding to label
         n_points = sum(idx_mask)
         if n_points == 0:
