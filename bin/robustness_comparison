@@ -9,12 +9,20 @@ import shutil
 import subprocess
 import tempfile
 from collections import Counter
+from os.path import splitext
 
 import imageio
 import matplotlib.pyplot as plt
 import numpy as np
 import logging
 import open3d as o3d
+from romidata import FSDB
+from romidata.fsdb import LOCK_FILE_NAME
+from romidata.fsdb import MARKER_FILE_NAME
+from romidata.io import read_image
+from romidata.io import read_json
+from romidata.io import read_point_cloud
+from romidata.io import read_triangle_mesh
 from romiscan.metrics import chamfer_distance
 from romiscan.metrics import point_cloud_registration_fitness
 from romiscan.metrics import set_metrics
@@ -25,13 +33,6 @@ dirname, filename = os.path.split(os.path.abspath(__file__))
 logger = logging.getLogger(f'{filename}')
 
 CONF_FILE = os.path.join(dirname, "conf_robustness_comparison.json")
-
-
-def _tests_pairs(pairs_dict: dict):
-    tp = {}
-    for pairs, test_result in pairs_dict.items():
-        tp[({pairs[0].parts[-2]}, {pairs[1].parts[-2]})] = test_result
-    return tp
 
 
 def save_data_repartition(data, data_type, db):
@@ -54,119 +55,294 @@ def save_data_repartition(data, data_type, db):
     fig.savefig(db / f"repeat_results_{data_type}.png")
 
 
-def compare_binary_mask(task_folder_output_list):
-    precision, recall = {}, {}
-    for t, ref_task in enumerate(task_folder_output_list):
-        ref_masks = os.listdir(ref_task)
-        for mask_id in ref_masks:
-            mask = imageio.imread(ref_task / mask_id)
-            if t + 1 > len(task_folder_output_list):
-                break
-            for flo_task in task_folder_output_list[t + 1:]:
-                flo_mask = imageio.imread(ref_task / mask_id)
-                _, _, _, _, precision[(ref_task, flo_task)], recall[(ref_task, flo_task)] = set_metrics(mask, flo_mask)
+def _get_task_fileset(scan_dataset, task_name):
+    """Returns the `Fileset` object produced by `task_name` in given `scan_dataset`.
 
-    print("\nPrecision (closer to 1.0 is better) between pairs of repetitions:")
-    precision = _tests_pairs(precision)
-    print(precision)
-    json.dump({"precision": precision}, out_log)
-    print("\nRecall (closer to 1.0 is better) between pairs of repetitions:")
-    _tests_pairs(recall)
+    Parameters
+    ----------
+    scan_dataset : romidata.FSDB.Scan
+        scan dataset that should contain the unique output of `task_name`
+    task_name : string
+        name of the task to test
+
+    Returns
+    -------
+    romidata.FSDB.Scan.Fileset
+        The `Fileset` object produced by `task_name` in given `scan_dataset`
+
+    Raises
+    ------
+    AssertionError
+        If there is more than one `Fileset` object matching the task.
+        This mean that this task was run several times with different parameters.
+
+    """
+    task_filesets = [fs for fs in scan_dataset.filesets if fs.id.startswith(task_name)]
+    try:
+        assert len(task_filesets) == 1
+    except AssertionError:
+        msg = f"There is more than one occurrence of the task {task_name}:\n"
+        msg += "  - " + "  - ".join([tfs.id for tfs in task_filesets])
+        raise AssertionError(msg)
+    return task_filesets[0]
+
+
+def _get_files(scan_dataset, task_name, unique=False):
+    """Returns the `File` object produced by `task_name` in given `scan_dataset`.
+
+    Parameters
+    ----------
+    scan_dataset : romidata.FSDB.Scan
+        scan dataset that should contain the unique output of `task_name`
+    task_name : string
+        name of the task to test
+    unique : bool, optional
+        if ``True``, assert that there is only one `File` in the `Fileset`
+
+    Returns
+    -------
+    list(romidata.FSDB.Scan.Fileset.File)
+        The `File` objects produced by `task_name` in given `scan_dataset`
+
+    Raises
+    ------
+    AssertionError
+        If there is more than one `File` object in the task `Fileset`, requires ``unique=True``.
+
+    """
+    # Get the `Fileset` corresponding to the replicated task:
+    fs = _get_task_fileset(scan_dataset, task_name)
+    # Get the list of `File` ids (task outputs)
+    f_list = [f.id for f in fs.files]
+    if unique:
+        try:
+            assert len(f_list) == 1
+        except AssertionError:
+            raise AssertionError("This method can only compare tasks that output a single point-cloud!")
+    # - Return the `File` objects:
+    return [fs.get_file(f) for f in f_list]
+
+
+def compare_binary_mask(db, task_name):
+    """Use set metrics to compare binary masks for each unique pairs of repetition.
+
+    Parameters
+    ----------
+    db : romidata.FSDB
+        Local ROMI database instance with the replicated scan datasets
+    task_name : string
+        name of the task to test
+
+    """
+    precision, recall = {}, {}
+    mean_precision, mean_recall = {}, {}
+    median_precision, median_recall = {}, {}
+    # List the duplicated `Scan` datasets:
+    scans_list = [scan for scan in db.get_scans()]
+    logger.info(f"Comparing {task_name} output for replicated scans list: {[s.id for s in scans_list]}")
+    # - Double loop to compare all unique pairs of repeats:
+    for t, ref_scan in enumerate(scans_list):
+        # Get `Fileset` with mask files:
+        ref_fileset = _get_task_fileset(ref_scan, task_name)
+        if t + 1 > len(scans_list):
+            break  # all unique pairs to compare are done! 
+        for flo_scan in scans_list[t + 1:]:
+            # Get `Fileset` with mask files:
+            flo_fileset = _get_task_fileset(flo_scan, task_name)
+            # Compare the two mask files list to get the list of 'same files" (ie. with same name)
+            ref_dir = pathlib.Path(db.basedir, ref_scan.id, ref_fileset.id)
+            flo_dir = pathlib.Path(db.basedir, flo_scan.id, flo_fileset.id)
+            same_files = filecmp.dircmp(ref_dir, flo_dir).same_files
+            # Remove the extension as the `Fileset.get_file()` method does not accept it!
+            same_files = [splitext(sf)[0] for sf in same_files]
+            # Dictionary key made of the two repeat names:
+            k = f"{ref_scan.id} - {flo_scan.id}"
+            precision[k], recall[k] = {}, {}
+            # For each file with the same name compute some set metrics:
+            for sf in same_files:
+                # Read the two mask files:
+                ref_mask = read_image(ref_fileset.get_file(sf))
+                flo_mask = read_image(flo_fileset.get_file(sf))
+                # Compute set metrics for each pair of masks:
+                _, _, _, _, p, r = set_metrics(ref_mask, flo_mask)
+                precision[k][sf] = p
+                recall[k][sf] = r
+            # Compute an average & the median for the metrics:
+            mean_precision[k] = np.mean(list(precision[k].values()))
+            mean_recall[k] = np.mean(list(recall[k].values()))
+            median_precision[k] = np.median(list(precision[k].values()))
+            median_recall[k] = np.median(list(recall[k].values()))
+
+    print("\nAverage precision (closer to 1.0 is better) between pairs of repetitions:")
+    print(mean_precision)
+    print("\nAverage recall (closer to 1.0 is better) between pairs of repetitions:")
+    print(mean_recall)
+    print("\nMedian precision (closer to 1.0 is better) between pairs of repetitions:")
+    print(median_precision)
+    print("\nMedian recall (closer to 1.0 is better) between pairs of repetitions:")
+    print(median_recall)
+
+    # Write a JSON summary file of the comparison:
+    with open(pathlib.Path(db.basedir) / f'{task_name}_comparison.json', 'w') as out_file:
+        json.dump({
+            'mean precision': mean_precision, 'mean recall': mean_recall,
+            'median precision': median_precision, 'median recall': median_recall,
+            'precision': precision, 'recall': recall
+        }, out_file, indent=2)
+
     return
 
 
+def compare_pointcloud(db, task_name):
+    """Use the chamfer distance to compare point-cloud for each unique pairs of repetition.
 
-def compare_pointcloud(task_folder_output_list):
-    """Use the chamfer distance to compare point-cloud for each unique pairs of repetition."""
+    Parameters
+    ----------
+    db : romidata.FSDB
+        Local ROMI database instance with the replicated scan datasets
+    task_name : string
+        name of the task to test
+
+    """
     chamfer_dist = {}
     fitness = {}
+    # List the duplicated `Scan` datasets:
+    scans_list = [scan for scan in db.get_scans()]
+    logger.info(f"Comparing {task_name} output for replicated scans list: {[s.id for s in scans_list]}")
     # - Double loop to compare all unique pairs of repeats:
-    for t, ref_task in enumerate(task_folder_output_list):
+    for t, ref_scan in enumerate(scans_list):
         # - Read the `PointCloud.ply` file
-        ref_pcd_file = ref_task / "PointCloud.ply"
-        ref_pcd = o3d.io.read_point_cloud(str(ref_pcd_file))
-        if t + 1 > len(task_folder_output_list):
-            break
-        for flo_task in task_folder_output_list[t + 1:]:
+        ref_pcd_file = _get_files(ref_scan, task_name, unique=True)[0]
+        ref_pcd = read_point_cloud(ref_pcd_file)
+        if t + 1 > len(scans_list):
+            break  # all unique pairs to compare are done! 
+        for flo_scan in scans_list[t + 1:]:
             # - Read the `PointCloud.ply` file
-            flo_pcd_file = flo_task / "PointCloud.ply"
-            flo_pcd = o3d.io.read_point_cloud(str(flo_pcd_file))
+            flo_pcd_file = _get_files(flo_scan, task_name, unique=True)[0]
+            flo_pcd = read_point_cloud(flo_pcd_file)
+            k = f"{ref_scan.id} - {flo_scan.id}"
             # - Compute the Chamfer distance
-            chamfer_dist[(ref_task, flo_task)] = chamfer_distance(ref_pcd, flo_pcd)
-            fitness[(ref_task, flo_task)] = point_cloud_registration_fitness(ref_pcd, flo_pcd)
+            chamfer_dist[k] = chamfer_distance(ref_pcd, flo_pcd)
+            # - Compute the registration fitness & residuals
+            fitness[k] = point_cloud_registration_fitness(ref_pcd, flo_pcd)
 
+    # Print result to terminal:
     print("\nChamfer distance (lower is better) between pairs of repetitions:")
-    _tests_pairs(chamfer_dist)
+    print(chamfer_dist)
+    # Print result to terminal:
     print("\nFitness (closer to 1.0 is better) & residuals (inliner RMSE) between pairs of repetitions:")
-    _tests_pairs(fitness)
+    print(fitness)
+
+    # Write a JSON summary file of the comparison:
+    with open(pathlib.Path(db.basedir) / f'{task_name}_comparison.json', 'w') as out_file:
+        json.dump({'chamfer distances': chamfer_dist, 'fitness & residuals': fitness}, out_file)
+
     return
 
 
-def compare_trianglemesh_points(task_folder_output_list):
-    """Use the chamfer distance to compare mesh vertice point-cloud for each unique pairs of repetition."""
+def compare_trianglemesh_points(db, task_name):
+    """Use the chamfer distance to compare mesh vertices point-cloud for each unique pairs of repetition.
+
+    Parameters
+    ----------
+    db : romidata.FSDB
+        Local ROMI database instance with the replicated scan datasets
+    task_name : string
+        name of the task to test
+
+    """
     chamfer_dist = {}
     surf_ratio = {}
     vol_ratio = {}
+    # List the duplicated `Scan` datasets:
+    scans_list = [scan for scan in db.get_scans()]
+    logger.info(f"Comparing {task_name} output for replicated scans list: {[s.id for s in scans_list]}")
     # - Double loop to compare all unique pairs of repeats:
-    for t, ref_task in enumerate(task_folder_output_list):
+    for t, ref_scan in enumerate(scans_list):
         # - Read the `TriangleMesh.ply` file
-        ref_mesh_file = ref_task / "TriangleMesh.ply"
-        ref_mesh = o3d.io.read_triangle_mesh(str(ref_mesh_file))
+        ref_mesh_file = _get_files(ref_scan, task_name, unique=True)[0]
+        ref_mesh = read_triangle_mesh(ref_mesh_file)
         # - Extract a PointCloud from the mesh vertices
         ref_pcd = o3d.geometry.PointCloud(ref_mesh.vertices)
-        if t + 1 > len(task_folder_output_list):
-            break
-        for flo_task in task_folder_output_list[t + 1:]:
+        if t + 1 > len(scans_list):
+            break  # all unique pairs to compare are done! 
+        for flo_scan in scans_list[t + 1:]:
             # - Read the `TriangleMesh.ply` file
-            flo_mesh_file = flo_task / "TriangleMesh.ply"
-            flo_mesh = o3d.io.read_triangle_mesh(str(flo_mesh_file))
+            flo_mesh_file = _get_files(flo_scan, task_name, unique=True)[0]
+            flo_mesh = read_triangle_mesh(flo_mesh_file)
             # - Extract a PointCloud from the mesh vertices
             flo_pcd = o3d.geometry.PointCloud(flo_mesh.vertices)
+            k = f"{ref_scan.id} - {flo_scan.id}"
             # - Compute the Chamfer distance
-            chamfer_dist[(ref_task, flo_task)] = chamfer_distance(ref_pcd, flo_pcd)
-            surf_ratio[(ref_task, flo_task)] = surface_ratio(ref_mesh, flo_mesh)
-            vol_ratio[(ref_task, flo_task)] = volume_ratio(ref_mesh, flo_mesh)
+            chamfer_dist[k] = chamfer_distance(ref_pcd, flo_pcd)
+            surf_ratio[k] = surface_ratio(ref_mesh, flo_mesh)
+            vol_ratio[k] = volume_ratio(ref_mesh, flo_mesh)
 
     print("\nChamfer distance (lower is better) between pairs of repetitions:")
-    _tests_pairs(chamfer_dist)
+    print(chamfer_dist)
     print("\nSurface ratio (closer to 1.0 is better) between pairs of repetitions:")
-    _tests_pairs(surf_ratio)
+    print(surf_ratio)
     print("\nVolume ratio (closer to 1.0 is better) between pairs of repetitions:")
-    _tests_pairs(vol_ratio)
+    print(vol_ratio)
+
+    # Write a JSON summary file of the comparison:
+    with open(pathlib.Path(db.basedir) / f'{task_name}_comparison.json', 'w') as out_file:
+        json.dump({
+            'chamfer distances': chamfer_dist,
+            'surface ratio': surf_ratio,
+            'volume ratio': vol_ratio
+        }, out_file)
+
     return
 
 
-def compare_curveskeleton_points(task_folder_output_list):
-    """Use the chamfer distance to compare point-cloud for each unique pairs of repetition."""
+def compare_curveskeleton_points(db, task_name):
+    """Use the chamfer distance to compare point-cloud for each unique pairs of repetition.
+
+    Parameters
+    ----------
+    db : romidata.FSDB
+        Local ROMI database instance with the replicated scan datasets
+    task_name : string
+        name of the task to test
+
+    """
     chamfer_dist = {}
+    # List the duplicated `Scan` datasets:
+    scans_list = [scan for scan in db.get_scans()]
+    logger.info(f"Comparing {task_name} output for replicated scans list: {[s.id for s in scans_list]}")
     # - Double loop to compare all unique pairs of repeats:
-    for t, ref_task in enumerate(task_folder_output_list):
+    for t, ref_scan in enumerate(scans_list):
         # - Read the `CurveSkeleton.json` file
-        ref_mesh_file = ref_task / "CurveSkeleton.json"
-        with open(str(ref_mesh_file), 'r') as jf:
-            ref_mesh = json.load(jf)
+        ref_json_file = _get_files(ref_scan, task_name, unique=True)[0]
+        ref_json = read_json(ref_json_file)
         # - Extract a PointCloud from the skeleton vertices
-        ref_pcd = o3d.geometry.PointCloud(ref_mesh["points"])
-        if t + 1 > len(task_folder_output_list):
-            break
-        for flo_task in task_folder_output_list[t + 1:]:
+        ref_pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(ref_json["points"]))
+        if t + 1 > len(scans_list):
+            break  # all unique pairs to compare are done!
+        for flo_scan in scans_list[t + 1:]:
             # - Read the `CurveSkeleton.json` file
-            flo_mesh_file = flo_task / "CurveSkeleton.json"
-            with open(str(flo_mesh_file), 'r') as jf:
-                flo_mesh = json.load(jf)
+            flo_json_file = _get_files(flo_scan, task_name, unique=True)[0]
+            flo_json = read_json(flo_json_file)
             # - Extract a PointCloud from the skeleton vertices
-            flo_pcd = o3d.geometry.PointCloud(flo_mesh["points"])
+            flo_pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(flo_json["points"]))
+            k = f"{ref_scan.id} - {flo_scan.id}"
             # - Compute the Chamfer distance
-            chamfer_dist[(ref_task, flo_task)] = chamfer_distance(ref_pcd, flo_pcd)
+            chamfer_dist[k] = chamfer_distance(ref_pcd, flo_pcd)
 
     print("\nChamfer distance (lower is better) between pairs of repetitions:")
-    _tests_pairs(chamfer_dist)
+    print(chamfer_dist)
+
+    # Write a JSON summary file of the comparison:
+    with open(pathlib.Path(db.basedir) / f'{task_name}_comparison.json', 'w') as out_file:
+        json.dump({'chamfer distances': chamfer_dist}, out_file)
+
     return
 
 
-def angles_and_internodes_comparison(task_folder_output_list, test_db):
-    """
-    Coarse comparison of sequences of angles and internodes
+def angles_and_internodes_comparison(db, task_name):
+    """Coarse comparison of sequences of angles and internodes.
+
     Prints a dict containing the number of scans for each number of organs indexed, ex : {12:4, 14:6} (4 scans with 12
     organs recognized and 6 with 14 organs)
     For the biggest number of scans with same number of organs, creates plots of the repartition of angles (and
@@ -174,24 +350,29 @@ def angles_and_internodes_comparison(task_folder_output_list, test_db):
 
     Parameters
     ----------
-    task_folder_output_list : pathlib.Path list
-        list of task output path to compare
-    test_db : pathlib.Path
-        path to put the potential results files
+    db : romidata.FSDB
+        Local ROMI database instance with the replicated scan datasets
+    task_name : string
+        name of the task to test
 
     """
     angles_and_internodes = {}
     nb_organs = []
-    ae_file_list = [f / "AnglesAndInternodes.json" for f in task_folder_output_list]
-    for ae_file in ae_file_list:
-        with open(ae_file) as f:
-            ae_list = json.load(f)
-            angles_and_internodes[str(ae_file.parent.parent)[-1]] = {
-                "angles": np.array(ae_list["angles"]) * 180 / np.pi,
-                "internodes": ae_list["internodes"],
-                "nb_organs": len(ae_list["angles"])
-            }
-            nb_organs.append(len(ae_list["angles"]))
+    # List the duplicated `Scan` datasets:
+    scans_list = [scan for scan in db.get_scans()]
+    logger.info(f"Comparing {task_name} output for replicated scans list: {[s.id for s in scans_list]}")
+    # - Load all JSON files with angles and internodes values:
+    for t, scan in enumerate(scans_list):
+        # - Read the `AnglesAndInternodes.json` file
+        json_file = _get_files(scan, task_name, unique=True)[0]
+        ae_dict = read_json(json_file)
+        angles_and_internodes[scan.id] = {
+            "angles": np.array(ae_dict["angles"]) * 180 / np.pi,
+            "internodes": ae_dict["internodes"],
+            "nb_organs": len(ae_dict["angles"])
+        }
+        nb_organs.append(len(ae_dict["angles"]))
+
     counter_nb_organs = Counter(nb_organs)
     print(" ** comparison results ** ")
     print("number of scans with the same nb of organs: ", counter_nb_organs)
@@ -200,84 +381,85 @@ def angles_and_internodes_comparison(task_folder_output_list, test_db):
               if angles_and_internodes[scan_num]["nb_organs"] == max_occurrence_nb_organs]
     internodes = [angles_and_internodes[scan_num]["internodes"] for scan_num in angles_and_internodes
                   if angles_and_internodes[scan_num]["nb_organs"] == max_occurrence_nb_organs]
-    save_data_repartition(angles, "angles", test_db)
-    save_data_repartition(internodes, "internodes", test_db)
+    save_data_repartition(angles, "angles", pathlib.Path(db.basedir))
+    save_data_repartition(internodes, "internodes", pathlib.Path(db.basedir))
 
 
-def file_by_file_comparison(task_folder_output_list):
+def file_by_file_comparison(db, task_name):
     """
     Compares task folder output file by file, print result
 
     Parameters
     ----------
-    task_folder_output_list : pathlib.Path list
-        list of task output path to compare
-
-    """
-    other_folders = task_folder_output_list[:]
-    identical_folders_list = []
-    for current_task_output in task_folder_output_list:
-        if current_task_output in other_folders:
-            current_identical_folder_list = [f for f in other_folders
-                                             if not len(filecmp.dircmp(str(current_task_output), str(f)).diff_files)]
-            identical_folders_list.append(current_identical_folder_list)
-            other_folders = list(set(other_folders) - set(current_identical_folder_list))
-        else:
-            pass
-    print(" ** comparison results ** ")
-    print(f"compare_file {identical_folders_list}")
-    print(np.array(identical_folders_list).shape)
-
-
-def get_task_folder(scan, task_name):
-    """
-    Look for the output folder of a task in the files.json file of a scan returns name as a string of a task output folder
-
-    Parameters
-    ----------
-    scan
-    task_name
-
-    Returns
-    -------
-
-    """
-    files = json.load(open(str(scan / "files.json")))
-    task_folders = [d["id"] for d in files["filesets"] if task_name in d["id"]]
-    return task_folders[0]  # shame ...
-
-
-def compare_task_output(scan_list, task_name, previous_task, test_db):
-    """
-    Method to compare outputs of a task.
-
-    Parameters
-    ----------
-    scan_list : list(pathlib.Path)
-        List of paths to the test scans.
+    db : romidata.FSDB
+        Local ROMI database instance with the replicated scan datasets
     task_name : string
         name of the task to test
-    previous_task : string
-        name of the task which is the comparison point
-    test_db : pathlib.Path
-        Path to the test folder.
+
+    """
+    logger.info("Performing file-by-file comparisons...")
+    fcmp = {}
+    scans_list = [scan for scan in db.get_scans()]
+    for t, ref_scan in enumerate(scans_list):
+        if t + 1 > len(scans_list):
+            break
+        for flo_scan in scans_list[t + 1:]:
+            ref_dir = pathlib.Path(db.basedir, ref_scan.id, _get_task_fileset(ref_scan, task_name).id)
+            flo_dir = pathlib.Path(db.basedir, flo_scan.id, _get_task_fileset(flo_scan, task_name).id)
+            n_diff = len(filecmp.dircmp(ref_dir, flo_dir).diff_files)
+            n_same = len(filecmp.dircmp(ref_dir, flo_dir).same_files)
+            if n_same == 0:
+                similarity = 0
+            else:
+                similarity = (1 - n_diff / n_same) * 100
+            fcmp[f"{ref_scan.id} - {flo_scan.id}"] = similarity
+
+    # Print result to terminal:
+    print("File-by-file comparison (similarity percentage) between pairs of repetitions:")
+    print(fcmp)
+    print()
+
+    # Write a JSON summary file of the comparison:
+    with open(pathlib.Path(db.basedir) / 'filebyfile_comparison.json', 'w') as out_file:
+        json.dump({'Similarity (%)': fcmp}, out_file)
+
+
+def compare_task_output(db, task_name, independant_tests=False):
+    """
+    Method to compare outputs of a task on replicated datasets.
+
+    Parameters
+    ----------
+    db : romidata.FSDB
+        Local ROMI database instance with the replicated scan datasets
+    task_name : string
+        name of the task to test
+    independant_tests : bool
+        if ``True`` indicate all tasks were performed independently and will be evaluated, else only evaluate `task_name`
 
     Notes
     -----
     The behaviour of this method is configured by the JSON file `CONF_FILE`.
 
     """
-    task_folder = get_task_folder(scan_list[0], task_name)
-    folder_task_list = [scan_path / task_folder for scan_path in scan_list]
-    if previous_task is None and task_name == "AnglesAndInternodes" and len(folder_task_list):
-        angles_and_internodes_comparison(folder_task_list, test_db)
-    elif len(folder_task_list):
-        file_by_file_comparison(folder_task_list)
-    else:
-        print(f"Output files of task {task_name} for db {str(scan_list[0].parent)} are missing")
-    # - Load the metric from the JSON configuration file
+    # List paths where tested task output(s) should be located
+    folder_task_list = [pathlib.Path(db.basedir, scan.id, _get_task_fileset(scan, task_name).id) for scan in db.get_scans()]
+    if len(folder_task_list) == 0:
+        raise IOError(f"Output files of task {task_name} for db {db.basedir} are missing")
+    # - Performs file-by-file comparisons for the selected task:
+    file_by_file_comparison(db, task_name)
+    # - Load the metric for the selected task from the JSON configuration file:
     c = json.load(open(CONF_FILE))
-    eval(c[task_name]["comp_func"] + "(folder_task_list)")
+    # - Evaluate all tasks if independent tests, else evaluate only tested task:
+    if independant_tests:
+        for task in c.keys():
+            try:
+                eval(c[task]["comp_func"] + "(db, task)")
+                print()  # make blocks of evaluation task summary clearer!
+            except:
+                pass
+    else:
+        eval(c[task_name]["comp_func"] + "(db, task_name)")
 
 
 def fill_test_db(test_db, init_scan_path, task_cfg, nb):
@@ -291,7 +473,7 @@ def fill_test_db(test_db, init_scan_path, task_cfg, nb):
     test_db : pathlib.Path
         name of the folder into which copy the tests scans
     init_scan_path : pathlib.Path
-        path of the initial scan
+        path of the initial scan dataset to use for repeatability test
     task_cfg : dict
         name of the configuration file to run the pipeline
     nb : int
@@ -300,7 +482,7 @@ def fill_test_db(test_db, init_scan_path, task_cfg, nb):
     Returns
     -------
     list
-        list of pathlib.Path of created scans
+        list of pathlib.Path of created scan datasets
 
     """
     scan_name = init_scan_path.name
@@ -312,7 +494,7 @@ def fill_test_db(test_db, init_scan_path, task_cfg, nb):
         tmp_scan_folder = pathlib.Path(tmp_path / f"tmp_{scan_name}")
         logger.info(f"Created a temporary folder '{tmp_scan_folder}'")
         # Creates the `romidb` marker for active FSDB
-        with open(pathlib.Path(tmp_path / "romidb"), 'w'):
+        with open(pathlib.Path(tmp_path / MARKER_FILE_NAME), 'w'):
             pass
         logger.info("Duplicating the scan dataset to a temporary folder...")
         # Duplicate the initial scan dataset to the temporary folder
@@ -337,7 +519,7 @@ def fill_test_db(test_db, init_scan_path, task_cfg, nb):
     return created_copied_scans
 
 
-def get_test_db_path(root_location, task_name):
+def create_test_db_path(root_location, task_name):
     """
     Generate test database name, ex: 20200803124841_rep_test_TriangleMesh
 
@@ -376,17 +558,17 @@ def create_test_db(root_location, task_name):
 
     """
     # Get the path of the ROMI database used to perform the test and creates the directory
-    test_db = get_test_db_path(root_location, task_name)
+    test_db = create_test_db_path(root_location, task_name)
     test_db.mkdir(exist_ok=True)
-    # Creates the `romidb` marker for active FSDB
-    with open(pathlib.Path(test_db / "romidb"), mode='w'):
-        pass
+    # Creates the marker file to get an active romidata.FSDB:
+    marker_file = test_db / MARKER_FILE_NAME
+    marker_file.touch()
     return test_db
 
 
 def run_pipe(scan_path, task_name, cfg_file):
     """
-    run confiured pipeline for given task on a scan
+    run configured pipeline for given task on a scan
 
     Parameters
     ----------
@@ -402,24 +584,34 @@ def run_pipe(scan_path, task_name, cfg_file):
 
     """
     logger.info(f"Executing tasks '{task_name}' on scan dataset '{str(scan_path)}'.")
-    # TODO: use luigi.build() instead of subprocess.run call
+    # TODO: use luigi.build() instead of subprocess.run call ?
     cmd = ["romi_run_task", "--config", cfg_file, task_name, str(scan_path), "--local-scheduler"]
     subprocess.run(cmd, check=True)
+    return
 
 
-def compute_repeatability_test(task_cfg):
+def compute_repeatability_test(db, task_cfg):
     """
     Creates test folder with copies of the input scan and runs repeatability tests on it
 
     Parameters
     ----------
+    db : romidata.FSDB
+        Local ROMI database instance with the replicated scan datasets
     task_cfg : dict
         configuration dict of the task to test
 
     """
-    for copied_scan in test_scans_list:
-        run_pipe(copied_scan, task_cfg["name"], task_cfg["config_file"])
-    compare_task_output(test_scans_list, task_cfg["name"], task_cfg["previous_task"], test_db)
+    scans_list = [scan.id for scan in db.get_scans()]
+    logger.info(f"Repeating task {task_cfg['name']} on replicated scans list: {scans_list}")
+    test_db.disconnect()  # to allow the luigi pipeline to run!
+    # Execute the task to test for all scans in the test database:
+    for copied_scan in scans_list:
+        copied_scan_path = pathlib.Path(db.basedir, copied_scan)
+        run_pipe(copied_scan_path, task_cfg["name"], task_cfg["config_file"])
+    # Reconnect to the DB before leaving...
+    test_db.connect()
+    return
 
 
 def config_task(task_name, cfg_file, full_pipe, previous_task):
@@ -470,15 +662,14 @@ if __name__ == "__main__":
 
     Comparison can be done at the scale of the files but also with metrics if a reference can be set.
     
-    To create fully independent tests, *i.e.* we the whole pipeline in run up to the task to test on each replicate.
-    
+    To create fully independent tests, we run the pipeline up to the task to test on each replicate.
     """
     # - Load the JSON config file of the script:
     c = json.load(open(CONF_FILE))
     valid_tasks = list(c.keys())
 
     # TODO: an option to set a reference (or would that be the job of the Evaluation tasks?!)
-    # TODO: add 'output_folder' argument to re-use previous test DB.
+    # TODO: add 'output_folder' argument to re-use previous teromidbMARKER_FILE_NAMEst DB.
 
     parser = argparse.ArgumentParser(description=DESC)
 
@@ -492,6 +683,14 @@ if __name__ == "__main__":
                         help="number of replicate to use for repeatability analysis")
     parser.add_argument("-f", "--full_pipe", action="store_true", default=False,
                         help="run the analysis pipeline on each replicate independently")
+    parser.add_argument("-db", '--test_database',
+                        help="test database location to use. Use at your own risks!")
+    # ->Test database path exists:
+    #   - NO: create the directory & use it instead of auto-generated path
+    #   - YES:
+    #     ->Test database contain scan datasets
+    #       - NO: use it instead of auto-generated path
+    #       - YES: use number of scans as replicate number & compute repeatability test
 
     # - Parse the input agruments to variables:
     args = parser.parse_args()
@@ -504,13 +703,37 @@ if __name__ == "__main__":
     if task2test not in valid_tasks:
         raise ValueError(f"UNKNOWN task: '{task2test}', choose among: {', '.join(valid_tasks)}")
 
+    # - Task configuration
     task_cfg = config_task(task2test, args.config_file, args.full_pipe, c[task2test]["prev_task"])
 
-    root_location = init_scan_path.parent.parent  # FSDB root location
-    test_db = create_test_db(root_location, task_cfg["name"])
-    # Duplicate the scan dataset as many times as requested
-    test_scans = fill_test_db(test_db, init_scan_path, task_cfg, replicate_number)
+    # - 'test database' setup & dataset duplication:
+    if args.test_database is not None:
+        logger.info(f"Got a test database location as argument: '{args.test_database}'.")
+        test_db_path = pathlib.Path(args.test_database)
+        test_db_path.mkdir(exist_ok=True)
+    else:
+        # test db is created next to db containing original scan dataset
+        root_location = init_scan_path.parent.parent
+        test_db_path = create_test_db(root_location, task_cfg["name"])
 
-    compute_repeatability_test(test_db, task_cfg, replicate_number)
+    scan_replicates = list([idir.stem for idir in test_db_path.iterdir() if idir.is_dir()])
+    n_replicates = len(scan_replicates)
+    # Case without/with scan datasets in the test database root folder
+    if n_replicates == 0:
+        # Duplicate the scan dataset as many times as requested
+        test_scans = fill_test_db(test_db_path, init_scan_path, task_cfg, replicate_number)
+    else:
+        # If there is something in the root folder that mean you passed a value to `--test_database`
+        # And we then consider that it already contains the replicated scans!
+        logger.info(f"Found {n_replicates} scan replicates in existing test database: {', '.join(map(str, scan_replicates))}")
+        # Make sure the lock is OFF!
+        lock_file = test_db_path / LOCK_FILE_NAME
+        lock_file.unlink(missing_ok=True)
 
-    # TODO: create a log file with the comparisons scores.
+    # - Instantiate ROMI database
+    test_db = FSDB(str(test_db_path))
+    test_db.connect()
+    # - Repeat task on all replicated scans dataset of the test database:
+    compute_repeatability_test(test_db, task_cfg)
+    # - Compare the output(s) of the task across replicated scans dataset:
+    compare_task_output(test_db, task_cfg["name"], independant_tests=args.full_pipe)
