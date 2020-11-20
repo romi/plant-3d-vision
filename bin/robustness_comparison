@@ -688,6 +688,7 @@ if __name__ == "__main__":
     parser.add_argument("scan",
                         help="scan to use for repeatability analysis")
     parser.add_argument("task", default="AnglesAndInternodes",
+                        choices=valid_tasks,
                         help=f"task to test, should be in: {', '.join(valid_tasks)}")
     parser.add_argument("config_file",
                         help="path to the TOML config file of the analysis pipeline")
@@ -712,10 +713,6 @@ if __name__ == "__main__":
     replicate_number = int(args.replicate_number)
     init_scan_path = pathlib.Path(args.scan).expanduser()
     logger.info(f"Got scan path: {init_scan_path}")
-
-    # - Test the task to test in valid:
-    if task2test not in valid_tasks:
-        raise ValueError(f"UNKNOWN task: '{task2test}', choose among: {', '.join(valid_tasks)}")
 
     # - Task configuration
     task_cfg = config_task(task2test, args.config_file, args.full_pipe, c[task2test]["prev_task"])
