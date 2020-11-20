@@ -336,7 +336,7 @@ class OrganSegmentation(RomiTask):
                 # Exclude outliers points (-1) from output point clouds
                 if i == -1:
                     continue
-                cluster_pcd = self.get_label_pointcloud(label_pcd, ids, i)
+                cluster_pcd = self.get_label_pointcloud(label_pcd, clustered_arr, i)
                 f = output_fileset.create_file("%s_%03d" % (label, i))
                 io.write_point_cloud(f, cluster_pcd)
                 f.set_metadata("label", label)
