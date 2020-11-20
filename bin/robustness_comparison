@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 import argparse
 import datetime
 import filecmp
 import json
+import logging
 import os
 import pathlib
 import shutil
@@ -11,10 +13,8 @@ import tempfile
 from collections import Counter
 from os.path import splitext
 
-import imageio
 import matplotlib.pyplot as plt
 import numpy as np
-import logging
 import open3d as o3d
 from romidata import FSDB
 from romidata.fsdb import LOCK_FILE_NAME
@@ -152,14 +152,14 @@ def compare_binary_mask(db, task_name):
             # Compare the two mask files list to get the list of 'same files" (ie. with same name)
             ref_dir = pathlib.Path(db.basedir, ref_scan.id, ref_fileset.id)
             flo_dir = pathlib.Path(db.basedir, flo_scan.id, flo_fileset.id)
-            same_files = filecmp.dircmp(ref_dir, flo_dir).same_files
+            common_files = filecmp.dircmp(ref_dir, flo_dir).common_files
             # Remove the extension as the `Fileset.get_file()` method does not accept it!
-            same_files = [splitext(sf)[0] for sf in same_files]
+            common_files = [splitext(sf)[0] for sf in common_files]
             # Dictionary key made of the two repeat names:
             k = f"{ref_scan.id} - {flo_scan.id}"
             precision[k], recall[k] = {}, {}
             # For each file with the same name compute some set metrics:
-            for sf in same_files:
+            for sf in common_files:
                 # Read the two mask files:
                 ref_mask = read_image(ref_fileset.get_file(sf))
                 flo_mask = read_image(flo_fileset.get_file(sf))
@@ -683,6 +683,8 @@ if __name__ == "__main__":
                         help="number of replicate to use for repeatability analysis")
     parser.add_argument("-f", "--full_pipe", action="store_true", default=False,
                         help="run the analysis pipeline on each replicate independently")
+    parser.add_argument("-np", "--no_pipeline", action="store_true", default=False,
+                        help="do not run the pipeline, only compare tasks outputs")
     parser.add_argument("-db", '--test_database',
                         help="test database location to use. Use at your own risks!")
     # ->Test database path exists:
@@ -733,7 +735,9 @@ if __name__ == "__main__":
     # - Instantiate ROMI database
     test_db = FSDB(str(test_db_path))
     test_db.connect()
-    # - Repeat task on all replicated scans dataset of the test database:
-    compute_repeatability_test(test_db, task_cfg)
+    if not args.no_pipeline:
+        # - Repeat task on all replicated scans dataset of the test database:
+        compute_repeatability_test(test_db, task_cfg)
+
     # - Compare the output(s) of the task across replicated scans dataset:
     compare_task_output(test_db, task_cfg["name"], independant_tests=args.full_pipe)
