@@ -694,7 +694,7 @@ if __name__ == "__main__":
     #       - NO: use it instead of auto-generated path
     #       - YES: use number of scans as replicate number & compute repeatability test
 
-    # - Parse the input agruments to variables:
+    # - Parse the input arguments to variables:
     args = parser.parse_args()
     task2test = args.task
     replicate_number = int(args.replicate_number)
