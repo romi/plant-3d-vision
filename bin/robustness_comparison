@@ -36,8 +36,7 @@ CONF_FILE = os.path.join(dirname, "conf_robustness_comparison.json")
 
 
 def save_data_repartition(data, data_type, db):
-    """
-    Save repartition plots
+    """Save repartition plots.
 
     Parameters
     ----------
@@ -376,6 +375,10 @@ def angles_and_internodes_comparison(db, task_name):
     counter_nb_organs = Counter(nb_organs)
     print(" ** comparison results ** ")
     print("number of scans with the same nb of organs: ", counter_nb_organs)
+    print("Min number of organs detected: ", min(nb_organs))
+    print("Max number of organs detected: ", max(nb_organs))
+    print("Average number of organs detected: ", np.mean(nb_organs))
+
     max_occurrence_nb_organs = counter_nb_organs.most_common()[0][0]
     angles = [angles_and_internodes[scan_num]["angles"] for scan_num in angles_and_internodes
               if angles_and_internodes[scan_num]["nb_organs"] == max_occurrence_nb_organs]
@@ -383,6 +386,15 @@ def angles_and_internodes_comparison(db, task_name):
                   if angles_and_internodes[scan_num]["nb_organs"] == max_occurrence_nb_organs]
     save_data_repartition(angles, "angles", pathlib.Path(db.basedir))
     save_data_repartition(internodes, "internodes", pathlib.Path(db.basedir))
+
+    # Write a JSON summary file of the comparison:
+    with open(pathlib.Path(db.basedir) / f'{task_name}_comparison.json', 'w') as out_file:
+        json.dump({
+            'Min number of organs detected': min(nb_organs),
+            'Max number of organs detected': max(nb_organs),
+            'Average number of organs detected': np.mean(nb_organs),
+            'number of scans with the same nb of organs': counter_nb_organs
+        }, out_file)
 
 
 def file_by_file_comparison(db, task_name):

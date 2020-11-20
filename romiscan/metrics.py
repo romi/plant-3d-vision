@@ -100,17 +100,17 @@ def set_metrics(mask_ref, mask_flo):
     Returns
     -------
     int
-        True positives
+        True positives (TP).
     int
-        False negatives
+        False negatives (FN).
     int
-        True negatives
+        True negatives (TN).
     int
-        False positives
+        False positives (FP).
     float
-        Precision as TP/(TP+FP)
+        Precision, as ``TP/(TP+FP)``.
     float
-        Recall as TP/(TP+FN)
+        Recall, as ``TP/(TP+FN)``.
 
     Examples
     --------
