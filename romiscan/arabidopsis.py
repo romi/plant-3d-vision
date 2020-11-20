@@ -320,13 +320,13 @@ def get_organ_features(organ_bb, stem_skeleton):
 def angles_and_internodes_from_point_cloud(stem_pcd, organ_pcd_list, characteristic_length, stem_axis
                                            , stem_axis_inverted, min_elongation_ratio, min_fruit_size):
     """
-    Get angles and internodes from mesh
+    Get angles and internodes from point cloud
     Parameters
     ----------
     stem_pcd : o3d.geometry.PointCloud
-        list of files containing the meshes
-    organ_pcd_list : o3d.geometry.PointCloud
-        organ on which to calculate the angles and internodes (fruit, pedicel, etc.)
+        point cloud of the stem
+    organ_pcd_list : list
+        list of o3d.geometry.PointCloud organs
     characteristic_length : int
         distance between 2 elements for the "stem skeletonization"
     stem_axis : int
