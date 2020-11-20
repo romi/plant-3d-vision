@@ -317,18 +317,18 @@ def get_organ_features(organ_bb, stem_skeleton):
     return organ_features
 
 
-def angles_from_meshes(input_fileset, characteristic_length, organ_type, stem_axis, stem_axis_inverted,
-                       min_elongation_ratio, min_fruit_size):
+def angles_and_internodes_from_point_cloud(stem_pcd, organ_pcd_list, characteristic_length, stem_axis
+                                           , stem_axis_inverted, min_elongation_ratio, min_fruit_size):
     """
     Get angles and internodes from mesh
     Parameters
     ----------
-    input_fileset : list
+    stem_pcd : o3d.geometry.PointCloud
         list of files containing the meshes
-    characteristic_length : float
-        distance between 2 elements for the "stem skeletonization"
-    organ_type : str
+    organ_pcd_list : o3d.geometry.PointCloud
         organ on which to calculate the angles and internodes (fruit, pedicel, etc.)
+    characteristic_length : int
+        distance between 2 elements for the "stem skeletonization"
     stem_axis : int
         [0,1,2] for the projection of the stem on the x, y or z axis
     stem_axis_inverted : bool
@@ -346,17 +346,7 @@ def angles_from_meshes(input_fileset, characteristic_length, organ_type, stem_ax
     import open3d
     from romidata import io
 
-    stem_meshes = [io.read_triangle_mesh(f) for f in input_fileset.get_files(query={"label": "stem"})]
-    stem_mesh = open3d.geometry.TriangleMesh()
-    for m in stem_meshes:
-        stem_mesh = stem_mesh + m
-
-    organ_meshes = [io.read_triangle_mesh(f) for f in input_fileset.get_files(query={"label": organ_type})]
-    organ_mesh = open3d.geometry.TriangleMesh()
-    for o in organ_meshes:
-        organ_mesh = organ_mesh + o
-
-    stem_points = np.asarray(stem_mesh.vertices)
+    stem_points = np.asarray(stem_pcd.points)
 
     idx_min = np.argmin(stem_points[:, stem_axis])
     idx_max = np.argmax(stem_points[:, stem_axis])
@@ -366,7 +356,7 @@ def angles_from_meshes(input_fileset, characteristic_length, organ_type, stem_ax
 
     stem_frame_axis = np.arange(stem_axis_min, stem_axis_max, characteristic_length)
 
-    kdtree = open3d.geometry.KDTreeFlann(stem_mesh)
+    kdtree = open3d.geometry.KDTreeFlann(stem_pcd)
 
     point = stem_points[idx_min]
     root = stem_points[idx_min]
@@ -376,7 +366,7 @@ def angles_from_meshes(input_fileset, characteristic_length, organ_type, stem_ax
     for i, axis in enumerate(stem_frame_axis):
         point[stem_axis] = axis
         k, idx, _ = kdtree.search_knn_vector_3d(point, 300)
-        vtx = np.asarray(stem_mesh.vertices)[idx]
+        vtx = stem_points[idx]
         mean = vtx.mean(axis=0)
         if i == 0:
             root = mean
@@ -396,10 +386,10 @@ def angles_from_meshes(input_fileset, characteristic_length, organ_type, stem_ax
 
     # calculate features as direction and corresponding node id for each organ
     organs_features_list = []
-    for i, o in enumerate(organ_meshes):
-        bb = open3d.geometry.OrientedBoundingBox.create_from_points(o.vertices)
+    for i, o in enumerate(organ_pcd_list):
+        bb = open3d.geometry.OrientedBoundingBox.create_from_points(o.points)
         organ_features = get_organ_features(bb, ordered_stem_skeleton)
-        organ_features["points"] = np.asarray(o.vertices).tolist()
+        organ_features["points"] = np.asarray(o.points).tolist()
         elongation_ratio = np.linalg.norm(organ_features["direction"]) / np.linalg.norm(organ_features["width"])
         # if the organ does not fit to the minimal fruit size and elongation ratio it is not taken into account
         if np.linalg.norm(organ_features["direction"]) > min_fruit_size and elongation_ratio > min_elongation_ratio:
