@@ -112,6 +112,17 @@ def set_metrics(mask_ref, mask_flo):
     float
         Recall as TP/(TP+FN)
 
+    Examples
+    --------
+    >>> import imageio
+    >>> import numpy as np
+    >>> from romiscan.metrics import set_metrics
+    >>> fpath_a = '/data/ROMI/20201119192731_rep_test_AnglesAndInternodes/arabido_test4_0/Masks_True_5_out_f143ab490d/00000_rgb.jpg'
+    >>> fpath_b = '/data/ROMI/20201119192731_rep_test_AnglesAndInternodes/arabido_test4_1/Masks_True_5_out_f143ab490d/00000_rgb.jpg'
+    >>> mask_a = imageio.imread(fpath_a)
+    >>> mask_b = imageio.imread(fpath_b)
+    >>> set_metrics(mask_a, mask_b)
+
     """
     tp = int(np.sum(mask_ref * (mask_flo > 0)))
     fn = int(np.sum(mask_ref * (mask_flo == 0)))
