@@ -54,7 +54,6 @@ class AnglesAndInternodes(RomiTask):
         if task_name == "TreeGraph": # angles and internodes from graph
             t = io.read_graph(self.input_file())
             measures = arabidopsis.compute_angles_and_internodes(t, self.stem_axis_inverted)
-            io.write_json(self.output_file(), measures)
         else: # angles and internodes from point cloud
             if task_name == "ClusteredMesh": # mesh to point cloud
                 stem_meshes = [io.read_triangle_mesh(f) for f in self.input().get().get_files(query={"label": "stem"})]
