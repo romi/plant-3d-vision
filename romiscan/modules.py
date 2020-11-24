@@ -19,6 +19,7 @@ MODULES = {
     "Segmentation2D": "romiscan.tasks.proc2d",
     "SegmentedPointCloud": "romiscan.tasks.proc3d",
     "ClusteredMesh": "romiscan.tasks.proc3d",
+    "OrganSegmentation": "romiscan.tasks.proc3d",
     # Quantification modules:
     "TreeGraph": "romiscan.tasks.arabidopsis",
     "AnglesAndInternodes": "romiscan.tasks.arabidopsis",

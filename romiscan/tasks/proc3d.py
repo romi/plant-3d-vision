@@ -254,6 +254,94 @@ class ClusteredMesh(RomiTask):
                     f.set_metadata("label", l)
 
 
+class OrganSegmentation(RomiTask):
+    """Organ detection using DBSCAN clustering on the SegmentedPointCloud.
+
+    This is done for each semantic label ('flower', 'fruit', ...) of the labelled point cloud,
+    except for the stem as it is considered to be one organ.
+    This task is suitable to detect organs on a point cloud where organs are detached from each other since
+    it use the DBSCAN clustering method with a density estimator.
+
+    Attributes
+    ----------
+    upstream_task : luigi.TaskParameter
+        Upstream task.
+        `SegmentedPointCloud` by default.
+    eps : luigi.FloatParameter
+        The maximum euclidean distance between two samples for one to be considered as in the neighborhood of the other.
+        This is not a maximum bound on the distances of points within a cluster.
+        `2.0` by default.
+    min_points : luigi.IntParameter
+        The number of points in a neighborhood for a point to be considered as a core point.
+        This includes the point itself.
+        `5` by default.
+
+    """
+    upstream_task = luigi.TaskParameter(default=SegmentedPointCloud)
+    eps = luigi.FloatParameter(default=2.0)
+    min_points = luigi.IntParameter(default=5)
+
+    def get_label_pointcloud(self, pcd, labels, label):
+        """Return a point cloud only for the selected label.
+
+        Parameters
+        ----------
+        pcd : open3d.geometry.PointCloud
+            A PointCloud instance with points.
+        labels : list
+            List of labels associated to the points.
+        label : str
+            Label used to select points from pointcloud.
+
+        Returns
+        open3d.geometry.PointCloud
+            A point cloud containing only the points associated to the selected label.
+        """
+        # Get the index of points matching the semantic label
+        idx_mask = np.where(np.array(labels) == label)[0]
+        # Skip point cloud reconstruction if no points corresponding to label
+        n_points = sum(idx_mask)
+        if n_points == 0:
+            print(f"No points found for label: '{label}'!")
+        else:
+            print(f"Found {n_points} point for, label '{label}'.")
+        # Returns point cloud (colored & with normals if any):
+        return pcd.select_by_index(list(idx_mask))
+
+    def run(self):
+        # Read the pointcloud from the `upstream_task`
+        labelled_pcd = io.read_point_cloud(self.input_file())
+        # Initialize the output FileSet object.
+        output_fileset = self.output().get()
+        # Get the list of semantic label ('flower', 'fruit', ...) attached to each points of the point cloud
+        labels = self.input_file().get_metadata("labels")
+        unique_labels = set(labels)
+        # Loop on the unique set of labels:
+        for label in unique_labels:
+            label_pcd = self.get_label_pointcloud(labelled_pcd, labels, label)
+            # Exclude stem from clustering
+            if label == 'stem':
+                f = output_fileset.create_file("%s_%03d" % (label, 0))
+                io.write_point_cloud(f, label_pcd)
+                f.set_metadata("label", label)
+                continue
+            # DBSCAN clustering:
+            clustered_arr = np.array(label_pcd.cluster_dbscan(eps=self.eps, min_points=self.min_points, print_progress=True))
+
+            ids = np.unique(clustered_arr)
+            n_ids = len(ids)
+            print(f"Found {n_ids} clusters in the point cloud!")
+            # For each organ
+            for i in ids:
+                # Exclude outliers points (-1) from output point clouds
+                if i == -1:
+                    continue
+                cluster_pcd = self.get_label_pointcloud(label_pcd, clustered_arr, i)
+                f = output_fileset.create_file("%s_%03d" % (label, i))
+                io.write_point_cloud(f, cluster_pcd)
+                f.set_metadata("label", label)
+
+
 class CurveSkeleton(RomiTask):
     """ Creates a 3D curve skeleton.
 
