@@ -28,7 +28,12 @@ class TreeGraph(RomiTask):
 
 
 class AnglesAndInternodes(RomiTask):
-    """ Computes angles and internodes from skeleton
+    """ Computes organs successive angles and internodes.
+
+    Depending on the upstream task this task will use a different algorithm:
+      - `TreeGraph`: based on a skeleton
+      - `ClusteredMesh`: based on an organ segmented mesh
+      - `OrganSegmentation`: based on an organ segmented point cloud
 
     Module: romiscan.tasks.arabidopsis
     Default upstream tasks: TreeGraph
