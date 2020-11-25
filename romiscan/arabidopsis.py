@@ -448,7 +448,7 @@ def angles_and_internodes_from_point_cloud(stem_pcd, organ_pcd_list, characteris
     return {"angles": angles, "internodes": internodes, "fruit_points": fruit_points}
 
 
-def compute_angles_and_internodes(T, stem_axis_inverted, n_nodes_fruit=5, n_nodes_stem=5):
+def compute_angles_and_internodes(T, n_nodes_fruit=5, n_nodes_stem=5):
     """
     Get angle and internodes from graph
 
@@ -467,10 +467,10 @@ def compute_angles_and_internodes(T, stem_axis_inverted, n_nodes_fruit=5, n_node
 
     unordered_main_stem = get_nodes_by_label(T, "stem")
     unordered_branching_points = get_nodes_by_label(T, "node")
-    angles = np.zeros(len(unordered_branching_points) - 1)
-    internodes = np.zeros(len(unordered_branching_points) - 1)
-    plane_vectors = np.zeros((len(unordered_branching_points) - 1, 3, 3))
+    angles = []
+    internodes = []
     all_fruit_points = []
+    node_info_list = []
 
     # seems like the branching order is lost in the treegraoh computation task
     # re order nodes
@@ -513,31 +513,38 @@ def compute_angles_and_internodes(T, stem_axis_inverted, n_nodes_fruit=5, n_node
             if v2.dot(node_next_point - node_point) < 0:
                 v2 = - v2
 
-            plane_vectors[i, 0, :] = node_point
-            plane_vectors[i, 1, :] = v1
-            plane_vectors[i, 2, :] = v2
+            node_info_list.append({
+                "node_point": node_point,
+                "fruit_direction": v1,
+                "stem_direction": v2
+            })
 
-    for i in range(1, len(plane_vectors)):
-        n1 = np.cross(plane_vectors[i - 1, 1, :], plane_vectors[i - 1, 2, :])
-        n2 = np.cross(plane_vectors[i, 1, :], plane_vectors[i, 2, :])
-        p1 = plane_vectors[i - 1, 0, :]
-        p2 = plane_vectors[i, 0, :]
-        v1 = plane_vectors[i - 1, 1, :]
-        v2 = plane_vectors[i, 1, :]
-        v3 = plane_vectors[i, 0, :] - plane_vectors[i - 1, 0, :]
+    for i in range(1, len(node_info_list)):
+        n1 = np.cross(node_info_list[i - 1]["fruit_direction"], node_info_list[i - 1]["stem_direction"])
+        n2 = np.cross(node_info_list[i]["fruit_direction"], node_info_list[i]["stem_direction"])
+        p1 = node_info_list[i - 1]["node_point"]
+        p2 = node_info_list[i]["node_point"]
+        v1 = node_info_list[i - 1]["fruit_direction"]
+        v2 = node_info_list[i]["fruit_direction"]
+        v3 = node_info_list[i]["node_point"] - node_info_list[i - 1]["node_point"]
 
         # Angle between the planes, between 0 and PI
         angle = np.arccos(np.dot(n1, n2))
 
         # IF basis is direct, then angle is positive (depends on stem axis inversion ?)
-        # if np.linalg.det([v1, v2, v3]) < 0 and not stem_axis_inverted or np.linalg.det([v1, v2, v3]) > 0 and stem_axis_inverted:
-        # if np.linalg.det([v1, v2, v3]) > 0 and stem_axis_inverted:
-        #    angle = 2 * np.pi - angle
-        angles[i - 1] = angle
-        internodes[i - 1] = np.linalg.norm(p2 - p1)
+        if np.linalg.det([v1, v2, v3]) < 0:
+            angle = 2 * np.pi - angle
+
+        angles.append(angle)
+        internodes.append(np.linalg.norm(p2 - p1))
+
+    # complement angles if needed
+    if np.median(angles) > np.pi:
+        angles = 2 * np.pi - np.array(angles)
+        angles = angles.tolist()
 
     return {
-        "angles": angles.tolist(),
-        "internodes": internodes.tolist(),
+        "angles": angles,
+        "internodes": internodes,
         "fruit_points": all_fruit_points
     }
