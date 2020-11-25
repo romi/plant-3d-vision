@@ -456,9 +456,10 @@ def compute_angles_and_internodes(T, n_nodes_fruit=5, n_nodes_stem=5):
     ----------
     T : nx.Graph
         input tree as a networkx graph
-    n_neighbours : int
-        number of nodes to consider as neighbour of a branching point
-        for plane estimation
+    n_nodes_fruit : int
+        number of nodes to consider as neighbours for a branching point
+    n_nodes_stem : int
+        number of nodes to consider as neighbours in the stem
 
     Returns
     -------
