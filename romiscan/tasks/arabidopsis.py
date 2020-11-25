@@ -55,11 +55,13 @@ class AnglesAndInternodes(RomiTask):
     def run(self):
         task_name = str(self.upstream_task.task_family)
         from romiscan import arabidopsis
-        x = self.input().get().get_files()
+
         if task_name == "TreeGraph": # angles and internodes from graph
             t = io.read_graph(self.input_file())
-            measures = arabidopsis.compute_angles_and_internodes(t, self.stem_axis_inverted)
-        else: # angles and internodes from point cloud
+            measures = arabidopsis.compute_angles_and_internodes(t)
+
+        # angles and internodes from point cloud
+        else:
             if task_name == "ClusteredMesh": # mesh to point cloud
                 stem_meshes = [io.read_triangle_mesh(f) for f in self.input().get().get_files(query={"label": "stem"})]
                 stem_mesh = o3d.geometry.TriangleMesh()
