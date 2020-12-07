@@ -732,7 +732,7 @@ if __name__ == "__main__":
         root_location = init_scan_path.parent.parent
         test_db_path = create_test_db(root_location, task_cfg["name"])
 
-    scan_replicates = list([idir.stem for idir in test_db_path.iterdir() if idir.is_dir() & idir.stem != 'models'])
+    scan_replicates = list([idir.stem for idir in test_db_path.iterdir() if idir.is_dir() and idir.stem != 'models'])
     n_replicates = len(scan_replicates)
     # Case without/with scan datasets in the test database root folder
     if n_replicates == 0:
