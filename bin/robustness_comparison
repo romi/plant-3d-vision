@@ -823,15 +823,15 @@ if __name__ == "__main__":
         # Make sure the lock is OFF!
         marker_file = test_db_path / MARKER_FILE_NAME
         lock_file = test_db_path / LOCK_FILE_NAME
-        try:
-            marker_file.touch()
-        except:
-            pass
-        try:
-            lock_file.unlink()
-            # lock_file.unlink(missing_ok=True)  # missing_ok only available since Python3.8
-        except:
-            pass
+    try:
+        marker_file.touch()
+    except:
+        pass
+    try:
+        lock_file.unlink()
+        # lock_file.unlink(missing_ok=True)  # missing_ok only available since Python3.8
+    except:
+        pass
 
     # - Instantiate ROMI database
     test_db = FSDB(str(test_db_path))
