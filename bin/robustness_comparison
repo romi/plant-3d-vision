@@ -308,8 +308,6 @@ def compare_pointcloud(db, task_name):
 def compare_labelled_masks(db, task_name):
     scans_list = [scan for scan in db.get_scans() if scan.id != 'models']
     labels_list = db.get_scan('models').get_fileset('models').get_files()[0].get_metadata('label_names')
-    for label in labels_list:
-
     pass
 
 
