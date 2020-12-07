@@ -675,6 +675,8 @@ if __name__ == "__main__":
     Comparison can be done at the scale of the files but also with metrics if a reference can be set.
     
     To create fully independent tests, we run the pipeline up to the task to test on each replicate.
+    
+    Note that in order to use the ML pipeline, you will first have to create the output directory first, then creates a `romidb` empty file and finally copy the `models` you want to use there.
     """
     # - Load the JSON config file of the script:
     c = json.load(open(CONF_FILE))
@@ -727,7 +729,7 @@ if __name__ == "__main__":
         root_location = init_scan_path.parent.parent
         test_db_path = create_test_db(root_location, task_cfg["name"])
 
-    scan_replicates = list([idir.stem for idir in test_db_path.iterdir() if idir.is_dir()])
+    scan_replicates = list([idir.stem for idir in test_db_path.iterdir() if idir.is_dir() & idir.stem != 'models'])
     n_replicates = len(scan_replicates)
     # Case without/with scan datasets in the test database root folder
     if n_replicates == 0:
