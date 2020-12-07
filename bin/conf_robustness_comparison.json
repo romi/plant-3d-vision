@@ -19,6 +19,11 @@
         "comp_func" : "compare_binary_mask"
     },
 
+    "Segmentation2D": {
+        "prev_task" : "Undistorted",
+        "comp_func" : "compare_binary_mask"
+    },
+
     "Voxels": {
         "prev_task" : "Masks",
         "comp_func" : "compare_voxels"
