@@ -678,8 +678,7 @@ if __name__ == "__main__":
     
     Note that in order to use the ML pipeline, you will first have to:
     1. create the output directory;
-    2. create a `romidb` empty file;
-    3. copy the `models` you want to use there.
+    2. copy the `models` you want to use there.
     """
     # - Load the JSON config file of the script:
     c = json.load(open(CONF_FILE))
@@ -743,7 +742,12 @@ if __name__ == "__main__":
         # And we then consider that it already contains the replicated scans!
         logger.info(f"Found {n_replicates} scan replicates in existing test database: {', '.join(map(str, scan_replicates))}")
         # Make sure the lock is OFF!
+        marker_file = test_db_path / MARKER_FILE_NAME
         lock_file = test_db_path / LOCK_FILE_NAME
+        try:
+            marker_file.touch()
+        except:
+            pass
         try:
             lock_file.unlink()
             # lock_file.unlink(missing_ok=True)  # missing_ok only available since Python3.8
