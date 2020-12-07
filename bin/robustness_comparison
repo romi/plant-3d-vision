@@ -739,7 +739,11 @@ if __name__ == "__main__":
         logger.info(f"Found {n_replicates} scan replicates in existing test database: {', '.join(map(str, scan_replicates))}")
         # Make sure the lock is OFF!
         lock_file = test_db_path / LOCK_FILE_NAME
-        lock_file.unlink(missing_ok=True)
+        try:
+            lock_file.unlink()
+            # lock_file.unlink(missing_ok=True)  # missing_ok only available since Python3.8
+        except:
+            pass
 
     # - Instantiate ROMI database
     test_db = FSDB(str(test_db_path))
