@@ -676,7 +676,10 @@ if __name__ == "__main__":
     
     To create fully independent tests, we run the pipeline up to the task to test on each replicate.
     
-    Note that in order to use the ML pipeline, you will first have to create the output directory first, then creates a `romidb` empty file and finally copy the `models` you want to use there.
+    Note that in order to use the ML pipeline, you will first have to:
+    1. create the output directory;
+    2. create a `romidb` empty file;
+    3. copy the `models` you want to use there.
     """
     # - Load the JSON config file of the script:
     c = json.load(open(CONF_FILE))
