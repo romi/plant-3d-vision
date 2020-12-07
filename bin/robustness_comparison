@@ -137,7 +137,7 @@ def compare_binary_mask(db, task_name):
     mean_precision, mean_recall = {}, {}
     median_precision, median_recall = {}, {}
     # List the duplicated `Scan` datasets:
-    scans_list = [scan for scan in db.get_scans()]
+    scans_list = [scan for scan in db.get_scans() if scan.id != 'models']
     logger.info(f"Comparing {task_name} output for replicated scans list: {[s.id for s in scans_list]}")
     # - Double loop to compare all unique pairs of repeats:
     for t, ref_scan in enumerate(scans_list):
@@ -206,7 +206,7 @@ def compare_pointcloud(db, task_name):
     chamfer_dist = {}
     fitness = {}
     # List the duplicated `Scan` datasets:
-    scans_list = [scan for scan in db.get_scans()]
+    scans_list = [scan for scan in db.get_scans() if scan.id != 'models']
     logger.info(f"Comparing {task_name} output for replicated scans list: {[s.id for s in scans_list]}")
     # - Double loop to compare all unique pairs of repeats:
     for t, ref_scan in enumerate(scans_list):
@@ -254,7 +254,7 @@ def compare_trianglemesh_points(db, task_name):
     surf_ratio = {}
     vol_ratio = {}
     # List the duplicated `Scan` datasets:
-    scans_list = [scan for scan in db.get_scans()]
+    scans_list = [scan for scan in db.get_scans() if scan.id != 'models']
     logger.info(f"Comparing {task_name} output for replicated scans list: {[s.id for s in scans_list]}")
     # - Double loop to compare all unique pairs of repeats:
     for t, ref_scan in enumerate(scans_list):
@@ -308,7 +308,7 @@ def compare_curveskeleton_points(db, task_name):
     """
     chamfer_dist = {}
     # List the duplicated `Scan` datasets:
-    scans_list = [scan for scan in db.get_scans()]
+    scans_list = [scan for scan in db.get_scans() if scan.id != 'models']
     logger.info(f"Comparing {task_name} output for replicated scans list: {[s.id for s in scans_list]}")
     # - Double loop to compare all unique pairs of repeats:
     for t, ref_scan in enumerate(scans_list):
@@ -358,7 +358,7 @@ def angles_and_internodes_comparison(db, task_name):
     angles_and_internodes = {}
     nb_organs = []
     # List the duplicated `Scan` datasets:
-    scans_list = [scan for scan in db.get_scans()]
+    scans_list = [scan for scan in db.get_scans() if scan.id != 'models']
     logger.info(f"Comparing {task_name} output for replicated scans list: {[s.id for s in scans_list]}")
     # - Load all JSON files with angles and internodes values:
     for t, scan in enumerate(scans_list):
@@ -411,7 +411,7 @@ def file_by_file_comparison(db, task_name):
     """
     logger.info("Performing file-by-file comparisons...")
     fcmp = {}
-    scans_list = [scan for scan in db.get_scans()]
+    scans_list = [scan for scan in db.get_scans() if scan.id != 'models']
     for t, ref_scan in enumerate(scans_list):
         if t + 1 > len(scans_list):
             break
@@ -455,7 +455,7 @@ def compare_task_output(db, task_name, independant_tests=False):
 
     """
     # List paths where tested task output(s) should be located
-    folder_task_list = [pathlib.Path(db.basedir, scan.id, _get_task_fileset(scan, task_name).id) for scan in db.get_scans()]
+    folder_task_list = [pathlib.Path(db.basedir, scan.id, _get_task_fileset(scan, task_name).id) for scan in db.get_scans() if scan.id != 'models']
     if len(folder_task_list) == 0:
         raise IOError(f"Output files of task {task_name} for db {db.basedir} are missing")
     # - Performs file-by-file comparisons for the selected task:
@@ -614,7 +614,7 @@ def compute_repeatability_test(db, task_cfg):
         configuration dict of the task to test
 
     """
-    scans_list = [scan.id for scan in db.get_scans()]
+    scans_list = [scan.id for scan in db.get_scans() if scan.id != 'models']
     logger.info(f"Repeating task {task_cfg['name']} on replicated scans list: {scans_list}")
     test_db.disconnect()  # to allow the luigi pipeline to run!
     # Execute the task to test for all scans in the test database:
