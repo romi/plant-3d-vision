@@ -14,6 +14,7 @@ from collections import Counter
 from os.path import splitext
 
 import matplotlib.pyplot as plt
+from matplotlib import cm
 import numpy as np
 import open3d as o3d
 from romidata import FSDB
@@ -49,10 +50,64 @@ def save_data_repartition(data, data_type, db):
 
     """
     fig, ax = plt.subplots()
-    ax.set_title(f'{data_type} distribution for same scan same pipe')
-    ax.boxplot(list(np.array(data).transpose()))
+    fig.suptitle(f'{data_type} distribution for same scan same pipe', fontsize=16)
+    fig.set_size_inches(10, 6)
+    data = np.array(data).transpose()
+    # n_scans = data.shape()[1]
+    ax.set_title(f'Number of scans: {data.shape[1]}')
+    bxp = ax.boxplot(list(data), patch_artist=True)
+
+    # fill with colors
+    colors = cm.get_cmap("magma", len(data))
+    for patch, color in zip(bxp['boxes'], colors.colors):
+        patch.set_facecolor(color)
+
+    # adding horizontal grid lines
+    ax.yaxis.grid(True)
+    ax.set_xlabel(f'{data_type}')
+    ax.set_ylabel('Observed values')
+
+    plt.tight_layout()
     fig.savefig(db / f"repeat_results_{data_type}.png")
 
+
+def pairwise_heatmap(pw_dict, scans_list, task_name, metrics, db):
+    """"""
+    scans_list = sorted([scan.id for scan in scans_list])
+    n_scans = len(scans_list)
+    pw_mat = np.zeros((n_scans, n_scans))
+    for i, scan_i in enumerate(scans_list):
+        for j, scan_j in enumerate(scans_list[i+1:]):
+            try:
+                data = pw_dict[(scan_i,scan_j)]
+            except:
+                data = pw_dict[(scan_j,scan_i)]
+            pw_mat[i,j]=pw_mat[j,i]=data
+    fig, ax = plt.subplots()
+    fig.set_size_inches(10, 10)
+    im = ax.imshow(pw_mat)
+
+    # We want to show all ticks...
+    ax.set_xticks(np.arange(n_scans))
+    ax.set_yticks(np.arange(n_scans))
+    # ... and label them with the respective list entries
+    ax.set_xticklabels(scans_list)
+    ax.set_yticklabels(scans_list)
+
+    # Rotate the tick labels and set their alignment.
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right",
+             rotation_mode="anchor")
+
+    # Loop over data dimensions and create text annotations.
+    # for i in range(n_scans):
+    #     for j in range(n_scans):
+    #         text = ax.text(j, i, pw_mat[i, j],
+    #                        ha="center", va="center", color="w")
+
+    ax.set_title(f"Pairwise heatmap for {task_name} {metrics}")
+    plt.tight_layout()
+    fig.colorbar(im)
+    fig.savefig(pathlib.Path(db.basedir) / f'{task_name}_heatmap.png')
 
 def _get_task_fileset(scan_dataset, task_name):
     """Returns the `Fileset` object produced by `task_name` in given `scan_dataset`.
@@ -191,6 +246,8 @@ def compare_binary_mask(db, task_name):
 
     return
 
+def jsonify_tuple_keys(json_dict: dict) -> dict:
+    return {f'{k[0]} - {k[1]}': v for k, v in json_dict.items()}
 
 def compare_pointcloud(db, task_name):
     """Use the chamfer distance to compare point-cloud for each unique pairs of repetition.
@@ -204,7 +261,7 @@ def compare_pointcloud(db, task_name):
 
     """
     chamfer_dist = {}
-    fitness = {}
+    fitness, residuals = {}, {}
     # List the duplicated `Scan` datasets:
     scans_list = [scan for scan in db.get_scans() if scan.id != 'models']
     logger.info(f"Comparing {task_name} output for replicated scans list: {[s.id for s in scans_list]}")
@@ -219,24 +276,37 @@ def compare_pointcloud(db, task_name):
             # - Read the `PointCloud.ply` file
             flo_pcd_file = _get_files(flo_scan, task_name, unique=True)[0]
             flo_pcd = read_point_cloud(flo_pcd_file)
-            k = f"{ref_scan.id} - {flo_scan.id}"
+            k = (ref_scan.id, flo_scan.id)
             # - Compute the Chamfer distance
             chamfer_dist[k] = chamfer_distance(ref_pcd, flo_pcd)
             # - Compute the registration fitness & residuals
-            fitness[k] = point_cloud_registration_fitness(ref_pcd, flo_pcd)
+            fitness[k], residuals[k] = point_cloud_registration_fitness(ref_pcd, flo_pcd)
 
     # Print result to terminal:
     print("\nChamfer distance (lower is better) between pairs of repetitions:")
     print(chamfer_dist)
     # Print result to terminal:
-    print("\nFitness (closer to 1.0 is better) & residuals (inliner RMSE) between pairs of repetitions:")
+    print("\nFitness (closer to 1.0 is better) between pairs of repetitions:")
     print(fitness)
+    print("\nResiduals (inliner RMSE) between pairs of repetitions:")
+    print(residuals)
 
     # Write a JSON summary file of the comparison:
     with open(pathlib.Path(db.basedir) / f'{task_name}_comparison.json', 'w') as out_file:
-        json.dump({'chamfer distances': chamfer_dist, 'fitness & residuals': fitness}, out_file)
+        json.dump({
+            'chamfer distances': jsonify_tuple_keys(chamfer_dist),
+            'fitness': jsonify_tuple_keys(fitness),
+            'residuals': jsonify_tuple_keys(residuals)
+        }, out_file)
+    # Creates a heatmap of the pariwise comparisons:
+    pairwise_heatmap(chamfer_dist, scans_list, 'chamfer distances', task_name, db)
+    pairwise_heatmap(fitness, scans_list, 'fitness', task_name, db)
+    pairwise_heatmap(residuals, scans_list, 'residuals', task_name, db)
 
     return
+
+def compare_labelled_pointcloud(db, task_name):
+    pass
 
 
 def compare_trianglemesh_points(db, task_name):
@@ -271,7 +341,7 @@ def compare_trianglemesh_points(db, task_name):
             flo_mesh = read_triangle_mesh(flo_mesh_file)
             # - Extract a PointCloud from the mesh vertices
             flo_pcd = o3d.geometry.PointCloud(flo_mesh.vertices)
-            k = f"{ref_scan.id} - {flo_scan.id}"
+            k = (ref_scan.id, flo_scan.id)
             # - Compute the Chamfer distance
             chamfer_dist[k] = chamfer_distance(ref_pcd, flo_pcd)
             surf_ratio[k] = surface_ratio(ref_mesh, flo_mesh)
@@ -677,8 +747,8 @@ if __name__ == "__main__":
     To create fully independent tests, we run the pipeline up to the task to test on each replicate.
     
     Note that in order to use the ML pipeline, you will first have to:
-    1. create the output directory;
-    2. copy the `models` you want to use there.
+    1. create an output directory
+    2. use the `--models` argument to copy the CNN trained models required to run the pipeline.
     """
     # - Load the JSON config file of the script:
     c = json.load(open(CONF_FILE))
@@ -704,6 +774,8 @@ if __name__ == "__main__":
                         help="do not run the pipeline, only compare tasks outputs")
     parser.add_argument("-db", '--test_database',
                         help="test database location to use. Use at your own risks!")
+    parser.add_argument("--models", default=False,
+                        help="models database location to use with ML pipeline.")
     # ->Test database path exists:
     #   - NO: create the directory & use it instead of auto-generated path
     #   - YES:
@@ -716,6 +788,8 @@ if __name__ == "__main__":
     task2test = args.task
     replicate_number = int(args.replicate_number)
     init_scan_path = pathlib.Path(args.scan).expanduser()
+    db_location = init_scan_path.parent
+    root_location = db_location.parent
     logger.info(f"Got scan path: {init_scan_path}")
 
     # - Task configuration
@@ -728,7 +802,6 @@ if __name__ == "__main__":
         test_db_path.mkdir(exist_ok=True)
     else:
         # test db is created next to db containing original scan dataset
-        root_location = init_scan_path.parent.parent
         test_db_path = create_test_db(root_location, task_cfg["name"])
 
     scan_replicates = list([idir.stem for idir in test_db_path.iterdir() if idir.is_dir() and idir.stem != 'models'])
@@ -757,6 +830,8 @@ if __name__ == "__main__":
     # - Instantiate ROMI database
     test_db = FSDB(str(test_db_path))
     test_db.connect()
+    if args.models:
+        shutil.copytree(str(db_location / args.models), str(test_db_path / args.models), dirs_exist_ok=True)
     if not args.no_pipeline:
         # - Repeat task on all replicated scans dataset of the test database:
         compute_repeatability_test(test_db, task_cfg)
