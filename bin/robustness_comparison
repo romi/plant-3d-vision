@@ -837,7 +837,11 @@ if __name__ == "__main__":
     test_db = FSDB(str(test_db_path))
     test_db.connect()
     if args.models:
-        shutil.copytree(str(db_location / args.models), str(test_db_path / args.models), dirs_exist_ok=True)
+        # shutil.copytree(str(db_location / args.models), str(test_db_path / args.models), dirs_exist_ok=True)
+        try:
+            shutil.copytree(str(db_location / args.models), str(test_db_path / args.models))
+        except:
+            pass
     if not args.no_pipeline:
         # - Repeat task on all replicated scans dataset of the test database:
         compute_repeatability_test(test_db, task_cfg)
