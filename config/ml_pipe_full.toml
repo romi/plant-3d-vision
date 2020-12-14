@@ -67,6 +67,11 @@ upstream_task = "SegmentedPointCloud"
 min_vol = 1.0
 min_length = 10.0
 
+[OrganSegmentation]
+upstream_task = "SegmentedPointCloud"
+eps = 2.0
+min_points = 5
+
 [AnglesAndInternodes]
 upstream_task = "ClusteredMesh"
 characteristic_length = 1.0
