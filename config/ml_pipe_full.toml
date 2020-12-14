@@ -33,13 +33,11 @@ model_id = "Resnetdataset_gl_png_896_896_epoch50" # no default value
 query = "{\"channel\":\"rgb\"}" # default {}
 Sx = 896
 Sy = 896
-resize = true
+labels = "[]"
+inverted_labels = "[\"background\"]"
 binarize = true
-dilation = 1
-epochs = 1
-batch = 1
-learning_rate = 0.0001
 threshold = 0.01
+dilation = 1
 
 [Voxels]
 upstream_mask = "Segmentation2D"
