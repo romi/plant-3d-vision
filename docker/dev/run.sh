@@ -113,7 +113,7 @@ while [ "$1" != "" ]; do
   --gpu_test)
     cmd=$gpu_cmd
     ;;
-  -v)
+  -v | --volume)
     shift
     if [ "$mount_option" == "" ]
     then
