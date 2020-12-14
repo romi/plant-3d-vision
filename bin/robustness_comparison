@@ -22,6 +22,7 @@ from romidata.fsdb import LOCK_FILE_NAME
 from romidata.fsdb import MARKER_FILE_NAME
 from romidata.io import read_image
 from romidata.io import read_json
+from romidata.io import read_npz
 from romidata.io import read_point_cloud
 from romidata.io import read_triangle_mesh
 from romiscan.metrics import chamfer_distance
@@ -71,7 +72,7 @@ def save_data_repartition(data, data_type, db):
     fig.savefig(db / f"repeat_results_{data_type}.png")
 
 
-def pairwise_heatmap(pw_dict, scans_list, task_name, metrics, db):
+def pairwise_heatmap(pw_dict, scans_list, task_name, metrics, db, **kwargs):
     """"""
     scans_list = sorted([scan.id for scan in scans_list])
     n_scans = len(scans_list)
@@ -107,7 +108,8 @@ def pairwise_heatmap(pw_dict, scans_list, task_name, metrics, db):
     ax.set_title(f"Pairwise heatmap for {task_name} {metrics}")
     plt.tight_layout()
     fig.colorbar(im)
-    fig.savefig(pathlib.Path(db.basedir) / f'{task_name}_heatmap.png')
+    fname = kwargs.get("fname", pathlib.Path(db.basedir) / f'{task_name}-{metrics}_heatmap.png')
+    fig.savefig(fname)
 
 def _get_task_fileset(scan_dataset, task_name):
     """Returns the `Fileset` object produced by `task_name` in given `scan_dataset`.
@@ -305,14 +307,126 @@ def compare_pointcloud(db, task_name):
 
     return
 
-def compare_labelled_masks(db, task_name):
-    scans_list = [scan for scan in db.get_scans() if scan.id != 'models']
-    labels_list = db.get_scan('models').get_fileset('models').get_files()[0].get_metadata('label_names')
-    pass
 
+def compare_voxels(db, task_name):
+    # List the duplicated `Scan` datasets:
+    scans_list = [scan for scan in db.get_scans() if scan.id != 'models']
+    logger.info(f"Comparing {task_name} output for replicated scans list: {[s.id for s in scans_list]}")
+    # Initialize the list of labels with the first NPZ file in the list
+    ref_scan = scans_list[0]
+    ref_voxel_file = _get_files(ref_scan, task_name, unique=True)[0]
+    ref_voxel = read_npz(ref_voxel_file)
+    labels = list(ref_voxel.keys())
+    # Initialize returned dictionary with labels as keys!
+    r2 = {label: {} for label in labels}
+    mean_abs_dev = {label: {} for label in labels}
+    # - Double loop to compare all unique pairs of repeats:
+    for t, ref_scan in enumerate(scans_list):
+        ref_voxel_file = _get_files(ref_scan, task_name, unique=True)[0]
+        ref_voxel = read_npz(ref_voxel_file)
+        if t + 1 > len(scans_list):
+            break  # all unique pairs to compare are done!
+        for flo_scan in scans_list[t + 1:]:
+            flo_voxel_file = _get_files(flo_scan, task_name, unique=True)[0]
+            flo_voxel = read_npz(flo_voxel_file)
+            k = (ref_scan.id, flo_scan.id)
+            for label in labels:
+                r2[label][k] = np.sum(np.sqrt(ref_voxel[label] - flo_voxel[label]))
+                mean_abs_dev[label][k] = np.mean(np.abs(ref_voxel[label] - flo_voxel[label]))
+
+    # Print result to terminal:
+    print("\nVoxels sum of square difference (lower is better) between pairs of repetitions:")
+    print(r2)
+    print("\nVoxels mean absolute deviation (lower is better) between pairs of repetitions:")
+    print(mean_abs_dev)
+
+    # Write a JSON summary file of the comparison:
+    with open(pathlib.Path(db.basedir) / f'{task_name}_comparison.json', 'w') as out_file:
+        json.dump({
+            'sum of square difference': {label: jsonify_tuple_keys(r2[label]) for label in labels},
+            'mean absolute deviation': {label: jsonify_tuple_keys(mean_abs_dev[label]) for label in labels}
+        }, out_file)
+
+    # Creates a heatmap of the pariwise comparisons:
+    for label in labels:
+        metric_str = f'{label} sum of square difference'
+        pairwise_heatmap(r2[label], scans_list, metric_str, task_name, db,
+                         fname=pathlib.Path(db.basedir) / f"{task_name}-{metric_str.replace(' ', '_')}_heatmap.png")
+        metric_str = f'{label} mean absolute deviation'
+        pairwise_heatmap(mean_abs_dev[label], scans_list, f'{label} mean absolute deviation', task_name, db,
+                         fname=pathlib.Path(db.basedir) / f"{task_name}-{metric_str.replace(' ', '_')}_heatmap.png")
 
 def compare_labelled_pointcloud(db, task_name):
-    pass
+    # List the duplicated `Scan` datasets:
+    scans_list = [scan for scan in db.get_scans() if scan.id != 'models']
+    logger.info(f"Comparing {task_name} output for replicated scans list: {[s.id for s in scans_list]}")
+    # Initialize the list of labels with the first PLY file in the list
+    ref_scan = scans_list[0]
+    ref_voxel_file = _get_files(ref_scan, task_name, unique=True)[0]
+    unique_labels = list(set(ref_voxel_file.get_metadata('labels')))
+
+    precision = {ulabel: {} for ulabel in unique_labels}
+    recall = {ulabel: {} for ulabel in unique_labels}
+
+    # - Double loop to compare all unique pairs of repeats:
+    for ref_idx, ref_scan in enumerate(scans_list):
+        # - Read the `PointCloud.ply` file
+        ref_pcd_file = _get_files(ref_scan, task_name, unique=True)[0]
+        ref_pcd = read_point_cloud(ref_pcd_file)
+        ref_labels = ref_pcd_file.get_metadata('labels')
+        ref_pcd_tree = o3d.geometry.KDTreeFlann(ref_pcd)
+        if ref_idx + 1 > len(scans_list):
+            break  # all unique pairs to compare are done!
+        for flo_scan in scans_list[ref_idx + 1:]:
+            # - Read the `PointCloud.ply` file
+            flo_pcd_file = _get_files(flo_scan, task_name, unique=True)[0]
+            flo_pcd = read_point_cloud(flo_pcd_file)
+            flo_labels = flo_pcd_file.get_metadata('labels')
+            res = {ulabel: {"tp": 0, "fp": 0, "tn": 0, "fn": 0} for ulabel in unique_labels}
+            # For each point of the floating point-cloud...
+            for i, pts in enumerate(flo_pcd.points):
+                # ... get its label
+                label_i = flo_labels[i]
+                # ... search for the closest point in reference neighborhood tree
+                [k, idx, _] = ref_pcd_tree.search_knn_vector_3d(pts, 1)
+                for ulabel in unique_labels:
+                    if label_i == ulabel:  # Positive cases
+                        if label_i == ref_labels[idx[0]]:
+                            res[ulabel]["tp"] += 1
+                        else:
+                            res[ulabel]["fp"] += 1
+                    else:  # Negative cases
+                        if label_i == ref_labels[idx[0]]:
+                            res[ulabel]["tn"] += 1
+                        else:
+                            res[ulabel]["fn"] += 1
+            k = (ref_scan.id, flo_scan.id)
+            for ulabel in unique_labels:
+                precision[ulabel][k] = res[ulabel]["tp"] / (res[ulabel]["tp"] + res[ulabel]["fp"])
+                recall[ulabel][k] = res[ulabel]["tp"] / (res[ulabel]["tp"] + res[ulabel]["fn"])
+
+    # Print result to terminal:
+    print("\nPrecision (closer to 1.0 is better) between pairs of repetitions:")
+    print(precision)
+    # Print result to terminal:
+    print("\nRecall (closer to 1.0 is better) between pairs of repetitions:")
+    print(fitness)
+
+    # Write a JSON summary file of the comparison:
+    with open(pathlib.Path(db.basedir) / f'{task_name}_comparison.json', 'w') as out_file:
+        json.dump({
+            'precision': {label: jsonify_tuple_keys(precision[label]) for label in labels},
+            'recall': {label: jsonify_tuple_keys(recall[label]) for label in labels}
+        }, out_file)
+
+    # Creates a heatmap of the pariwise comparisons:
+    for label in labels:
+        metric_str = f'{label} precision'
+        pairwise_heatmap(precision[label], scans_list, metric_str, task_name, db,
+                         fname=pathlib.Path(db.basedir) / f"{task_name}-{metric_str.replace(' ', '_')}_heatmap.png")
+        metric_str = f'{label} recall'
+        pairwise_heatmap(recall[label], scans_list, f'{label} recall', task_name, db,
+                         fname=pathlib.Path(db.basedir) / f"{task_name}-{metric_str.replace(' ', '_')}_heatmap.png")
 
 
 def compare_trianglemesh_points(db, task_name):

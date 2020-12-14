@@ -45,6 +45,7 @@ class VoxelGroundTruth(RomiTask):
         x = self.input_file()
         mtl_file = self.input().get().get_file(x.id + "_mtl")
         outfs = self.output().get()
+        # Convert the input MTL file into a ground truth voxel matrix:
         with tempfile.TemporaryDirectory() as tmpdir:
             io.to_file(x, os.path.join(tmpdir, "plant.obj"))
             io.to_file(x, os.path.join(tmpdir, "plant.mtl"))
@@ -53,14 +54,11 @@ class VoxelGroundTruth(RomiTask):
             res = {}
             min = np.min(x.vertices, axis=0)
             max = np.max(x.vertices, axis=0)
-            arr_size = np.asarray((max - min) / cl.Voxels().voxel_size + 1,
-                                  dtype=np.int) + 1
+            arr_size = np.asarray((max - min) / cl.Voxels().voxel_size + 1, dtype=np.int) + 1
             for k in x.meshes.keys():
                 t = o3d.geometry.TriangleMesh()
-                t.triangles = o3d.utility.Vector3iVector(
-                    np.asarray(x.meshes[k].faces))
-                t.vertices = o3d.utility.Vector3dVector(
-                    np.asarray(x.vertices))
+                t.triangles = o3d.utility.Vector3iVector(np.asarray(x.meshes[k].faces))
+                t.vertices = o3d.utility.Vector3dVector(np.asarray(x.vertices))
                 t.compute_triangle_normals()
                 o3d.io.write_triangle_mesh(os.path.join(tmpdir, "tmp.stl"),
                                               t)
