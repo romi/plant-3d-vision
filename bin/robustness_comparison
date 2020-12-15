@@ -701,7 +701,11 @@ def compare_task_output(db, task_name, independant_tests=False):
             except:
                 pass
     else:
-        eval(c[task_name]["comp_func"] + "(db, task_name)")
+        try:
+            eval(c[task_name]["comp_func"] + "(db, task_name)")
+        except NameError:
+            logger.warning(f"The comparison function {c[task_name]['comp_func']} provided in the "
+                           f"conf_robustness_comparison.json doesn't exist")
 
 
 def fill_test_db(test_db, init_scan_path, task_cfg, nb):
