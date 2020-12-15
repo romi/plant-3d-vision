@@ -450,22 +450,22 @@ def compare_labelled_pointcloud(db, task_name):
     print(precision)
     # Print result to terminal:
     print("\nRecall (closer to 1.0 is better) between pairs of repetitions:")
-    print(fitness)
+    print(recall)
 
     # Write a JSON summary file of the comparison:
     with open(pathlib.Path(db.basedir) / f'{task_name}_comparison.json', 'w') as out_file:
         json.dump({
-            'precision': {label: jsonify_tuple_keys(precision[label]) for label in labels},
-            'recall': {label: jsonify_tuple_keys(recall[label]) for label in labels}
+            'precision': {ulabel: jsonify_tuple_keys(precision[ulabel]) for ulabel in unique_labels},
+            'recall': {ulabel: jsonify_tuple_keys(recall[ulabel]) for ulabel in unique_labels}
         }, out_file)
 
     # Creates a heatmap of the pariwise comparisons:
-    for label in labels:
-        metric_str = f'{label} precision'
-        pairwise_heatmap(precision[label], scans_list, metric_str, task_name, db,
+    for ulabel in unique_labels:
+        metric_str = f'{ulabel} precision'
+        pairwise_heatmap(precision[ulabel], scans_list, metric_str, task_name, db,
                          fname=pathlib.Path(db.basedir) / f"{task_name}-{metric_str.replace(' ', '_')}_heatmap.png")
-        metric_str = f'{label} recall'
-        pairwise_heatmap(recall[label], scans_list, f'{label} recall', task_name, db,
+        metric_str = f'{ulabel} recall'
+        pairwise_heatmap(recall[ulabel], scans_list, f'{ulabel} recall', task_name, db,
                          fname=pathlib.Path(db.basedir) / f"{task_name}-{metric_str.replace(' ', '_')}_heatmap.png")
 
 
