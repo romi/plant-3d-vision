@@ -31,12 +31,7 @@ upstream_task = "SegmentedPointCloud"
 upstream_task = "SegmentedPointCloud"
 
 [AnglesAndInternodes]
-upstream_task = "ClusteredMesh"
+upstream_task = "OrganSegmentation"
 
-[Visualization]
-upstream_point_cloud = "PointCloud"
-upstream_mesh = "TriangleMesh"
-upstream_colmap = "Colmap"
-upstream_angles = "AnglesAndInternodes"
-upstream_skeleton = "CurveSkeleton"
-upstream_images = "ImagesFilesetExists"
+[Clean]
+no_confirm = true

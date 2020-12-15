@@ -32,3 +32,6 @@ upstream_colmap = "Colmap"
 upstream_angles = "AnglesAndInternodes"
 upstream_skeleton = "CurveSkeleton"
 upstream_images = "ImagesFilesetExists"
+
+[Clean]
+no_confirm = true
