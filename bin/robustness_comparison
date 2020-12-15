@@ -73,19 +73,56 @@ def save_data_repartition(data, data_type, db):
 
 
 def pairwise_heatmap(pw_dict, scans_list, task_name, metrics, db, **kwargs):
-    """"""
+    """Save a PNG of the pairwise heatmap.
+
+    Parameters
+    ----------
+    pw_dict : dict
+        Pairwise dictionary with a float value and a pair of scan as keys.
+    scans_list : list
+        List of scan to use in pairwise heatmap representation.
+    task_name : str
+        Name of the task, used in title and filename.
+    metrics : str
+        Name of the metric, used in title and filename.
+    db : FSDB
+        Database containing the scan, used for PNG file location.
+
+    Other Parameters
+    ----------------
+    fname : str
+        PNG file location, override the automatic location.
+
+    Examples
+    --------
+    >>> from romidata import FSDB
+    >>> # - Connect to a ROMI databse to access an 'images' fileset to reconstruct with COLMAP:
+    >>> db = FSDB("/data/ROMI/repeat_test_organseg")
+    >>> db.connect()
+    >>> scans_list = [scan for scan in db.get_scans() if scan.id != 'models']
+    >>> import json
+    >>> pw_json = json.load(open('/data/ROMI/repeat_test_organseg/PointCloud_comparison.json', 'r'))
+    >>> metrics = 'chamfer distances'
+    >>> pw_dict = unjsonify_tuple_keys(pw_json[metrics])
+    >>> pairwise_heatmap(pw_dict, scans_list, 'PointCloud', metrics, db)
+
+    """
     scans_list = sorted([scan.id for scan in scans_list])
     n_scans = len(scans_list)
     pw_mat = np.zeros((n_scans, n_scans))
     for i, scan_i in enumerate(scans_list):
-        for j, scan_j in enumerate(scans_list[i+1:]):
+        for j, scan_j in enumerate(scans_list):
+            if j <= i:
+                continue  # only scan half of the pairwise matrix
             try:
                 data = pw_dict[(scan_i,scan_j)]
             except:
                 data = pw_dict[(scan_j,scan_i)]
-            pw_mat[i,j]=pw_mat[j,i]=data
+            pw_mat[i,j]=data
+            pw_mat[j,i]=data
+
     fig, ax = plt.subplots()
-    fig.set_size_inches(10, 10)
+    fig.set_size_inches(n_scans/2., n_scans/2.)
     im = ax.imshow(pw_mat)
 
     # We want to show all ticks...
@@ -100,10 +137,10 @@ def pairwise_heatmap(pw_dict, scans_list, task_name, metrics, db, **kwargs):
              rotation_mode="anchor")
 
     # Loop over data dimensions and create text annotations.
-    # for i in range(n_scans):
-    #     for j in range(n_scans):
-    #         text = ax.text(j, i, pw_mat[i, j],
-    #                        ha="center", va="center", color="w")
+    for i in range(n_scans):
+        for j in range(i+1, n_scans):
+            text = ax.text(i, j, round(pw_mat[i, j], 1),
+                           ha="center", va="center", color="w", size=7)
 
     ax.set_title(f"Pairwise heatmap for {task_name} {metrics}")
     plt.tight_layout()
@@ -250,6 +287,9 @@ def compare_binary_mask(db, task_name):
 
 def jsonify_tuple_keys(json_dict: dict) -> dict:
     return {f'{k[0]} - {k[1]}': v for k, v in json_dict.items()}
+
+def unjsonify_tuple_keys(json_dict: dict) -> dict:
+    return {tuple(k.split(' - ')): v for k, v in json_dict.items()}
 
 def compare_pointcloud(db, task_name):
     """Use the chamfer distance to compare point-cloud for each unique pairs of repetition.
