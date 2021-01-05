@@ -266,6 +266,10 @@ def compare_binary_mask(db, task_name):
             median_precision[k] = np.median(list(precision[k].values()))
             median_recall[k] = np.median(list(recall[k].values()))
 
+    global_mean_precision = average_file_by_file_comp(mean_precision)
+    global_mean_recall = average_file_by_file_comp(mean_recall)
+    global_median_precision = average_file_by_file_comp(median_precision)
+    global_median_recall = average_file_by_file_comp(median_recall)
     print("\nAverage precision (closer to 1.0 is better) between pairs of repetitions:")
     print(mean_precision)
     print("\nAverage recall (closer to 1.0 is better) between pairs of repetitions:")
@@ -274,13 +278,19 @@ def compare_binary_mask(db, task_name):
     print(median_precision)
     print("\nMedian recall (closer to 1.0 is better) between pairs of repetitions:")
     print(median_recall)
+    print(f"Global average precision {global_mean_precision}")
+    print(f"Global average recall {global_mean_recall}")
+    print(f"Global median precision {global_median_precision}")
+    print(f"Global median recall {global_median_recall}")
 
     # Write a JSON summary file of the comparison:
     with open(pathlib.Path(db.basedir) / f'{task_name}_comparison.json', 'w') as out_file:
         json.dump({
             'mean precision': mean_precision, 'mean recall': mean_recall,
             'median precision': median_precision, 'median recall': median_recall,
-            'precision': precision, 'recall': recall
+            'precision': precision, 'recall': recall,
+            'global mean precision': global_mean_precision, 'global mean recall': global_mean_recall,
+            'global median precision': global_median_precision, 'global median recall': global_median_recall
         }, out_file, indent=2)
 
     return
@@ -290,6 +300,13 @@ def jsonify_tuple_keys(json_dict: dict) -> dict:
 
 def unjsonify_tuple_keys(json_dict: dict) -> dict:
     return {tuple(k.split(' - ')): v for k, v in json_dict.items()}
+
+
+def average_file_by_file_comp(fbf_comp_dict: dict) -> float:
+    if len(fbf_comp_dict.values()):
+        return sum(fbf_comp_dict.values()) / len(fbf_comp_dict.values())
+    else:
+        return None
 
 def compare_pointcloud(db, task_name):
     """Use the chamfer distance to compare point-cloud for each unique pairs of repetition.
@@ -659,11 +676,13 @@ def file_by_file_comparison(db, task_name):
     # Print result to terminal:
     print("File-by-file comparison (similarity percentage) between pairs of repetitions:")
     print(fcmp)
+    average_similarity = average_file_by_file_comp(fcmp)
+    print(f"Mean Similarity: {average_similarity} %")
     print()
 
     # Write a JSON summary file of the comparison:
     with open(pathlib.Path(db.basedir) / 'filebyfile_comparison.json', 'w') as out_file:
-        json.dump({'Similarity (%)': fcmp}, out_file)
+        json.dump({'Similarity (%)': fcmp, 'Mean similarity (%)': average_similarity}, out_file)
 
 
 def compare_task_output(db, task_name, independant_tests=False):
