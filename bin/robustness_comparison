@@ -266,10 +266,10 @@ def compare_binary_mask(db, task_name):
             median_precision[k] = np.median(list(precision[k].values()))
             median_recall[k] = np.median(list(recall[k].values()))
 
-    global_mean_precision = average_file_by_file_comp(mean_precision)
-    global_mean_recall = average_file_by_file_comp(mean_recall)
-    global_median_precision = average_file_by_file_comp(median_precision)
-    global_median_recall = average_file_by_file_comp(median_recall)
+    global_mean_precision = average_pairwise_comparison(mean_precision)
+    global_mean_recall = average_pairwise_comparison(mean_recall)
+    global_median_precision = average_pairwise_comparison(median_precision)
+    global_median_recall = average_pairwise_comparison(median_recall)
     print("\nAverage precision (closer to 1.0 is better) between pairs of repetitions:")
     print(mean_precision)
     print("\nAverage recall (closer to 1.0 is better) between pairs of repetitions:")
@@ -302,7 +302,7 @@ def unjsonify_tuple_keys(json_dict: dict) -> dict:
     return {tuple(k.split(' - ')): v for k, v in json_dict.items()}
 
 
-def average_file_by_file_comp(fbf_comp_dict: dict) -> float:
+def average_pairwise_comparison(fbf_comp_dict: dict) -> float:
     if len(fbf_comp_dict.values()):
         return sum(fbf_comp_dict.values()) / len(fbf_comp_dict.values())
     else:
@@ -349,13 +349,22 @@ def compare_pointcloud(db, task_name):
     print(fitness)
     print("\nResiduals (inliner RMSE) between pairs of repetitions:")
     print(residuals)
+    average_chamfer_dist = average_pairwise_comparison(chamfer_dist)
+    print(f"\nAverage Chamfer distance (lower is better): {average_chamfer_dist}")
+    average_fitness = average_pairwise_comparison(fitness)
+    print(f"Average fitness (closer to 1.0 is better): {average_fitness}")
+    average_residuals = average_pairwise_comparison(residuals)
+    print(f"Average residuals: {average_residuals}")
 
     # Write a JSON summary file of the comparison:
     with open(pathlib.Path(db.basedir) / f'{task_name}_comparison.json', 'w') as out_file:
         json.dump({
             'chamfer distances': jsonify_tuple_keys(chamfer_dist),
             'fitness': jsonify_tuple_keys(fitness),
-            'residuals': jsonify_tuple_keys(residuals)
+            'residuals': jsonify_tuple_keys(residuals),
+            'average chamfer distances': average_chamfer_dist,
+            'average fitness': average_fitness,
+            'average residuals': average_residuals,
         }, out_file)
     # Creates a heatmap of the pariwise comparisons:
     pairwise_heatmap(chamfer_dist, scans_list, 'chamfer distances', task_name, db)
@@ -396,12 +405,25 @@ def compare_voxels(db, task_name):
     print(r2)
     print("\nVoxels mean absolute deviation (lower is better) between pairs of repetitions:")
     print(mean_abs_dev)
+    average_r2 = {}
+    average_mean_abs_dev = {}
+    for label in labels:
+        average_r2[label] = average_pairwise_comparison(r2[label])
+        average_mean_abs_dev[label] = average_pairwise_comparison(mean_abs_dev[label])
+        print(f"Average voxels sum of square difference (lower is better) between pairs of repetitions for label "
+              f"{label}: {average_r2[label]}")
+        print(f"Average voxels mean absolute deviation (lower is better) between pairs of repetitions for label "
+              f"{label}: {average_mean_abs_dev[label]}")
 
     # Write a JSON summary file of the comparison:
     with open(pathlib.Path(db.basedir) / f'{task_name}_comparison.json', 'w') as out_file:
         json.dump({
             'sum of square difference': {label: jsonify_tuple_keys(r2[label]) for label in labels},
-            'mean absolute deviation': {label: jsonify_tuple_keys(mean_abs_dev[label]) for label in labels}
+            'mean absolute deviation': {label: jsonify_tuple_keys(mean_abs_dev[label]) for label in labels},
+            'average pairwise sum of square difference': {label: average_r2[label] for label
+                                                          in labels},
+            'average pairwise mean absolute deviation': {label: average_mean_abs_dev[label] for label
+                                                         in labels}
         }, out_file)
 
     # Creates a heatmap of the pariwise comparisons:
@@ -412,6 +434,7 @@ def compare_voxels(db, task_name):
         metric_str = f'{label} mean absolute deviation'
         pairwise_heatmap(mean_abs_dev[label], scans_list, f'{label} mean absolute deviation', task_name, db,
                          fname=pathlib.Path(db.basedir) / f"{task_name}-{metric_str.replace(' ', '_')}_heatmap.png")
+
 
 def compare_labelled_pointcloud(db, task_name):
     # List the duplicated `Scan` datasets:
@@ -530,13 +553,22 @@ def compare_trianglemesh_points(db, task_name):
     print(surf_ratio)
     print("\nVolume ratio (closer to 1.0 is better) between pairs of repetitions:")
     print(vol_ratio)
+    average_chamfer_dist = average_pairwise_comparison(chamfer_dist)
+    print(f"\nAverage Chamfer distance (lower is better): {average_chamfer_dist}")
+    average_surf_ratio = average_pairwise_comparison(surf_ratio)
+    print(f"Average surface ratio (closer to 1.0 is better): {average_surf_ratio}")
+    average_vol_ratio = average_pairwise_comparison(vol_ratio)
+    print(f"Average volume ratio (closer to 1.0 is better): {average_vol_ratio}")
 
     # Write a JSON summary file of the comparison:
     with open(pathlib.Path(db.basedir) / f'{task_name}_comparison.json', 'w') as out_file:
         json.dump({
-            'chamfer distances': chamfer_dist,
-            'surface ratio': surf_ratio,
-            'volume ratio': vol_ratio
+            'chamfer distances': jsonify_tuple_keys(chamfer_dist),
+            'surface ratio': jsonify_tuple_keys(surf_ratio),
+            'volume ratio': jsonify_tuple_keys(vol_ratio),
+            'average chamfer distances': average_chamfer_dist,
+            'average surface ratio': average_surf_ratio,
+            'average volume ratio': average_vol_ratio
         }, out_file)
 
     return
@@ -578,10 +610,13 @@ def compare_curveskeleton_points(db, task_name):
 
     print("\nChamfer distance (lower is better) between pairs of repetitions:")
     print(chamfer_dist)
+    average_chamfer_dist = average_pairwise_comparison(chamfer_dist)
+    print(f"\nAverage Chamfer distance (lower is better): {average_chamfer_dist}")
 
     # Write a JSON summary file of the comparison:
     with open(pathlib.Path(db.basedir) / f'{task_name}_comparison.json', 'w') as out_file:
-        json.dump({'chamfer distances': chamfer_dist}, out_file)
+        json.dump({'chamfer distances': chamfer_dist,
+                   'average chamfer distance': average_chamfer_dist}, out_file)
 
     return
 
@@ -676,7 +711,7 @@ def file_by_file_comparison(db, task_name):
     # Print result to terminal:
     print("File-by-file comparison (similarity percentage) between pairs of repetitions:")
     print(fcmp)
-    average_similarity = average_file_by_file_comp(fcmp)
+    average_similarity = average_pairwise_comparison(fcmp)
     print(f"Mean Similarity: {average_similarity} %")
     print()
 
@@ -977,7 +1012,6 @@ if __name__ == "__main__":
 
     # - Task configuration
     task_cfg = config_task(task2test, args.config_file, args.full_pipe, c[task2test]["prev_task"])
-
     # - 'test database' setup & dataset duplication:
     if args.test_database is not None:
         logger.info(f"Got a test database location as argument: '{args.test_database}'.")
