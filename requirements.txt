@@ -12,5 +12,5 @@ opencv-python== 4.2.0.34
 pybind11
 pyopencl==2020.2.2
 scikit-image
-toml
+toml>= 0.10.2
 tqdm
