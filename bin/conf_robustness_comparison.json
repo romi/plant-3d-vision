@@ -52,5 +52,25 @@
     "AnglesAndInternodes": {
         "prev_task" : "TreeGraph",
         "comp_func" : "angles_and_internodes_comparison"
+    },
+
+    "Segmentation2d": {
+        "prev_task" : "Colmap",
+        "comp_func" : "compare_segmentation2d"
+    },
+
+    "SegmentedPointCloud": {
+        "prev_task" : "PointCloud",
+        "comp_func" : "compare_labelled_pointcloud"
+    },
+
+    "ClusteredMesh": {
+        "prev_task" : "SegmentedPointCloud",
+        "comp_func" : "compare_clusteredmesh"
+    },
+
+    "OrganSegmentation": {
+        "prev_task" : "TreeGraph",
+        "comp_func" : "compare_organsegmentation"
     }
 }
