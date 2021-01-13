@@ -3,6 +3,7 @@
 # trimesh  # Changed to optional as only used once in romiscan/romiscan/tasks/evaluation.py
 appdirs
 colorlog
+cython
 docker
 imageio
 luigi>= 2.8.11
@@ -10,7 +11,7 @@ networkx
 open3d>= 0.9.0.0  # open3d== 0.9.0.0
 opencv-python== 4.2.0.34
 pybind11
-pyopencl==2020.2.2
+pyopencl== 2020.2.2
 scikit-image
-toml
+toml>= 0.10.2
 tqdm

@@ -1,0 +1,76 @@
+{
+    "Clean": {
+        "prev_task" : "",
+        "comp_func" : ""
+    },
+
+    "Colmap": {
+        "prev_task" : "",
+        "comp_func" : "compare_colmap"
+    },
+
+    "Undistorted": {
+        "prev_task" : "Colmap",
+        "comp_func" : "compare_undistorted"
+    },
+
+    "Masks": {
+        "prev_task" : "Undistorted",
+        "comp_func" : "compare_binary_mask"
+    },
+
+    "Segmentation2D": {
+        "prev_task" : "Undistorted",
+        "comp_func" : "compare_binary_mask"
+    },
+
+    "Voxels": {
+        "prev_task" : "Masks",
+        "comp_func" : "compare_voxels"
+    },
+
+    "PointCloud": {
+        "prev_task" : "Voxels",
+        "comp_func" : "compare_pointcloud"
+    },
+
+    "TriangleMesh": {
+        "prev_task" : "PointCloud",
+        "comp_func" : "compare_trianglemesh_points"
+    },
+
+    "CurveSkeleton": {
+        "prev_task" : "TriangleMesh",
+        "comp_func" : "compare_curveskeleton_points"
+    },
+
+    "TreeGraph": {
+        "prev_task" : "CurveSkeleton",
+        "comp_func" : "compare_treeGraph"
+    },
+
+    "AnglesAndInternodes": {
+        "prev_task" : "TreeGraph",
+        "comp_func" : "angles_and_internodes_comparison"
+    },
+
+    "Segmentation2d": {
+        "prev_task" : "Colmap",
+        "comp_func" : "compare_segmentation2d"
+    },
+
+    "SegmentedPointCloud": {
+        "prev_task" : "PointCloud",
+        "comp_func" : "compare_labelled_pointcloud"
+    },
+
+    "ClusteredMesh": {
+        "prev_task" : "SegmentedPointCloud",
+        "comp_func" : "compare_clusteredmesh"
+    },
+
+    "OrganSegmentation": {
+        "prev_task" : "TreeGraph",
+        "comp_func" : "compare_organsegmentation"
+    }
+}

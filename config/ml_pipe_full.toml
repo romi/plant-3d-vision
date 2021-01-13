@@ -29,11 +29,11 @@ scan_id = "models"
 [Segmentation2D]
 upstream_task = "Undistorted"
 model_fileset = "ModelFileset"
-model_id = "Resnetdataset_gl_png_896_896_epoch50" # no default value
-query = "{\"channel\":\"rgb\"}" # default {}
+model_id = "Resnetdataset_gl_png_896_896_epoch50"  # no default value
+query = "{\"channel\":\"rgb\"}"  # default is an empty dict '{}'
 Sx = 896
 Sy = 896
-labels = "[]"
+labels = "[]"  # default is empty list to use all trained labels from model
 inverted_labels = "[\"background\"]"
 binarize = true
 threshold = 0.01
@@ -73,7 +73,7 @@ eps = 2.0
 min_points = 5
 
 [AnglesAndInternodes]
-upstream_task = "ClusteredMesh"
+upstream_task = "OrganSegmentation"
 characteristic_length = 1.0
 organ_type = "fruit"
 stem_axis = 2

@@ -10,6 +10,7 @@ opts = dict(
     scripts=[
         'bin/romi_run_task',
         'bin/print_task_info',
+        'bin/robustness_comparison',
     ],
     author='Timothée Wintz',
     author_email='timothee@timwin.fr',
