@@ -239,7 +239,7 @@ class ClusteredMesh(RomiTask):
             normals = all_normals[idx, :]
             colors = all_colors[idx, :]
             # Skip point cloud reconstruction if no points corresponding to label
-            if len(points == 0):
+            if len(points) == 0:
                 logger.critical(f"No points found for label: '{l}'")
                 continue
             # Reconstruct colored point cloud with normals:
