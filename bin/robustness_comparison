@@ -278,10 +278,10 @@ def compare_binary_mask(db, task_name):
     print(median_precision)
     print("\nMedian recall (closer to 1.0 is better) between pairs of repetitions:")
     print(median_recall)
-    print(f"Global average precision {global_mean_precision}")
-    print(f"Global average recall {global_mean_recall}")
-    print(f"Global median precision {global_median_precision}")
-    print(f"Global median recall {global_median_recall}")
+    print(f"Global average precision between pairs of repetitions: {global_mean_precision}")
+    print(f"Global average recall between pairs of repetitions: {global_mean_recall}")
+    print(f"Global median precision between pairs of repetitions: {global_median_precision}")
+    print(f"Global median recall: between pairs of repetitions {global_median_recall}")
 
     # Write a JSON summary file of the comparison:
     with open(pathlib.Path(db.basedir) / f'{task_name}_comparison.json', 'w') as out_file:
@@ -350,9 +350,9 @@ def compare_pointcloud(db, task_name):
     print("\nResiduals (inliner RMSE) between pairs of repetitions:")
     print(residuals)
     average_chamfer_dist = average_pairwise_comparison(chamfer_dist)
-    print(f"\nAverage Chamfer distance (lower is better): {average_chamfer_dist}")
+    print(f"\nAverage Chamfer distance (lower is better) between pairs of repetitions: {average_chamfer_dist}")
     average_fitness = average_pairwise_comparison(fitness)
-    print(f"Average fitness (closer to 1.0 is better): {average_fitness}")
+    print(f"Average fitness (closer to 1.0 is better) between pairs of repetitions: {average_fitness}")
     average_residuals = average_pairwise_comparison(residuals)
     print(f"Average residuals: {average_residuals}")
 
@@ -492,11 +492,25 @@ def compare_labelled_pointcloud(db, task_name):
     print("\nRecall (closer to 1.0 is better) between pairs of repetitions:")
     print(recall)
 
+    average_precision = {}
+    average_recall = {}
+    for label in unique_labels:
+        average_precision[label] = average_pairwise_comparison(precision[label])
+        average_recall[label] = average_pairwise_comparison(recall[label])
+        print(f"Average precision (closer to 1.0 is better) between pairs of repetitions for label "
+              f"{label}: {average_precision[label]}")
+        print(f"Average recall (closer to 1.0 is better) between pairs of repetitions for label "
+              f"{label}: {average_recall[label]}")
+
     # Write a JSON summary file of the comparison:
     with open(pathlib.Path(db.basedir) / f'{task_name}_comparison.json', 'w') as out_file:
         json.dump({
             'precision': {ulabel: jsonify_tuple_keys(precision[ulabel]) for ulabel in unique_labels},
-            'recall': {ulabel: jsonify_tuple_keys(recall[ulabel]) for ulabel in unique_labels}
+            'recall': {ulabel: jsonify_tuple_keys(recall[ulabel]) for ulabel in unique_labels},
+            'average pairwise precision': {label: average_precision[label] for label
+                                                          in unique_labels},
+            'average pairwise recall': {label: average_recall[label] for label
+                                                         in unique_labels}
         }, out_file)
 
     # Creates a heatmap of the pariwise comparisons:
@@ -554,11 +568,11 @@ def compare_trianglemesh_points(db, task_name):
     print("\nVolume ratio (closer to 1.0 is better) between pairs of repetitions:")
     print(vol_ratio)
     average_chamfer_dist = average_pairwise_comparison(chamfer_dist)
-    print(f"\nAverage Chamfer distance (lower is better): {average_chamfer_dist}")
+    print(f"\nAverage Chamfer distance (lower is better) between pairs of repetitions: {average_chamfer_dist}")
     average_surf_ratio = average_pairwise_comparison(surf_ratio)
-    print(f"Average surface ratio (closer to 1.0 is better): {average_surf_ratio}")
+    print(f"Average surface ratio (closer to 1.0 is better) between pairs of repetitions: {average_surf_ratio}")
     average_vol_ratio = average_pairwise_comparison(vol_ratio)
-    print(f"Average volume ratio (closer to 1.0 is better): {average_vol_ratio}")
+    print(f"Average volume ratio (closer to 1.0 is better) between pairs of repetitions: {average_vol_ratio}")
 
     # Write a JSON summary file of the comparison:
     with open(pathlib.Path(db.basedir) / f'{task_name}_comparison.json', 'w') as out_file:
@@ -611,7 +625,7 @@ def compare_curveskeleton_points(db, task_name):
     print("\nChamfer distance (lower is better) between pairs of repetitions:")
     print(chamfer_dist)
     average_chamfer_dist = average_pairwise_comparison(chamfer_dist)
-    print(f"\nAverage Chamfer distance (lower is better): {average_chamfer_dist}")
+    print(f"\nAverage Chamfer distance (lower is better) between pairs of repetitions: {average_chamfer_dist}")
 
     # Write a JSON summary file of the comparison:
     with open(pathlib.Path(db.basedir) / f'{task_name}_comparison.json', 'w') as out_file:
@@ -705,14 +719,14 @@ def file_by_file_comparison(db, task_name):
             if n_same == 0:
                 similarity = 0
             else:
-                similarity = (1 - n_diff / n_same) * 100
+                similarity = (n_same / (n_diff + n_same)) * 100
             fcmp[f"{ref_scan.id} - {flo_scan.id}"] = similarity
 
     # Print result to terminal:
     print("File-by-file comparison (similarity percentage) between pairs of repetitions:")
     print(fcmp)
     average_similarity = average_pairwise_comparison(fcmp)
-    print(f"Mean Similarity: {average_similarity} %")
+    print(f"Mean Similarity: {average_similarity:.2f} %")
     print()
 
     # Write a JSON summary file of the comparison:
@@ -762,7 +776,7 @@ def compare_task_output(db, task_name, independant_tests=False):
                            f"conf_robustness_comparison.json doesn't exist")
 
 
-def fill_test_db(test_db, init_scan_path, task_cfg, nb):
+def fill_test_db(test_db, init_scan_path, task_cfg, nb, models_path):
     """
     From an initial scan, copy it in temporary folder, cleans it,
     runs the pipe to the comparison point task and copy the scan a certain
@@ -778,6 +792,8 @@ def fill_test_db(test_db, init_scan_path, task_cfg, nb):
         name of the configuration file to run the pipeline
     nb : int
         number time to repeat the same task to evaluate
+    models_path : pathlib.Path
+        name of models folder for segmentation2D
 
     Returns
     -------
@@ -797,6 +813,14 @@ def fill_test_db(test_db, init_scan_path, task_cfg, nb):
         with open(pathlib.Path(tmp_path / MARKER_FILE_NAME), 'w'):
             pass
         logger.info("Duplicating the scan dataset to a temporary folder...")
+        # if models are needed, copies models folder to temporary folder
+        if models_path:
+            try:
+                shutil.copytree(str(models_path), str(tmp_path / "models"))
+                shutil.copytree(str(models_path), str(test_db / "models"))
+            except:
+                pass
+
         # Duplicate the initial scan dataset to the temporary folder
         shutil.copytree(str(init_scan_path), str(tmp_scan_folder))
         # Check for previous analysis & if yes, clean the dataset
@@ -1008,6 +1032,10 @@ if __name__ == "__main__":
     init_scan_path = pathlib.Path(args.scan).expanduser()
     db_location = init_scan_path.parent
     root_location = db_location.parent
+    if args.models:
+        models_path = pathlib.Path(args.models).expanduser()
+    else:
+        models_path = None
     logger.info(f"Got scan path: {init_scan_path}")
 
     # - Task configuration
@@ -1026,7 +1054,7 @@ if __name__ == "__main__":
     # Case without/with scan datasets in the test database root folder
     if n_replicates == 0:
         # Duplicate the scan dataset as many times as requested
-        test_scans = fill_test_db(test_db_path, init_scan_path, task_cfg, replicate_number)
+        test_scans = fill_test_db(test_db_path, init_scan_path, task_cfg, replicate_number, models_path)
     else:
         # If there is something in the root folder that mean you passed a value to `--test_database`
         # And we then consider that it already contains the replicated scans!
@@ -1047,12 +1075,7 @@ if __name__ == "__main__":
     # - Instantiate ROMI database
     test_db = FSDB(str(test_db_path))
     test_db.connect()
-    if args.models:
-        # shutil.copytree(str(db_location / args.models), str(test_db_path / args.models), dirs_exist_ok=True)
-        try:
-            shutil.copytree(str(db_location / args.models), str(test_db_path / args.models))
-        except:
-            pass
+
     if not args.no_pipeline:
         # - Repeat task on all replicated scans dataset of the test database:
         compute_repeatability_test(test_db, task_cfg)
