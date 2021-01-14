@@ -125,20 +125,39 @@ class Segmentation2D(Masks):
     Upstream task format: Fileset with image files
     Output fileset format: Fileset with grayscale image files, each corresponding to a given input image and class
 
-    Parameters
+    Attributes
     ----------
+    upstream_task : luigi.TaskParameter, optional
+        Upstream task to access RBG images to segment, valid values in {'ImagesFilesetExists', 'Undistorted'}
+        'Undistorted' by default.
+    model_fileset : luigi.TaskParameter, optional
+        Upstream model training task, valid values in {'ModelFileset'}.
+        'ModelFileset' by default.
+    model_id : luigi.Parameter
+        Name of the trained model to use from the 'model' `Fileset`.
+        This should be the file name without extension.
     query : DictParameter
-        query to pass to upstream fileset. It filters file by metadata, e.g
-        {"channel": "rgb"} will process only input files such that "channel"
+        Query to pass to filter upstream 'image' `Fileset`.
+        It filters file by metadata, e.g. '{"channel": "rgb"}' will process only input files such that "channel"
         metadata is equal to "rgb".
-    labels : Parameter
-        string of the form "a,b,c" such that a, b, c are the identifiers of the
-        labels produced by the neural network
-    Sx, Sy : IntParametr
-        size of the input of the neural network.
-        Input pictures are cropped in the center to this size.
-    model_segmentation_name : str??
-        name of ".pt" file. Can be found at `https://db.romi-project.eu/models`
+    Sx, Sy : luigi.IntParameter
+        Size of the input image in the neural network.
+        Input image are cropped, from their center, to this size.
+    labels : luigi.ListParameter, optional
+        List of labels identifiers produced by the neural network to use to generate (binary) mask files.
+        Default to `[]` use all labels identifiers from model.
+    inverted_labels : luigi.ListParameter, optional
+        List of labels identifiers that requires inversion of their predicted mask.
+        Default to `["background"]`.
+    binarize : luigi.BoolParameter, optional
+        If `True`, use a `threshold` to binarize predictions, else returns the prediction map.
+        Default to `True`.
+    threshold : luigi.FloatParameter, optional
+        Threshold to binarize predictions, required if ``binarize=True``.
+        Default to `0.01`.
+    dilation : luigi.IntParameter, optional
+        Dilation factor to apply to a binary mask.
+        Default to `1`.
 
     """
     type = None
@@ -146,19 +165,25 @@ class Segmentation2D(Masks):
 
     upstream_task = luigi.TaskParameter(default=Undistorted)
     model_fileset = luigi.TaskParameter(default=ModelFileset)
-
     model_id = luigi.Parameter()
     query = luigi.DictParameter(default={})
-
     Sx = luigi.IntParameter(default=896)
     Sy = luigi.IntParameter(default=896)
-
     labels = luigi.ListParameter(default=[])
     inverted_labels = luigi.ListParameter(default=["background"])
-
-    resize = luigi.BoolParameter(default=False)
+    # resize = luigi.BoolParameter(default=False)
+    # `resize` seems outdated as `segmentation` from `romiseg.Segmentation2D` uses `ResizeCrop` from `romiseg.utils.train_from_dataset`.
+    binarize = luigi.BoolParameter(default=True)
+    threshold = luigi.FloatParameter(default=0.01)
+    dilation = luigi.IntParameter(default=1)
 
     def requires(self):
+        """ Override default require method returning `self.upstream_task()`.
+
+        Computing mask using trained deep learning models requires:
+          - a set of image to segment
+          - a trained PyTorch model ('*.pt' file)
+        """
         return {
             "images": self.upstream_task(),
             "model": self.model_fileset()
@@ -168,42 +193,62 @@ class Segmentation2D(Masks):
         from romiseg.Segmentation2D import segmentation
         from romiscan import proc2d
 
-        images_fileset = self.input()["images"].get().get_files(
-            query=self.query)
+        # Get the 'image' `Fileset` to segment and filter by `query`:
+        images_fileset = self.input()["images"].get().get_files(query=self.query)
+        # Get the trained model using given `model_id`:
         model_file = self.input()["model"].get().get_file(self.model_id)
+        # A trained model is required, abort if none found!
         if model_file is None:
             raise IOError("unable to find model: %s" % self.model_id)
-
+        # Get the list of labels used in the trained model:
         labels = model_file.get_metadata("label_names")
+        # Filter the list of trained labels to save in segmented mask files...
         if len(self.labels) > 0:
+            # if a list of labels is given ...
             label_range = [labels.index(x) for x in self.labels]
         else:
+            # else use all trained labels
             label_range = range(len(labels))
 
-        # APPLY SEGMENTATION
-        images_segmented, id_im = segmentation(self.Sx, self.Sy, images_fileset,
-                                               model_file, self.resize)
-        output_fileset = self.output().get()
+        # Apply trained segmentation model on 'image' `Fileset`
+        images_segmented, id_im = segmentation(self.Sx, self.Sy, images_fileset, model_file)
 
         # Save class prediction as images, one by one, class per class
-        logger.debug(
-            "Saving the .astype(np.uint8)segmented images, takes around 15 s")
-        for i in range(images_segmented.shape[0]):
-            for j in label_range:
-                f = output_fileset.create_file('%03d_%s' % (i, labels[j]))
-                im = images_segmented[i, j, :, :].cpu().numpy()
-                if labels[j] in self.inverted_labels:
+        logger.debug("Saving the `.astype(np.uint8)` segmented images, takes around 15 s")
+
+        # Get the output `Fileset` used to save predicted label position in (binary) mask files
+        output_fileset = self.output().get()
+        # For every segmented image...
+        for img_id in range(images_segmented.shape[0]):
+            # And for each label in the filtered label list...
+            for label_id in label_range:
+                # Get the corresponding `File` object to use
+                f = output_fileset.create_file('%03d_%s' % (img_id, labels[label_id]))
+                # Get the image for given label as a numpy array
+                im = images_segmented[img_id, label_id, :, :].cpu().numpy()
+                # Invert the prediction map for labels in the `inverted_labels` list
+                if labels[label_id] in self.inverted_labels:
                     im = 1.0 - im
+                # If required, binarize the prediction map to create a binary mask of the predicted label
                 if self.binarize:
                     im = im > self.threshold
+                    # If required, dilation of the binary mask is performed
                     if self.dilation > 0:
                         im = proc2d.dilation(im, self.dilation)
+                # Convert the image to 8bits unsigned integers
                 im = (im * 255).astype(np.uint8)
-                if labels[j] in self.inverted_labels:
+                # Invert the binary mask for labels in `inverted_labels` list
+                if labels[label_id] in self.inverted_labels:
                     im = 255 - im
+                # Save the prediction map or binary mask
                 io.write_image(f, im, 'png')
-                orig_metadata = images_fileset[i].get_metadata()
-                f.set_metadata({'image_id': id_im[i][0], **orig_metadata,
-                                'channel': labels[j]})
-            output_fileset.set_metadata("label_names",
-                                        [labels[j] for j in label_range])
+                # Get the original metadata to add them to `File` object metadata
+                orig_metadata = images_fileset[img_id].get_metadata()
+                # Also add used image id & label to `File` object metadata
+                f.set_metadata({
+                    'image_id': id_im[img_id][0],
+                    'channel': labels[label_id],
+                    **orig_metadata
+                })
+        # Add the list of predicted labels to the metadata of the output `Fileset`
+        output_fileset.set_metadata("label_names", [labels[j] for j in label_range])

@@ -1,0 +1,37 @@
+[Colmap]
+upstream_task = "ImagesFilesetExists"
+
+[Undistorted]
+upstream_task = "ImagesFilesetExists"
+
+[Masks]
+upstream_task = "Undistorted"
+
+[Voxels]
+upstream_mask = "Masks"
+
+[PointCloud]
+upstream_task = "Voxels"
+
+[TriangleMesh]
+upstream_task = "PointCloud"
+
+[CurveSkeleton]
+upstream_task = "TriangleMesh"
+
+[TreeGraph]
+upstream_task = "CurveSkeleton"
+
+[AnglesAndInternodes]
+upstream_task = "TreeGraph"
+
+[Visualization]
+upstream_point_cloud = "PointCloud"
+upstream_mesh = "TriangleMesh"
+upstream_colmap = "Colmap"
+upstream_angles = "AnglesAndInternodes"
+upstream_skeleton = "CurveSkeleton"
+upstream_images = "ImagesFilesetExists"
+
+[Clean]
+no_confirm = true
