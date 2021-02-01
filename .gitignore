@@ -125,3 +125,7 @@ dmypy.json
 *.tcl
 CMakeCache.txt
 CMakeFiles/
+
+# VSCode
+/.vscode/
+
