@@ -247,8 +247,10 @@ class Segmentation2D(Masks):
                 # Also add used image id & label to `File` object metadata
                 f.set_metadata({
                     'image_id': id_im[img_id][0],
-                    'channel': labels[label_id],
                     **orig_metadata
+                })
+                f.set_metadata({
+                    'channel': labels[label_id],
                 })
         # Add the list of predicted labels to the metadata of the output `Fileset`
         output_fileset.set_metadata("label_names", [labels[j] for j in label_range])
