@@ -1,0 +1,36 @@
+[Masks]
+upstream_task = "ImagesFilesetExists"
+type = "linear"
+parameters = "[0, 1, 0]"
+dilation = 2 # default to 0
+binarize = true
+threshold = 0.3
+
+[Voxels]
+upstream_mask = "Masks"
+use_colmap_poses = false
+voxel_size = 0.3
+type = "carving"
+
+[PointCloud]
+upstream_task = "Voxels"
+level_set_value = 0.0
+
+[TriangleMesh]
+upstream_task = "PointCloud"
+
+[CurveSkeleton]
+upstream_task = "TriangleMesh"
+
+[TreeGraph]
+upstream_task = "CurveSkeleton"
+z_axis = 2
+stem_axis_inverted = false
+
+[AnglesAndInternodes]
+upstream_task = "TreeGraph"
+characteristic_length = 1.0
+stem_axis_inverted = false
+
+[Clean]
+no_confirm = true

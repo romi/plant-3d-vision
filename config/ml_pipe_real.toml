@@ -29,21 +29,23 @@ scan_id = "models"
 [Segmentation2D]
 upstream_task = "Undistorted"
 model_fileset = "ModelFileset"
-model_id = "Resnetdataset_gl_png_896_896_epoch50"  # no default value
+model_id = "Resnet_896_896_epoch50"  # no default value
 query = "{\"channel\":\"rgb\"}"  # default is an empty dict '{}'
 Sx = 896
 Sy = 896
-labels = "[]"  # default is empty list to use all trained labels from model
-inverted_labels = "[\"background\"]"
 binarize = true
-threshold = 0.01
+resize = true
 dilation = 1
+epochs = 1
+batch = 1
+learning_rate = 0.0001
+threshold = 0.01
 
 [Voxels]
 upstream_mask = "Segmentation2D"
 upstream_colmap = "Colmap"
 use_colmap_poses = true
-voxel_size = 1.0
+voxel_size = 1
 type = "averaging"
 log = false # default to true
 invert = false
