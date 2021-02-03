@@ -1,19 +1,11 @@
 {
-        "filesets": [
+    "filesets": [
         {
             "files": [
                 {
-                    "file": "tmp_epoch40.pt",
-                    "id": "tmp_epoch40"
+                    "file": "Resnet_896_896_epoch50.pt",
+                    "id": "Resnet_896_896_epoch50"
                 }
-
-            ],
-			"files": [
-                {
-                    "file": "Resnetdataset_gl_png_896_896_epoch50.pt",
-                    "id": "Resnetdataset_gl_png_896_896_epoch50"
-                }
-
             ],
             "id": "models"
         }
