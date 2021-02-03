@@ -28,11 +28,11 @@ jobs:
            run: |
             docker run --gpus all --env PYOPENCL_CTX='0' --rm romiscan:${GITHUB_REF##*/} /bin/sh -c 'cd romiscan/tests/; python -m unittest'
 
-    feature-tests:
+    integration-tests:
        runs-on: self-hosted
        needs: docker-build
         
        steps:
-        - name: Run Feature Tests
+        - name: Run Integration Tests
           run: |
            docker run -v /home/${USER}/ML_models:/home/${USER}/romiscan/tests/testdata/models/models --gpus all --env PYOPENCL_CTX='0' --rm romiscan:${GITHUB_REF##*/} /bin/sh -c 'cd romiscan/tests/; ./check_pipe.sh'

@@ -20,6 +20,7 @@ db_path=''
 vtag="latest"
 cmd=''
 unittest_cmd="cd romiscan/tests/ && python -m unittest"
+integrationtest_cmd="python -m unittest discover -s romiscan/tests/integration/"
 pipeline_cmd="cd romiscan/tests/ && ./check_pipe.sh"
 geom_pipeline_cmd="cd romiscan/tests/ && ./check_geom_pipe.sh"
 ml_pipeline_cmd="cd romiscan/tests/ && ./check_ml_pipe.sh"
@@ -53,6 +54,9 @@ usage() {
     "
   echo " --unittest_cmd
     Runs unit tests defined in romiscan.
+    "
+  echo " --integrationtest_cmd
+    Runs integration tests defined in romiscan.
     "
   echo "  --pipeline_test
     Test pipelines (geometric & ML based) in docker container with CI test.
@@ -92,6 +96,9 @@ while [ "$1" != "" ]; do
     ;;
   --unittest_cmd)
     cmd=$unittest_cmd
+    ;;
+  --integrationtest_cmd)
+    cmd=$integrationtest_cmd
     ;;
   --pipeline_test)
     cmd=$pipeline_cmd
