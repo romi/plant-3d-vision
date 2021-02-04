@@ -1,0 +1,96 @@
+[Colmap]
+upstream_task = "ImagesFilesetExists"
+matcher = "exhaustive"
+compute_dense = false
+align_pcd = true
+calibration_scan_id = ""
+
+  [Colmap.cli_args.feature_extractor]
+  "--ImageReader.single_camera" = "1" # in colmap default to 0
+  "--SiftExtraction.use_gpu" = "1"
+
+  [Colmap.cli_args.exhaustive_matcher]
+  "--SiftMatching.use_gpu" = "1"
+
+  [Colmap.cli_args.model_aligner]
+  "--robust_alignment_max_error" = "10"
+
+  # [Colmap.bounding_box] # default to None
+  # x = [150, 650]
+  # y = [150, 650]
+  # z = [-90, 300]
+
+[Undistorted]
+upstream_task = "ImagesFilesetExists"
+
+[ModelFileset]
+scan_id = "models"
+
+[Segmentation2D]
+upstream_task = "Undistorted"
+model_fileset = "ModelFileset"
+model_id = "Resnet_896_896_epoch50"  # no default value
+query = "{\"channel\":\"rgb\"}"  # default is an empty dict '{}'
+Sx = 896
+Sy = 896
+labels = "[]"  # default is empty list to use all trained labels from model
+inverted_labels = "[\"background\"]"
+binarize = true
+threshold = 0.01
+dilation = 1
+
+[Voxels]
+upstream_mask = "Segmentation2D"
+upstream_colmap = "Colmap"
+use_colmap_poses = true
+voxel_size = 1.0
+type = "averaging"
+log = false # default to true
+invert = false
+labels = "[\"background\"]"
+
+[PointCloud]
+upstream_task = "Voxels"
+level_set_value = 0.5 # default to 1.0
+log = false
+background_prior= 1.0
+min_contrast = 10.0
+min_score = 0.01 # default to 0.2
+
+[SegmentedPointCloud]
+upstream_segmentation = "Segmentation2D"
+upstream_task = "PointCloud"
+use_colmap_poses = true
+
+[ClusteredMesh]
+upstream_task = "SegmentedPointCloud"
+min_vol = 1.0
+min_length = 10.0
+
+[OrganSegmentation]
+upstream_task = "SegmentedPointCloud"
+eps = 2.0
+min_points = 5
+
+[AnglesAndInternodes]
+upstream_task = "OrganSegmentation"
+characteristic_length = 1.0
+organ_type = "fruit"
+stem_axis = 2
+stem_axis_inverted = false
+min_elongation_ratio = 2.0
+min_fruit_size = 0.1
+
+[Visualization]
+upstream_point_cloud = "PointCloud"
+upstream_mesh = "TriangleMesh"
+upstream_colmap = "Colmap"
+upstream_angles = "AnglesAndInternodes"
+upstream_skeleton = "CurveSkeleton"
+upstream_images = "ImagesFilesetExists"
+max_image_size = 1500
+max_point_cloud_size = 10000
+thumbnail_size = 150
+
+[Clean]
+no_confirm = true
