@@ -13,7 +13,7 @@ class TestArabidopsis(unittest.TestCase):
         vertices = np.array(test_pts)
         edges = np.array(test_lines, dtype=int)
         G = arabidopsis.build_graph(vertices, edges)
-        assert(len(G.edges) == len(test_lines) * 2)
+        assert(len(G.edges) == len(test_lines))
         assert(len(G.nodes) == len(test_pts))
 
     def test_compute_tree_graph(self):
