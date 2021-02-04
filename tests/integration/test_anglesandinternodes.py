@@ -112,7 +112,7 @@ class TestMLAnglesAndInternodes(unittest.TestCase):
         print("found angles=", len(angles), "found internodes=", len(internodes))
 
         # TODO : Improve the robustness of these following asserts (use appropriate metrics)
-        assert(len(angles) > 10)
+        assert(len(angles) > 1000)
         assert(len(internodes) > 10)
 
         angles_and_internodes_json_file.close()
