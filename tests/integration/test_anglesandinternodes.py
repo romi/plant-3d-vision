@@ -35,15 +35,20 @@ class TestGeomAnglesAndInternodes(unittest.TestCase):
         assert(process.returncode == 0)
 
         # Check if a minimum number of angles and internodes were computed
-        angles_and_internodes_json_file = glob.glob(real_plant_data + "AnglesAndInternodes_*" + "/" + "AnglesAndInternodes.json")[0]
-        json_data = json.load(open(angles_and_internodes_json_file))
+        angles_and_internodes_json_file = open(glob.glob(real_plant_data + "AnglesAndInternodes_*" + "/" + "AnglesAndInternodes.json")[0])
+        json_data = json.load(angles_and_internodes_json_file)
 
         angles = json_data["angles"]
         internodes = json_data["internodes"]
-        
+
+        # Print number of angles and internodes
+        print("found angles=", len(angles), "found internodes=", len(internodes))
+
         # TODO : Improve the robustness of these following asserts (use appropriate metrics)
         assert(len(angles) > 10)
         assert(len(internodes) > 10)
+
+        angles_and_internodes_json_file.close()
 
     def test_virtual_plant(self):
         geom_pipe_virtual_conf = os.path.join(Path(__file__).parents[2], "config/geom_pipe_virtual.toml")
@@ -58,15 +63,20 @@ class TestGeomAnglesAndInternodes(unittest.TestCase):
         assert(process.returncode == 0)
 
         # Check if a minimum number of angles and internodes were computed
-        angles_and_internodes_json_file = glob.glob(virtual_plant_data + "AnglesAndInternodes_*" + "/" + "AnglesAndInternodes.json")[0]
-        json_data = json.load(open(angles_and_internodes_json_file))
+        angles_and_internodes_json_file = open(glob.glob(virtual_plant_data + "AnglesAndInternodes_*" + "/" + "AnglesAndInternodes.json")[0])
+        json_data = json.load(angles_and_internodes_json_file)
 
         angles = json_data["angles"]
         internodes = json_data["internodes"]
 
+        # Print number of angles and internodes
+        print("found angles=", len(angles), "found internodes=", len(internodes))
+
         # TODO : Improve the robustness of these following asserts (use appropriate metrics)
         assert(len(angles) > 10)
         assert(len(internodes) > 10)
+
+        angles_and_internodes_json_file.close()
     
 class TestMLAnglesAndInternodes(unittest.TestCase):
     def test_real_plant(self):
@@ -83,22 +93,29 @@ class TestMLAnglesAndInternodes(unittest.TestCase):
         if not os.path.exists(model_name):
             url = "https://media.romi-project.eu/data/" + fname
             r = requests.get(url)
-            open(model_name, 'w').write(r.content)
+            model_file = open(model_name, 'wb')
+            model_file.write(r.content)
+            model_file.close()
         
         # Perform the AnglesAndInternodes
         process = run_task(ml_pipe_real_conf, "AnglesAndInternodes", real_plant_data)
         assert(process.returncode == 0)
 
         # Check if a minimum number of angles and internodes were computed
-        angles_and_internodes_json_file = glob.glob(real_plant_data + "AnglesAndInternodes_*" + "/" + "AnglesAndInternodes.json")[0]
-        json_data = json.load(open(angles_and_internodes_json_file))
+        angles_and_internodes_json_file = open(glob.glob(real_plant_data + "AnglesAndInternodes_*" + "/" + "AnglesAndInternodes.json")[0])
+        json_data = json.load(angles_and_internodes_json_file)
 
         angles = json_data["angles"]
         internodes = json_data["internodes"]
 
+        # Print number of angles and internodes
+        print("found angles=", len(angles), "found internodes=", len(internodes))
+
         # TODO : Improve the robustness of these following asserts (use appropriate metrics)
         assert(len(angles) > 10)
         assert(len(internodes) > 10)
+
+        angles_and_internodes_json_file.close()
     
     def test_virtual_plant(self):
         ml_virtual_plant_conf = os.path.join(Path(__file__).parents[2], "config/ml_pipe_virtual.toml")
@@ -114,22 +131,29 @@ class TestMLAnglesAndInternodes(unittest.TestCase):
         if not os.path.exists(model_name):
             url = "https://media.romi-project.eu/data/" + fname
             r = requests.get(url)
-            open(model_name, 'w').write(r.content)
+            model_file = open(model_name, 'wb')
+            model_file.write(r.content)
+            model_file.close()
         
         # Perform the AnglesAndInternodes
         process = run_task(ml_virtual_plant_conf, "AnglesAndInternodes", virtual_plant_data)
         assert(process.returncode == 0)
 
         # Check if a minimum number of angles and internodes were computed
-        angles_and_internodes_json_file = glob.glob(virtual_plant_data + "AnglesAndInternodes_*" + "/" + "AnglesAndInternodes.json")[0]
-        json_data = json.load(open(angles_and_internodes_json_file))
+        angles_and_internodes_json_file = open(glob.glob(virtual_plant_data + "AnglesAndInternodes_*" + "/" + "AnglesAndInternodes.json")[0])
+        json_data = json.load(angles_and_internodes_json_file)
 
         angles = json_data["angles"]
         internodes = json_data["internodes"]
 
+        # Print number of angles and internodes
+        print("found angles=", len(angles), "found internodes=", len(internodes))
+
         # TODO : Improve the robustness of these following asserts (use appropriate metrics)
         assert(len(angles) > 10)
         assert(len(internodes) > 10)
+
+        angles_and_internodes_json_file.close()
 
 
 if __name__ == "__main__":
