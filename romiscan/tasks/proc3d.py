@@ -315,7 +315,7 @@ class OrganSegmentation(RomiTask):
         else:
             print(f"Found {n_points} point for, label '{label}'.")
         # Returns point cloud (colored & with normals if any):
-        return pcd.select_down_sample(list(idx_mask))
+        return pcd.select_by_index(list(idx_mask))
 
     def run(self):
         # Read the pointcloud from the `upstream_task`
