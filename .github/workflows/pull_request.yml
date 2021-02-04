@@ -1,4 +1,4 @@
-# This workflow will build the Docker image, run python unit tests and checks if main features of the pipe are not broken
+# This workflow will build the Docker image, run python unit tests and integration tests
 
 name: CI
 

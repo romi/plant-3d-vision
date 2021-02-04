@@ -1,4 +1,4 @@
-# This workflow will build the Docker image, run python unit tests and checks if main features of the pipe are not broken
+# This workflow will build the Docker image, run python unit tests and integration tests
 
 name: CI
 
@@ -17,7 +17,7 @@ jobs:
          - name: Build Dockerfile
            run: |
             cd docker/
-            docker build --no-cache -t romiscan:${GITHUB_REF##*/} --build-arg USER_NAME=$(id -n -u) --build-arg USER_ID=$(id -u) --build-arg GROUP_ID=$(id -g) --build-arg ROMISCAN_BRANCH=${GITHUB_REF##*/} .
+            ./build.sh -t ${GITHUB_REF##*/} -b ${GITHUB_REF##*/} --no-cache
     
     unit-tests:
         runs-on: self-hosted
@@ -26,7 +26,8 @@ jobs:
         steps:
          - name: Run Unit Tests
            run: |
-            docker run --gpus all --env PYOPENCL_CTX='0' --rm romiscan:${GITHUB_REF##*/} /bin/sh -c 'cd romiscan/tests/; python -m unittest'
+            cd docker/
+            ./run.sh -t ${GITHUB_REF##*/} --unittest_cmd
 
     integration-tests:
        runs-on: self-hosted
@@ -35,4 +36,5 @@ jobs:
        steps:
         - name: Run Integration Tests
           run: |
-           docker run -v /home/${USER}/ML_models:/home/${USER}/romiscan/tests/testdata/models/models --gpus all --env PYOPENCL_CTX='0' --rm romiscan:${GITHUB_REF##*/} /bin/sh -c 'cd romiscan/tests/; ./check_pipe.sh'
+           cd docker/
+           ./run.sh -v /home/${USER}/ML_models:/home/${USER}/romiscan/tests/testdata/models/models -t ${GITHUB_REF##*/} --integrationtest_cmd
