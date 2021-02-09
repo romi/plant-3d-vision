@@ -9,7 +9,7 @@ threshold = 0.3
 [Voxels]
 upstream_mask = "Masks"
 use_colmap_poses = false
-voxel_size = 0.3
+voxel_size = 0.1
 type = "carving"
 
 [PointCloud]
