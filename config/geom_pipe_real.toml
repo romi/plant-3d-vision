@@ -44,7 +44,7 @@ level_set_value = 0.0
 
 [TriangleMesh]
 upstream_task = "PointCloud"
-library = "open3d"
+library = "open3d" # or "cgal"
 filtering = "most connected triangles"  # ["", "most connected triangles", "largest connected triangles", "dbscan point-cloud"]
 
 [CurveSkeleton]
