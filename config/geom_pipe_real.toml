@@ -27,7 +27,7 @@ upstream_task = "ImagesFilesetExists"
 upstream_task = "Undistorted"
 type = "linear"
 parameters = "[0, 1, 0]"
-dilation = 2 # default to 0
+dilation = 5 # default to 0
 binarize = true
 threshold = 0.2
 
