@@ -5,12 +5,11 @@ ARG USER_NAME=scanner
 ARG USER_ID=1000
 ARG GROUP_NAME=scanner
 ARG GROUP_ID=1000
-ARG ROMISCAN_BRANCH=dev
 
 # Change Shell to 'bash', default is 'sh'
 SHELL [ "/bin/bash", "-c" ]
 
-ENV DB_LOCATION="/home/${USER_NAME}/db_test"
+ENV DB_LOCATION="/home/${USER_NAME}/database"
 ENV PATH=$PATH:"/home/${USER_NAME}/.local/bin"
 ENV COLMAP_EXE='colmap'
 
@@ -43,11 +42,9 @@ USER ${USER_NAME}
 ENV NVIDIA_VISIBLE_DEVICES all
 ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
 
-RUN git clone https://github.com/romi/romiscan && \
-    cd romiscan/ && \
-    git checkout $ROMISCAN_BRANCH && \
-    git submodule init && \
-    git submodule update && \
+COPY --chown=${USER_NAME}:${GROUP_NAME} ./ romiscan/
+
+RUN cd romiscan/ && \
     python -m pip install -e ./romidata/ --no-cache-dir && \
     python -m pip install -e ./romiseg/ --no-cache-dir && \
     python -m pip install -e ./romiscanner/ --no-cache-dir && \
