@@ -136,18 +136,18 @@ done
 # Use 'host database path' & 'docker user' to create a bind mount:
 if [ "$db_path" != "" ]
 then
-  mount_option="$mount_option -v $db_path:/home/$user/db"
+  mount_option="$mount_option -v $db_path:/home/$user/database/"
 fi
 
 if [ "$cmd" = "" ]
 then
   # Start in interactive mode:
-  docker run --runtime=nvidia --gpus all $mount_option \
+  docker run --gpus all $mount_option \
     --env PYOPENCL_CTX='0' \
-    -it romiscan:$vtag
+    -it romiscan:$vtag /bin/bash
 else
   # Start in non-interactive mode (run the command):
-  docker run --runtime=nvidia --gpus all $mount_option \
+  docker run --gpus all $mount_option \
     --env PYOPENCL_CTX='0' \
     --rm \
     romiscan:$vtag \

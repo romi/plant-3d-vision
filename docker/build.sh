@@ -13,7 +13,6 @@
 # $ ./build.sh -t debug -b 'my_branch'
 
 vtag="latest"
-romiscan_branch='dev'
 user=$USER
 uid=$(id -u)
 group=$(id -g -n)
@@ -45,9 +44,6 @@ usage() {
   echo "  --gid
     Group id to use with 'user' inside docker image, default to '$gid'.
     "
-  echo "  -b, --romiscan
-    Git branch to use for cloning 'romiscan' inside docker image, default to '$romiscan_branch'.
-    "
   # Docker options:
   echo "  --no-cache
     Do not use cache when building the image, (re)start from scratch.
@@ -66,10 +62,6 @@ while [ "$1" != "" ]; do
   -t | --tag)
     shift
     vtag=$1
-    ;;
-  -b | --romiscan)
-    shift
-    romiscan_branch=$1
     ;;
   -u | --user)
     shift
@@ -112,12 +104,11 @@ start_time=`date +%s`
 
 # Start the docker image build:
 docker build -t romiscan:$vtag $docker_opts \
-  --build-arg ROMISCAN_BRANCH=$romiscan_branch \
   --build-arg USER_NAME=$user \
   --build-arg USER_ID=$uid \
   --build-arg GROUP_NAME=$group \
   --build-arg GROUP_ID=$gid \
-  .
+  -f docker/Dockerfile .
 
 docker_build_status=$?
 
