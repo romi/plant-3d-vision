@@ -2,6 +2,79 @@
 
 Documentation about the "Plant Scanner" project can be found [here](https://docs.romi-project.eu/Scanner/home/).
 
+# Table of Contents
+- [Building and running with Docker (recommended)](#Docker)
+    * [Building the image](#Building-the-image)
+    * [Running the container](#Running-the-container)
+    * [Performing a task with `romiscan`](#Performing-a-task-with-romiscan)
+- [Install requirements for Ubuntu and Conda Environment](#Install-requirements)
+- [Conda Environment](#Conda-environment)
+    * [Install from sources in conda environment](#Install-from-sources-in-conda-environment)
+    * [Build `romiscan` conda package](#Build-romiscan-conda-package)
+    * [Install `romiscan` conda package](#Install-romiscan-conda-package)
+
+## Docker
+
+### Building the image
+To build the Docker image of romiscan, you have to clone the repo and run the script `docker/build.sh`.
+
+```bash
+
+git clone git clone https://github.com/romi/romiscan
+cd romiscan/
+git submodule init
+git submodule update
+./docker/build.sh
+```
+This will create an image docker `romiscan:latest`. If you want to tag your image with a specific one, just pass the tag argument as follows
+`./docker/build.sh -t mytag`
+
+To show more options (built-in user...), just type `./docker/build.sh -h`.
+Note that, you must run the script from the root of `romiscan` folder as shown previously.
+
+
+### Running the container
+In the docker folder, you will find also a run script `docker/run.sh`.
+You may want to mount your database folder and an other folder (let's say your configs).
+This can be done as follows:
+```bash
+./docker/run.sh \
+    -v /home/${USER}/my_database:/home/${USER}/database/ \
+    -v /home/${USER}/my_configs/:/home/${USER}/config/
+```
+Don't forget to change the paths with yours!
+
+If you want to run a docker image with an other tag, you can pass the tag name as an argument:
+`./docker/run.sh -t my_tage`.
+
+To see more running options (specif tag, command...), type `./docker/run.sh -h`
+
+**Troubleshooting**:
+
+- You must install nvidia gpu drivers, nvidia-docker (v2.0) and nvidia-container-toolkit. To test if everything is okay:
+
+```bash
+./docker/run.sh --gpu_test
+```
+
+This docker image has been tested successfully on:
+`docker --version=19.03.6 | nvidia driver version=450.102.04 | CUDA version=11.0`
+
+### Performing a task with romiscan
+Inside the docker image there is a `romi_run_task` command which performs a task on a database according to a passed config file.
+
+In this following example, we will use the test database and config file shipped in this repo:
+ - Run the default docker image (`romiscan:latest`)
+ - Mount the database (`romiscan/tests/testdata/`) and configs folder (romiscan/config/) inside the docker container
+ - Perform the task `AnglesAndInternodes` on the database with `geom_pipe_real.toml` config file
+
+```bash
+./docker/run.sh -v /path/to/romiscan/tests/testdata/:/home/$USER/database/ -v /path/to/romiscan/config/:/home/$USER/config
+romi_run_task --config ~/config/geom_pipe_real.toml AnglesAndInternodes ~/database/real_plant/
+```
+
+Don't forget to replace the paths `path/to/romican` by the correct ones.
+
 ## Install requirements
 Colmap is required to run the reconstruction tasks, follow the official install instructions for linux [here](https://colmap.github.io/install.html#linux).
 
@@ -44,7 +117,9 @@ To avoid troubles during `pyopencl` install, check `/usr/lib/libOpenCL.so` exist
 ln -s /usr/lib/x86_64-linux-gnu/libOpenCL.so.1 /usr/lib/libOpenCL.so
 ```
 
-## Install from sources in conda environment:
+## Conda environment
+
+## Install from sources in conda environment
 In this install instructions, we leverage the `git submodule` functionality to clone the required ROMI libraries.
 
 1. Clone the `romiscan` sources:
@@ -92,17 +167,14 @@ In this install instructions, we leverage the `git submodule` functionality to c
     apt-get install libsm6 libxext6 libxrender-dev
     ```
 
-
-## Conda packaging
-
-### Build `romiscan` conda package:
+### Build romiscan conda package
 From the `base` conda environment, run:
 ```bash
 conda build conda_recipes/romiscan/ -c romi-eu -c open3d-admin -c conda-forge --user romi-eu
 ```
 
 
-### Install `romiscan` conda package:
+### Install romiscan conda package
 ```bash
 conda create -n romiscan romiscan -c romi-eu -c open3d-admin --force
 ```
@@ -111,49 +183,3 @@ To test package install, in the activated environment import `romiscan` in pytho
 conda activate romiscan
 python -c 'import romiscan'
 ```
-
-
-## Docker
-
-### Building the image
-To enable read/write access, it is required have correct user name, uid & gid.
-Then we use arguments (`USER_NAME`, `USER_ID` & `GROUP_ID`) with docker image build command:
-```bash
-docker build -t romiscan:<tag> \
-    --build-arg USER_NAME=$(id -n -u) \
-    --build-arg USER_ID=$(id -u) \
-    --build-arg GROUP_ID=$(id -g) .
-```
-Don’t forget to change the `<tag>` to a version (e.g. `v0.6`) or explicit name (e.g. `fix_colmap`) of your choosing!
-
-Note that:
-
-- `$(id -n -u)` will retrieve your host user name
-- `$(id -u)` will retrieve your host user id
-- `$(id -g)` will retrieve your host user group id
-
-
-### Running the container
-On the server, mount your database directory to `db_test` and optionally the config: 
-```bash
-docker run -it \
-    -v /home/${USER}/database_<user>:/home/${USER}/db_test \
-    -v /home/${USER}/configs/:/home/${USER}/config/ \
-    --env PYOPENCL_CTX='0' \
-    --gpus all romiscan:<tag> bash
-```
-Don't forget to:
-
-- set the `<tag>` to match the one used to build!
-- change the database path `database_<user>` with yours!
-
-Also, note that:
-
-- you are using the docker image `romiscan:0.6`
-- you mount the host directory `~/database_<user>` "inside" the running container in the `~/db_test` directory
-- you mount the host directory `~/configs` "inside" the running container in the `~/config` directory
-- you activate all GPUs within the container with `--gpus all`
-- declaring the environment variable `PYOPENCL_CTX='0'` select the first CUDA GPU capable
-- `-it` & `bash` returns an interactive bash shell
-
-You may want to name the running container (with `--name <my_name>`) if you "deamonize" it (with `-d`).
