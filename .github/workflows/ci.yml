@@ -2,7 +2,7 @@
 
 name: CI
 
-on: pull_request
+on: [pull_request, push]
 
 jobs:
     docker-build:
@@ -12,8 +12,9 @@ jobs:
          - uses: actions/checkout@v2
          - name: Build Dockerfile
            run: |
-            cd docker/
-            ./build.sh -t ${{ github.sha }} -b ${{ github.head_ref }} --no-cache
+            git submodule init
+            git submodule update
+            ./docker/build.sh -t ${{ github.sha }} --no-cache
     
     unit-tests:
         runs-on: self-hosted
@@ -22,8 +23,7 @@ jobs:
         steps:
          - name: Run Unit Tests
            run: |
-            cd docker/
-            ./run.sh -t ${{ github.sha }} --unittest_cmd
+            ./docker/run.sh -t ${{ github.sha }} --unittest_cmd
 
     integration-tests:
        runs-on: self-hosted
@@ -32,8 +32,7 @@ jobs:
        steps:
         - name: Run Integration Tests
           run: |
-           cd docker/ 
-           ./run.sh -v /home/${USER}/ML_models:/home/${USER}/romiscan/tests/testdata/models/models -t ${{ github.sha }} --integrationtest_cmd
+           ./docker/run.sh -v /home/${USER}/ML_models:/home/${USER}/romiscan/tests/testdata/models/models -t ${{ github.sha }} --integrationtest_cmd
 
     docker-clean:
        runs-on: self-hosted
