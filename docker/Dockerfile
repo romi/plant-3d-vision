@@ -15,7 +15,7 @@ ENV COLMAP_EXE='colmap'
 
 USER root
 RUN apt-get update && apt-get install -y \
-    python3.7 python3.7-dev python3-pip wget && \
+    python3.7 python3.7-dev python3-pip wget emacs-nox && \
     update-alternatives --install /usr/bin/python python /usr/bin/python3.7 10 && \
     apt-get update && apt-get install -y --no-install-recommends \
     ocl-icd-libopencl1 opencl-headers clinfo && \
