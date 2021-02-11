@@ -9,11 +9,11 @@ jobs:
         runs-on: self-hosted
 
         steps:
-         - uses: actions/checkout@v2
+         - uses: actions/checkout@v1
+           with:
+             submodules: true
          - name: Build Dockerfile
            run: |
-            git submodule init
-            git submodule update
             ./docker/build.sh -t ${{ github.sha }} --no-cache
     
     unit-tests:
