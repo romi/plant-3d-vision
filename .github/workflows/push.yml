@@ -13,11 +13,12 @@ jobs:
         runs-on: self-hosted
 
         steps:
-         - uses: actions/checkout@v2
+         - uses: actions/checkout@v1
+           with:
+             submodules: true
          - name: Build Dockerfile
            run: |
-            cd docker/
-            ./build.sh -t ${GITHUB_REF##*/} -b ${GITHUB_REF##*/} --no-cache
+            ./docker/build.sh -t ${GITHUB_REF##*/} --no-cache
     
     unit-tests:
         runs-on: self-hosted
@@ -26,8 +27,7 @@ jobs:
         steps:
          - name: Run Unit Tests
            run: |
-            cd docker/
-            ./run.sh -t ${GITHUB_REF##*/} --unittest_cmd
+            ./docker/run.sh -t ${GITHUB_REF##*/} --unittest_cmd
 
     integration-tests:
        runs-on: self-hosted
@@ -36,5 +36,14 @@ jobs:
        steps:
         - name: Run Integration Tests
           run: |
-           cd docker/
-           ./run.sh -v /home/${USER}/ML_models:/home/${USER}/romiscan/tests/testdata/models/models -t ${GITHUB_REF##*/} --integrationtest_cmd
+           ./docker/run.sh -v /home/${USER}/ML_models:/home/${USER}/romiscan/tests/testdata/models/models -t ${GITHUB_REF##*/} --integrationtest_cmd
+
+    docker-clean:
+       runs-on: self-hosted
+       needs: [integration-tests, unit-tests]
+       if: always()
+
+       steps:
+        - name: Remove Docker Image
+          run: |
+            docker image rm romiscan:${GITHUB_REF##*/}
