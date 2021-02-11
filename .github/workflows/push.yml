@@ -1,0 +1,40 @@
+# This workflow will build the Docker image, run python unit tests and integration tests
+
+name: CI
+
+on:
+  push:
+    branches:
+        - dev
+        - v*
+
+jobs:
+    docker-build:
+        runs-on: self-hosted
+
+        steps:
+         - uses: actions/checkout@v2
+         - name: Build Dockerfile
+           run: |
+            cd docker/
+            ./build.sh -t ${GITHUB_REF##*/} -b ${GITHUB_REF##*/} --no-cache
+    
+    unit-tests:
+        runs-on: self-hosted
+        needs: docker-build
+        
+        steps:
+         - name: Run Unit Tests
+           run: |
+            cd docker/
+            ./run.sh -t ${GITHUB_REF##*/} --unittest_cmd
+
+    integration-tests:
+       runs-on: self-hosted
+       needs: docker-build
+        
+       steps:
+        - name: Run Integration Tests
+          run: |
+           cd docker/
+           ./run.sh -v /home/${USER}/ML_models:/home/${USER}/romiscan/tests/testdata/models/models -t ${GITHUB_REF##*/} --integrationtest_cmd
