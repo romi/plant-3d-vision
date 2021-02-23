@@ -1,6 +1,6 @@
 # romiscan v0.8.99 (dev)
 
-Documentation about the "Plant Scanner" project can be found [here](https://docs.romi-project.eu/Scanner/home/).
+Documentation about the "Plant Scanner" project can be found [here](https://docs.romi-project.eu/Scanner/).
 
 # Table of Contents
 - [Building and running with Docker (recommended)](#Docker)
