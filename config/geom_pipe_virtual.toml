@@ -6,6 +6,7 @@ parameters = "[0, 1, 0]"
 dilation = 2 # default to 0
 binarize = true
 threshold = 0.3
+query = "{\"channel\":\"rgb\"}"  # default is an empty dict '{}'
 
 [Voxels]
 upstream_mask = "Masks"
