@@ -20,7 +20,7 @@ To build the Docker image of romiscan, you have to clone the repo and run the sc
 
 ```bash
 
-git https://github.com/romi/romiscan.git
+git clone https://github.com/romi/romiscan.git
 cd romiscan/
 git submodule init
 git submodule update
