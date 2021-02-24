@@ -44,6 +44,9 @@ ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
 
 COPY --chown=${USER_NAME}:${GROUP_NAME} ./ romiscan/
 
+RUN wget https://media.romi-project.eu/data/Resnet_896_896_epoch50.pt && \
+    mv Resnet_896_896_epoch50.pt romiscan/tests/testdata/models/models/
+
 RUN cd romiscan/ && \
     python -m pip install -e ./romidata/ --no-cache-dir && \
     python -m pip install -e ./romiseg/ --no-cache-dir && \
