@@ -1,0 +1,19 @@
+{
+    "task_params": {
+        "lpy_file_id": "arabidopsis_notex",
+        "lpy_globals": {
+            "BETA": 51,
+            "BRANCHON": false,
+            "INTERNODE_LENGTH": 1.3,
+            "MEAN_NB_DAYS": 70,
+            "STDEV_NB_DAYS": 5,
+            "STEM_DIAMETER": 0.09
+        },
+        "metadata": [
+            "angles",
+            "internodes"
+        ],
+        "output_file_id": "out",
+        "scan_id": ""
+    }
+}
