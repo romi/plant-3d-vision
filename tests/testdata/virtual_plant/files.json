@@ -3,76 +3,521 @@
         {
             "files": [
                 {
+                    "file": "VirtualPlant.obj",
+                    "id": "VirtualPlant"
+                },
+                {
+                    "file": "VirtualPlant_mtl.mtl",
+                    "id": "VirtualPlant_mtl"
+                }
+            ],
+            "id": "VirtualPlant_arabidopsis_note___BRANCHON___fal___angles____inte_a7299a0b5f"
+        },
+        {
+            "files": [
+                {
                     "file": "00000_rgb.png",
                     "id": "00000_rgb"
+                },
+                {
+                    "file": "00000_flower.png",
+                    "id": "00000_flower"
+                },
+                {
+                    "file": "00000_leaf.png",
+                    "id": "00000_leaf"
+                },
+                {
+                    "file": "00000_pedicel.png",
+                    "id": "00000_pedicel"
+                },
+                {
+                    "file": "00000_stem.png",
+                    "id": "00000_stem"
+                },
+                {
+                    "file": "00000_fruit.png",
+                    "id": "00000_fruit"
+                },
+                {
+                    "file": "00000_background.png",
+                    "id": "00000_background"
                 },
                 {
                     "file": "00001_rgb.png",
                     "id": "00001_rgb"
                 },
                 {
+                    "file": "00001_flower.png",
+                    "id": "00001_flower"
+                },
+                {
+                    "file": "00001_leaf.png",
+                    "id": "00001_leaf"
+                },
+                {
+                    "file": "00001_pedicel.png",
+                    "id": "00001_pedicel"
+                },
+                {
+                    "file": "00001_stem.png",
+                    "id": "00001_stem"
+                },
+                {
+                    "file": "00001_fruit.png",
+                    "id": "00001_fruit"
+                },
+                {
+                    "file": "00001_background.png",
+                    "id": "00001_background"
+                },
+                {
                     "file": "00002_rgb.png",
                     "id": "00002_rgb"
+                },
+                {
+                    "file": "00002_flower.png",
+                    "id": "00002_flower"
+                },
+                {
+                    "file": "00002_leaf.png",
+                    "id": "00002_leaf"
+                },
+                {
+                    "file": "00002_pedicel.png",
+                    "id": "00002_pedicel"
+                },
+                {
+                    "file": "00002_stem.png",
+                    "id": "00002_stem"
+                },
+                {
+                    "file": "00002_fruit.png",
+                    "id": "00002_fruit"
+                },
+                {
+                    "file": "00002_background.png",
+                    "id": "00002_background"
                 },
                 {
                     "file": "00003_rgb.png",
                     "id": "00003_rgb"
                 },
                 {
+                    "file": "00003_flower.png",
+                    "id": "00003_flower"
+                },
+                {
+                    "file": "00003_leaf.png",
+                    "id": "00003_leaf"
+                },
+                {
+                    "file": "00003_pedicel.png",
+                    "id": "00003_pedicel"
+                },
+                {
+                    "file": "00003_stem.png",
+                    "id": "00003_stem"
+                },
+                {
+                    "file": "00003_fruit.png",
+                    "id": "00003_fruit"
+                },
+                {
+                    "file": "00003_background.png",
+                    "id": "00003_background"
+                },
+                {
                     "file": "00004_rgb.png",
                     "id": "00004_rgb"
+                },
+                {
+                    "file": "00004_flower.png",
+                    "id": "00004_flower"
+                },
+                {
+                    "file": "00004_leaf.png",
+                    "id": "00004_leaf"
+                },
+                {
+                    "file": "00004_pedicel.png",
+                    "id": "00004_pedicel"
+                },
+                {
+                    "file": "00004_stem.png",
+                    "id": "00004_stem"
+                },
+                {
+                    "file": "00004_fruit.png",
+                    "id": "00004_fruit"
+                },
+                {
+                    "file": "00004_background.png",
+                    "id": "00004_background"
                 },
                 {
                     "file": "00005_rgb.png",
                     "id": "00005_rgb"
                 },
                 {
+                    "file": "00005_flower.png",
+                    "id": "00005_flower"
+                },
+                {
+                    "file": "00005_leaf.png",
+                    "id": "00005_leaf"
+                },
+                {
+                    "file": "00005_pedicel.png",
+                    "id": "00005_pedicel"
+                },
+                {
+                    "file": "00005_stem.png",
+                    "id": "00005_stem"
+                },
+                {
+                    "file": "00005_fruit.png",
+                    "id": "00005_fruit"
+                },
+                {
+                    "file": "00005_background.png",
+                    "id": "00005_background"
+                },
+                {
                     "file": "00006_rgb.png",
                     "id": "00006_rgb"
+                },
+                {
+                    "file": "00006_flower.png",
+                    "id": "00006_flower"
+                },
+                {
+                    "file": "00006_leaf.png",
+                    "id": "00006_leaf"
+                },
+                {
+                    "file": "00006_pedicel.png",
+                    "id": "00006_pedicel"
+                },
+                {
+                    "file": "00006_stem.png",
+                    "id": "00006_stem"
+                },
+                {
+                    "file": "00006_fruit.png",
+                    "id": "00006_fruit"
+                },
+                {
+                    "file": "00006_background.png",
+                    "id": "00006_background"
                 },
                 {
                     "file": "00007_rgb.png",
                     "id": "00007_rgb"
                 },
                 {
+                    "file": "00007_flower.png",
+                    "id": "00007_flower"
+                },
+                {
+                    "file": "00007_leaf.png",
+                    "id": "00007_leaf"
+                },
+                {
+                    "file": "00007_pedicel.png",
+                    "id": "00007_pedicel"
+                },
+                {
+                    "file": "00007_stem.png",
+                    "id": "00007_stem"
+                },
+                {
+                    "file": "00007_fruit.png",
+                    "id": "00007_fruit"
+                },
+                {
+                    "file": "00007_background.png",
+                    "id": "00007_background"
+                },
+                {
                     "file": "00008_rgb.png",
                     "id": "00008_rgb"
+                },
+                {
+                    "file": "00008_flower.png",
+                    "id": "00008_flower"
+                },
+                {
+                    "file": "00008_leaf.png",
+                    "id": "00008_leaf"
+                },
+                {
+                    "file": "00008_pedicel.png",
+                    "id": "00008_pedicel"
+                },
+                {
+                    "file": "00008_stem.png",
+                    "id": "00008_stem"
+                },
+                {
+                    "file": "00008_fruit.png",
+                    "id": "00008_fruit"
+                },
+                {
+                    "file": "00008_background.png",
+                    "id": "00008_background"
                 },
                 {
                     "file": "00009_rgb.png",
                     "id": "00009_rgb"
                 },
                 {
+                    "file": "00009_flower.png",
+                    "id": "00009_flower"
+                },
+                {
+                    "file": "00009_leaf.png",
+                    "id": "00009_leaf"
+                },
+                {
+                    "file": "00009_pedicel.png",
+                    "id": "00009_pedicel"
+                },
+                {
+                    "file": "00009_stem.png",
+                    "id": "00009_stem"
+                },
+                {
+                    "file": "00009_fruit.png",
+                    "id": "00009_fruit"
+                },
+                {
+                    "file": "00009_background.png",
+                    "id": "00009_background"
+                },
+                {
                     "file": "00010_rgb.png",
                     "id": "00010_rgb"
+                },
+                {
+                    "file": "00010_flower.png",
+                    "id": "00010_flower"
+                },
+                {
+                    "file": "00010_leaf.png",
+                    "id": "00010_leaf"
+                },
+                {
+                    "file": "00010_pedicel.png",
+                    "id": "00010_pedicel"
+                },
+                {
+                    "file": "00010_stem.png",
+                    "id": "00010_stem"
+                },
+                {
+                    "file": "00010_fruit.png",
+                    "id": "00010_fruit"
+                },
+                {
+                    "file": "00010_background.png",
+                    "id": "00010_background"
                 },
                 {
                     "file": "00011_rgb.png",
                     "id": "00011_rgb"
                 },
                 {
+                    "file": "00011_flower.png",
+                    "id": "00011_flower"
+                },
+                {
+                    "file": "00011_leaf.png",
+                    "id": "00011_leaf"
+                },
+                {
+                    "file": "00011_pedicel.png",
+                    "id": "00011_pedicel"
+                },
+                {
+                    "file": "00011_stem.png",
+                    "id": "00011_stem"
+                },
+                {
+                    "file": "00011_fruit.png",
+                    "id": "00011_fruit"
+                },
+                {
+                    "file": "00011_background.png",
+                    "id": "00011_background"
+                },
+                {
                     "file": "00012_rgb.png",
                     "id": "00012_rgb"
+                },
+                {
+                    "file": "00012_flower.png",
+                    "id": "00012_flower"
+                },
+                {
+                    "file": "00012_leaf.png",
+                    "id": "00012_leaf"
+                },
+                {
+                    "file": "00012_pedicel.png",
+                    "id": "00012_pedicel"
+                },
+                {
+                    "file": "00012_stem.png",
+                    "id": "00012_stem"
+                },
+                {
+                    "file": "00012_fruit.png",
+                    "id": "00012_fruit"
+                },
+                {
+                    "file": "00012_background.png",
+                    "id": "00012_background"
                 },
                 {
                     "file": "00013_rgb.png",
                     "id": "00013_rgb"
                 },
                 {
+                    "file": "00013_flower.png",
+                    "id": "00013_flower"
+                },
+                {
+                    "file": "00013_leaf.png",
+                    "id": "00013_leaf"
+                },
+                {
+                    "file": "00013_pedicel.png",
+                    "id": "00013_pedicel"
+                },
+                {
+                    "file": "00013_stem.png",
+                    "id": "00013_stem"
+                },
+                {
+                    "file": "00013_fruit.png",
+                    "id": "00013_fruit"
+                },
+                {
+                    "file": "00013_background.png",
+                    "id": "00013_background"
+                },
+                {
                     "file": "00014_rgb.png",
                     "id": "00014_rgb"
+                },
+                {
+                    "file": "00014_flower.png",
+                    "id": "00014_flower"
+                },
+                {
+                    "file": "00014_leaf.png",
+                    "id": "00014_leaf"
+                },
+                {
+                    "file": "00014_pedicel.png",
+                    "id": "00014_pedicel"
+                },
+                {
+                    "file": "00014_stem.png",
+                    "id": "00014_stem"
+                },
+                {
+                    "file": "00014_fruit.png",
+                    "id": "00014_fruit"
+                },
+                {
+                    "file": "00014_background.png",
+                    "id": "00014_background"
                 },
                 {
                     "file": "00015_rgb.png",
                     "id": "00015_rgb"
                 },
                 {
+                    "file": "00015_flower.png",
+                    "id": "00015_flower"
+                },
+                {
+                    "file": "00015_leaf.png",
+                    "id": "00015_leaf"
+                },
+                {
+                    "file": "00015_pedicel.png",
+                    "id": "00015_pedicel"
+                },
+                {
+                    "file": "00015_stem.png",
+                    "id": "00015_stem"
+                },
+                {
+                    "file": "00015_fruit.png",
+                    "id": "00015_fruit"
+                },
+                {
+                    "file": "00015_background.png",
+                    "id": "00015_background"
+                },
+                {
                     "file": "00016_rgb.png",
                     "id": "00016_rgb"
                 },
                 {
+                    "file": "00016_flower.png",
+                    "id": "00016_flower"
+                },
+                {
+                    "file": "00016_leaf.png",
+                    "id": "00016_leaf"
+                },
+                {
+                    "file": "00016_pedicel.png",
+                    "id": "00016_pedicel"
+                },
+                {
+                    "file": "00016_stem.png",
+                    "id": "00016_stem"
+                },
+                {
+                    "file": "00016_fruit.png",
+                    "id": "00016_fruit"
+                },
+                {
+                    "file": "00016_background.png",
+                    "id": "00016_background"
+                },
+                {
                     "file": "00017_rgb.png",
                     "id": "00017_rgb"
+                },
+                {
+                    "file": "00017_flower.png",
+                    "id": "00017_flower"
+                },
+                {
+                    "file": "00017_leaf.png",
+                    "id": "00017_leaf"
+                },
+                {
+                    "file": "00017_pedicel.png",
+                    "id": "00017_pedicel"
+                },
+                {
+                    "file": "00017_stem.png",
+                    "id": "00017_stem"
+                },
+                {
+                    "file": "00017_fruit.png",
+                    "id": "00017_fruit"
+                },
+                {
+                    "file": "00017_background.png",
+                    "id": "00017_background"
                 }
             ],
             "id": "images"
