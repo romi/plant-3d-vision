@@ -96,6 +96,12 @@ class Masks(FileByFileTask):
     def f(self, fi, outfs):
         from romiscan import proc2d
         logger.debug(f"Loading file: {fi.filename}")
+
+        # Perform masking operation only on rgb images
+        filename_without_extension = fi.filename.split(".")[0]
+        if filename_without_extension[-4:] != "_rgb":
+           return None
+
         x = io.read_image(fi)
         x = self.f_raw(x)
         if self.binarize:
