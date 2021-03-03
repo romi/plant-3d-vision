@@ -1,4 +1,4 @@
-# romiscan v0.8.99 (dev)
+# romiscan v0.9.99 (dev)
 
 Documentation about the "Plant Scanner" project can be found [here](https://docs.romi-project.eu/Scanner/).
 
@@ -126,13 +126,13 @@ In this install instructions, we leverage the `git submodule` functionality to c
     ```bash
     git clone https://github.com/romi/romiscan.git
     ```
-2. Create a conda environment named `scan_0.8` with Python3.7:
+2. Create a conda environment named `scan_0.9` with Python3.7:
     ```bash
-    conda create --name scan_0.8 python=3.7
+    conda create --name scan_0.9 python=3.7
     ```
 3. Install sources and submodules in activated environment:
     ```bash
-    conda activate scan_0.8
+    conda activate scan_0.9
     cd romiscan
     git submodule init
     git submodule update
@@ -145,7 +145,7 @@ In this install instructions, we leverage the `git submodule` functionality to c
     ```
 4. Test import of `romiscan` library:
     ```bash
-    conda activate scan_0.8
+    conda activate scan_0.9
     python3 -c 'import romiscan'
     ```
 5. Longer tests using shipped "test dataset":

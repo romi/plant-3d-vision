@@ -6,7 +6,7 @@ with open("README.md", "r") as fh:
 opts = dict(
     name='romiscan',
     packages=find_packages(),
-    version='0.8.99',
+    version='0.9.99',
     scripts=[
         'bin/romi_run_task',
         'bin/print_task_info',
