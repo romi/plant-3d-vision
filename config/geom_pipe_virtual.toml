@@ -1,5 +1,6 @@
 [Masks]
 upstream_task = "ImagesFilesetExists"
+query = "{\"channel\":\"rgb\"}"
 type = "linear"
 parameters = "[0, 1, 0]"
 dilation = 2 # default to 0

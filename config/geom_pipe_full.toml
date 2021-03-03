@@ -25,6 +25,7 @@ upstream_task = "ImagesFilesetExists"
 
 [Masks]
 upstream_task = "Undistorted" # other option "ImagesFilesetExists"
+query = "{\"channel\":\"rgb\"}"
 type = "linear"
 parameters = "[0,1,0]"
 dilation = 1 # default to 0
