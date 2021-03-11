@@ -16,7 +16,6 @@ from plant3dvision.tasks import proc2d
 from plant3dvision.tasks import proc3d
 from plantimager.tasks.lpy import VirtualPlant
 
-
 class EvaluationTask(RomiTask):
     upstream_task = luigi.TaskParameter()
     ground_truth = luigi.TaskParameter()
@@ -36,7 +35,7 @@ class EvaluationTask(RomiTask):
         io.write_json(self.output_file(), res)
 
 
-class VoxelGroundTruth(RomiTask):
+class VoxelsGroundTruth(RomiTask):
     upstream_task = luigi.TaskParameter(default=VirtualPlant)
 
     def run(self):
@@ -224,7 +223,7 @@ class PointCloudSegmentationEvaluation(EvaluationTask):
 
 
 class PointCloudEvaluation(EvaluationTask):
-    upstream_task = luigi.TaskParameter()
+    upstream_task = luigi.TaskParameter(default=proc3d.PointCloud)
     ground_truth = luigi.TaskParameter(default=PointCloudGroundTruth)
     max_distance = luigi.FloatParameter(default=2)
 
@@ -233,8 +232,15 @@ class PointCloudEvaluation(EvaluationTask):
         target = io.read_point_cloud(self.ground_truth().output_file())
         labels = self.upstream_task().output_file().get_metadata('labels')
         labels_gt = self.ground_truth().output_file().get_metadata('labels')
+
+        res = o3d.pipelines.registration.evaluate_registration(source, target,
+                                                        self.max_distance)
+        eval = {"id": self.upstream_task().task_id}
+        eval["all"] = {
+            "fitness": res.fitness,
+            "inlier_rmse": res.inlier_rmse
+        }
         if labels is not None:
-            eval = {"id": self.upstream_task().task_id}
             for l in set(labels_gt):
                 idx = [i for i in range(len(labels)) if labels[i] == l]
                 idx_gt = [i for i in range(len(labels_gt)) if labels_gt[i] == l]
@@ -252,19 +258,14 @@ class PointCloudEvaluation(EvaluationTask):
                 logger.debug("label : %s" % l)
                 logger.debug("gt points: %i" % len(subpcd_target.points))
                 logger.debug("pcd points: %i" % len(subpcd_source.points))
-                res = o3d.registration.evaluate_registration(subpcd_source,
+                res = o3d.pipelines.registration.evaluate_registration(subpcd_source,
                                                                 subpcd_target,
                                                                 self.max_distance)
                 eval[l] = {
                     "fitness": res.fitness,
                     "inlier_rmse": res.inlier_rmse
                 }
-        res = o3d.registration.evaluate_registration(source, target,
-                                                        self.max_distance)
-        eval["all"] = {
-            "fitness": res.fitness,
-            "inlier_rmse": res.inlier_rmse
-        }
+
         return eval
 
 
@@ -354,7 +355,7 @@ class Segmentation2DEvaluation(EvaluationTask):
 
 class VoxelsEvaluation(EvaluationTask):
     upstream_task = luigi.TaskParameter(default=cl.Voxels)
-    ground_truth = luigi.TaskParameter(default=VoxelGroundTruth)
+    ground_truth = luigi.TaskParameter(default=VoxelsGroundTruth)
     hist_bins = luigi.IntParameter(default=100)
 
     def requires(self):
