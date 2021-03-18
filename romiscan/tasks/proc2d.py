@@ -51,13 +51,11 @@ class Masks(FileByFileTask):
     Parameters
     ----------
     type : luigi.Parameter
-        "linear", "excess_green", "vesselness", "invert" (TODO: see segmentation documentation)
+        "linear", "excess_green" (see Segmentation explanation in documentation)
     parameters : luigi.ListParameter
         list of scalar parmeters, depends on type
     dilation : luigi.IntParameter
         by how much to dilate masks if binary
-    binarize : luigi.BoolParameter, optional
-        binarize the masks, default=True
     threshold : luigi.FloatParameter, optional
         threshold for binarization, default=0.0
 
@@ -69,7 +67,6 @@ class Masks(FileByFileTask):
     logger.debug(f"Parameters: {parameters}")
     dilation = luigi.IntParameter(default=0)
 
-    binarize = luigi.BoolParameter(default=True)
     threshold = luigi.FloatParameter(default=0.3)
 
     def f_raw(self, x):
@@ -84,12 +81,6 @@ class Masks(FileByFileTask):
                     coefs[2] * x[:, :, 2])
         elif self.type == "excess_green":
             return proc2d.excess_green(x)
-        elif self.type == "vesselness":
-            scale = self.parameters['scale']
-            channel = self.parameters['channel']
-            return vesselness(x, scale, channel=channel)
-        elif self.type == "invert":
-            return 1 - x
         else:
             raise Exception("Unknown masking type")
 
@@ -98,13 +89,10 @@ class Masks(FileByFileTask):
         logger.debug(f"Loading file: {fi.filename}")
         x = io.read_image(fi)
         x = self.f_raw(x)
-        if self.binarize:
-            x = x > self.threshold
-            if self.dilation > 0:
-                x = proc2d.dilation(x, self.dilation)
-        else:
-            x[x < self.threshold] = 0
-            x = rescale_intensity(x, out_range=(0, 1))
+        
+        x = x > self.threshold
+        if self.dilation > 0:
+           x = proc2d.dilation(x, self.dilation)
         x = np.array(255 * x, dtype=np.uint8)
 
         outfi = outfs.create_file(fi.id)

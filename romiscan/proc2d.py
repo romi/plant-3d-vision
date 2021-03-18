@@ -7,14 +7,9 @@ This module contains all functions for processing of 2D data.
 """
 import cv2
 import numpy as np
-from scipy.special import betainc
-from skimage.feature import hessian_matrix
-from skimage.feature import hessian_matrix_eigvals
-from skimage.filters import gaussian
 from skimage.morphology import binary_dilation
 
 EPS = 1e-9
-
 
 def undistort(img, camera):
     """
@@ -55,60 +50,6 @@ def excess_green(img):
     b = img[:, :, 2] / s
     return (2 * g - r - b)
 
-
-def hessian_eigvals_abs_sorted(volume):
-    """
-    Returns Hessian eigenvalues sorted by increasing absolute value.
-
-    Parameters
-    ----------
-    volume: np.ndarray
-        n dimensional array
-
-    Returns
-    -------
-    list of np.ndarray
-    """
-    N = volume.ndim
-    H = hessian_matrix(volume, order="xy")
-    L = hessian_matrix_eigvals(H)
-
-    sorting = np.argsort(np.abs(L), axis=0)
-
-    res = []
-    for i in range(N):
-        newL = np.zeros_like(L[0])
-        for j in range(N):
-            newL[sorting[i, :] == j] = L[j, sorting[i, :] == j]
-        res.append(newL)
-    return res
-
-
-def vesselness(image, scale):
-    """
-    Returns 2D vesselness image
-
-    Parameters
-    ----------
-    image: np.ndarray
-        NxM input image
-    scale: float
-        size of vessels
-
-    Returns
-    -------
-    np.ndarray
-        NxM vesselness image.
-    """
-    image = image.astype(float)
-    image = gaussian(image, scale)
-    L1, L2 = hessian_eigvals_abs_sorted(image)
-    res = (1 - betainc(4, 4, np.abs(L1) / (np.abs(L2) + EPS)))
-    res = np.abs(L2) / np.abs(L2).max() * np.exp(
-        np.abs(L1) / (np.abs(L2) + EPS))
-    return res
-
-
 def dilation(img, n):
     """
     Dilates a binary image by n pixels
@@ -127,9 +68,3 @@ def dilation(img, n):
     for i in range(n):
         img = binary_dilation(img)
     return img
-
-
-def colmap_stitch(cameras, images, points):
-    """
-    Stitch images using colmap estiamted poses.
-    """
