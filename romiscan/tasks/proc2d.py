@@ -5,7 +5,6 @@ from romidata.task import FileByFileTask
 from romidata.task import FilesetExists
 from romidata.task import ImagesFilesetExists
 from romiscan.log import logger
-from romiscan.proc2d import vesselness
 from romiscan.tasks.colmap import Colmap
 from skimage.exposure import rescale_intensity
 
