@@ -51,7 +51,6 @@ def parsing():
                                      """.format(HELP_URL))
 
     parser.add_argument('task', metavar='task', type=str,
-                        choices=TASKS,
                         help=f"Luigi task to run: {', '.join(TASKS)}")
 
     parser.add_argument('db_path', metavar='dataset_path', type=str,
@@ -151,11 +150,14 @@ if __name__ == "__main__":
     else:
         print("Using a PREVIOUS configuration.")
 
-    # TODO: Not really sure what happens here...
+    # Set the module to be loaded for the task. 
     if args.module is not None:
         module = args.module
-    else:
+    elif args.task in MODULES:
         module = MODULES[args.task]
+    else:
+        raise ValueError("No module was defined for the task '%s'" % args.task)
+        
 
     # Handle datasets directory:
     #  - if a "Scan" or "VirtualScan" tasks is required, a directory should be created
