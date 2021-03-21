@@ -297,7 +297,7 @@ class Segmentation2DEvaluation(EvaluationTask):
 
     def compare_label(self, label):
         prediction_files = self.get_prediction_files(label)
-        results = { 'tp': 0, 'fp': 0, 'tn': 0, 'fn': 0 }
+        results = { 'tp': 0, 'fp': 0, 'tn': 0, 'fn': 0, 'miou': 0.0 }
 
         for prediction_file in prediction_files:
             tp, fn, tn, fp = self.evaluate_prediction(prediction_file, label)
@@ -305,9 +305,16 @@ class Segmentation2DEvaluation(EvaluationTask):
             results['fp'] += fp
             results['tn'] += tn
             results['fn'] += fn
-
+            if tp + fp + fn > 0:
+                results['miou'] += tp / (tp + fp + fn)
+            else:
+                logger.warning("Can't compute IoU for label '%s' and file '%s'"
+                               % (label, prediction_file.filename))
+                
+        if len(prediction_files) > 0:
+            results['miou'] /= len(prediction_files)
+            
         self.compute_precision_and_recall(results)
-        self.compute_intersection_over_union(results)
         return results
 
     def compute_precision_and_recall(self, results):
@@ -316,11 +323,6 @@ class Segmentation2DEvaluation(EvaluationTask):
             results['recall'] = 'undefined'
         else:
             results['recall'] = results['tp'] / (results['tp'] + results['fn'])
-
-    def compute_intersection_over_union(self, results):
-        results['iou'] = ((results['tp'] + results['tn'])
-                          / (results['tp'] + results['tn']
-                             + results['fp'] + results['fn']))
 
     def get_prediction_files(self, label):
         return self.prediction_fileset.get_files(query={'channel': label})
