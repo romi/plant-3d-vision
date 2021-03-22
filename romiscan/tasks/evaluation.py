@@ -297,12 +297,12 @@ class Segmentation2DEvaluation(EvaluationTask):
 
     def compare_label(self, label):
         prediction_files = self.get_prediction_files(label)
-        results = { 'tp': 0, 'fp': 0, 'tn': 0, 'fn': 0, 'miou': 0.0 }
+        results = { 'tp': 0, 'fp': 0, 'tn': 0, 'fn': 0, 'miou': 0.0, 'images': 0 }
 
         for prediction_file in prediction_files:
             self.update_results(results, prediction_file, label)
                 
-        self.average_miou(results, len(prediction_files))
+        self.average_miou(results)
         self.compute_precision_and_recall(results)
         return results
 
@@ -314,13 +314,14 @@ class Segmentation2DEvaluation(EvaluationTask):
         results['fn'] += fn
         if tp + fp + fn > 0:
             results['miou'] += tp / (tp + fp + fn)
+            results['images'] += 1
         else:
             logger.warning("Can't compute IoU for label '%s' and file '%s'"
                            % (label, prediction_file.filename))
 
-    def average_miou(self, results, num):
-        if num > 0:
-            results['miou'] /= num
+    def average_miou(self, results):
+        if results['images'] > 0:
+            results['miou'] /= results['images']
             
     def compute_precision_and_recall(self, results):
         results['precision'] = results['tp'] / (results['tp'] + results['fp'])
