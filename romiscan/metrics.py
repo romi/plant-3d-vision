@@ -86,49 +86,86 @@ def point_cloud_registration_fitness(ref_pcd, flo_pcd, max_distance=2):
     res = o3d.pipelines.registration.evaluate_registration(ref_pcd, flo_pcd, max_distance)
     return res.fitness, res.inlier_rmse
 
+class SetMetrics():
 
-def set_metrics(mask_ref, mask_flo):
-    """Compare two binary masks as sets.
+    def __init__(self):
+        self.tp = 0
+        self.fn = 0
+        self.tn = 0
+        self.fp = 0
+        self._miou = 0
+        self._miou_count = 0
 
-    Parameters
-    ----------
-    mask_ref : numpy.array
-        The reference binary mask.
-    mask_flo : numpy.array
-        The floating binary mask.
+    def compare(self, groundtruth, prediction):
+        """Compare two binary masks as sets. Non-binary masks can be passed as
+        argument. Any value equal to zero will be considered as zero,
+        any value > 0 will be considered as 1.
 
-    Returns
-    -------
-    int
-        True positives (TP).
-    int
-        False negatives (FN).
-    int
-        True negatives (TN).
-    int
-        False positives (FP).
-    float
-        Precision, as ``TP/(TP+FP)``.
-    float
-        Recall, as ``TP/(TP+FN)``.
+        Parameters
+        ----------
+        groundtruth : numpy.array
+            The reference binary mask.
+        prediction : numpy.array
+            The binary mask to evaluate.
 
-    Examples
-    --------
-    >>> import imageio
-    >>> import numpy as np
-    >>> from romiscan.metrics import set_metrics
-    >>> fpath_a = '/data/ROMI/20201119192731_rep_test_AnglesAndInternodes/arabido_test4_0/Masks_True_5_out_f143ab490d/00000_rgb.jpg'
-    >>> fpath_b = '/data/ROMI/20201119192731_rep_test_AnglesAndInternodes/arabido_test4_1/Masks_True_5_out_f143ab490d/00000_rgb.jpg'
-    >>> mask_a = imageio.imread(fpath_a)
-    >>> mask_b = imageio.imread(fpath_b)
-    >>> set_metrics(mask_a, mask_b)
+        Examples
+        --------
+        >>> import imageio
+        >>> import numpy as np
+        >>> from romiscan.metrics import SetMetrics
+        >>> fpath_a = 'groundtruth/00000_rgb.jpg'
+        >>> fpath_b = 'prediction/00000_rgb.jpg'
+        >>> mask_a = imageio.imread(fpath_a)
+        >>> mask_b = imageio.imread(fpath_b)
+        >>> metrics = SetMetrics(mask_a, mask_b)
+        >>> print(metrics.miou())
 
-    """
-    tp = int(np.sum(mask_ref * (mask_flo > 0)))
-    fn = int(np.sum(mask_ref * (mask_flo == 0)))
-    tn = int(np.sum((mask_ref == 0) * (mask_flo == 0)))
-    fp = int(np.sum((mask_ref == 0) * (mask_flo > 0)))
-    return tp, fn, tn, fp, tp/(tp+fp), tp/(tp+fn)
+        """
+        groundtruth = self.as_binary(groundtruth)
+        prediction = self.as_binary(prediction)
+        self.update_metrics(groundtruth, prediction)
+
+    def as_binary(self, matrix):
+        return (matrix != 0).astype(np.int)
+
+    def update_metrics(self, groundtruth, prediction):
+        tp, fn, tn, fp = self.compute_metrics(groundtruth, prediction)
+        self.tp += tp
+        self.fn += fn
+        self.tn += tn
+        self.fp += fp
+        self.update_miou(tp, fp, fn)
+
+    def compute_metrics(self, groundtruth, prediction):
+        tp = int(np.sum(groundtruth * (prediction > 0)))
+        fn = int(np.sum(groundtruth * (prediction == 0)))
+        tn = int(np.sum((groundtruth == 0) * (prediction == 0)))
+        fp = int(np.sum((groundtruth == 0) * (prediction > 0)))
+        return tp, fn, tn, fp
+
+    def update_miou(self, tp, fp, fn):
+        if (tp + fp + fn) != 0:
+            self._miou += tp / (tp + fp + fn)
+            self._miou_count += 1
+
+    def precision(self):
+        value = 0.0
+        if (self.tp + self.fp) != 0:
+            value = self.tp / (self.tp + self.fp)
+        return value
+
+    def recall(self):
+        value = 0.0
+        if (self.tp + self.fn) != 0:
+            value = self.tp / (self.tp + self.fn)
+        return value
+
+    def miou(self):
+        value = 0.0
+        if self._miou_count > 0:
+            value = self._miou / self._miou_count
+        return value
+
 
 def surface_ratio(ref_tmesh, flo_tmesh):
     """Returns the min/max surface ratio of two triangular meshes.
