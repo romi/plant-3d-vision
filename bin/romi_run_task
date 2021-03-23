@@ -51,7 +51,7 @@ def parsing():
                                      """.format(HELP_URL))
 
     parser.add_argument('task', metavar='task', type=str,
-                        help=f"Luigi task to run: {', '.join(TASKS)}")
+                        help=f"Luigi task to run. The list of pre-defined is: {', '.join(TASKS)}")
 
     parser.add_argument('db_path', metavar='dataset_path', type=str,
                         help='FSDB scan dataset to process (path)')
@@ -156,9 +156,11 @@ if __name__ == "__main__":
     elif args.task in MODULES:
         module = MODULES[args.task]
     else:
-        raise ValueError("No module was defined for the task '%s'" % args.task)
+        print(f"WARNING: No module was defined for the task '{args.task}'" )
+        print(f"WARNING: The list of pre-defined tasks is: {', '.join(TASKS)}" )
+        print(f"WARNING: For other tasks, use the --module option to load the module containing the task")
+        raise ValueError(f"No module was defined for the task '{args.task}'")
         
-
     # Handle datasets directory:
     #  - if a "Scan" or "VirtualScan" tasks is required, a directory should be created
     #  - else, check it exists
