@@ -185,19 +185,19 @@ class SetMetrics():
             self._miou_count += 1
 
     def precision(self):
-        value = 0.0
+        value = None
         if (self.tp + self.fp) != 0:
             value = self.tp / (self.tp + self.fp)
         return value
 
     def recall(self):
-        value = 0.0
+        value = None
         if (self.tp + self.fn) != 0:
             value = self.tp / (self.tp + self.fn)
         return value
 
     def miou(self):
-        value = 0.0
+        value = None
         if self._miou_count > 0:
             value = self._miou / self._miou_count
         return value

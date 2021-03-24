@@ -98,3 +98,13 @@ class TestSetMetrics(unittest.TestCase):
         assert(metrics.precision() == 0.5)
         assert(metrics.recall() == 0.5)
         assert(metrics.miou() == 2.0/6.0)
+
+    def test_uninitilized_metrics_returns_zeros_and_none(self):
+        metrics = SetMetrics()
+        assert(metrics.tp == 0)
+        assert(metrics.fn == 0)
+        assert(metrics.tn == 0)
+        assert(metrics.fp == 0)
+        assert(metrics.precision() == None)
+        assert(metrics.recall() == None)
+        assert(metrics.miou() == None)
