@@ -86,10 +86,11 @@ def point_cloud_registration_fitness(ref_pcd, flo_pcd, max_distance=2):
     res = o3d.pipelines.registration.evaluate_registration(ref_pcd, flo_pcd, max_distance)
     return res.fitness, res.inlier_rmse
 
+
 class SetMetrics():
-    """Compare two binary masks as sets. Non-binary masks can be passed as
-    argument. Any value equal to zero will be considered as zero,
-    any value > 0 will be considered as 1.
+    """Compare two arrays as sets. Non-binary arrays can be passed as
+    argument. Any value equal to zero will be considered as zero, any
+    value > 0 will be considered as 1.
     
         Parameters
         ----------
@@ -122,6 +123,7 @@ class SetMetrics():
     >>>     prediction_mask = imageio.imread(prediction_file)
     >>>     metrics.add(groundtruth_mask, prediction_mask)
     >>> print(metrics)
+
     """
 
     def __init__(self, groundtruth=None, prediction=None):
@@ -202,7 +204,7 @@ class SetMetrics():
             value = self._miou / self._miou_count
         return value
 
-
+    
 def surface_ratio(ref_tmesh, flo_tmesh):
     """Returns the min/max surface ratio of two triangular meshes.
 
