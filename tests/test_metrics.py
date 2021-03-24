@@ -139,7 +139,7 @@ class TestCompareMaskFilesets(unittest.TestCase):
         return groundtruth_fileset, prediction_fileset
     
     def init_db(self):
-        return fsdb.FSDB(fsdb.dummy_db())
+        return fsdb.dummy_db()
         
     def init_db_alternative(self):
         os.mkdir('test-db')
