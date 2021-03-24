@@ -4,6 +4,9 @@
 import open3d as o3d
 import numpy as np
 
+from romidata import io
+from romiscan.log import logger
+
 
 def chamfer_distance(ref_pcd, flo_pcd):
     """Compute the symmetric chamfer distance between two point clouds.
@@ -153,9 +156,12 @@ class SetMetrics():
         self._compare(groundtruth, prediction)
         
     def __str__(self):
-        return str({'tp': self.tp, 'fn': self.fn, 'tn': self.tn, 'fp': self.fp,
-                    'precision': self.precision(), 'recall': self.recall(),
-                    'miou': self.miou() })
+        return str(self.as_dict())
+        
+    def as_dict(self):
+        return {'tp': self.tp, 'fn': self.fn, 'tn': self.tn, 'fp': self.fp,
+                'precision': self.precision(), 'recall': self.recall(),
+                'miou': self.miou() }
         
     def _compare(self, groundtruth, prediction):
         if self._can_compare(groundtruth, prediction):
@@ -204,6 +210,90 @@ class SetMetrics():
             value = self._miou / self._miou_count
         return value
 
+
+class CompareMaskFilesets():
+    """Compare two mask filesets. 
+    """
+    def __init__(self, groundtruth_fileset, prediction_fileset, labels):
+        self.groundtruth_fileset = groundtruth_fileset
+        self.prediction_fileset = prediction_fileset
+        self.labels = labels
+        self.results = { 'xxx-prediction-files': {}}
+        self.assure_matching_images()
+        self.compare_predictions_to_ground_truths()
+
+    def assure_matching_images(self):
+        self.assure_matching_prediction()
+        self.assure_matching_groundtruths()
+
+    def assure_matching_prediction(self):
+        groundtruth_files = self.groundtruth_fileset.get_files()
+        for groundtruth_file in groundtruth_files:
+            shot_id = groundtruth_file.get_metadata('shot_id')
+            label = groundtruth_file.get_metadata('channel')
+            if label in self.labels:
+                query = {'channel': label, 'shot_id': shot_id}
+                prediction = self.prediction_fileset.get_files(query=query)
+                if len(prediction) != 1:
+                    logger.warning(f"No prediction for ground truth with label '{label}' and shot_id '{shot_id}'")
+                    raise ValueError("Missing file in predictions")
+
+    def assure_matching_groundtruths(self):
+        prediction_files = self.prediction_fileset.get_files()
+        for prediction_file in prediction_files:
+            shot_id = prediction_file.get_metadata('shot_id')
+            label = prediction_file.get_metadata('channel')
+            if label in self.labels:
+                query = {'channel': label, 'shot_id': shot_id}
+                groundtruth = self.groundtruth_fileset.get_files(query=query)
+                if len(groundtruth) != 1:
+                    logger.warning(f"Ground truth lacks file for label '{label}' and shot_id '{shot_id}'")
+                    raise ValueError("Missing file in groundtruth")
+                       
+    def compare_predictions_to_ground_truths(self):
+        for label in self.labels:
+            metrics = self.compare_label(label)
+            self.results[label] = metrics.as_dict()
+        return self.results
+
+    def compare_label(self, label):
+        prediction_files = self.get_prediction_files(label)
+        metrics_label = SetMetrics()
+        for prediction_file in prediction_files:
+            metrics_file = self.evaluate_prediction(prediction_file, label)
+            self.results['xxx-prediction-files'][prediction_file.id] = metrics_file.as_dict()
+            metrics_label += metrics_file 
+        return metrics_label
+
+    def get_prediction_file(self, shot_id, label):
+        return self.prediction_fileset.get_files(query={'channel': label})
+
+    def get_prediction_files(self, label):
+        return self.prediction_fileset.get_files(query={'channel': label})
+
+    def evaluate_prediction(self, prediction_file, label):
+        groundtruth = self.load_ground_truth_image(label, prediction_file)
+        prediction = self.load_prediction_image(prediction_file)
+        return SetMetrics(groundtruth, prediction)
+
+    def load_ground_truth_image(self, label, prediction_file):
+        ground_truth_file = self.get_ground_truth_file(label, prediction_file)
+        return self.read_binary_image(ground_truth_file)
+
+    def get_ground_truth_file(self, label, prediction_file):
+        shot_id = prediction_file.get_metadata('shot_id')
+        query = {'channel': label, 'shot_id': shot_id}
+        files = self.groundtruth_fileset.get_files(query=query)
+        return files[0] # already checked that there exists only one
+    
+    def load_prediction_image(self, prediction):
+        return self.read_binary_image(prediction)
+
+    def read_binary_image(self, file_obj):
+        return io.read_image(file_obj)
+
+        
+        
     
 def surface_ratio(ref_tmesh, flo_tmesh):
     """Returns the min/max surface ratio of two triangular meshes.
