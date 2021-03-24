@@ -87,20 +87,10 @@ def point_cloud_registration_fitness(ref_pcd, flo_pcd, max_distance=2):
     return res.fitness, res.inlier_rmse
 
 class SetMetrics():
-
-    def __init__(self):
-        self.tp = 0
-        self.fn = 0
-        self.tn = 0
-        self.fp = 0
-        self._miou = 0
-        self._miou_count = 0
-
-    def compare(self, groundtruth, prediction):
-        """Compare two binary masks as sets. Non-binary masks can be passed as
-        argument. Any value equal to zero will be considered as zero,
-        any value > 0 will be considered as 1.
-
+    """Compare two binary masks as sets. Non-binary masks can be passed as
+    argument. Any value equal to zero will be considered as zero,
+    any value > 0 will be considered as 1.
+    
         Parameters
         ----------
         groundtruth : numpy.array
@@ -108,42 +98,88 @@ class SetMetrics():
         prediction : numpy.array
             The binary mask to evaluate.
 
-        Examples
-        --------
-        >>> import imageio
-        >>> import numpy as np
-        >>> from romiscan.metrics import SetMetrics
-        >>> fpath_a = 'groundtruth/00000_rgb.jpg'
-        >>> fpath_b = 'prediction/00000_rgb.jpg'
-        >>> mask_a = imageio.imread(fpath_a)
-        >>> mask_b = imageio.imread(fpath_b)
-        >>> metrics = SetMetrics(mask_a, mask_b)
-        >>> print(metrics.miou())
+    Examples
+    --------
+    >>> import imageio
+    >>> import numpy as np
+    >>> from romiscan.metrics import SetMetrics
+    >>> groundtruth_file = 'groundtruth/00000_stem.jpg'
+    >>> prediction_file = 'prediction/00000_stem.jpg'
+    >>> groundtruth_mask = imageio.imread(groundtruth_file)
+    >>> prediction_mask = imageio.imread(prediction_file)
+    >>> metrics = SetMetrics(groundtruth_mask, prediction_mask)
+    >>> print(metrics)
 
-        """
-        groundtruth = self.as_binary(groundtruth)
-        prediction = self.as_binary(prediction)
-        self.update_metrics(groundtruth, prediction)
 
-    def as_binary(self, matrix):
+    >>> import imageio
+    >>> import numpy as np
+    >>> from romiscan.metrics import SetMetrics
+    >>> metrics = SetMetrics()
+    >>> for label in ['stem', 'fruit']:
+    >>>     groundtruth_file = f"groundtruth/00000_{label}.jpg"
+    >>>     prediction_file = f"prediction/00000_{label}.jpg"
+    >>>     groundtruth_mask = imageio.imread(groundtruth_file)
+    >>>     prediction_mask = imageio.imread(prediction_file)
+    >>>     metrics.add(groundtruth_mask, prediction_mask)
+    >>> print(metrics)
+    """
+
+    def __init__(self, groundtruth=None, prediction=None):
+        self.tp = 0
+        self.fn = 0
+        self.tn = 0
+        self.fp = 0
+        self._miou = 0
+        self._miou_count = 0
+        self._compare(groundtruth, prediction)
+        
+    def _can_compare(self, groundtruth, prediction):
+        not_none = groundtruth is not None and prediction is not None
+        if not_none:
+            self._assert_same_size(groundtruth, prediction)
+        return not_none
+    
+    def _assert_same_size(self, groundtruth, prediction):
+        if groundtruth.shape != prediction.shape:
+            raise ValueError("The groundtruth and prediction are different is size")
+    
+    def __add__(self, other):
+        self._update_metrics(other.tp, other.fn, other.tn, other.fp)
+        return self
+    
+    def add(self, groundtruth, prediction):
+        self._compare(groundtruth, prediction)
+        
+    def __str__(self):
+        return str({'tp': self.tp, 'fn': self.fn, 'tn': self.tn, 'fp': self.fp,
+                    'precision': self.precision(), 'recall': self.recall(),
+                    'miou': self.miou() })
+        
+    def _compare(self, groundtruth, prediction):
+        if self._can_compare(groundtruth, prediction):
+            groundtruth = self._as_binary(groundtruth)
+            prediction = self._as_binary(prediction)
+            tp, fn, tn, fp = self._compute_metrics(groundtruth, prediction)
+            self._update_metrics(tp, fn, tn, fp)
+
+    def _as_binary(self, matrix):
         return (matrix != 0).astype(np.int)
 
-    def update_metrics(self, groundtruth, prediction):
-        tp, fn, tn, fp = self.compute_metrics(groundtruth, prediction)
-        self.tp += tp
-        self.fn += fn
-        self.tn += tn
-        self.fp += fp
-        self.update_miou(tp, fp, fn)
-
-    def compute_metrics(self, groundtruth, prediction):
+    def _compute_metrics(self, groundtruth, prediction):
         tp = int(np.sum(groundtruth * (prediction > 0)))
         fn = int(np.sum(groundtruth * (prediction == 0)))
         tn = int(np.sum((groundtruth == 0) * (prediction == 0)))
         fp = int(np.sum((groundtruth == 0) * (prediction > 0)))
         return tp, fn, tn, fp
 
-    def update_miou(self, tp, fp, fn):
+    def _update_metrics(self, tp, fn, tn, fp):
+        self.tp += tp
+        self.fn += fn
+        self.tn += tn
+        self.fp += fp
+        self._update_miou(tp, fp, fn)
+
+    def _update_miou(self, tp, fp, fn):
         if (tp + fp + fn) != 0:
             self._miou += tp / (tp + fp + fn)
             self._miou_count += 1
