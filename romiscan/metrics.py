@@ -95,12 +95,12 @@ class SetMetrics():
     argument. Any value equal to zero will be considered as zero, any
     value > 0 will be considered as 1.
     
-        Parameters
-        ----------
-        groundtruth : numpy.array
-            The reference binary mask.
-        prediction : numpy.array
-            The binary mask to evaluate.
+    Parameters
+    ----------
+    groundtruth : numpy.array
+        The reference binary mask.
+    prediction : numpy.array
+        The binary mask to evaluate.
 
     Examples
     --------
@@ -213,6 +213,29 @@ class SetMetrics():
 
 class CompareMaskFilesets():
     """Compare two mask filesets. 
+    
+    Parameters
+    ----------
+    groundtruth_fileset: romidata.db.IFileset
+        The fileset with the reference binary masks.
+    prediction_fileset : romidata.db.IFileset
+        The fileset with the masks to evaluate.
+    labels: List(str)
+        The list of labels to evaluate.
+
+    Examples
+    --------
+    >>> from romidata import fsdb
+    >>> from romidata import io
+    >>> from romiscan.metrics import CompareMaskFilesets
+    >>> db = fsdb.FSDB('db')
+    >>> db.connect()
+    >>> groundtruths = db.get_scan('test').get_fileset('images')
+    >>> predictions = db.get_scan('test').get_fileset('Segmentation2D')
+    >>> labels = ['flower', 'fruit', 'leaf', 'pedicel', 'stem']
+    >>> metrics = CompareMaskFilesets(groundtruths, predictions, labels)
+    >>> print(metrics.results)
+
     """
     def __init__(self, groundtruth_fileset, prediction_fileset, labels):
         self.groundtruth_fileset = groundtruth_fileset
