@@ -14,7 +14,7 @@ from romiscan.tasks import cl
 from romiscan.tasks import config
 from romiscan.tasks import proc2d
 from romiscan.tasks import proc3d
-from romiscanner.tasks.lpy import VirtualPlant
+from plantimager.tasks.lpy import VirtualPlant
 
 
 class EvaluationTask(RomiTask):
