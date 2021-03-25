@@ -17,14 +17,14 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 import numpy as np
 import open3d as o3d
-from romidata import FSDB
-from romidata.fsdb import LOCK_FILE_NAME
-from romidata.fsdb import MARKER_FILE_NAME
-from romidata.io import read_image
-from romidata.io import read_json
-from romidata.io import read_npz
-from romidata.io import read_point_cloud
-from romidata.io import read_triangle_mesh
+from plantdb import FSDB
+from plantdb.fsdb import LOCK_FILE_NAME
+from plantdb.fsdb import MARKER_FILE_NAME
+from plantdb.io import read_image
+from plantdb.io import read_json
+from plantdb.io import read_npz
+from plantdb.io import read_point_cloud
+from plantdb.io import read_triangle_mesh
 from romiscan.metrics import chamfer_distance
 from romiscan.metrics import point_cloud_registration_fitness
 from romiscan.metrics import set_metrics
@@ -95,7 +95,7 @@ def pairwise_heatmap(pw_dict, scans_list, task_name, metrics, db, **kwargs):
 
     Examples
     --------
-    >>> from romidata import FSDB
+    >>> from plantdb import FSDB
     >>> # - Connect to a ROMI databse to access an 'images' fileset to reconstruct with COLMAP:
     >>> db = FSDB("/data/ROMI/repeat_test_organseg")
     >>> db.connect()
@@ -153,14 +153,14 @@ def _get_task_fileset(scan_dataset, task_name):
 
     Parameters
     ----------
-    scan_dataset : romidata.FSDB.Scan
+    scan_dataset : plantdb.FSDB.Scan
         scan dataset that should contain the unique output of `task_name`
     task_name : string
         name of the task to test
 
     Returns
     -------
-    romidata.FSDB.Scan.Fileset
+    plantdb.FSDB.Scan.Fileset
         The `Fileset` object produced by `task_name` in given `scan_dataset`
 
     Raises
@@ -185,7 +185,7 @@ def _get_files(scan_dataset, task_name, unique=False):
 
     Parameters
     ----------
-    scan_dataset : romidata.FSDB.Scan
+    scan_dataset : plantdb.FSDB.Scan
         scan dataset that should contain the unique output of `task_name`
     task_name : string
         name of the task to test
@@ -194,7 +194,7 @@ def _get_files(scan_dataset, task_name, unique=False):
 
     Returns
     -------
-    list(romidata.FSDB.Scan.Fileset.File)
+    list(plantdb.FSDB.Scan.Fileset.File)
         The `File` objects produced by `task_name` in given `scan_dataset`
 
     Raises
@@ -221,7 +221,7 @@ def compare_binary_mask(db, task_name):
 
     Parameters
     ----------
-    db : romidata.FSDB
+    db : plantdb.FSDB
         Local ROMI database instance with the replicated scan datasets
     task_name : string
         name of the task to test
@@ -313,7 +313,7 @@ def compare_pointcloud(db, task_name):
 
     Parameters
     ----------
-    db : romidata.FSDB
+    db : plantdb.FSDB
         Local ROMI database instance with the replicated scan datasets
     task_name : string
         name of the task to test
@@ -528,7 +528,7 @@ def compare_trianglemesh_points(db, task_name):
 
     Parameters
     ----------
-    db : romidata.FSDB
+    db : plantdb.FSDB
         Local ROMI database instance with the replicated scan datasets
     task_name : string
         name of the task to test
@@ -593,7 +593,7 @@ def compare_curveskeleton_points(db, task_name):
 
     Parameters
     ----------
-    db : romidata.FSDB
+    db : plantdb.FSDB
         Local ROMI database instance with the replicated scan datasets
     task_name : string
         name of the task to test
@@ -645,7 +645,7 @@ def angles_and_internodes_comparison(db, task_name):
 
     Parameters
     ----------
-    db : romidata.FSDB
+    db : plantdb.FSDB
         Local ROMI database instance with the replicated scan datasets
     task_name : string
         name of the task to test
@@ -699,7 +699,7 @@ def file_by_file_comparison(db, task_name):
 
     Parameters
     ----------
-    db : romidata.FSDB
+    db : plantdb.FSDB
         Local ROMI database instance with the replicated scan datasets
     task_name : string
         name of the task to test
@@ -740,7 +740,7 @@ def compare_task_output(db, task_name, independant_tests=False):
 
     Parameters
     ----------
-    db : romidata.FSDB
+    db : plantdb.FSDB
         Local ROMI database instance with the replicated scan datasets
     task_name : string
         name of the task to test
@@ -884,7 +884,7 @@ def create_test_db(root_location, task_name):
     # Get the path of the ROMI database used to perform the test and creates the directory
     test_db = create_test_db_path(root_location, task_name)
     test_db.mkdir(exist_ok=True)
-    # Creates the marker file to get an active romidata.FSDB:
+    # Creates the marker file to get an active plantdb.FSDB:
     marker_file = test_db / MARKER_FILE_NAME
     marker_file.touch()
     return test_db
@@ -920,7 +920,7 @@ def compute_repeatability_test(db, task_cfg):
 
     Parameters
     ----------
-    db : romidata.FSDB
+    db : plantdb.FSDB
         Local ROMI database instance with the replicated scan datasets
     task_cfg : dict
         configuration dict of the task to test

@@ -2,9 +2,9 @@ from os.path import splitext
 
 import luigi
 import numpy as np
-from romidata import RomiTask
-from romidata import io
-from romidata.task import ImagesFilesetExists
+from plantdb import RomiTask
+from plantdb import io
+from plantdb.task import ImagesFilesetExists
 from romiscan.colmap import ColmapRunner
 from romiscan.filenames import COLMAP_CAMERAS_ID
 from romiscan.filenames import COLMAP_DENSE_ID

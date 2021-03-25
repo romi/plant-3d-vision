@@ -6,7 +6,7 @@ from os.path import splitext
 import imageio
 import numpy as np
 import open3d as o3d
-from romidata import io
+from plantdb import io
 from romiscan import proc3d
 from romiscan.log import logger
 from romiscan.thirdparty import read_model
@@ -260,7 +260,7 @@ class ColmapRunner(object):
         >>> import os
         >>> # os.environ['COLMAP_EXE'] = "geki/colmap"  # Use this to manually switch between local COLMAP install ('colmap') or docker container ('geki/colmap')
         >>> from romiscan.colmap import ColmapRunner
-        >>> from romidata import FSDB
+        >>> from plantdb import FSDB
         >>> # - Connect to a ROMI databse to access an 'images' fileset to reconstruct with COLMAP:
         >>> db = FSDB("/data/ROMI/DB")
         >>> db.connect()
@@ -471,7 +471,7 @@ class ColmapRunner(object):
         Examples
         --------
         >>> from romiscan.colmap import ColmapRunner
-        >>> from romidata import FSDB
+        >>> from plantdb import FSDB
         >>> # - Connect to a ROMI databse to access an 'images' fileset to reconstruct with COLMAP:
         >>> db = FSDB("/data/ROMI/DB")
         >>> db.connect()
