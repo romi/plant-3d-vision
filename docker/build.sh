@@ -3,13 +3,13 @@
 ###############################################################################
 # Example usages:
 ###############################################################################
-# 1. Default build options will create `romiscan:latest`:
+# 1. Default build options will create `plant3dvision:latest`:
 # $ ./build.sh
 #
 # 2. Build image for a 'githubrunner' user and specify user & group id value:
 # $ ./build.sh -u githubrunner --uid 1003 -g scanner --gid 1003
 #
-# 3. Build image with 'debug' image tag & another 'romiscan' branch options:
+# 3. Build image with 'debug' image tag & another 'plant3dvision' branch options:
 # $ ./build.sh -t debug -b 'my_branch'
 
 vtag="latest"
@@ -25,7 +25,7 @@ usage() {
     "
 
   echo "DESCRIPTION:"
-  echo "  Build a docker image named 'romiscan' using Dockerfile in same location.
+  echo "  Build a docker image named 'plant3dvision' using Dockerfile in same location.
     "
 
   echo "OPTIONS:"
@@ -103,7 +103,7 @@ done
 start_time=`date +%s`
 
 # Start the docker image build:
-docker build -t romiscan:$vtag $docker_opts \
+docker build -t plant3dvision:$vtag $docker_opts \
   --build-arg USER_NAME=$user \
   --build-arg USER_ID=$uid \
   --build-arg GROUP_NAME=$group \
