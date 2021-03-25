@@ -42,13 +42,13 @@ USER ${USER_NAME}
 ENV NVIDIA_VISIBLE_DEVICES all
 ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
 
-COPY --chown=${USER_NAME}:${GROUP_NAME} ./ romiscan/
+COPY --chown=${USER_NAME}:${GROUP_NAME} ./ plant-3d-vision/
 
 RUN wget https://media.romi-project.eu/data/Resnet_896_896_epoch50.pt && \
-    mkdir romiscan/tests/testdata/models/models && \
-    mv Resnet_896_896_epoch50.pt romiscan/tests/testdata/models/models/
+    mkdir plant-3d-vision/tests/testdata/models/models && \
+    mv Resnet_896_896_epoch50.pt plant-3d-vision/tests/testdata/models/models/
 
-RUN cd romiscan/ && \
+RUN cd plant-3d-vision/ && \
     python -m pip install -e ./romidata/ --no-cache-dir && \
     python -m pip install -e ./romiseg/ --no-cache-dir && \
     python -m pip install -e ./romiscanner/ --no-cache-dir && \

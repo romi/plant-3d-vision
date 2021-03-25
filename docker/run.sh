@@ -13,17 +13,17 @@
 # $ ./run.sh --pipeline_test
 #
 # 4. Run container using 'debug' image tag & start a ROMI Task:
-# $ ./run.sh -t debug -p "/data/ROMI/DB" -c "romi_run_task AnglesAndInternodes ~/db/2019-02-01_10-56-33 --config ~/romiscan/config/original_pipe_0.toml"
+# $ ./run.sh -t debug -p "/data/ROMI/DB" -c "romi_run_task AnglesAndInternodes ~/db/2019-02-01_10-56-33 --config ~/plant-3d-vision/config/geom_pipe_real.toml"
 
 user=$USER
 db_path=''
 vtag="latest"
 cmd=''
-unittest_cmd="cd romiscan/tests/ && python -m unittest"
-integrationtest_cmd="python -m unittest discover -s romiscan/tests/integration/"
-pipeline_cmd="cd romiscan/tests/ && ./check_pipe.sh"
-geom_pipeline_cmd="cd romiscan/tests/ && ./check_geom_pipe.sh"
-ml_pipeline_cmd="cd romiscan/tests/ && ./check_ml_pipe.sh"
+unittest_cmd="cd plant-3d-vision/tests/ && python -m unittest"
+integrationtest_cmd="python -m unittest discover -s plant-3d-vision/tests/integration/"
+pipeline_cmd="cd plant-3d-vision/tests/ && ./check_pipe.sh"
+geom_pipeline_cmd="cd plant-3d-vision/tests/ && ./check_geom_pipe.sh"
+ml_pipeline_cmd="cd plant-3d-vision/tests/ && ./check_ml_pipe.sh"
 gpu_cmd="nvidia-smi"
 mount_option=""
 
@@ -33,7 +33,7 @@ usage() {
     "
 
   echo "DESCRIPTION:"
-  echo "  Run 'romiscan:<vtag>' container with a mounted local (host) database.
+  echo "  Run 'plant3dvision:<vtag>' container with a mounted local (host) database.
     "
 
   echo "OPTIONS:"
@@ -53,10 +53,10 @@ usage() {
     Defines the command to run at docker startup, by default start an interactive container with a bash shell.
     "
   echo " --unittest_cmd
-    Runs unit tests defined in romiscan.
+    Runs unit tests defined in plant3dvision.
     "
   echo " --integrationtest_cmd
-    Runs integration tests defined in romiscan.
+    Runs integration tests defined in plant3dvision.
     "
   echo "  --pipeline_test
     Test pipelines (geometric & ML based) in docker container with CI test.
@@ -144,12 +144,12 @@ then
   # Start in interactive mode:
   docker run --gpus all $mount_option \
     --env PYOPENCL_CTX='0' \
-    -it romiscan:$vtag /bin/bash
+    -it plant3dvision:$vtag /bin/bash
 else
   # Start in non-interactive mode (run the command):
   docker run --gpus all $mount_option \
     --env PYOPENCL_CTX='0' \
     --rm \
-    romiscan:$vtag \
+    plant3dvision:$vtag \
     bash -c "$cmd"
 fi
