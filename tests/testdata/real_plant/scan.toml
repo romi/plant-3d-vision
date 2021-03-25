@@ -18,13 +18,13 @@ radius = 300
 n_points = 60
 
 [Scan.scanner.camera]
-module = "romiscanner.sony"
+module = "plantimager.sony"
 
 [Scan.scanner.gimbal]
-module = "romiscanner.blgimbal"
+module = "plantimager.blgimbal"
 
 [Scan.scanner.cnc]
-module = "romiscanner.grbl"
+module = "plantimager.grbl"
 
 [Scan.metadata.workspace]
 x = [ 100, 700,]
