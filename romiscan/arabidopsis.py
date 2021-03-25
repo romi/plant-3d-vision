@@ -13,7 +13,7 @@ import operator
 
 import networkx as nx
 import numpy as np
-from romiscan.log import logger
+from plant3dvision.log import logger
 
 
 def get_main_stem_and_nodes(G, root_node):

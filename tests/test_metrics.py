@@ -3,7 +3,7 @@ import numpy as np
 import sys
 
 sys.path.append("..")
-from romiscan.metrics import SetMetrics
+from plant3dvision.metrics import SetMetrics
 
 class TestSetMetrics(unittest.TestCase):
     square_left = np.array([[1, 1, 0, 0],

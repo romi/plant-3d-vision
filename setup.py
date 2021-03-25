@@ -4,7 +4,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 opts = dict(
-    name='romiscan',
+    name='plant3dvision',
     packages=find_packages(),
     version='0.9.99',
     scripts=[

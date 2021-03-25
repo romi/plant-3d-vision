@@ -33,7 +33,7 @@ def chamfer_distance(ref_pcd, flo_pcd):
     --------
     >>> import open3d as o3d
     >>> import numpy as np
-    >>> from romiscan.metrics import chamfer_distance
+    >>> from plant3dvision.metrics import chamfer_distance
     >>> fpath_a = '/data/ROMI/20201119192731_rep_test_AnglesAndInternodes/arabido_test4_0/PointCloud__200_0_1_0_False_4ce2e46446/PointCloud.ply'
     >>> fpath_b = '/data/ROMI/20201119192731_rep_test_AnglesAndInternodes/arabido_test4_1/PointCloud__200_0_1_0_False_4ce2e46446/PointCloud.ply'
     >>> pcd_a = o3d.io.read_point_cloud(fpath_a)
@@ -75,7 +75,7 @@ def point_cloud_registration_fitness(ref_pcd, flo_pcd, max_distance=2):
     --------
     >>> import open3d as o3d
     >>> import numpy as np
-    >>> from romiscan.metrics import point_cloud_registration_fitness
+    >>> from plant3dvision.metrics import point_cloud_registration_fitness
     >>> fpath_a = '/data/ROMI/20201119192731_rep_test_AnglesAndInternodes/arabido_test4_0/PointCloud__200_0_1_0_False_4ce2e46446/PointCloud.ply'
     >>> fpath_b = '/data/ROMI/20201119192731_rep_test_AnglesAndInternodes/arabido_test4_1/PointCloud__200_0_1_0_False_4ce2e46446/PointCloud.ply'
     >>> pcd_a = o3d.io.read_point_cloud(fpath_a)
@@ -103,7 +103,7 @@ class SetMetrics():
     --------
     >>> import imageio
     >>> import numpy as np
-    >>> from romiscan.metrics import SetMetrics
+    >>> from plant3dvision.metrics import SetMetrics
     >>> groundtruth_file = 'groundtruth/00000_stem.jpg'
     >>> prediction_file = 'prediction/00000_stem.jpg'
     >>> groundtruth_mask = imageio.imread(groundtruth_file)
@@ -114,7 +114,7 @@ class SetMetrics():
 
     >>> import imageio
     >>> import numpy as np
-    >>> from romiscan.metrics import SetMetrics
+    >>> from plant3dvision.metrics import SetMetrics
     >>> metrics = SetMetrics()
     >>> for label in ['stem', 'fruit']:
     >>>     groundtruth_file = f"groundtruth/00000_{label}.jpg"

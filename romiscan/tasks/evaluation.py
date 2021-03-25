@@ -9,11 +9,11 @@ from plantdb import RomiTask
 from plantdb import io
 from plantdb.task import FilesetTarget
 from plantdb.task import ImagesFilesetExists
-from romiscan.log import logger
-from romiscan.tasks import cl
-from romiscan.tasks import config
-from romiscan.tasks import proc2d
-from romiscan.tasks import proc3d
+from plant3dvision.log import logger
+from plant3dvision.tasks import cl
+from plant3dvision.tasks import config
+from plant3dvision.tasks import proc2d
+from plant3dvision.tasks import proc3d
 from plantimager.tasks.lpy import VirtualPlant
 
 

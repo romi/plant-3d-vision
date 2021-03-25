@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from romiscan import colmap
+from plant3dvision import colmap
 from plantdb.testing import DBTestCase
 
 class TestColmap(DBTestCase):

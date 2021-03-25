@@ -4,15 +4,15 @@ from plantdb import io
 from plantdb.task import FileByFileTask
 from plantdb.task import FilesetExists
 from plantdb.task import ImagesFilesetExists
-from romiscan.log import logger
-from romiscan.tasks.colmap import Colmap
+from plant3dvision.log import logger
+from plant3dvision.tasks.colmap import Colmap
 from skimage.exposure import rescale_intensity
 
 
 class Undistorted(FileByFileTask):
     """ Undistorts images using computed intrinsic camera parameters
 
-    Module: romiscan.tasks.proc2d
+    Module: plant3dvision.tasks.proc2d
     Default upstream tasks: Scan, Colmap
     Upstream task format: Fileset with image files
     Output fileset format: Fileset with image files
@@ -28,7 +28,7 @@ class Undistorted(FileByFileTask):
         return [Colmap(), self.upstream_task()]
 
     def f(self, fi, outfs):
-        from romiscan import proc2d
+        from plant3dvision import proc2d
         camera = fi.get_metadata('colmap_camera')
         if camera is not None:
             camera_model = camera['camera_model']
@@ -42,7 +42,7 @@ class Undistorted(FileByFileTask):
 class Masks(FileByFileTask):
     """ Compute masks using several functions
 
-    Module: romiscan.tasks.proc2d
+    Module: plant3dvision.tasks.proc2d
     Default upstream tasks: Undistorted
     Upstream task format: Fileset with image files
     Output fileset format: Fileset with grayscale or binary image files
@@ -69,7 +69,7 @@ class Masks(FileByFileTask):
     threshold = luigi.FloatParameter(default=0.3)
 
     def f_raw(self, x):
-        from romiscan import proc2d
+        from plant3dvision import proc2d
         x = np.asarray(x, dtype=np.float)
         logger.debug(f"x shape: {x.shape}")
         x = rescale_intensity(x, out_range=(0, 1))
@@ -84,7 +84,7 @@ class Masks(FileByFileTask):
             raise Exception("Unknown masking type")
 
     def f(self, fi, outfs):
-        from romiscan import proc2d
+        from plant3dvision import proc2d
         logger.debug(f"Loading file: {fi.filename}")
         x = io.read_image(fi)
         x = self.f_raw(x)
@@ -106,7 +106,7 @@ class ModelFileset(FilesetExists):
 class Segmentation2D(Masks):
     """ Compute masks using trained deep learning models.
 
-    Module: romiscan.tasks.proc2d
+    Module: plant3dvision.tasks.proc2d
     Description: compute masks using trained deep learning models
     Default upstream tasks: Undistorted
     Upstream task format: Fileset with image files
@@ -178,7 +178,7 @@ class Segmentation2D(Masks):
 
     def run(self):
         from romiseg.Segmentation2D import segmentation
-        from romiscan import proc2d
+        from plant3dvision import proc2d
 
         # Get the 'image' `Fileset` to segment and filter by `query`:
         images_fileset = self.input()["images"].get().get_files(query=self.query)

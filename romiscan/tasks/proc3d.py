@@ -4,18 +4,18 @@ import open3d as o3d
 
 from plantdb import RomiTask
 from plantdb import io
-from romiscan import proc3d
-from romiscan.log import logger
-from romiscan.tasks import config
-from romiscan.tasks.cl import Voxels
-from romiscan.tasks.colmap import Colmap
-from romiscan.tasks.proc2d import Segmentation2D
+from plant3dvision import proc3d
+from plant3dvision.log import logger
+from plant3dvision.tasks import config
+from plant3dvision.tasks.cl import Voxels
+from plant3dvision.tasks.colmap import Colmap
+from plant3dvision.tasks.proc2d import Segmentation2D
 
 
 class PointCloud(RomiTask):
     """ Computes a point cloud from volumetric voxel data (either single or multiclass).
 
-    Module: romiscan.tasks.proc3d
+    Module: plant3dvision.tasks.proc3d
     Default upstream tasks: Voxels
     Upstream task format: npz file with as many 3D array as classes
     Output task format: single point cloud in ply. Metadata may include label name if multiclass.
@@ -200,7 +200,7 @@ class TriangleMesh(RomiTask):
 
     Currently ignores class data and needs only one connected component.
 
-    Module: romiscan.tasks.proc3d
+    Module: plant3dvision.tasks.proc3d
     Default upstream tasks: PointCloud
     Upstream task format: ply file
     Output task format: ply triangle mesh file
@@ -211,7 +211,7 @@ class TriangleMesh(RomiTask):
     filtering = luigi.Parameter(default="most connected triangles")  # ["", "most connected triangles", "largest connected triangles", "dbscan point-cloud"]
 
     def run(self):
-        from romiscan import proc3d
+        from plant3dvision import proc3d
         point_cloud = io.read_point_cloud(self.input_file())
 
         # TODO: Add DBSCAN clustering method to filter the point-cloud prior to meshing
@@ -390,7 +390,7 @@ class OrganSegmentation(RomiTask):
 class CurveSkeleton(RomiTask):
     """ Creates a 3D curve skeleton.
 
-    Module: romiscan.tasks.proc3d
+    Module: plant3dvision.tasks.proc3d
     Default upstream tasks: TriangleMesh
     Upstream task format: ply triangle mesh
     Output task format: json with two entries "points" and "lines" (TODO: precise)
@@ -399,7 +399,7 @@ class CurveSkeleton(RomiTask):
     upstream_task = luigi.TaskParameter(default=TriangleMesh)
 
     def run(self):
-        from romiscan import proc3d
+        from plant3dvision import proc3d
         mesh = io.read_triangle_mesh(self.input_file())
         out = proc3d.skeletonize(mesh)
         io.write_json(self.output_file(), out)

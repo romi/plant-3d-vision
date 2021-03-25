@@ -1,5 +1,5 @@
 """
-romiscan.cl
+plant3dvision.cl
 ___________
 
 This module contains all OpenCL accelerated functions.
@@ -15,8 +15,8 @@ import os
 import numpy as np
 import pyopencl as cl
 from plantdb import io
-from romiscan.log import logger
-from romiscan.proc3d import point2index
+from plant3dvision.log import logger
+from plant3dvision.proc3d import point2index
 
 ctx = cl.create_some_context()
 queue = cl.CommandQueue(ctx)

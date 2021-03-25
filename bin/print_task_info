@@ -11,7 +11,7 @@ import os
 
 import numpy as np
 import toml
-from romiscan.modules import TASKS
+from plant3dvision.modules import TASKS
 
 HELP_URL = "https://docs.romi-project.eu/Scanner/metadata/tasks_metadata/"
 

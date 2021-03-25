@@ -10,7 +10,7 @@ import tempfile
 from warnings import warn
 
 import toml
-from romiscan.modules import MODULES, TASKS
+from plant3dvision.modules import MODULES, TASKS
 
 LUIGI_CMD = "luigi"
 LOGLEV = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]

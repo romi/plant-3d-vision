@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from romiscan import proc2d
+from plant3dvision import proc2d
 
 class TestProc2D(unittest.TestCase):
     def test_excess_green(self):

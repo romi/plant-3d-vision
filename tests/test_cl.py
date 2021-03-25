@@ -1,5 +1,5 @@
 import unittest
-from romiscan import cl
+from plant3dvision import cl
 
 class TestBackProjection(unittest.TestCase):
     def test_init(self):
