@@ -3,15 +3,15 @@ import numpy as np
 from plantdb import RomiTask
 from plantdb import io
 from plantdb.task import ImagesFilesetExists
-from romiscan.log import logger
-from romiscan.tasks.colmap import Colmap
-from romiscan.tasks.proc2d import Masks
+from plant3dvision.log import logger
+from plant3dvision.tasks.colmap import Colmap
+from plant3dvision.tasks.proc2d import Masks
 
 
 class Voxels(RomiTask):
     """ Computes a volume from backprojection of 2D segmented images.
 
-    Module: romiscan.tasks.cl
+    Module: plant3dvision.tasks.cl
     Default upstream tasks:
         - upstream_mask: Masks
         - upstream_colmap: Colmap
@@ -66,7 +66,7 @@ class Voxels(RomiTask):
             return {'masks': self.upstream_mask()}  # , 'colmap': None}
 
     def run(self):
-        from romiscan import cl
+        from plant3dvision import cl
         masks_fileset = self.input()['masks'].get()
         if len(self.labels) == 0:
             labels = masks_fileset.get_metadata("label_names")

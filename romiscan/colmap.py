@@ -7,9 +7,9 @@ import imageio
 import numpy as np
 import open3d as o3d
 from plantdb import io
-from romiscan import proc3d
-from romiscan.log import logger
-from romiscan.thirdparty import read_model
+from plant3dvision import proc3d
+from plant3dvision.log import logger
+from plant3dvision.thirdparty import read_model
 
 #: List of valid colmap executable values:
 ALL_COLMAP_EXE = ['colmap', 'geki/colmap']
@@ -259,7 +259,7 @@ class ColmapRunner(object):
         --------
         >>> import os
         >>> # os.environ['COLMAP_EXE'] = "geki/colmap"  # Use this to manually switch between local COLMAP install ('colmap') or docker container ('geki/colmap')
-        >>> from romiscan.colmap import ColmapRunner
+        >>> from plant3dvision.colmap import ColmapRunner
         >>> from plantdb import FSDB
         >>> # - Connect to a ROMI databse to access an 'images' fileset to reconstruct with COLMAP:
         >>> db = FSDB("/data/ROMI/DB")
@@ -295,7 +295,7 @@ class ColmapRunner(object):
         >>> print(f"Feature matching - Elapsed time on CPU: {round(time.time() - t_start, 2)}s")
 
         >>> # -- Examples of a step-by-step SfM reconstruction:
-        >>> from romiscan.colmap import colmap_cameras_to_dict, colmap_images_to_dict, colmap_points_to_pcd
+        >>> from plant3dvision.colmap import colmap_cameras_to_dict, colmap_images_to_dict, colmap_points_to_pcd
         >>> args = {"feature_extractor": {"--ImageReader.single_camera": "1"}}
         >>> colmap = ColmapRunner(fs, all_cli_args=args)
         >>> colmap.feature_extractor()  #1 - Extract features from images
@@ -470,7 +470,7 @@ class ColmapRunner(object):
 
         Examples
         --------
-        >>> from romiscan.colmap import ColmapRunner
+        >>> from plant3dvision.colmap import ColmapRunner
         >>> from plantdb import FSDB
         >>> # - Connect to a ROMI databse to access an 'images' fileset to reconstruct with COLMAP:
         >>> db = FSDB("/data/ROMI/DB")
@@ -481,8 +481,8 @@ class ColmapRunner(object):
         >>> fs = dataset.get_fileset('images')
 
         >>> # -- Examples of a step-by-step SfM reconstruction:
-        >>> from romiscan.colmap import ColmapRunner
-        >>> from romiscan.colmap import colmap_cameras_to_dict, colmap_images_to_dict, colmap_points_to_pcd
+        >>> from plant3dvision.colmap import ColmapRunner
+        >>> from plant3dvision.colmap import colmap_cameras_to_dict, colmap_images_to_dict, colmap_points_to_pcd
         >>> cli_args = {"feature_extractor": {"--ImageReader.single_camera": "1"}}
         >>> colmap = ColmapRunner(fs, all_cli_args=cli_args)
 

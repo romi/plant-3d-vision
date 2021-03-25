@@ -5,13 +5,13 @@ import numpy as np
 from plantdb import RomiTask
 from plantdb import io
 from plantdb.task import ImagesFilesetExists
-from romiscan.colmap import ColmapRunner
-from romiscan.filenames import COLMAP_CAMERAS_ID
-from romiscan.filenames import COLMAP_DENSE_ID
-from romiscan.filenames import COLMAP_IMAGES_ID
-from romiscan.filenames import COLMAP_POINTS_ID
-from romiscan.filenames import COLMAP_SPARSE_ID
-from romiscan.log import logger
+from plant3dvision.colmap import ColmapRunner
+from plant3dvision.filenames import COLMAP_CAMERAS_ID
+from plant3dvision.filenames import COLMAP_DENSE_ID
+from plant3dvision.filenames import COLMAP_IMAGES_ID
+from plant3dvision.filenames import COLMAP_POINTS_ID
+from plant3dvision.filenames import COLMAP_SPARSE_ID
+from plant3dvision.log import logger
 
 
 def use_calibrated_poses(images_fileset, calibration_scan):
@@ -177,7 +177,7 @@ class Colmap(RomiTask):
         logger.debug("Start a Colmap reconstruction...")
         points, images, cameras, sparse, dense, bounding_box = colmap_runner.run()
         # -- Export results of Colmap reconstruction to DB:
-        # Note that file names are defined in romiscan.filenames
+        # Note that file names are defined in plant3dvision.filenames
         # - Save colmap points dictionary in JSON file:
         outfile = self.output_file(COLMAP_POINTS_ID)
         io.write_json(outfile, points)

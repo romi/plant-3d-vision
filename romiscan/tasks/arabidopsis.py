@@ -1,15 +1,15 @@
 import luigi
 import open3d as o3d
-from romiscan.log import logger
+from plant3dvision.log import logger
 from plantdb import RomiTask
 from plantdb import io
-from romiscan.tasks.proc3d import CurveSkeleton
+from plant3dvision.tasks.proc3d import CurveSkeleton
 
 
 class TreeGraph(RomiTask):
     """ Creates a tree graph of the plant
 
-    Module: romiscan.tasks.arabidopsis
+    Module: plant3dvision.tasks.arabidopsis
     Default upstream tasks: CurveSkeleton
     Upstream task format: json
     Output task format: json (TODO: precise)
@@ -21,7 +21,7 @@ class TreeGraph(RomiTask):
     stem_axis_inverted = luigi.BoolParameter(default=False)
 
     def run(self):
-        from romiscan import arabidopsis
+        from plant3dvision import arabidopsis
         f = io.read_json(self.input_file())
         t = arabidopsis.compute_tree_graph(f["points"], f["lines"], self.z_axis, self.stem_axis_inverted)
         io.write_graph(self.output_file(), t)
@@ -35,7 +35,7 @@ class AnglesAndInternodes(RomiTask):
       - `ClusteredMesh`: based on an organ segmented mesh
       - `OrganSegmentation`: based on an organ segmented point cloud
 
-    Module: romiscan.tasks.arabidopsis
+    Module: plant3dvision.tasks.arabidopsis
     Default upstream tasks: TreeGraph
     Upstream task format: json
     Output task format: json (TODO: precise)
@@ -54,7 +54,7 @@ class AnglesAndInternodes(RomiTask):
 
     def run(self):
         task_name = str(self.upstream_task.task_family)
-        from romiscan import arabidopsis
+        from plant3dvision import arabidopsis
 
         if task_name == "TreeGraph": # angles and internodes from graph
             t = io.read_graph(self.input_file())

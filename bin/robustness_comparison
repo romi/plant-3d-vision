@@ -25,11 +25,11 @@ from plantdb.io import read_json
 from plantdb.io import read_npz
 from plantdb.io import read_point_cloud
 from plantdb.io import read_triangle_mesh
-from romiscan.metrics import chamfer_distance
-from romiscan.metrics import point_cloud_registration_fitness
-from romiscan.metrics import set_metrics
-from romiscan.metrics import surface_ratio
-from romiscan.metrics import volume_ratio
+from plant3dvision.metrics import chamfer_distance
+from plant3dvision.metrics import point_cloud_registration_fitness
+from plant3dvision.metrics import set_metrics
+from plant3dvision.metrics import surface_ratio
+from plant3dvision.metrics import volume_ratio
 
 dirname, filename = os.path.split(os.path.abspath(__file__))
 logger = logging.getLogger(f'{filename}')

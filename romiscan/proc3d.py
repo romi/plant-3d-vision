@@ -1,5 +1,5 @@
 """
-romiscan.proc3d
+plant3dvision.proc3d
 ---------------
 
 This module contains all functions for processing of 3D data.
@@ -13,7 +13,7 @@ import imageio
 import networkx as nx
 import numpy as np
 import open3d as o3d
-from romiscan.log import logger
+from plant3dvision.log import logger
 from scipy.ndimage.filters import gaussian_filter
 from scipy.ndimage.morphology import distance_transform_edt
 from skimage.exposure import rescale_intensity

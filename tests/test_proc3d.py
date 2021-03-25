@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 import open3d
 
-from romiscan import proc3d
+from plant3dvision import proc3d
 
 class TestProc2D(unittest.TestCase):
     def test_index2point(self):

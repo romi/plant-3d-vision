@@ -1,5 +1,5 @@
 """
-romiscan.proc2d
+plant3dvision.proc2d
 ---------------
 
 This module contains all functions for processing of 2D data.
