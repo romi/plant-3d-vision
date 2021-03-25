@@ -363,7 +363,7 @@ def angles_and_internodes_from_point_cloud(stem_pcd, organ_pcd_list, characteris
         list of angles, internodes and fruit points
     """
     import open3d
-    from romidata import io
+    from plantdb import io
 
     stem_points = np.asarray(stem_pcd.points)
 

@@ -26,7 +26,7 @@ MODULES = {
     # Visu modules:
     "Visualization": "romiscan.tasks.visualization",
     # Database modules:
-    "Clean": "romidata.task"
+    "Clean": "plantdb.task"
 }
 
 TASKS = list(MODULES.keys())

@@ -1,8 +1,8 @@
 import luigi
 import numpy as np
-from romidata import RomiTask
-from romidata import io
-from romidata.task import ImagesFilesetExists
+from plantdb import RomiTask
+from plantdb import io
+from plantdb.task import ImagesFilesetExists
 from romiscan.log import logger
 from romiscan.tasks.colmap import Colmap
 from romiscan.tasks.proc2d import Masks

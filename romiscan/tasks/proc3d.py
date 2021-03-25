@@ -2,8 +2,8 @@ import luigi
 import numpy as np
 import open3d as o3d
 
-from romidata import RomiTask
-from romidata import io
+from plantdb import RomiTask
+from plantdb import io
 from romiscan import proc3d
 from romiscan.log import logger
 from romiscan.tasks import config

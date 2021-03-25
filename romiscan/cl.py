@@ -14,7 +14,7 @@ import os
 
 import numpy as np
 import pyopencl as cl
-from romidata import io
+from plantdb import io
 from romiscan.log import logger
 from romiscan.proc3d import point2index
 
@@ -189,7 +189,7 @@ class Backprojection(object):
 
         Parameters
         ----------
-        fs : romidata.DB.Fileset
+        fs : plantdb.DB.Fileset
             Fileset to process.
         use_colmap_poses: bool
             If `True` use the poses estimated by colmap (metadata `colmap_camera`),
@@ -217,7 +217,7 @@ class Backprojection(object):
 
         Parameters
         ----------
-        fs : romidata.DB.Fileset
+        fs : plantdb.DB.Fileset
             Fileset to process.
         label: str
             Name of the label to process, can be `None`.

@@ -1,8 +1,8 @@
 import luigi
 import open3d as o3d
 from romiscan.log import logger
-from romidata import RomiTask
-from romidata import io
+from plantdb import RomiTask
+from plantdb import io
 from romiscan.tasks.proc3d import CurveSkeleton
 
 
