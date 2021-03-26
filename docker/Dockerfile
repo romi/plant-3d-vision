@@ -49,9 +49,9 @@ RUN wget https://media.romi-project.eu/data/Resnet_896_896_epoch50.pt && \
     mv Resnet_896_896_epoch50.pt plant-3d-vision/tests/testdata/models/models/
 
 RUN cd plant-3d-vision/ && \
-    python -m pip install -e ./romidata/ --no-cache-dir && \
+    python -m pip install -e ./plantdb/ --no-cache-dir && \
     python -m pip install -e ./romiseg/ --no-cache-dir && \
-    python -m pip install -e ./romiscanner/ --no-cache-dir && \
+    python -m pip install -e ./plant-imager/ --no-cache-dir && \
     python -m pip install -e ./romicgal/ --no-cache-dir && \
     python -m pip install -r requirements.txt --no-cache-dir && \
     python -m pip install . --no-cache-dir
