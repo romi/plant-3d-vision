@@ -32,7 +32,7 @@ jobs:
        steps:
         - name: Run Integration Tests
           run: |
-           ./docker/run.sh -v /home/${USER}/ML_models:/home/${USER}/romiscan/tests/testdata/models/models -t ${{ github.sha }} --integrationtest_cmd
+           ./docker/run.sh -v /home/${USER}/ML_models:/home/${USER}/plant-3d-vision/tests/testdata/models/models -t ${{ github.sha }} --integrationtest_cmd
 
     docker-clean:
        runs-on: self-hosted
@@ -42,4 +42,4 @@ jobs:
        steps:
         - name: Remove Docker Image
           run: |
-            docker image rm romiscan:${{ github.sha }}
+            docker image rm plant3dvision:${{ github.sha }}
