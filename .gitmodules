@@ -4,9 +4,9 @@
 [submodule "romiseg"]
 	path = romiseg
 	url = https://github.com/romi/romiseg.git
-[submodule "romiscanner"]
+[submodule "plant-imager"]
 	path = plant-imager
-	url = https://github.com/romi/romiscanner.git
+	url = https://github.com/romi/plant-imager.git
 [submodule "romicgal"]
 	path = romicgal
 	url = https://github.com/romi/romicgal.git
