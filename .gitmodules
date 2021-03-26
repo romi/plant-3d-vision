@@ -1,5 +1,5 @@
 [submodule "romidata"]
-	path = romidata
+	path = plantdb
 	url = https://github.com/romi/romidata.git
 [submodule "romiseg"]
 	path = romiseg
