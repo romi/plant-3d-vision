@@ -1,2 +1,2 @@
-include romiscan/kernels/*.c
-include romiscan/kernels/*.h
+include plant3dvision/kernels/*.c
+include plant3dvision/kernels/*.h
