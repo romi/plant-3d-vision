@@ -150,7 +150,7 @@ if __name__ == "__main__":
     else:
         print("Using a PREVIOUS configuration.")
 
-    # Set the module to be loaded for the task. 
+    # Set the module to be loaded for the task.
     if args.module is not None:
         module = args.module
     elif args.task in MODULES:
@@ -160,7 +160,7 @@ if __name__ == "__main__":
         print(f"WARNING: The list of pre-defined tasks is: {', '.join(TASKS)}" )
         print(f"WARNING: For other tasks, use the --module option to load the module containing the task")
         raise ValueError(f"No module was defined for the task '{args.task}'")
-        
+
     # Handle datasets directory:
     #  - if a "Scan" or "VirtualScan" tasks is required, a directory should be created
     #  - else, check it exists

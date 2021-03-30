@@ -1,0 +1,29 @@
+[VoxelGroundTruth]
+upstream_task = "ImagesFilesetExists"  # Default is VirtualPlant
+
+[VoxelsEvaluation]
+upstream_task = "cl.Voxels"
+ground_truth = "VoxelGroundTruth"
+hist_bins = 100
+
+[PointCloudGroundTruth]
+upstream_task = "ImagesFilesetExists"
+pcd_size = 100000
+
+[PointCloudEvaluation]
+upstream_task = ""
+ground_truth = "PointCloudGroundTruth"
+max_distance = 2
+
+[ClusteredMeshGroundTruth]
+upstream_task = "VirtualPlant"
+
+[PointCloudSegmentationEvaluation]
+upstream_task = "proc3d.PointCloud"
+ground_truth = "PointCloudGroundTruth"
+
+[Segmentation2DEvaluation]
+upstream_task = "proc2d.Segmentation2D"
+ground_truth = "ImagesFilesetExists"
+hist_bins = 100
+tol_px = 5
