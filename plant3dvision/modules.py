@@ -23,6 +23,14 @@ MODULES = {
     # Quantification modules:
     "TreeGraph": "plant3dvision.tasks.arabidopsis",
     "AnglesAndInternodes": "plant3dvision.tasks.arabidopsis",
+    # Evaluation tasks:
+    "VoxelsGroundTruth": "plant3dvision.tasks.evaluation",
+    "VoxelsEvaluation": "plant3dvision.tasks.evaluation",
+    "PointCloudGroundTruth": "plant3dvision.tasks.evaluation",
+    "PointCloudEvaluation": "plant3dvision.tasks.evaluation",
+    "ClusteredMeshGroundTruth": "plant3dvision.tasks.evaluation",
+    "PointCloudSegmentationEvaluation": "plant3dvision.tasks.evaluation",
+    "Segmentation2DEvaluation": "plant3dvision.tasks.evaluation",
     # Visu modules:
     "Visualization": "plant3dvision.tasks.visualization",
     # Database modules:
@@ -30,15 +38,3 @@ MODULES = {
 }
 
 TASKS = list(MODULES.keys())
-
-EVAL_MODULES = {
-    "VoxelsGroundTruth": "plant3dvision.tasks.eval",
-    "VoxelsEvaluation": "plant3dvision.tasks.eval",
-    "PointCloudGroundTruth": "plant3dvision.tasks.eval",
-    "PointCloudEvaluation": "plant3dvision.tasks.eval",
-    "ClusteredMeshGroundTruth": "plant3dvision.tasks.eval",
-    "PointCloudSegmentationEvaluation": "plant3dvision.tasks.eval",
-    "Segmentation2DEvaluation": "plant3dvision.tasks.eval"
-}
-
-EVAL_TASKS = list(EVAL_MODULES.keys())
