@@ -50,6 +50,7 @@ RUN wget https://media.romi-project.eu/data/Resnet_896_896_epoch50.pt && \
 
 RUN cd plant-3d-vision/ && \
     python -m pip install -e ./plantdb/ --no-cache-dir && \
+    python -m pip install -e ./romitask/ --no-cache-dir && \
     python -m pip install -e ./romiseg/ --no-cache-dir && \
     python -m pip install -e ./plant-imager/ --no-cache-dir && \
     python -m pip install -e ./romicgal/ --no-cache-dir && \
