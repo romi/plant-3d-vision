@@ -10,3 +10,6 @@
 [submodule "romicgal"]
 	path = romicgal
 	url = https://github.com/romi/romicgal.git
+[submodule "romitask"]
+	path = romitask
+	url = https://github.com/romi/romitask.git
