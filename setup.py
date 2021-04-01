@@ -8,13 +8,11 @@ opts = dict(
     packages=find_packages(),
     version='0.9.99',
     scripts=[
-        'bin/romi_run_task',
-        'bin/print_task_info',
-        'bin/robustness_comparison',
+        'bin/robustness_comparison'
     ],
     author='Timothée Wintz',
     author_email='timothee@timwin.fr',
-    description='A plant scanner',
+    description='A plant 3d vision tool',
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://docs.romi-project.eu/Scanner/home/",
