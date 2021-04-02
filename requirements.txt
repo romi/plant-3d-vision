@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-# pywavefront  # Changed to optional as only used in romiscan/romiscan/tasks/evaluation.py
-# trimesh  # Changed to optional as only used once in romiscan/romiscan/tasks/evaluation.py
 appdirs
 colorlog
 cython
