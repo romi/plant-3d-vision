@@ -1,9 +1,9 @@
 import unittest
 
 import luigi
-from plantdb import RomiTask, DatabaseConfig, FilesetTarget
+from romitask import RomiTask, DatabaseConfig, FilesetTarget
 from plantdb import io
-from plantdb.task import FilesetExists, ImagesFilesetExists, FileByFileTask
+from romitask.task import FilesetExists, ImagesFilesetExists, FileByFileTask
 from plantdb.testing import DBTestCase
 from os import rmdir, path
 

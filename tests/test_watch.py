@@ -2,7 +2,7 @@ import os
 import unittest
 
 from plantdb.testing import DBTestCase
-from plantdb.watch import FSDBWatcher
+from romitask.watch import FSDBWatcher
 
 
 # class TouchFileTask(RomiTask):
