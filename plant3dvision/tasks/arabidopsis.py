@@ -1,7 +1,7 @@
 import luigi
 import open3d as o3d
 from plant3dvision.log import logger
-from plantdb import RomiTask
+from romitask import RomiTask
 from plantdb import io
 from plant3dvision.tasks.proc3d import CurveSkeleton
 

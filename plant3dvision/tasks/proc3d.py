@@ -2,7 +2,7 @@ import luigi
 import numpy as np
 import open3d as o3d
 
-from plantdb import RomiTask
+from romitask import RomiTask
 from plantdb import io
 from plant3dvision import proc3d
 from plant3dvision.log import logger
