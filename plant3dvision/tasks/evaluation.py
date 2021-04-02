@@ -4,11 +4,11 @@ import tempfile
 import luigi
 import numpy as np
 import open3d as o3d
-from plantdb import DatabaseConfig
-from plantdb import RomiTask
+from romitask.task import DatabaseConfig
+from romitask.task import RomiTask
 from plantdb import io
-from plantdb.task import FilesetTarget
-from plantdb.task import ImagesFilesetExists
+from romitask.task import FilesetTarget
+from romitask.task import ImagesFilesetExists
 from plant3dvision.log import logger
 from plant3dvision.tasks import cl
 from plant3dvision.tasks import config
