@@ -1,6 +1,6 @@
 import unittest
 
-from plantdb.runner import DBRunner
+from romitask.runner import DBRunner
 from plantdb.testing import DBTestCase
 
 
