@@ -4,13 +4,16 @@ import tempfile
 import luigi
 import numpy as np
 import open3d as o3d
+import random
 from plantdb import io
+from sklearn import decomposition
 from romitask.task import RomiTask, FilesetTarget, ImagesFilesetExists, DatabaseConfig, VirtualPlantObj
 from plant3dvision.log import logger
 from plant3dvision.tasks import cl
 from plant3dvision.tasks import config
 from plant3dvision.tasks import proc2d
 from plant3dvision.tasks import proc3d
+
 
 class EvaluationTask(RomiTask):
     upstream_task = luigi.TaskParameter()
@@ -219,7 +222,7 @@ class PointCloudSegmentationEvaluation(EvaluationTask):
 
 
 class PointCloudEvaluation(EvaluationTask):
-    upstream_task = luigi.TaskParameter(default=proc3d.PointCloud)
+    upstream_task = luigi.TaskParameter()
     ground_truth = luigi.TaskParameter(default=PointCloudGroundTruth)
     max_distance = luigi.FloatParameter(default=2)
 
@@ -228,15 +231,8 @@ class PointCloudEvaluation(EvaluationTask):
         target = io.read_point_cloud(self.ground_truth().output_file())
         labels = self.upstream_task().output_file().get_metadata('labels')
         labels_gt = self.ground_truth().output_file().get_metadata('labels')
-
-        res = o3d.pipelines.registration.evaluate_registration(source, target,
-                                                        self.max_distance)
-        eval = {"id": self.upstream_task().task_id}
-        eval["all"] = {
-            "fitness": res.fitness,
-            "inlier_rmse": res.inlier_rmse
-        }
         if labels is not None:
+            eval = {"id": self.upstream_task().task_id}
             for l in set(labels_gt):
                 idx = [i for i in range(len(labels)) if labels[i] == l]
                 idx_gt = [i for i in range(len(labels_gt)) if labels_gt[i] == l]
@@ -254,14 +250,19 @@ class PointCloudEvaluation(EvaluationTask):
                 logger.debug("label : %s" % l)
                 logger.debug("gt points: %i" % len(subpcd_target.points))
                 logger.debug("pcd points: %i" % len(subpcd_source.points))
-                res = o3d.pipelines.registration.evaluate_registration(subpcd_source,
+                res = o3d.registration.evaluate_registration(subpcd_source,
                                                                 subpcd_target,
                                                                 self.max_distance)
                 eval[l] = {
                     "fitness": res.fitness,
                     "inlier_rmse": res.inlier_rmse
                 }
-
+        res = o3d.registration.evaluate_registration(source, target,
+                                                        self.max_distance)
+        eval["all"] = {
+            "fitness": res.fitness,
+            "inlier_rmse": res.inlier_rmse
+        }
         return eval
 
 
@@ -414,3 +415,78 @@ class VoxelsEvaluation(EvaluationTask):
             histograms[c] = {"tp": tp.tolist(), "fp": fp.tolist(),
                              "tn": tn.tolist(), "fn": fn.tolist()}
         return histograms
+
+
+class CylinderRadiusGroundTruth(RomiTask):
+    """
+    Provide a point cloud with a cylindrical shape and a known radius
+    """
+    upstream_task = luigi.TaskParameter(ImagesFilesetExists)
+    noise_type = luigi.Parameter(default="")
+    nb_points = luigi.IntParameter(default=10000)
+
+    def run(self):
+        radius = random.uniform(1, 100)
+        height = random.uniform(1, 100)
+        zs = np.random.uniform(0, height, self.nb_points)
+        thetas = np.random.uniform(0, 2 * np.pi, self.nb_points)
+        xs = radius * np.cos(thetas)
+        ys = radius * np.sin(thetas)
+        cylinder = np.array([xs, ys, zs]).T
+
+        gt_cyl = o3d.geometry.PointCloud()
+        gt_cyl.points = o3d.utility.Vector3dVector(cylinder)
+        # visualization
+        # o3d.visualization.draw_geometries([gt_cyl])
+
+        io.write_point_cloud(self.output_file(), gt_cyl)
+        self.output().get().set_metadata({'radius': radius})
+
+
+class CylinderRadiusEvaluation(RomiTask):
+    """
+    Extract specific features of a cylinder shaped point cloud
+
+    Module: romiscan.tasks.calibration_test
+    Default upstream tasks: PointCloud
+    Upstream task format: ply
+    Output task format: json
+
+    """
+    upstream_task = luigi.TaskParameter(CylinderRadiusGroundTruth)
+
+    def input(self):
+        return self.upstream_task().output()
+
+    def run(self):
+        cylinder_fileset = self.input().get()
+        input_file = self.input_file()
+        pcd = io.read_point_cloud(input_file)
+        if str(self.upstream_task.task_family) == "CylinderRadiusGroundTruth":
+            gt_radius = cylinder_fileset.get_metadata("radius")
+        elif str(self.upstream_task.task_family) == "PointCloud":
+            try:
+                gt_radius = input_file.get_scan().get_measures()["radius"]
+            except KeyError:
+                gt_radius = None
+                logger.warning("No radius measurement specified")
+        else:
+            gt_radius = None
+
+        pcd_points = np.asarray(pcd.points)
+        pca = decomposition.PCA(n_components=3)
+        pca.fit(pcd_points)
+        t_points = np.dot(pca.components_, pcd_points.T).T
+        gt_cyl = o3d.geometry.PointCloud()
+        gt_cyl.points = o3d.utility.Vector3dVector(t_points)
+        o3d.visualization.draw_geometries([gt_cyl])
+        center = t_points.mean(axis=0)
+        radius = np.mean(np.sqrt((t_points[:, 0] - center[0]) ** 2 + (t_points[:, 1] - center[1]) ** 2))
+
+        output = {"calculated_radius": radius}
+        if gt_radius:
+            err = round(abs(radius - gt_radius) / gt_radius*100, 2)
+            output["gt_radius"] = gt_radius
+            output["err (%)"] = err
+        io.write_json(self.output_file(), output)
+
