@@ -138,8 +138,8 @@ In this install instructions, we leverage the `git submodule` functionality to c
     git submodule update
     python3 -m pip install -r requirements.txt
     python3 -m pip install ./plantdb/
+    python3 -m pip install ./romitask/
     python3 -m pip install ./romiseg/
-    python3 -m pip install ./plant-imager/
     python3 -m pip install ./romicgal/
     python3 -m pip install .
     ```
