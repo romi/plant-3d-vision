@@ -4,17 +4,13 @@ import tempfile
 import luigi
 import numpy as np
 import open3d as o3d
-from romitask.task import DatabaseConfig
-from romitask.task import RomiTask
 from plantdb import io
-from romitask.task import FilesetTarget
-from romitask.task import ImagesFilesetExists
+from romitask.task import RomiTask, FilesetTarget, ImagesFilesetExists, DatabaseConfig, VirtualPlantObj
 from plant3dvision.log import logger
 from plant3dvision.tasks import cl
 from plant3dvision.tasks import config
 from plant3dvision.tasks import proc2d
 from plant3dvision.tasks import proc3d
-from plantimager.tasks.lpy import VirtualPlant
 
 
 class EvaluationTask(RomiTask):
@@ -36,8 +32,8 @@ class EvaluationTask(RomiTask):
         io.write_json(self.output_file(), res)
 
 
-class VoxelGroundTruth(RomiTask):
-    upstream_task = luigi.TaskParameter(default=VirtualPlant)
+class VoxelsGroundTruth(RomiTask):
+    upstream_task = luigi.TaskParameter(default=VirtualPlantObj)
 
     def run(self):
         import pywavefront
@@ -88,7 +84,7 @@ class VoxelGroundTruth(RomiTask):
 
 
 class PointCloudGroundTruth(RomiTask):
-    upstream_task = luigi.TaskParameter(default=VirtualPlant)
+    upstream_task = luigi.TaskParameter(default=VirtualPlantObj)
     pcd_size = luigi.IntParameter(default=100000)
 
     def run(self):
@@ -138,7 +134,7 @@ class PointCloudGroundTruth(RomiTask):
 
 
 class ClusteredMeshGroundTruth(RomiTask):
-    upstream_task = luigi.TaskParameter(default=VirtualPlant)
+    upstream_task = luigi.TaskParameter(default=VirtualPlantObj)
 
     def run(self):
         import pywavefront
