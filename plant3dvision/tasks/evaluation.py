@@ -479,9 +479,9 @@ class CylinderRadiusEvaluation(RomiTask):
         pca = decomposition.PCA(n_components=3)
         pca.fit(pcd_points)
         t_points = np.dot(pca.components_, pcd_points.T).T
-        gt_cyl = o3d.geometry.PointCloud()
-        gt_cyl.points = o3d.utility.Vector3dVector(t_points)
-        o3d.visualization.draw_geometries([gt_cyl])
+        # gt_cyl = o3d.geometry.PointCloud()
+        # gt_cyl.points = o3d.utility.Vector3dVector(t_points)
+        # o3d.visualization.draw_geometries([gt_cyl])
         center = t_points.mean(axis=0)
         radius = np.mean(np.sqrt((t_points[:, 0] - center[0]) ** 2 + (t_points[:, 1] - center[1]) ** 2))
 
