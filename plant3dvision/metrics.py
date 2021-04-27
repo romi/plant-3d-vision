@@ -202,9 +202,9 @@ class SetMetrics(ABC):
 
 class CompareMasks(SetMetrics):
     def __init__(self, groundtruth, prediction):
-        super(SetMetrics, self).__init__(MaskEvaluator(),
-                                         groundtruth,
-                                         prediction)
+        super(CompareMasks, self).__init__(MaskEvaluator(),
+                                           groundtruth,
+                                           prediction)
         
 class MaskEvaluator(SetEvaluator):
 

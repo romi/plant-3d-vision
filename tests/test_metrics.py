@@ -7,6 +7,7 @@ import open3d
 
 from plant3dvision.metrics import SetMetrics
 from plant3dvision.metrics import MaskEvaluator
+from plant3dvision.metrics import CompareMasks
 from plant3dvision.metrics import CompareMaskFilesets
 from plant3dvision.metrics import CompareSegmentedPointClouds
 from plantdb import io
