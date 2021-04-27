@@ -200,6 +200,12 @@ class SetMetrics(ABC):
         return value
 
 
+class CompareMasks(SetMetrics):
+    def __init__(self, groundtruth, prediction):
+        super(SetMetrics, self).__init__(MaskEvaluator(),
+                                         groundtruth,
+                                         prediction)
+        
 class MaskEvaluator(SetEvaluator):
 
     def evaluate(self, groundtruth, prediction):
@@ -373,13 +379,11 @@ class CompareSegmentedPointClouds():
         self._compute_miou()
         
     def _compare_groundtruth_to_prediction(self):
-        #print(f"compare_groundtruth_to_prediction")
         res = self._compare(self.groundtruth, self.groundtruth_labels,
                             self.prediction, self.prediction_labels)
         self.results['groundtruth-to-prediction'] = res
 
     def _compare_prediction_to_groundtruth(self):
-        #print(f"compare_predictions_to_ground_truth")
         res = self._compare(self.prediction, self.prediction_labels,
                             self.groundtruth, self.groundtruth_labels)
         self.results['prediction-to-groundtruth'] = res
@@ -399,7 +403,6 @@ class CompareSegmentedPointClouds():
         search_tree = self._build_search_tree(target)
         
         for index, point in enumerate(source.points):
-            #print(f"Point {point} @ {index}")
             source_label = source_labels[index]
             target_label = self._get_label_closest_point(search_tree, point, target_labels)
             self._evalulate_labels(results, source_label, target_label)
@@ -414,12 +417,10 @@ class CompareSegmentedPointClouds():
         
     def _get_closest_point(self, tree, p):
         [k, indices, _] = tree.search_knn_vector_3d(p, 1)
-        #print(f"Closest point @ {indices[0]}")
         return indices[0]
     
     def _get_label_closest_point(self, tree, p, labels):
         index = self._get_closest_point(tree, p)
-        #print(f"Closest label {labels[index]}")
         return labels[index]
 
     def _evalulate_labels(self, results, source_label, target_label):

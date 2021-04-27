@@ -31,7 +31,7 @@ class TestMaskMetrics(unittest.TestCase):
 
     def test_compare_idential_masks(self):
         # Act
-        metrics = SetMetrics(MaskEvaluator(), self.square_left, self.square_left)
+        metrics = CompareMasks(self.square_left, self.square_left)
         
         # Assert
         assert(metrics.tp == 4)
@@ -44,7 +44,7 @@ class TestMaskMetrics(unittest.TestCase):
 
     def test_compare_masks_without_intersection(self):
         # Act
-        metrics = SetMetrics(MaskEvaluator(), self.square_left, self.square_right)
+        metrics = CompareMasks(self.square_left, self.square_right)
 
         # Assert
         assert(metrics.tp == 0)
@@ -57,7 +57,7 @@ class TestMaskMetrics(unittest.TestCase):
 
     def test_compare_masks_with_partial_overlap(self):
         # Act
-        metrics = SetMetrics(MaskEvaluator(), self.square_left, self.square_center)
+        metrics = CompareMasks(self.square_left, self.square_center)
 
         # Assert
         assert(metrics.tp == 2)
@@ -86,9 +86,9 @@ class TestMaskMetrics(unittest.TestCase):
 
     def test_adding_metrics(self):
         # Act
-        m1 = SetMetrics(MaskEvaluator(), self.square_left, self.square_left)
-        m2 = SetMetrics(MaskEvaluator(), self.square_left, self.square_right)
-        m3 = SetMetrics(MaskEvaluator(), self.square_left, self.square_center)
+        m1 = CompareMasks(self.square_left, self.square_left)
+        m2 = CompareMasks(self.square_left, self.square_right)
+        m3 = CompareMasks(self.square_left, self.square_center)
         m1 += m2
         m1 += m3
         
@@ -118,7 +118,7 @@ class TestMaskMetrics(unittest.TestCase):
 
     def test_mixing_int_and_floating_point_arrays(self):
         # Act
-        metrics = SetMetrics(MaskEvaluator(), self.square_left, self.square_center_float)
+        metrics = CompareMasks(self.square_left, self.square_center_float)
         
         # Assert
         assert(metrics.tp == 2)
@@ -160,7 +160,6 @@ class TestCompareMaskFilesets(unittest.TestCase):
     
     def make_db(self, groundtruths, predictions):
         db = self.init_db()
-        #db = self.init_db_alternative()
         db.connect()
         scan = db.create_scan("test")
         groundtruth_fileset = self.create_groundtruth_fileset(scan, groundtruths)
@@ -169,11 +168,6 @@ class TestCompareMaskFilesets(unittest.TestCase):
     
     def init_db(self):
         return fsdb.dummy_db()
-        
-    def init_db_alternative(self):
-        os.mkdir('test-db')
-        open('test-db/romidb', 'w').close()
-        return fsdb.FSDB('test-db')
 
     def create_groundtruth_fileset(self, scan, groundtruths):
         fileset = scan.create_fileset("groundtruth")
@@ -278,33 +272,7 @@ class TestCompareMaskFilesets(unittest.TestCase):
         
 
 
-            
-
 class TestCompareSegmentedPointClouds(unittest.TestCase):
-    """
-    def test_compare(self):
-        db = fsdb.FSDB('../../db')
-        db.connect()
-        scan = db.get_scan('000000-masks')
-        
-        groundtruth_fileset = scan.get_fileset('SegmentedPointCloud_out__Segmentation2D_db46b44b10')
-        groundtruth_file = groundtruth_fileset.get_file('SegmentedPointCloud')
-        groundtruth = io.read_point_cloud(groundtruth_file)
-        groundtruth_labels = groundtruth_file.get_metadata('labels')
-
-        predicted_fileset = scan.get_fileset('SegmentedPointCloud_out__Segmentation2D_db46b44b10')
-        prediction_file = predicted_fileset.get_file('SegmentedPointCloud')
-        prediction = io.read_point_cloud(prediction_file)
-        
-        prediction_labels = prediction_file.get_metadata('labels')
-
-        metrics = CompareSegmentedPointClouds(groundtruth, groundtruth_labels,
-                                              prediction, prediction_labels)
-        #print(json.dumps(metrics.results, indent=4, sort_keys=True))
-        
-        assert(True)
-    """
-
         
     def test_assure_empty_pountclouds_return_empty_results(self):
         # Arrange
@@ -344,7 +312,6 @@ class TestCompareSegmentedPointClouds(unittest.TestCase):
                                               prediction, prediction_labels)
 
         # Assert
-        print(json.dumps(metrics.results, indent=4))
         for label in groundtruth_labels:
             assert(metrics.results['miou'][label] == 1.0)
         
@@ -396,8 +363,7 @@ class TestCompareSegmentedPointClouds(unittest.TestCase):
                                               prediction, prediction_labels)
 
         # Assert        
-        print(json.dumps(metrics.results, indent=4))
-
+        #print(json.dumps(metrics.results, indent=4))
         assert(metrics.results['miou']['one'] == (0.5 + 0.5) / 2.0)
         assert(metrics.results['miou']['two'] == (0.0 + 0.0) / 2.0)
         assert(metrics.results['miou']['three'] == (1.0 + 1.0) / 2.0)
