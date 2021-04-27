@@ -36,8 +36,8 @@ def use_calibrated_poses(images_fileset, calibration_scan):
     else:
         colmap_fs = colmap_fs[0]
         # TODO: What happens if we have more than one 'Colmap' job ?!
-        if len(colmap_fs) > 1:
-            logger.warning(f"More than one 'Colmap' job has been performed on calibration scan '{calibration_scan.id}'!")
+        # if len(colmap_fs) > 1:
+        #     logger.warning(f"More than one 'Colmap' job has been performed on calibration scan '{calibration_scan.id}'!")
     # - Read the JSON file with calibrated poses:
     poses = io.read_json(colmap_fs.get_file(COLMAP_IMAGES_ID))
     # - Get the 'images' fileset for the calibration scan
@@ -58,7 +58,8 @@ def use_calibrated_poses(images_fileset, calibration_scan):
         # - Compute the 'calibrated_pose':
         rot = np.array(poses[key]['rotmat'])
         tvec = np.array(poses[key]['tvec'])
-        pose = -rot.transpose() * (tvec.transpose())
+        # pose = -rot.transpose() * (tvec.transpose())
+        pose = np.dot(-rot.transpose(),(tvec.transpose()))
         pose = np.array(pose).flatten().tolist()
         # - Assign this calibrated pose to the metadata of the image of the fileset to reconstruct
         # Assignment is order based...
@@ -149,7 +150,7 @@ class Colmap(RomiTask):
             else:
                 logger.info("Found a 'workspace' definition in the 'images' fileset metadata!")
         else:
-            bounding_box = self.bounding_box
+            bounding_box = dict(self.bounding_box)
             logger.info("Found manual definition of cropping bounding-box!")
 
         # - Defines if colmap may use a calibration:
