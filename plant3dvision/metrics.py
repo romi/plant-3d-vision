@@ -298,7 +298,7 @@ class CompareMaskFilesets():
         self.prediction_fileset = prediction_fileset
         self.labels = labels
         self.dilation_amount = dilation_amount
-        self.results = { 'xxx-prediction-files': {}}
+        self.results = { 'evaluation-results': {}}
         self.assure_matching_images()
         self.compare_predictions_to_ground_truths()
 
@@ -341,7 +341,7 @@ class CompareMaskFilesets():
         metrics_label = SetMetrics(MaskEvaluator(self.dilation_amount))
         for prediction_file in prediction_files:
             metrics_file = self.evaluate_prediction(prediction_file, label)
-            self.results['xxx-prediction-files'][prediction_file.id] = metrics_file.as_dict()
+            self.results['evaluation-results'][prediction_file.id] = metrics_file.as_dict()
             metrics_label += metrics_file 
         return metrics_label
 
