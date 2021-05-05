@@ -274,14 +274,13 @@ class Segmentation2DEvaluation(EvaluationTask):
     ground_truth = luigi.TaskParameter(default=ImagesFilesetExists)
     hist_bins = luigi.IntParameter(default=100)
     dilation_amount = luigi.IntParameter(default=0)
-    skip_rgb_channel = luigi.IntParameter(default=True)
+    labels = luigi.ListParameter(default=[])
 
     def evaluate(self):
         groundtruth_fileset = self.ground_truth().output().get()
         prediction_fileset = self.upstream_task().output().get()
-        labels = groundtruth_fileset.get_metadata('channels')
-        if self.skip_rgb_channel:
-            labels.remove('rgb')
+        if len(self.labels) == 0:
+            raise ValueError("The labels parameter is empty. No continuing because the results may not be what you expected. Please add 'labels = ['...', '...']' to the Segmentation2DEvaluation section in the config file.")
         metrics = CompareMaskFilesets(groundtruth_fileset,
                                       prediction_fileset,
                                       labels,
