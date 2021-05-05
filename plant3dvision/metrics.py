@@ -228,7 +228,6 @@ class CompareMasks(SetMetrics):
     >>> print(metrics.miou())
 
     """
-        Dilate the zones of white pixels by this many pixels before the comparison 
     def __init__(self, groundtruth, prediction, dilation_amount=0):
         super(CompareMasks, self).__init__(MaskEvaluator(dilation_amount),
                                            groundtruth,
