@@ -273,17 +273,19 @@ class Segmentation2DEvaluation(EvaluationTask):
     upstream_task = luigi.TaskParameter(default=proc2d.Segmentation2D)
     ground_truth = luigi.TaskParameter(default=ImagesFilesetExists)
     hist_bins = luigi.IntParameter(default=100)
-    tol_px = luigi.IntParameter(default=0)
+    dilation_amount = luigi.IntParameter(default=0)
+    skip_rgb_channel = luigi.IntParameter(default=True)
 
     def evaluate(self):
         groundtruth_fileset = self.ground_truth().output().get()
         prediction_fileset = self.upstream_task().output().get()
         labels = groundtruth_fileset.get_metadata('channels')
-        labels.remove('rgb')
+        if not self.skip_rgb_channel:
+            labels.remove('rgb')
         metrics = CompareMaskFilesets(groundtruth_fileset,
                                       prediction_fileset,
                                       labels,
-                                      self.tol_px)
+                                      self.dilation_amount)
         return metrics.results
 
 
