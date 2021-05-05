@@ -283,7 +283,7 @@ class Segmentation2DEvaluation(EvaluationTask):
             raise ValueError("The labels parameter is empty. No continuing because the results may not be what you expected. Please add 'labels = ['...', '...']' to the Segmentation2DEvaluation section in the config file.")
         metrics = CompareMaskFilesets(groundtruth_fileset,
                                       prediction_fileset,
-                                      labels,
+                                      self.labels,
                                       self.dilation_amount)
         return metrics.results
 
