@@ -280,7 +280,7 @@ class Segmentation2DEvaluation(EvaluationTask):
         groundtruth_fileset = self.ground_truth().output().get()
         prediction_fileset = self.upstream_task().output().get()
         labels = groundtruth_fileset.get_metadata('channels')
-        if not self.skip_rgb_channel:
+        if self.skip_rgb_channel:
             labels.remove('rgb')
         metrics = CompareMaskFilesets(groundtruth_fileset,
                                       prediction_fileset,
