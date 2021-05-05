@@ -80,5 +80,11 @@ upstream_task = "PointCloud"
 ground_truth = "PointCloudGroundTruth"
 max_distance = 2.0 # default to 2.0
 
+## Segmentation2D
+[Segmentation2DEvaluation]
+upstream_task = "Segmentation2D"
+labels = "[\"flower\", \"fruit\", \"leaf\", \"pedicel\", \"stem\"]"
+dilation_amount = 0
+
 [Clean]
 no_confirm = true
