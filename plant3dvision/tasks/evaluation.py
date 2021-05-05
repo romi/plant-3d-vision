@@ -13,6 +13,7 @@ from plant3dvision.tasks import cl
 from plant3dvision.tasks import config
 from plant3dvision.tasks import proc2d
 from plant3dvision.tasks import proc3d
+from plant3dvision.metrics import CompareMaskFilesets
 
 
 class EvaluationTask(RomiTask):
