@@ -272,84 +272,18 @@ class Segmentation2DEvaluation(EvaluationTask):
     upstream_task = luigi.TaskParameter(default=proc2d.Segmentation2D)
     ground_truth = luigi.TaskParameter(default=ImagesFilesetExists)
     hist_bins = luigi.IntParameter(default=100)
-    tol_px = luigi.IntParameter()
+    tol_px = luigi.IntParameter(default=0)
 
     def evaluate(self):
-        from scipy.ndimage.morphology import binary_dilation
-
+        groundtruth_fileset = self.ground_truth().output().get()
         prediction_fileset = self.upstream_task().output().get()
-        gt_fileset = self.ground_truth().output().get()
-        channels = gt_fileset.get_metadata('channels')
-        channels.remove('rgb')
-
-        histograms = {}
-        res = {}
-
-        for c in channels:
-
-            if (c == "background"):
-                continue
-
-            preds = prediction_fileset.get_files(query={'channel': c})
-            # hist_high, disc = np.histogram(np.array([]), self.hist_bins, range=(0,1))
-            # hist_low, disc = np.histogram(np.array([]), self.hist_bins, range=(0,1))
-            res[c] = {
-                "tp": 0,
-                "fp": 0,
-                "tn": 0,
-                "fn": 0
-            }
-
-            for pred in preds:
-                ground_truth = gt_fileset.get_files(query={'channel': c,
-                                                           'shot_id': pred.get_metadata(
-                                                               'shot_id')})[0]
-                im_pred = io.read_image(pred)
-                im_gt = io.read_image(ground_truth)
-                for i in range(self.tol_px):
-                    im_gt_tol = binary_dilation(im_gt > 0)
-
-                tp = int(np.sum(im_gt_tol * (im_pred > 0)))
-                fn = int(np.sum(im_gt_tol * (im_pred == 0)))
-                tn = int(np.sum((im_gt == 0) * (im_pred == 0)))
-                fp = int(np.sum((im_gt == 0) * (im_pred > 0)))
-
-                res[c]["tp"] += tp
-                res[c]["fp"] += fp
-                res[c]["tn"] += tn
-                res[c]["fn"] += fn
-
-            #         if c == "background":
-            #             threshold = 254
-            #         else:
-            #             threshold = 0
-
-            #         res[c]["tp"] += int(np.sum((im_gt > threshold) * (im_pred > 128)))
-            #         res[c]["fp"] += int(np.sum((im_gt <= threshold) * (im_pred > 128)))
-            #         res[c]["tn"] += int(np.sum((im_gt <= threshold) * (im_pred <= 128)))
-            #         res[c]["fn"] += int(np.sum((im_gt > threshold) * (im_pred <= 128)))
-
-            #         # im_gt_high = im_pred[im_gt > threshold] / 255
-            #         # im_gt_low = im_pred[1-im_gt < threshold] / 255
-
-            #         # hist_high_pred, bins_high = np.histogram(im_gt_high, self.hist_bins, range=(0,1))
-            #         # hist_low_pred, bins_low = np.histogram(im_gt_low, self.hist_bins, range=(0,1))
-            #         # hist_high += hist_high_pred
-            #         # hist_low += hist_low_pred
-            #     if res[c]["tp"] + res[c]["fp"] == 0:
-            #         res.pop(c, None)
-            #         continue
-
-            res[c]["precision"] = res[c]["tp"] / (res[c]["tp"] + res[c]["fp"])
-
-            if res[c]["tp"] + res[c]["fn"] == 0:
-                res.pop(c, None)
-                continue
-
-            res[c]["recall"] = res[c]["tp"] / (res[c]["tp"] + res[c]["fn"])
-        #     # histograms[c] = {"hist_high": hist_high.tolist(), "bins_high": bins_high.tolist(), "hist_low": hist_low.tolist(), "bins_low": bins_low.tolist()}
-        # # return histograms
-        return res
+        labels = gt_fileset.get_metadata('channels')
+        labels.remove('rgb')
+        metrics = CompareMaskFilesets(groundtruth_fileset,
+                                      prediction_fileset,
+                                      labels,
+                                      self.tol_px)
+        return metrics.results
 
 
 class VoxelsEvaluation(EvaluationTask):

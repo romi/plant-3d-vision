@@ -201,21 +201,58 @@ class SetMetrics(ABC):
 
 
 class CompareMasks(SetMetrics):
-    def __init__(self, groundtruth, prediction):
-        super(CompareMasks, self).__init__(MaskEvaluator(),
+    """Compare two masks. 
+    
+    Parameters
+    ----------
+    groundtruth: Image as np.array
+        The reference binary mask.
+    prediction : Image as np.array
+        The mask to evaluate.
+    dilation_amount: int
+        Dilate the zones of white pixels by this many pixels before the comparison 
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import cv2
+    >>> groundtruth = cv2.imread('image1.png')
+    >>> prediction = cv2.imread('image2.png')
+    >>> metrics = CompareMasks(groundtruth, prediction)
+    >>> print(metrics.tp)
+    >>> print(metrics.fn)
+    >>> print(metrics.tn)
+    >>> print(metrics.fp)
+    >>> print(metrics.precision())
+    >>> print(metrics.recall())
+    >>> print(metrics.miou())
+
+    """
+        Dilate the zones of white pixels by this many pixels before the comparison 
+    def __init__(self, groundtruth, prediction, dilation_amount=0):
+        super(CompareMasks, self).__init__(MaskEvaluator(dilation_amount),
                                            groundtruth,
                                            prediction)
         
 class MaskEvaluator(SetEvaluator):
-
+    def __init__(self, dilation_amount=0):
+        self.dilation_amount = dilation_amount
+        
     def evaluate(self, groundtruth, prediction):
         self._assert_same_size(groundtruth, prediction)
+        prediction = self._dilate_image(prediction)
         return self._compute_metrics(groundtruth, prediction)
     
     def _assert_same_size(self, groundtruth, prediction):
         if groundtruth.shape != prediction.shape:
             raise ValueError("The groundtruth and prediction are different is size")
 
+    def _dilate_image(self, image):
+        from scipy.ndimage.morphology import binary_dilation
+        for i in range(self.dilation_amount):
+            image = binary_dilation(image > 0)
+        return image
+    
     def _compute_metrics(self, groundtruth, prediction):
         groundtruth = self._to_binary_image(groundtruth)
         prediction = self._to_binary_image(prediction)
@@ -240,6 +277,8 @@ class CompareMaskFilesets():
         The fileset with the masks to evaluate.
     labels: List(str)
         The list of labels to evaluate.
+    dilation_amount: int
+        Dilate the zones of white pixels by this many pixels before the comparison 
 
     Examples
     --------
@@ -255,10 +294,11 @@ class CompareMaskFilesets():
     >>> print(metrics.results)
 
     """
-    def __init__(self, groundtruth_fileset, prediction_fileset, labels):
+    def __init__(self, groundtruth_fileset, prediction_fileset, labels, dilation_amount=0):
         self.groundtruth_fileset = groundtruth_fileset
         self.prediction_fileset = prediction_fileset
         self.labels = labels
+        self.dilation_amount = dilation_amount
         self.results = { 'xxx-prediction-files': {}}
         self.assure_matching_images()
         self.compare_predictions_to_ground_truths()
@@ -299,7 +339,7 @@ class CompareMaskFilesets():
 
     def compare_label(self, label):
         prediction_files = self.get_prediction_files(label)
-        metrics_label = SetMetrics(MaskEvaluator())
+        metrics_label = SetMetrics(MaskEvaluator(self.dilation_amount))
         for prediction_file in prediction_files:
             metrics_file = self.evaluate_prediction(prediction_file, label)
             self.results['xxx-prediction-files'][prediction_file.id] = metrics_file.as_dict()
@@ -315,7 +355,7 @@ class CompareMaskFilesets():
     def evaluate_prediction(self, prediction_file, label):
         groundtruth = self.load_ground_truth_image(label, prediction_file)
         prediction = self.load_prediction_image(prediction_file)
-        return SetMetrics(MaskEvaluator(), groundtruth, prediction)
+        return SetMetrics(MaskEvaluator(self.dilation_amount), groundtruth, prediction)
 
     def load_ground_truth_image(self, label, prediction_file):
         ground_truth_file = self.get_ground_truth_file(label, prediction_file)

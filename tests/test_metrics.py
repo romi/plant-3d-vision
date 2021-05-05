@@ -143,6 +143,19 @@ class TestMaskMetrics(unittest.TestCase):
         assert(metrics.recall() == None)
         assert(metrics.miou() == None)
 
+    def test_dilation(self):
+        # Act
+        metrics = CompareMasks(self.square_left, self.square_center, 1)
+
+        # Assert
+        assert(metrics.tp == 4)
+        assert(metrics.fn == 0)
+        assert(metrics.tn == 0)
+        assert(metrics.fp == 4)
+        assert(metrics.precision() == 0.5)
+        assert(metrics.recall() == 1.0)
+        assert(metrics.miou() == 4.0/8.0)
+
 
 class TestCompareMaskFilesets(unittest.TestCase):
     square_left = np.array([[1, 1, 0, 0],
