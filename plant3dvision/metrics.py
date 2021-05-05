@@ -244,7 +244,7 @@ class MaskEvaluator(SetEvaluator):
     
     def _assert_same_size(self, groundtruth, prediction):
         if groundtruth.shape != prediction.shape:
-            raise ValueError("The groundtruth and prediction are different is size")
+            raise ValueError("The groundtruth and prediction are different in size: %s vs %s" % (str(groundtruth.shape), str(prediction.shape)))
 
     def _dilate_image(self, image):
         from scipy.ndimage.morphology import binary_dilation
