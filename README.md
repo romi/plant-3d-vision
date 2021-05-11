@@ -83,7 +83,7 @@ This library use `pyopencl` and thus require the following system libraries:
 - ocl-icd-libopencl1
 - opencl-headers
 
-In addition you will need:
+In addition, you will need:
 
 - git
 - python3-pip

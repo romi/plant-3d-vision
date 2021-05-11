@@ -3,8 +3,12 @@ import tempfile
 
 import luigi
 import numpy as np
-import open3d as o3d
 import random
+
+from dtw.dtw import DTW
+from dtw.dtw import brute_force_free_ends_search
+from dtw.dtw import mixed_dist
+from plant3dvision.tasks.arabidopsis import AnglesAndInternodes
 from plantdb import io
 from sklearn import decomposition
 from romitask.task import RomiTask, FilesetTarget, ImagesFilesetExists, DatabaseConfig, VirtualPlantObj
@@ -41,6 +45,7 @@ class VoxelsGroundTruth(RomiTask):
     def run(self):
         import pywavefront
         import trimesh
+        import open3d as o3d
         x = self.input_file()
         mtl_file = self.input().get().get_file(x.id + "_mtl")
         outfs = self.output().get()
@@ -92,6 +97,7 @@ class PointCloudGroundTruth(RomiTask):
 
     def run(self):
         import pywavefront
+        import open3d as o3d
         x = self.input_file()
         mtl_file = self.input().get().get_file(x.id + "_mtl")
         outfs = self.output().get()
@@ -141,6 +147,7 @@ class ClusteredMeshGroundTruth(RomiTask):
 
     def run(self):
         import pywavefront
+        import open3d as o3d
         x = self.input_file()
         mtl_file = self.input().get().get_file(x.id + "_mtl")
         outfs = self.output().get()
@@ -187,6 +194,7 @@ class PointCloudSegmentationEvaluation(EvaluationTask):
     ground_truth = luigi.TaskParameter(default=PointCloudGroundTruth)
 
     def evaluate(self):
+        import open3d as o3d
         source = io.read_point_cloud(self.upstream_task().output_file())
         target = io.read_point_cloud(self.ground_truth().output_file())
         labels_gt = self.ground_truth().output_file().get_metadata('labels')
@@ -228,6 +236,7 @@ class PointCloudEvaluation(EvaluationTask):
     max_distance = luigi.FloatParameter(default=2)
 
     def evaluate(self):
+        import open3d as o3d
         source = io.read_point_cloud(self.upstream_task().output_file())
         target = io.read_point_cloud(self.ground_truth().output_file())
         labels = self.upstream_task().output_file().get_metadata('labels')
@@ -364,6 +373,7 @@ class CylinderRadiusGroundTruth(RomiTask):
     nb_points = luigi.IntParameter(default=10000)
 
     def run(self):
+        import open3d as o3d
         radius = random.uniform(1, 100)
         height = random.uniform(1, 100)
         zs = np.random.uniform(0, height, self.nb_points)
@@ -428,3 +438,46 @@ class CylinderRadiusEvaluation(RomiTask):
             output["err (%)"] = err
         io.write_json(self.output_file(), output)
 
+
+class AnglesAndInternodesEvaluation(EvaluationTask):
+    """
+
+    """
+    upstream_task = luigi.TaskParameter(default=AnglesAndInternodes)
+    ground_truth = luigi.TaskParameter(default=VirtualPlantObj)
+
+    free_ends = luigi.FloatParameter(default=0.4)
+    free_ends_eps = luigi.FloatParameter(default=1e-2)
+
+    def input(self):
+        # Get the output of the ground truth task
+        gt_f = self.ground_truth().output()
+        print(type(gt_f))
+        gt_angles = gt_f.get_metadata('angles')
+        gt_internodes = gt_f.get_metadata('internodes')
+
+        pred_f = self.upstream_task().output()
+        print(type(pred_f))
+        pred = io.read_json(pred_f)
+        pred_angles = pred['angles']
+        pred_internodes = pred['internodes']
+
+        seq_ref = np.array([gt_angles, gt_internodes]).T
+        seq_test = np.array([pred_angles, pred_internodes]).T
+
+        return [seq_ref, seq_test]
+
+    def evaluate(self):
+        seq_ref, seq_test = self.input()
+
+        max_ref = max(seq_ref[:, 1])
+        max_test = max(seq_test[:, 1])
+        max_in = max(max_ref, max_test)
+
+        dtwcomputer = DTW(seq_ref, seq_test, constraints="merge_split", free_ends=(0, 1), ldist=mixed_dist,
+                          mixed_type=[True, False], mixed_spread=[1, max_in], mixed_weight=[0.5, 0.5])
+
+        free_ends, n_cost = brute_force_free_ends_search(dtwcomputer, free_ends_eps=1e-2)
+        dtwcomputer.free_ends = free_ends
+        dtwcomputer.run()
+        dtwcomputer.plot_results()
