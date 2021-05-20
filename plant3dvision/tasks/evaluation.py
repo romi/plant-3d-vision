@@ -16,6 +16,7 @@ from plant3dvision.tasks import proc3d
 from plant3dvision.tasks.arabidopsis import AnglesAndInternodes
 from plantdb import io
 from romitask.task import DatabaseConfig
+from romitask.task import FilesetExists
 from romitask.task import FilesetTarget
 from romitask.task import ImagesFilesetExists
 from romitask.task import RomiTask
@@ -446,9 +447,13 @@ class CylinderRadiusEvaluation(RomiTask):
 class AnglesAndInternodesEvaluation(EvaluationTask):
     """
 
+    Examples
+    --------
+    romi_run_task AnglesAndInternodes plant-3d-vision/tests/testdata/virtual_plant --config plant-3d-vision/config/geom_pipe_virtual.toml
+    romi_run_task AnglesAndInternodesEvaluation plant-3d-vision/tests/testdata/virtual_plant --config plant-3d-vision/config/geom_pipe_virtual.toml --module plant3dvision.tasks.evaluation
     """
     upstream_task = luigi.TaskParameter(default=AnglesAndInternodes)
-    ground_truth = luigi.TaskParameter(default=VirtualPlantObj)
+    ground_truth = luigi.TaskParameter(default=FilesetExists)
 
     free_ends = luigi.FloatParameter(default=0.4)
     free_ends_eps = luigi.FloatParameter(default=1e-2)
