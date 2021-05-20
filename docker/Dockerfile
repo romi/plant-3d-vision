@@ -44,9 +44,14 @@ ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
 
 COPY --chown=${USER_NAME}:${GROUP_NAME} ./ plant-3d-vision/
 
-RUN wget https://media.romi-project.eu/data/Resnet_896_896_epoch50.pt && \
-    mkdir plant-3d-vision/tests/testdata/models/models && \
-    mv Resnet_896_896_epoch50.pt plant-3d-vision/tests/testdata/models/models/
+ARG MODEL=Resnet_896_896_epoch50.pt
+RUN mkdir -p plant-3d-vision/tests/testdata/models/models && \
+    if test -f "plant-3d-vision/tests/testdata/models/models/${MODEL}"; then \
+        echo "${MODEL} exists.";\
+    else \
+        wget https://media.romi-project.eu/data/${MODEL} && \
+        mv ${MODEL} plant-3d-vision/tests/testdata/models/models/;\
+    fi
 
 RUN cd plant-3d-vision/ && \
     python -m pip install -e ./plantdb/ --no-cache-dir && \
@@ -54,6 +59,6 @@ RUN cd plant-3d-vision/ && \
     python -m pip install -e ./romiseg/ --no-cache-dir && \
     python -m pip install -e ./romicgal/ --no-cache-dir && \
     python -m pip install -r requirements.txt --no-cache-dir && \
-    python -m pip install . --no-cache-dir
+    python -m pip install -e . --no-cache-dir
 
 CMD ["/bin/bash", "-c", "romi_run_task -h"]
