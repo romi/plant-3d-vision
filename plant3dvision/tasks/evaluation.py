@@ -8,12 +8,13 @@ import random
 from plantdb import io
 from sklearn import decomposition
 from romitask.task import RomiTask, FilesetTarget, ImagesFilesetExists, DatabaseConfig, VirtualPlantObj
+from plant3dvision import metrics
 from plant3dvision.log import logger
 from plant3dvision.tasks import cl
 from plant3dvision.tasks import config
 from plant3dvision.tasks import proc2d
 from plant3dvision.tasks import proc3d
-from plant3dvision.metrics import CompareMaskFilesets
+from plant3dvision.metrics import CompareMaskFilesets, CompareSegmentedPointClouds
 
 
 class EvaluationTask(RomiTask):
@@ -182,44 +183,22 @@ class ClusteredMeshGroundTruth(RomiTask):
                     f.set_metadata("label", class_name)
 
 
-class PointCloudSegmentationEvaluation(EvaluationTask):
-    upstream_task = luigi.TaskParameter(default=proc3d.PointCloud)
+class SegmentedPointCloudEvaluation(EvaluationTask):
+    upstream_task = luigi.TaskParameter(default=proc3d.SegmentedPointCloud)
     ground_truth = luigi.TaskParameter(default=PointCloudGroundTruth)
 
     def evaluate(self):
-        source = io.read_point_cloud(self.upstream_task().output_file())
-        target = io.read_point_cloud(self.ground_truth().output_file())
+        prediction = io.read_point_cloud(self.upstream_task().output_file())
+        groundtruth = io.read_point_cloud(self.ground_truth().output_file())
         labels_gt = self.ground_truth().output_file().get_metadata('labels')
         labels = self.upstream_task().output_file().get_metadata('labels')
-        pcd_tree = o3d.geometry.KDTreeFlann(target)
-        res = {}
-        unique_labels = set(labels_gt)
-        for l in unique_labels:
-            res[l] = {
-                "tp": 0,
-                "fp": 0,
-                "tn": 0,
-                "fn": 0
-            }
-        for i, p in enumerate(source.points):
-            li = labels[i]
-            [k, idx, _] = pcd_tree.search_knn_vector_3d(p, 1)
-            for l in unique_labels:
-                if li == l:  # Positive cases
-                    if li == labels_gt[idx[0]]:
-                        res[l]["tp"] += 1
-                    else:
-                        res[l]["fp"] += 1
-                else:  # Negative cases
-                    if li == labels_gt[idx[0]]:
-                        res[l]["tn"] += 1
-                    else:
-                        res[l]["fn"] += 1
 
-        for l in unique_labels:
-            res[l]["precision"] = res[l]["tp"] / (res[l]["tp"] + res[l]["fp"])
-            res[l]["recall"] = res[l]["tp"] / (res[l]["tp"] + res[l]["fn"])
-        return res
+        if len(labels) == 0:
+            raise ValueError("The labels parameter is empty. No continuing because the results may not be what expected.")
+
+        metrics = CompareSegmentedPointClouds(groundtruth, labels_gt, prediction, labels)
+
+        return metrics.results
 
 
 class PointCloudEvaluation(EvaluationTask):

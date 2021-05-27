@@ -46,7 +46,7 @@ classes = [
 
 bins = 100
 eval = {}
-tasks_eval = ['Segmentation2DEvaluation', 'PointCloudSegmentationEvaluation']#, 'PointCloudEvaluation']
+tasks_eval = ['Segmentation2DEvaluation', 'SegmentedPointCloudEvaluation']#, 'PointCloudEvaluation']
 
 # Initialisation
 for c in classes:
