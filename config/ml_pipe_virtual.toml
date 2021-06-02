@@ -86,5 +86,10 @@ upstream_task = "Segmentation2D"
 labels = "[\"flower\", \"fruit\", \"leaf\", \"pedicel\", \"stem\"]"
 dilation_amount = 0
 
+## SegmentedPointCloud
+[SegmentedPointCloudEvaluation]
+upstream_task = "SegmentedPointCloud"
+ground_truth = "PointCloudGroundTruth"
+
 [Clean]
 no_confirm = true
