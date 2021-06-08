@@ -1,5 +1,8 @@
 import unittest
 
+from os.path import join, abspath
+from pathlib import Path
+
 import numpy as np
 import open3d
 
@@ -50,7 +53,10 @@ class TestProc2D(unittest.TestCase):
         assert(vol[1,1,1] == 1)
 
     def test_skeletonize(self):
-        mesh = open3d.io.read_triangle_mesh("testdata/cylinder.ply")
+        parent_dir = Path(__file__).resolve().parents[1]
+        cylinder_mesh_file = abspath(join(parent_dir, "testdata", "cylinder.ply"))
+        
+        mesh = open3d.io.read_triangle_mesh(cylinder_mesh_file)
         skel = proc3d.skeletonize(mesh)
         assert(len(skel["points"]) > 0)
         assert(len(skel["lines"]) > 0)
