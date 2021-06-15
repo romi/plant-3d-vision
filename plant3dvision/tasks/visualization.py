@@ -24,7 +24,9 @@ class Visualization(RomiTask):
     upstream_angles = luigi.TaskParameter(default=AnglesAndInternodes)
     upstream_skeleton = luigi.TaskParameter(default=CurveSkeleton)
     upstream_images = luigi.TaskParameter(default=ImagesFilesetExists)
+    query = luigi.DictParameter(default={})
 
+    use_colmap_poses = luigi.BoolParameter(default=True)
     max_image_size = luigi.IntParameter(default=1500)
     max_point_cloud_size = luigi.IntParameter(default=10000)
     thumbnail_size = luigi.IntParameter(default=150)
@@ -65,10 +67,34 @@ class Visualization(RomiTask):
         }
 
         # POSES
-        colmap_fileset = self.upstream_colmap().output().get()
-        images = io.read_json(colmap_fileset.get_file(COLMAP_IMAGES_ID))
-        camera = io.read_json(colmap_fileset.get_file(COLMAP_CAMERAS_ID))
-        camera["bounding_box"] = colmap_fileset.get_metadata("bounding_box")
+        image_files = self.upstream_images().output().get().get_files(query=self.query)
+        if self.use_colmap_poses:
+            colmap_fileset = self.upstream_colmap().output().get()
+            images = io.read_json(colmap_fileset.get_file(COLMAP_IMAGES_ID))
+            camera = io.read_json(colmap_fileset.get_file(COLMAP_CAMERAS_ID))
+            camera["bounding_box"] = colmap_fileset.get_metadata("bounding_box")
+        else: # when colmap is not defined, we try to use ground truth poses
+            # camera handling
+            first_image_file = image_files[0]
+            camera_model = first_image_file.get_metadata("camera")["camera_model"] # we just pick the first camera
+            camera = {}
+            camera[first_image_file.id] = camera_model
+            bounding_box = self.upstream_images().output().get().get_metadata("bounding_box")
+            camera["bounding_box"] = bounding_box
+
+            # images handling
+            images = {}
+            for img in image_files:
+                img_id = img.id
+                img_rotmat = img.get_metadata("camera")["rotmat"]
+                img_tvec = img.get_metadata("camera")["tvec"]
+                image = {}
+                image["id"] = img_id
+                image["rotmat"] = img_rotmat
+                image["tvec"] = img_tvec
+
+                images[img_id] = image
+
         f = output_fileset.get_file(COLMAP_IMAGES_ID, create=True)
         f_cam = output_fileset.get_file(COLMAP_CAMERAS_ID, create=True)
         io.write_json(f, images)
@@ -120,11 +146,10 @@ class Visualization(RomiTask):
             files_metadata["point_cloud"] = point_cloud_file.id
 
         # IMAGES
-        images_fileset = self.upstream_images().output().get()
         files_metadata["images"] = []
         files_metadata["thumbnails"] = []
 
-        for img in images_fileset.get_files():
+        for img in image_files:
             data = io.read_image(img)
             # remove alpha channel
             if data.shape[2] == 4:
