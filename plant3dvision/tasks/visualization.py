@@ -2,12 +2,12 @@ import luigi
 import numpy as np
 from romitask import RomiTask
 from plantdb import io
-from romitask.task import ImagesFilesetExists
+from romitask.task import ImagesFilesetExists, VirtualPlantObj
 from plant3dvision.filenames import COLMAP_CAMERAS_ID
 from plant3dvision.filenames import COLMAP_IMAGES_ID
 from plant3dvision.log import logger
 from plant3dvision.tasks.arabidopsis import AnglesAndInternodes
-from plant3dvision.tasks.colmap import Colmap
+from plant3dvision.tasks.colmap import Colmap, use_calibrated_poses
 from plant3dvision.tasks.proc3d import CurveSkeleton
 from plant3dvision.tasks.proc3d import PointCloud
 from plant3dvision.tasks.proc3d import TriangleMesh
@@ -25,6 +25,7 @@ class Visualization(RomiTask):
     upstream_skeleton = luigi.TaskParameter(default=CurveSkeleton)
     upstream_images = luigi.TaskParameter(default=ImagesFilesetExists)
     query = luigi.DictParameter(default={})
+    upstream_virtualplantobj = luigi.TaskParameter(default=VirtualPlantObj)
 
     use_colmap_poses = luigi.BoolParameter(default=True)
     max_image_size = luigi.IntParameter(default=1500)
@@ -77,23 +78,29 @@ class Visualization(RomiTask):
             # camera handling
             first_image_file = image_files[0]
             camera_model = first_image_file.get_metadata("camera")["camera_model"] # we just pick the first camera
+            camera_id = "1" # I don't know why the camera_id must be equal to "1", probably Colmap logic
+            camera_model["id"] = camera_id
             camera = {}
-            camera[first_image_file.id] = camera_model
+            camera[camera_id] = camera_model
             bounding_box = self.upstream_images().output().get().get_metadata("bounding_box")
             camera["bounding_box"] = bounding_box
 
             # images handling
             images = {}
+            img_id = 1 # I don't know why image id's must start by "1" and go up, probably Colmap logic
             for img in image_files:
-                img_id = img.id
                 img_rotmat = img.get_metadata("camera")["rotmat"]
                 img_tvec = img.get_metadata("camera")["tvec"]
+                name = img.filename
+
                 image = {}
-                image["id"] = img_id
+                image["id"] = str(img_id)
                 image["rotmat"] = img_rotmat
                 image["tvec"] = img_tvec
-
+                image["camera_id"] = camera_id
+                image["name"] = name
                 images[img_id] = image
+                img_id += 1
 
         f = output_fileset.get_file(COLMAP_IMAGES_ID, create=True)
         f_cam = output_fileset.get_file(COLMAP_CAMERAS_ID, create=True)
@@ -172,7 +179,17 @@ class Visualization(RomiTask):
             files_metadata["thumbnails"].append(thumbnail_id)
 
         # MEASURES
-        measures = scan.get_measures()
+        if self.use_colmap_poses:
+            measures = scan.get_measures()
+        else:
+            measures = {}
+            angles = self.upstream_virtualplantobj().output_file().get_metadata("angles")
+            print("angles = ", angles)
+            internodes = self.upstream_virtualplantobj().output_file().get_metadata("internodes")
+            print("internodes = ", internodes)
+            measures["angles"] = angles
+            measures["internodes"] = internodes
+
         f_measures = output_fileset.create_file("measures")
         io.write_json(f_measures, measures)
         files_metadata["measures"] = "measures"
