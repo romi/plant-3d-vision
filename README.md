@@ -103,7 +103,7 @@ sudo apt-get update && sudo apt-get install -y \
     ocl-icd-libopencl1 opencl-headers \
     python3-wheel python3-pip \
     gcc pkg-config \
-    libeigen3-dev libgmp3-dev libmpfr-dev
+    libeigen3-dev libgmp3-dev libmpfr-dev libboost-dev
 ```
 
 If you have an NVIDIA GPU:
@@ -137,11 +137,11 @@ In this install instructions, we leverage the `git submodule` functionality to c
     git submodule init
     git submodule update
     python3 -m pip install -r requirements.txt
-    python3 -m pip install ./plantdb/
-    python3 -m pip install ./romitask/
-    python3 -m pip install ./romiseg/
-    python3 -m pip install ./romicgal/
-    python3 -m pip install .
+    python3 -m pip install -e ./plantdb/ --use-feature=in-tree-build
+    python3 -m pip install -e ./romitask/ --use-feature=in-tree-build
+    python3 -m pip install -e ./romiseg/ --use-feature=in-tree-build
+    python3 -m pip install -e ./romicgal/ --use-feature=in-tree-build
+    python3 -m pip install -e . --use-feature=in-tree-build
     ```
 4. Test import of `plant3dvision` library:
     ```bash

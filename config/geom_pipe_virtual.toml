@@ -36,6 +36,8 @@ characteristic_length = 1.0
 stem_axis_inverted = false
 
 ### Evaluation ####
+[VirtualScan]
+obj_fileset = "VirtualPlantObj"
 
 ## PointCloud
 [PointCloudGroundTruth]
@@ -47,9 +49,12 @@ upstream_task = "PointCloud"
 ground_truth = "PointCloudGroundTruth"
 max_distance = 2.0 # default to 2.0
 
+[AnglesAndInternodesGroundTruth]
+upstream_task = "VirtualPlantObj" # The dataset must have an obj in VirtualPlant
+
 [AnglesAndInternodesEvaluation]
 upstream_task = "AnglesAndInternodes"
-ground_truth = "VirtualPlantObj"
+ground_truth = "AnglesAndInternodesGroundTruth"
 free_ends = 0.4
 free_ends_eps = 1e-2
 

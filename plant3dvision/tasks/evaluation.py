@@ -1,7 +1,3 @@
-import os
-import random
-import tempfile
-
 import luigi
 import numpy as np
 from dtw.dtw import DTW
@@ -10,187 +6,59 @@ from dtw.dtw import mixed_dist
 from plant3dvision.log import logger
 from plant3dvision.metrics import CompareMaskFilesets
 from plant3dvision.tasks import cl
-from plant3dvision.tasks import config
 from plant3dvision.tasks import proc2d
 from plant3dvision.tasks import proc3d
 from plant3dvision.tasks.arabidopsis import AnglesAndInternodes
+from plant3dvision.tasks.ground_truth import CylinderRadiusGroundTruth
+from plant3dvision.tasks.ground_truth import PointCloudGroundTruth
+from plant3dvision.tasks.ground_truth import VoxelsGroundTruth
 from plantdb import io
 from romitask.task import DatabaseConfig
-from romitask.task import FilesetExists
 from romitask.task import FilesetTarget
 from romitask.task import ImagesFilesetExists
 from romitask.task import RomiTask
-from romitask.task import VirtualPlantObj
 from sklearn import decomposition
 
 
 class EvaluationTask(RomiTask):
+    """Implementation of an abstract ``luigi`` task dedicated to the evaluation of a `RomiTask`."""
     upstream_task = luigi.TaskParameter()
     ground_truth = luigi.TaskParameter()
 
     def requires(self):
+        """Default requirements method of a standard evaluation task.
+
+        An evaluation task should require an upstream task (to evaluate) and a ground-truth to test against.
+
+        Returns
+        -------
+        list of luigi.TaskParameter
+            The upstream task and ground truth.
+        """
         return [self.upstream_task(), self.ground_truth()]
 
     def output(self):
+        """Default output method.
+
+        Returns
+        -------
+        FilesetTarget
+            The target fileset in the database.
+        """
         fileset_id = self.task_family  # self.upstream_task().task_id + "Evaluation"
         return FilesetTarget(DatabaseConfig().scan, fileset_id)
 
     def evaluate(self):
+        """Default evaluation method, should be overridden by inheriting class."""
         raise NotImplementedError
 
     def run(self):
+        """Default run method called by ``luigi``.
+
+        Call the ``evaluate`` method and save the result in a JSON file.
+        """
         res = self.evaluate()
         io.write_json(self.output_file(), res)
-
-
-class VoxelsGroundTruth(RomiTask):
-    upstream_task = luigi.TaskParameter(default=VirtualPlantObj)
-
-    def run(self):
-        import pywavefront
-        import trimesh
-        import open3d as o3d
-        x = self.input_file()
-        mtl_file = self.input().get().get_file(x.id + "_mtl")
-        outfs = self.output().get()
-        # Convert the input MTL file into a ground truth voxel matrix:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            io.to_file(x, os.path.join(tmpdir, "plant.obj"))
-            io.to_file(x, os.path.join(tmpdir, "plant.mtl"))
-            x = pywavefront.Wavefront(os.path.join(tmpdir, "plant.obj"),
-                                      collect_faces=True, create_materials=True)
-            res = {}
-            min = np.min(x.vertices, axis=0)
-            max = np.max(x.vertices, axis=0)
-            arr_size = np.asarray((max - min) / cl.Voxels().voxel_size + 1, dtype=np.int) + 1
-            for k in x.meshes.keys():
-                t = o3d.geometry.TriangleMesh()
-                t.triangles = o3d.utility.Vector3iVector(np.asarray(x.meshes[k].faces))
-                t.vertices = o3d.utility.Vector3dVector(np.asarray(x.vertices))
-                t.compute_triangle_normals()
-                o3d.io.write_triangle_mesh(os.path.join(tmpdir, "tmp.stl"),
-                                           t)
-                m = trimesh.load(os.path.join(tmpdir, "tmp.stl"))
-                v = m.voxelized(cl.Voxels().voxel_size)
-
-                class_name = x.meshes[k].materials[0].name
-                arr = np.zeros(arr_size)
-                voxel_size = cl.Voxels().voxel_size
-                origin_idx = np.asarray((v.origin - min) / voxel_size,
-                                        dtype=np.int)
-                arr[origin_idx[0]:origin_idx[0] + v.matrix.shape[0],
-                origin_idx[1]:origin_idx[1] + v.matrix.shape[1],
-                origin_idx[2]:origin_idx[2] + v.matrix.shape[2]] = v.matrix
-
-                # The following is needed because there are rotation in lpy's output...
-                arr = np.swapaxes(arr, 2, 1)
-                arr = np.flip(arr, 1)
-
-                res[class_name] = arr  # gaussian_filter(arr, voxel_size)
-
-            bg = np.ones(arr.shape)
-            for k in res.keys():
-                bg = np.minimum(bg, 1 - res[k])
-            res["background"] = bg
-            io.write_npz(self.output_file(), res)
-
-
-class PointCloudGroundTruth(RomiTask):
-    upstream_task = luigi.TaskParameter(default=VirtualPlantObj)
-    pcd_size = luigi.IntParameter(default=100000)
-
-    def run(self):
-        import pywavefront
-        import open3d as o3d
-        x = self.input_file()
-        mtl_file = self.input().get().get_file(x.id + "_mtl")
-        outfs = self.output().get()
-        colors = config.PointCloudColorConfig().colors
-        with tempfile.TemporaryDirectory() as tmpdir:
-            io.to_file(x, os.path.join(tmpdir, "plant.obj"))
-            io.to_file(x, os.path.join(tmpdir, "plant.mtl"))
-            x = pywavefront.Wavefront(os.path.join(tmpdir, "plant.obj"),
-                                      collect_faces=True, create_materials=True)
-            res = o3d.geometry.PointCloud()
-            point_labels = []
-
-            for i, k in enumerate(x.meshes.keys()):
-                t = o3d.geometry.TriangleMesh()
-                t.triangles = o3d.utility.Vector3iVector(
-                    np.asarray(x.meshes[k].faces))
-                t.vertices = o3d.utility.Vector3dVector(
-                    np.asarray(x.vertices))
-                t.compute_triangle_normals()
-
-                class_name = x.meshes[k].materials[0].name
-
-                # The following is needed because there are rotation in lpy's output...
-                pcd = t.sample_points_poisson_disk(self.pcd_size)
-                pcd_pts = np.asarray(pcd.points)
-                pcd_pts = pcd_pts[:, [0, 2, 1]]
-                pcd_pts[:, 1] *= -1
-                pcd.points = o3d.utility.Vector3dVector(pcd_pts)
-
-                color = np.zeros((len(pcd.points), 3))
-                if class_name in colors:
-                    color[:] = np.asarray(colors[class_name])
-                else:
-                    color[:] = np.random.rand(3)
-                color = o3d.utility.Vector3dVector(color)
-                pcd.colors = color
-
-                res = res + pcd
-                point_labels += [class_name] * len(pcd.points)
-
-            io.write_point_cloud(self.output_file(), res)
-            self.output_file().set_metadata({'labels': point_labels})
-
-
-class ClusteredMeshGroundTruth(RomiTask):
-    upstream_task = luigi.TaskParameter(default=VirtualPlantObj)
-
-    def run(self):
-        import pywavefront
-        import open3d as o3d
-        x = self.input_file()
-        mtl_file = self.input().get().get_file(x.id + "_mtl")
-        outfs = self.output().get()
-        colors = config.PointCloudColorConfig().colors
-        output_fileset = self.output().get()
-        with tempfile.TemporaryDirectory() as tmpdir:
-            io.to_file(x, os.path.join(tmpdir, "plant.obj"))
-            io.to_file(x, os.path.join(tmpdir, "plant.mtl"))
-            x = pywavefront.Wavefront(os.path.join(tmpdir, "plant.obj"),
-                                      collect_faces=True, create_materials=True)
-            res = o3d.geometry.PointCloud()
-            point_labels = []
-
-            for i, k in enumerate(x.meshes.keys()):
-                t = o3d.geometry.TriangleMesh()
-                t.triangles = o3d.utility.Vector3iVector(
-                    np.asarray(x.meshes[k].faces))
-
-                pts = np.asarray(x.vertices)
-                pts = pts[:, [0, 2, 1]]
-                pts[:, 1] *= -1
-
-                t.vertices = o3d.utility.Vector3dVector(pts)
-                t.compute_triangle_normals()
-
-                class_name = x.meshes[k].materials[0].name
-
-                k, cc, _ = t.cluster_connected_triangles()
-                k = np.asarray(k)
-                tri_np = np.asarray(t.triangles)
-                for j in range(len(cc)):
-                    newt = o3d.geometry.TriangleMesh(t.vertices,
-                                                     o3d.utility.Vector3iVector(tri_np[k == j, :]))
-                    newt.vertex_colors = t.vertex_colors
-                    newt.remove_unreferenced_vertices()
-
-                    f = output_fileset.create_file("%s_%03d" % (class_name, j))
-                    io.write_triangle_mesh(f, newt)
-                    f.set_metadata("label", class_name)
 
 
 class PointCloudSegmentationEvaluation(EvaluationTask):
@@ -246,8 +114,7 @@ class PointCloudEvaluation(EvaluationTask):
         labels = self.upstream_task().output_file().get_metadata('labels')
         labels_gt = self.ground_truth().output_file().get_metadata('labels')
 
-        res = o3d.pipelines.registration.evaluate_registration(source, target,
-                                                               self.max_distance)
+        res = o3d.pipelines.registration.evaluate_registration(source, target, self.max_distance)
         eval = {"id": self.upstream_task().task_id}
         eval["all"] = {
             "fitness": res.fitness,
@@ -306,9 +173,6 @@ class VoxelsEvaluation(EvaluationTask):
     upstream_task = luigi.TaskParameter(default=cl.Voxels)
     ground_truth = luigi.TaskParameter(default=VoxelsGroundTruth)
     hist_bins = luigi.IntParameter(default=100)
-
-    def requires(self):
-        return [self.upstream_task(), self.ground_truth()]
 
     def evaluate(self):
         prediction_file = self.upstream_task().output().get().get_files()[0]
@@ -369,33 +233,6 @@ class VoxelsEvaluation(EvaluationTask):
         return histograms
 
 
-class CylinderRadiusGroundTruth(RomiTask):
-    """
-    Provide a point cloud with a cylindrical shape and a known radius
-    """
-    upstream_task = luigi.TaskParameter(ImagesFilesetExists)
-    noise_type = luigi.Parameter(default="")
-    nb_points = luigi.IntParameter(default=10000)
-
-    def run(self):
-        import open3d as o3d
-        radius = random.uniform(1, 100)
-        height = random.uniform(1, 100)
-        zs = np.random.uniform(0, height, self.nb_points)
-        thetas = np.random.uniform(0, 2 * np.pi, self.nb_points)
-        xs = radius * np.cos(thetas)
-        ys = radius * np.sin(thetas)
-        cylinder = np.array([xs, ys, zs]).T
-
-        gt_cyl = o3d.geometry.PointCloud()
-        gt_cyl.points = o3d.utility.Vector3dVector(cylinder)
-        # visualization
-        # o3d.visualization.draw_geometries([gt_cyl])
-
-        io.write_point_cloud(self.output_file(), gt_cyl)
-        self.output().get().set_metadata({'radius': radius})
-
-
 class CylinderRadiusEvaluation(RomiTask):
     """
     Extract specific features of a cylinder shaped point cloud
@@ -445,15 +282,18 @@ class CylinderRadiusEvaluation(RomiTask):
 
 
 class AnglesAndInternodesEvaluation(EvaluationTask):
-    """
+    """ Evaluation of the `AnglesAndInternodes` tasks.
+
+    Use the angles and inter-nodes sequence generated by the virtual plant imager as ground-truth.
+    Compare them to the angles and inter-nodes sequence obtained from upstream task `AnglesAndInternodes`.
 
     Examples
     --------
-    romi_run_task AnglesAndInternodes plant-3d-vision/tests/testdata/virtual_plant --config plant-3d-vision/config/geom_pipe_virtual.toml
-    romi_run_task AnglesAndInternodesEvaluation plant-3d-vision/tests/testdata/virtual_plant --config plant-3d-vision/config/geom_pipe_virtual.toml --module plant3dvision.tasks.evaluation
+    cp -R plant-3d-vision/tests /tmp/
+    romi_run_task AnglesAndInternodes /tmp/tests/testdata/virtual_plant --config plant-3d-vision/config/geom_pipe_virtual.toml
+    romi_run_task AnglesAndInternodesEvaluation /tmp/tests/testdata/virtual_plant --config plant-3d-vision/config/geom_pipe_virtual.toml --module plant3dvision.tasks.evaluation
     """
     upstream_task = luigi.TaskParameter(default=AnglesAndInternodes)
-    ground_truth = luigi.TaskParameter(default=FilesetExists)
 
     free_ends = luigi.FloatParameter(default=0.4)
     free_ends_eps = luigi.FloatParameter(default=1e-2)
