@@ -184,9 +184,7 @@ class Visualization(RomiTask):
         else:
             measures = {}
             angles = self.upstream_virtualplantobj().output_file().get_metadata("angles")
-            print("angles = ", angles)
             internodes = self.upstream_virtualplantobj().output_file().get_metadata("internodes")
-            print("internodes = ", internodes)
             measures["angles"] = angles
             measures["internodes"] = internodes
 
