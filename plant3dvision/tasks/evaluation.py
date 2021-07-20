@@ -7,7 +7,7 @@ import open3d as o3d
 import random
 from plantdb import io
 from sklearn import decomposition
-from romitask.task import RomiTask, FilesetTarget, ImagesFilesetExists, DatabaseConfig, VirtualPlantObj
+from romitask.task import RomiTask, FilesetTarget, ImagesFilesetExists, DatabaseConfig, Segmentation2DGroundTruthFilesetExists, VirtualPlantObj
 from plant3dvision import metrics
 from plant3dvision.log import logger
 from plant3dvision.tasks import cl
@@ -250,7 +250,7 @@ class PointCloudEvaluation(EvaluationTask):
 
 class Segmentation2DEvaluation(EvaluationTask):
     upstream_task = luigi.TaskParameter(default=proc2d.Segmentation2D)
-    ground_truth = luigi.TaskParameter(default=ImagesFilesetExists)
+    ground_truth = luigi.TaskParameter(default=Segmentation2DGroundTruthFilesetExists)
     hist_bins = luigi.IntParameter(default=100)
     dilation_amount = luigi.IntParameter(default=0)
     labels = luigi.ListParameter(default=[])
