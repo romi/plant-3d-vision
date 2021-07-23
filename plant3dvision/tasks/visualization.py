@@ -220,22 +220,25 @@ class Visualization(RomiTask):
         # POINTCLOUD EVALUATION
         if self.upstream_pcd_evaluation().complete():
             pcd_evaluation_file = self.upstream_pcd_evaluation().output_file()
+            pcd_evaluation = io.read_json(pcd_evaluation_file)
             f = output_fileset.create_file(pcd_evaluation_file.id)
-            io.write_json(f, pcd_evaluation_file)
+            io.write_json(f, pcd_evaluation)
             files_metadata["point_cloud_evaluation"] = pcd_evaluation_file.id
 
         # SEGMENTED POINTCLOUD EVALUATION
         if self.upstream_segmentedpcd_evaluation().complete():
             segmented_pcd_evaluation_file = self.upstream_segmentedpcd_evaluation().output_file()
+            segmented_pcd_evaluation = io.read_json(segmented_pcd_evaluation_file)
             f = output_fileset.create_file(segmented_pcd_evaluation_file.id)
-            io.write_json(f, segmented_pcd_evaluation_file)
+            io.write_json(f, segmented_pcd_evaluation)
             files_metadata["segmented_pcd_evaluation"] = segmented_pcd_evaluation_file.id
 
         # SEGMENTATION2D EVALUATION
         if self.upstream_segmentation2d_evaluation().complete():
             segmentation2d_evaluation_file = self.upstream_segmentation2d_evaluation().output_file()
+            segmentation2d_evaluation = io.read_json(segmentation2d_evaluation_file)
             f = output_fileset.create_file(segmentation2d_evaluation_file.id)
-            io.write_json(f, segmentation2d_evaluation_file)
+            io.write_json(f, segmentation2d_evaluation)
             files_metadata["segmentation2d_evaluation"] = segmentation2d_evaluation_file.id
 
         # DESCRIPTION OF FILES
