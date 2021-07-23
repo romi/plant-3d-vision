@@ -11,7 +11,7 @@ from plant3dvision.tasks.colmap import Colmap, use_calibrated_poses
 from plant3dvision.tasks.proc3d import CurveSkeleton
 from plant3dvision.tasks.proc3d import PointCloud
 from plant3dvision.tasks.proc3d import TriangleMesh
-
+from plant3dvision.tasks.evaluation import PointCloudEvaluation, PointCloudGroundTruth, Segmentation2DEvaluation, SegmentedPointCloudEvaluation
 
 class Visualization(RomiTask):
     """Prepares files for visualization
@@ -26,6 +26,15 @@ class Visualization(RomiTask):
     upstream_images = luigi.TaskParameter(default=ImagesFilesetExists)
     query = luigi.DictParameter(default={})
     upstream_virtualplantobj = luigi.TaskParameter(default=VirtualPlantObj)
+
+    # ground truths
+    upstream_pcd_ground_truth = luigi.TaskParameter(default=PointCloudGroundTruth)
+
+    # evaluation tasks
+    upstream_pcd_evaluation = luigi.TaskParameter(default=PointCloudEvaluation)
+    upstream_segmentedpcd_evaluation = luigi.TaskParameter(default=SegmentedPointCloudEvaluation)
+    upstream_segmentation2d_evaluation = luigi.TaskParameter(default=Segmentation2DEvaluation)
+
 
     use_colmap_poses = luigi.BoolParameter(default=True)
     max_image_size = luigi.IntParameter(default=1500)
@@ -64,7 +73,11 @@ class Visualization(RomiTask):
             "point_cloud": None,
             "images": None,
             "poses": None,
-            "thumbnails": None
+            "thumbnails": None,
+            "pcd_ground_truth": None,
+            "point_cloud_evaluation": None,
+            "segmented_pcd_evaluation": None,
+            "segmentation2d_evaluation": None
         }
 
         # POSES
@@ -191,6 +204,39 @@ class Visualization(RomiTask):
         f_measures = output_fileset.create_file("measures")
         io.write_json(f_measures, measures)
         files_metadata["measures"] = "measures"
+
+        # POINT CLOUD GROUND TRUTH
+        if self.upstream_pcd_ground_truth().complete():
+            pcd_ground_truth_file = self.upstream_pcd_ground_truth().output_file()
+            pcd_ground_truth = io.read_point_cloud(pcd_ground_truth_file)
+            f = output_fileset.create_file(pcd_ground_truth_file.id)
+            if len(pcd_ground_truth.points) < self.max_point_cloud_size:
+                pcd_ground_truth_lowres = pcd_ground_truth
+            else:
+                pcd_ground_truth_lowres = pcd_ground_truth.voxel_down_sample(len(pcd_ground_truth.points) // self.max_point_cloud_size + 1)
+            io.write_point_cloud(f, pcd_ground_truth_lowres)
+            files_metadata["pcd_ground_truth"] = pcd_ground_truth_file.id
+
+        # POINTCLOUD EVALUATION
+        if self.upstream_pcd_evaluation().complete():
+            pcd_evaluation_file = self.upstream_pcd_evaluation().output_file()
+            f = output_fileset.create_file(pcd_evaluation_file.id)
+            io.write_json(f, pcd_evaluation_file)
+            files_metadata["point_cloud_evaluation"] = pcd_evaluation_file.id
+
+        # SEGMENTED POINTCLOUD EVALUATION
+        if self.upstream_segmentedpcd_evaluation().complete():
+            segmented_pcd_evaluation_file = self.upstream_segmentedpcd_evaluation().output_file()
+            f = output_fileset.create_file(segmented_pcd_evaluation_file.id)
+            io.write_json(f, segmented_pcd_evaluation_file)
+            files_metadata["segmented_pcd_evaluation"] = segmented_pcd_evaluation_file.id
+
+        # SEGMENTATION2D EVALUATION
+        if self.upstream_segmentation2d_evaluation().complete():
+            segmentation2d_evaluation_file = self.upstream_segmentation2d_evaluation().output_file()
+            f = output_fileset.create_file(segmentation2d_evaluation_file.id)
+            io.write_json(f, segmentation2d_evaluation_file)
+            files_metadata["segmentation2d_evaluation"] = segmentation2d_evaluation_file.id
 
         # DESCRIPTION OF FILES
         output_fileset.set_metadata("files", files_metadata)
