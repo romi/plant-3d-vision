@@ -94,5 +94,12 @@ dilation_amount = 0
 upstream_task = "SegmentedPointCloud"
 ground_truth = "PointCloudGroundTruth"
 
+## AnglesAndInternodes
+[AnglesAndInternodesEvaluation]
+upstream_task = "AnglesAndInternodes"
+ground_truth = "VirtualPlantObj"
+free_ends = 0.4
+free_ends_eps = 1e-2
+
 [Clean]
 no_confirm = true

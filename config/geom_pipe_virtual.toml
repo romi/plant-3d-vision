@@ -52,5 +52,12 @@ upstream_task = "PointCloud"
 ground_truth = "PointCloudGroundTruth"
 max_distance = 2.0 # default to 2.0
 
+## AnglesAndInternodes
+[AnglesAndInternodesEvaluation]
+upstream_task = "AnglesAndInternodes"
+ground_truth = "VirtualPlantObj"
+free_ends = 0.4
+free_ends_eps = 1e-2
+
 [Clean]
 no_confirm = true
