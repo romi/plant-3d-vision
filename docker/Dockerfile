@@ -53,6 +53,7 @@ RUN cd plant-3d-vision/ && \
     python -m pip install -e ./romitask/ --no-cache-dir && \
     python -m pip install -e ./romiseg/ --no-cache-dir && \
     python -m pip install -e ./romicgal/ --no-cache-dir && \
+    python -m pip install -e ./dtw/ --no-cache-dir && \
     python -m pip install -r requirements.txt --no-cache-dir && \
     python -m pip install . --no-cache-dir
 
