@@ -10,3 +10,6 @@
 [submodule "romitask"]
 	path = romitask
 	url = https://github.com/romi/romitask.git
+[submodule "dtw"]
+	path = dtw
+	url = https://github.com/romi/dtw.git
