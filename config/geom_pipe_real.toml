@@ -61,6 +61,12 @@ upstream_task = "TreeGraph"
 characteristic_length = 1.0
 stem_axis_inverted = false
 
+[AnglesAndInternodesEvaluation]
+upstream_task = "AnglesAndInternodes"
+ground_truth = "ImagesFilesetExists"  # "ImagesFilesetExists" with manual measures / "VirtualPlantObj" with computer generated plants
+free_ends = 0.4
+free_ends_eps = 1e-2
+
 [Visualization]
 upstream_point_cloud = "PointCloud"
 upstream_mesh = "TriangleMesh"

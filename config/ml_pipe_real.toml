@@ -83,6 +83,12 @@ stem_axis_inverted = false
 min_elongation_ratio = 2.0
 min_fruit_size = 0.1
 
+[AnglesAndInternodesEvaluation]
+upstream_task = "AnglesAndInternodes"
+ground_truth = ""
+free_ends = 0.4
+free_ends_eps = 1e-2
+
 [Visualization]
 upstream_point_cloud = "PointCloud"
 upstream_mesh = "TriangleMesh"
