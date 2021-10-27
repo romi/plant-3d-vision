@@ -44,8 +44,8 @@ ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
 
 COPY --chown=${USER_NAME}:${GROUP_NAME} ./ plant-3d-vision/
 
-RUN wget https://media.romi-project.eu/data/Resnet_896_896_epoch50.pt && \
-    mkdir plant-3d-vision/tests/testdata/models/models && \
+RUN wget -nv --show-progress --progress=bar:force:noscroll https://media.romi-project.eu/data/Resnet_896_896_epoch50.pt && \
+    mkdir -p plant-3d-vision/tests/testdata/models/models && \
     mv Resnet_896_896_epoch50.pt plant-3d-vision/tests/testdata/models/models/
 
 RUN cd plant-3d-vision/ && \
