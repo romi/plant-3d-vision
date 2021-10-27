@@ -478,7 +478,7 @@ class AnglesAndInternodesEvaluation(EvaluationTask):
         results = dtwcomputer.get_results()
         summary = dtwcomputer.summarize()
 
-        def jsonyfy(data) -> dict:
+        def jsonyfy(data: dict) -> dict:
             from collections.abc import Iterable
             json_data = {}
             for k, v in data.items():
