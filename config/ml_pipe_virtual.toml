@@ -86,6 +86,7 @@ max_distance = 2.0 # default to 2.0
 ## Segmentation2D
 [Segmentation2DEvaluation]
 upstream_task = "Segmentation2D"
+ground_truth = "ImagesFilesetExists"
 labels = "[\"flower\", \"fruit\", \"leaf\", \"pedicel\", \"stem\"]"
 dilation_amount = 0
 
