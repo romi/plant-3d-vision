@@ -3,7 +3,7 @@ pywavefront
 trimesh
 appdirs
 colorlog
-#cython==0.29.22
+cython
 docker
 imageio
 luigi>= 2.8.11
