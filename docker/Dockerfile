@@ -28,7 +28,7 @@ RUN apt-get update && apt-get install -y \
     chown -R ${USER_NAME}: /home/${USER_NAME} && \
     mkdir ${DB_LOCATION} && \
     mkdir -p /etc/OpenCL/vendors && \
-    echo "libnvidia-opencl.so.1" > /etc/OpenCL/vendors/nvidia.icd \
+    echo "libnvidia-opencl.so.1" > /etc/OpenCL/vendors/nvidia.icd
 
 # Change to non-root user:
 USER ${USER_NAME}
