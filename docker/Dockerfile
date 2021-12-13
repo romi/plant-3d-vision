@@ -26,18 +26,14 @@ RUN apt-get update && apt-get install -y \
     addgroup --gid $GROUP_ID $GROUP_NAME && \
     adduser --disabled-password --gecos '' --uid $USER_ID --gid $GROUP_ID $USER_NAME && \
     chown -R ${USER_NAME}: /home/${USER_NAME} && \
-    mkdir ${DB_LOCATION}
+    mkdir ${DB_LOCATION} && \
+    mkdir -p /etc/OpenCL/vendors && \
+    echo "libnvidia-opencl.so.1" > /etc/OpenCL/vendors/nvidia.icd \
 
 # Change to non-root user:
 USER ${USER_NAME}
 # Change working directory:
 WORKDIR /home/${USER_NAME}
-
-USER root
-RUN mkdir -p /etc/OpenCL/vendors && \
-    echo "libnvidia-opencl.so.1" > /etc/OpenCL/vendors/nvidia.icd
-
-USER ${USER_NAME}
 # nvidia-container-runtime
 ENV NVIDIA_VISIBLE_DEVICES all
 ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
@@ -48,13 +44,14 @@ RUN wget -nv --show-progress --progress=bar:force:noscroll https://media.romi-pr
     mkdir -p plant-3d-vision/tests/testdata/models/models && \
     mv Resnet_896_896_epoch50.pt plant-3d-vision/tests/testdata/models/models/
 
-RUN cd plant-3d-vision/ && \
-    python -m pip install -e ./plantdb/ --no-cache-dir && \
-    python -m pip install -e ./romitask/ --no-cache-dir && \
-    python -m pip install -e ./romiseg/ --no-cache-dir && \
-    python -m pip install -e ./romicgal/ --no-cache-dir && \
-    python -m pip install -e ./dtw/ --no-cache-dir && \
-    python -m pip install -r requirements.txt --no-cache-dir && \
-    python -m pip install . --no-cache-dir
+RUN python -m pip install --upgrade pip && \
+    python -m pip install -e plant-3d-vision/plantdb/ && \
+    python -m pip install -e plant-3d-vision/romitask/ && \
+    python -m pip install -e plant-3d-vision/romiseg/ && \
+    python -m pip install -e plant-3d-vision/romicgal/ && \
+    python -m pip install -e plant-3d-vision/dtw/ && \
+    python -m pip install -r plant-3d-vision/requirements.txt && \
+    python -m pip install -e plant-3d-vision/ && \
+    rm -rf /home/jonathan/.cache/pip
 
 CMD ["/bin/bash", "-c", "romi_run_task -h"]
