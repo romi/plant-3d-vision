@@ -51,6 +51,6 @@ RUN python -m pip install --upgrade pip && \
     python -m pip install -e plant-3d-vision/dtw/ && \
     python -m pip install -r plant-3d-vision/requirements.txt && \
     python -m pip install -e plant-3d-vision/ && \
-    rm -rf /home/jonathan/.cache/pip
+    rm -rf .cache/pip
 
 CMD ["/bin/bash", "-c", "romi_run_task -h"]
