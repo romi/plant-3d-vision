@@ -8,7 +8,7 @@ class TestFSDBRunner(DBTestCase):
     def test_run_scan(self):
         db = self.get_test_db()
         runner = DBRunner(db, [], {})
-        runner.run_scan("testscan")
+        runner.run_scan("myscan_001")
 
     def test_run(self):
         db = self.get_test_db()

@@ -47,7 +47,7 @@ class ImageIdentityTask(FileByFileTask):
 class TestFilesetTarget(DBTestCase):
     def test_target(self):
         db = self.get_test_db()
-        scan = db.get_scan("testscan")
+        scan = db.get_scan("myscan_001")
         target = FilesetTarget(scan, "testfileset2")
         assert (target.get(create=False) is None)
         assert (not target.exists())
@@ -64,7 +64,7 @@ class TestRomiTask(DBTestCase):
     def test_romi_task(self):
         db = self.get_test_db()
         DatabaseConfig.db = db
-        DatabaseConfig.scan = db.get_scan("testscan")
+        DatabaseConfig.scan = db.get_scan("myscan_001")
         task = TouchFileTask()
         assert (not task.complete())
         luigi.build(tasks=[task], local_scheduler=True)
@@ -75,7 +75,7 @@ class TestFileByFileTask(DBTestCase):
     def test_romi_task(self):
         db = self.get_test_db()
         DatabaseConfig.db = db
-        DatabaseConfig.scan_id = "testscan"
+        DatabaseConfig.scan_id = "myscan_001"
         DatabaseConfig.scan = self.get_test_scan()
         # task = ImageIdentityTask(fileset_id="testfileset")
         # assert (not task.complete())
