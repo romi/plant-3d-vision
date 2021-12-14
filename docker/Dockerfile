@@ -44,6 +44,7 @@ RUN wget -nv --show-progress --progress=bar:force:noscroll https://media.romi-pr
     mv Resnet_896_896_epoch50.pt plant-3d-vision/tests/testdata/models/models/
 
 RUN python -m pip install --upgrade pip && \
+    python -m pip install -r plant-3d-vision/plantdb/requirements.txt && \
     python -m pip install -e plant-3d-vision/plantdb/ && \
     python -m pip install -e plant-3d-vision/romitask/ && \
     python -m pip install -e plant-3d-vision/romiseg/ && \
