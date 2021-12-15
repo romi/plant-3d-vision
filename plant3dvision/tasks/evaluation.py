@@ -422,7 +422,7 @@ class AnglesAndInternodesEvaluation(EvaluationTask):
     romi_run_task AnglesAndInternodesEvaluation /tmp/tests/testdata/virtual_plant --config plant-3d-vision/config/geom_pipe_virtual.toml --module plant3dvision.tasks.evaluation
 
     cp -R /data/ROMI/test_db /tmp/
-    romi_run_task AnglesAndInternodesEvaluation /tmp/test_db/arabido_test4 --config config/geom_pipe_real.toml --module plant3dvision.tasks.evaluation
+    romi_run_task AnglesAndInternodesEvaluation /tmp/test_db/test_v0.10 --module plant3dvision.tasks.evaluation
 
     """
     upstream_task = luigi.TaskParameter(default=AnglesAndInternodes)
@@ -480,11 +480,15 @@ class AnglesAndInternodesEvaluation(EvaluationTask):
         results = dtwcomputer.get_results()
         summary = dtwcomputer.summarize()
 
-        def jsonyfy(data: dict) -> dict:
+        def jsonify(data: dict) -> dict:
             from collections.abc import Iterable
             json_data = {}
             for k, v in data.items():
+                # logger.info(f"{k}:{v}")
                 if isinstance(v, Iterable):
+                    if len(v) == 0:
+                        json_data[k] = 'None'
+                        continue
                     if isinstance(v, np.ndarray):
                         v = v.tolist()
                     if isinstance(v[0], float):
@@ -504,7 +508,7 @@ class AnglesAndInternodesEvaluation(EvaluationTask):
 
         # JSONify the results from DTW as np.array can't be exported as such:
         json_results = {}
-        json_results.update(jsonyfy(summary))
-        json_results.update(jsonyfy(results))
+        json_results.update(jsonify(summary))
+        json_results.update(jsonify(results))
 
         io.write_json(self.output_file(), json_results)
