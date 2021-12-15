@@ -432,7 +432,9 @@ class AnglesAndInternodesEvaluation(EvaluationTask):
     n_jobs = luigi.IntParameter(default=-1)
 
     def run(self):
-        from dtw.dtw import DTW, brute_force_free_ends_search, mixed_dist
+        from dtw import DTW
+        from dtw.tasks.search_free_ends import brute_force_free_ends_search
+        from dtw.metrics import mixed_dist
         from os.path import join
 
         if str(self.ground_truth.task_family) == "VirtualPlantObj":
