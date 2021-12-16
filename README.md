@@ -1,4 +1,4 @@
-# Plant 3D Vision v0.9.99 (dev)
+# Plant 3D Vision v0.10
 
 Documentation about the "Plant Scanner" project can be found [here](https://docs.romi-project.eu/Scanner/).
 
@@ -126,13 +126,13 @@ In this install instructions, we leverage the `git submodule` functionality to c
     ```bash
     git clone https://github.com/romi/plant-3d-vision.git
     ```
-2. Create a conda environment named `plant_3d_vision_0.9` with Python3.7 for example:
+2. Create a conda environment named `plant_3d_vision_0.10` with Python3.7 for example:
     ```bash
-    conda create --name plant_3d_vision_0.9 python=3.7
+    conda create --name plant_3d_vision_0.10 python=3.7
     ```
 3. Install sources and submodules in activated environment:
     ```bash
-    conda activate plant_3d_vision_0.9
+    conda activate plant_3d_vision_0.10
     cd plant-3d-vision/
     git submodule init
     git submodule update
@@ -145,7 +145,7 @@ In this install instructions, we leverage the `git submodule` functionality to c
     ```
 4. Test import of `plant3dvision` library:
     ```bash
-    conda activate scan_0.9
+    conda activate scan_0.10
     python3 -c 'import plant3dvision'
     ```
 5. Longer tests using shipped "test dataset":
