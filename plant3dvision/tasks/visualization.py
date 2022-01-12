@@ -59,9 +59,9 @@ class Visualization(RomiTask):
             if img.shape[i] <= max_size:
                 return img
             if i == 0:
-                new_shape = [max_size, int(max_size * img.shape[1] / img.shape[0])]
+                new_shape = (max_size, int(max_size * img.shape[1] / img.shape[0]))
             else:
-                new_shape = [int(max_size * img.shape[0] / img.shape[1]), max_size]
+                new_shape = (int(max_size * img.shape[0] / img.shape[1]), max_size)
             return resize(img, new_shape)
 
         output_fileset = self.output().get()
