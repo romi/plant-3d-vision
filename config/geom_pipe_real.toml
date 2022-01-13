@@ -36,15 +36,18 @@ threshold = 0.2
 upstream_mask = "Masks"
 upstream_colmap = "Colmap"
 use_colmap_poses = true
-voxel_size = 0.5
+voxel_size = 1.0
 type = "carving"
 
 [PointCloud]
 upstream_task = "Voxels"
 level_set_value = 0.0
 
-[TriangleMesh]
+[SelectLongestStem]
 upstream_task = "PointCloud"
+
+[TriangleMesh]
+upstream_task = "SelectLongestStem"
 library = "open3d" # or "cgal"
 filtering = "most connected triangles"  # ["", "most connected triangles", "largest connected triangles", "dbscan point-cloud"]
 

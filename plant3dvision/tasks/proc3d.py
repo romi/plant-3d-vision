@@ -11,6 +11,10 @@ from plant3dvision.tasks.cl import Voxels
 from plant3dvision.tasks.colmap import Colmap
 from plant3dvision.tasks.proc2d import Segmentation2D
 
+try:
+    from hdbscan import HDBSCAN
+except ImportError:
+    logger.warning("HDBSCAN clustering method is not available!")
 
 class PointCloud(RomiTask):
     """ Computes a point cloud from volumetric voxel data (either single or multiclass).
@@ -97,6 +101,111 @@ class PointCloud(RomiTask):
             out = proc3d.vol2pcd_p(voxels, origin, voxel_size, self.level_set_value)
             io.write_point_cloud(self.output_file(), out)
             self.output_file().set_metadata({'voxel_size': voxel_size})
+
+
+class SelectLongestStem(RomiTask):
+    """Select the longest stem from the point cloud.
+
+    Obtained point-clouds often suffer from reconstruction aberrations such as a broken stem or other artifacts.
+
+    We first cluster the point-cloud using a density based approach to detect the groups of points.
+    Then we use the inertia axes to select the longest stem under the hypothesis that it will:
+      - be made of a lots of point;
+      - have a first axis with a norm much larger than the second.
+
+    Hence this should work well with elongated structure such as arabidopsis plants!
+
+    Attributes
+    ----------
+    upstream_task : {PointCloud, SegmentedPointCloud}
+        The upstream task, should return a PointCloud object.
+    min_pts : int
+        The minimum number of point to consider the cluster as a potential candidate for the longest stem
+    clustering_method : {"dbscan", "hdbscan"}
+        The clustering method to use, see references.
+    eps : float
+        The density parameter, used by DBSCAN clustering method.
+    min_points : int
+        The number of samples in a neighbourhood for a point to be considered a core point.
+    min_cluster_size : int
+        The minimum size of clusters; single linkage splits that contain fewer points than this will be considered
+        points “falling out” of a cluster rather than a cluster splitting into two new clusters.
+
+    References
+    ----------
+    https://hdbscan.readthedocs.io/en/latest/api.html
+    http://www.open3d.org/docs/release/tutorial/geometry/pointcloud.html#DBSCAN-clustering
+
+    """
+    upstream_task = luigi.TaskParameter(default=PointCloud)  # should also accept 'SegmentedPointCloud'
+    min_pts = luigi.IntParameter(default=500)  # minimum number of points in a cluster to consider the cluster with criterion
+
+    clustering_method = luigi.Parameter(default="dbscan")  # ["dbscan", "hdbscan"]
+    eps = luigi.FloatParameter(default=2.0)  # dbscan
+    min_points = luigi.IntParameter(default=5)  # dbscan (equivalent to 'min_sample' in hdbscan)
+    min_cluster_size = luigi.IntParameter(default=5)  # hdbscan
+
+    def run(self):
+        # Read the (labelled)point-cloud from the `upstream_task`
+        pcd = io.read_point_cloud(self.input_file())
+        pcd_arr = np.asarray(pcd.points)
+
+        # - Clustering of the whole point-cloud:
+        # DBSCAN clustering:
+        if self.clustering_method == "dbscan":
+            clustered_arr = np.array(pcd.cluster_dbscan(eps=self.eps, min_points=self.min_points, print_progress=True))
+        # HDBSCAN clustering:
+        elif self.clustering_method == "hdbscan":
+            clusterer = HDBSCAN(min_cluster_size=self.min_cluster_size, min_samples=self.min_points, core_dist_n_jobs=-1)
+            clustered_arr = np.array(clusterer.fit(pcd_arr).labels_)
+
+        # List of cluster ids
+        ids = np.unique(clustered_arr).tolist()
+        if -1 in ids:
+            ids.remove(-1)  # outliers id!
+        logger.info(f"Got {len(ids)} clusters in point-could!")
+
+        # - Compute the covariance matrices and number of points in each cluster:
+        eig_vals = {}
+        n_pts = {}
+        for idx in ids:
+            sel_pts = pcd_arr[clustered_arr == idx]
+            n_pts[idx] = len(sel_pts)
+            logger.info(f"Got {n_pts[idx]} points in cluster {idx}!")
+            cov_mat = np.cov(sel_pts, rowvar=False)  # covariance matrix from subset of points
+            eig_val, _ = np.linalg.eig(cov_mat)  # eigen value to get inertia matrix
+            logger.debug(f"The inertia axes norms are: {eig_val}")
+            eig_vals[idx] = eig_val
+
+        def criterion(n_pts, eig):
+            """Selection criterion is the ratio of the two largest components multiplied by the number of points."""
+            return n_pts * eig[0]/eig[1]
+
+        # - Use the criterion to find the cluster of points
+        # Compute it for the first cluster:
+        longest_stem_idx = 0
+        coef = criterion(n_pts[longest_stem_idx], eig_vals[longest_stem_idx])
+        # Iterate and select the one with the largest criteria value
+        for idx in ids[1:]:
+            if n_pts[idx] < self.min_pts:
+                continue  #skip if number of point is below defined threshold
+            new_coef = criterion(n_pts[idx], eig_vals[idx])
+            if new_coef > coef:
+                longest_stem_idx = idx
+        logger.info(f"Selected cluster {longest_stem_idx} as the longest stem point-cloud!")
+
+        # - Get the index of points matching the longest stem index
+        idx_mask = np.where(clustered_arr == longest_stem_idx)[0]
+        stem_pcd = pcd.select_by_index(list(idx_mask))
+        io.write_point_cloud(self.output_file(), stem_pcd)
+        # - Get a bounding-box
+        bbox = stem_pcd.get_axis_aligned_bounding_box()
+        xyz_bbox = np.array([bbox.get_min_bound(), bbox.get_max_bound()]).T
+        extent = bbox.get_extent()
+        margin = min(0.05 * extent)  # a 5% margin on bounding-box extent
+        xyz_bbox += np.array([-margin, margin])
+        logger.info(f"New region of interest (XYZ bounds): {xyz_bbox}")
+        # TODO: export bounding-box to metadata !!!!
 
 
 class SegmentedPointCloud(RomiTask):
@@ -195,7 +304,7 @@ class SegmentedPointCloud(RomiTask):
 class TriangleMesh(RomiTask):
     """ Triangulates input point cloud.
 
-    Currently ignores class data and needs only one connected component.
+    Currently, ignores class data and needs only one connected component.
 
     Module: plant3dvision.tasks.proc3d
     Default upstream tasks: PointCloud
@@ -320,10 +429,14 @@ class OrganSegmentation(RomiTask):
 
     """
     upstream_task = luigi.TaskParameter(default=SegmentedPointCloud)
-    eps = luigi.FloatParameter(default=2.0)
-    min_points = luigi.IntParameter(default=5)
 
-    def get_label_pointcloud(self, pcd, labels, label):
+    clustering_method = luigi.Parameter(default="dbscan")  # ["dbscan", "hdbscan"]
+    eps = luigi.FloatParameter(default=2.0)  # dbscan
+    min_points = luigi.IntParameter(default=5)  # dbscan (equivalent to 'min_sample' in hdbscan)
+    min_cluster_size = luigi.IntParameter(default=5)  # hdbscan
+
+    @staticmethod
+    def get_label_pointcloud(pcd, labels, label):
         """Return a point cloud only for the selected label.
 
         Parameters
@@ -368,7 +481,13 @@ class OrganSegmentation(RomiTask):
                 f.set_metadata("label", label)
                 continue
             # DBSCAN clustering:
-            clustered_arr = np.array(label_pcd.cluster_dbscan(eps=self.eps, min_points=self.min_points, print_progress=True))
+            if self.clustering_method == "dbscan":
+                clustered_arr = np.array(label_pcd.cluster_dbscan(eps=self.eps, min_points=self.min_points, print_progress=True))
+            # HDBSCAN clustering:
+            elif self.clustering_method == "hdbscan":
+                pcd_arr = np.asarray(label_pcd.points)
+                clusterer = HDBSCAN(min_cluster_size=self.min_cluster_size, min_samples=self.min_points, core_dist_n_jobs=-1)
+                clustered_arr = np.array(clusterer.fit(pcd_arr).labels_)
 
             ids = np.unique(clustered_arr)
             n_ids = len(ids)
