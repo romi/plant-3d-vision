@@ -77,8 +77,7 @@ class PointCloud(RomiTask):
                         pred_c *= (pred_c > (self.min_contrast * pred_no_c))
                     pred_c *= (pred_c > self.min_score)
 
-                    out = proc3d.vol2pcd(pred_c, origin, voxel_size,
-                                         self.level_set_value)
+                    out = proc3d.vol2pcd_p(pred_c, origin, voxel_size, self.level_set_value)
                     color = np.zeros((len(out.points), 3))
                     if l[i] in colors:
                         color[:] = np.asarray(colors[l[i]])
@@ -95,15 +94,13 @@ class PointCloud(RomiTask):
         else:
             origin = np.array(ifile.get_metadata('origin'))
             voxel_size = float(ifile.get_metadata('voxel_size'))
-            out = proc3d.vol2pcd(voxels, origin, voxel_size,
-                                 self.level_set_value)
+            out = proc3d.vol2pcd_p(voxels, origin, voxel_size, self.level_set_value)
             io.write_point_cloud(self.output_file(), out)
             self.output_file().set_metadata({'voxel_size': voxel_size})
 
 
 class SegmentedPointCloud(RomiTask):
-    """ Segments an existing point cloud using 2D pictures
-    """
+    """Segments an existing point cloud using 2D pictures."""
     upstream_task = luigi.TaskParameter(default=Colmap)
     upstream_segmentation = luigi.TaskParameter(default=Segmentation2D)
     use_colmap_poses = luigi.BoolParameter(default=True)

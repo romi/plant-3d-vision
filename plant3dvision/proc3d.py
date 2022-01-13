@@ -13,6 +13,7 @@ import imageio
 import networkx as nx
 import numpy as np
 import open3d as o3d
+
 from plant3dvision.log import logger
 from scipy.ndimage.filters import gaussian_filter
 from scipy.ndimage.morphology import distance_transform_edt
@@ -391,12 +392,12 @@ def skeleton_from_distance_to_root_clusters(pcd, root_index, binsize, k,
 
 
 def vol2pcd(volume, origin, voxel_size, level_set_value=0):
-    """Converts a binary volume into a point cloud with normals.
+    """Converts a volume into a point cloud with normals.
 
     Parameters
     ----------
     volume : np.ndarray
-        NxMxP 3D binary numpy array
+        NxMxP 3D numpy array
     voxel_size: float
         voxel size
     level_set_value: float
@@ -448,9 +449,89 @@ def vol2pcd(volume, origin, voxel_size, level_set_value=0):
     return pcd
 
 
-def crop_point_cloud(point_cloud, bounding_box):
+def vol2pcd_p(volume, origin, voxel_size, level_set_value=0):
+    """Converts a volume into a point cloud with normals.
+
+    Parameters
+    ----------
+    volume : numpy.ndarray
+        NxMxP 3D numpy array
+    origin : numpy.ndarray
+        origin of the volume
+    voxel_size: float
+        voxel size
+    level_set_value: float
+        distance of the level set on which the points are sampled
+
+    Returns
+    -------
+    open3d.geometry.PointCloud
+        Point-cloud with normal vectors.
     """
-    Crops a point cloud by keeping only points inside bouding box.
+    logger.info("Volume binarization...")
+    volume = 1.0 * (volume > 0.5)  # variable level ?
+
+    logger.info("Distance transform...")
+    dist = distance_transform_edt(volume)
+    mdist = distance_transform_edt(1 - volume)
+    logger.info(f"Max distance transform: {dist.max()}")
+    logger.info(f"Min distance transform: {dist.min()}")
+    dist = np.where(dist > 0.5, dist - 0.5, -mdist + 0.5)
+
+    logger.info("Gradiant computation...")
+    gx, gy, gz = np.gradient(dist)
+
+    logger.info("Gradiant Gaussian filtering...")
+    gx = gaussian_filter(gx, 1)
+    gy = gaussian_filter(gy, 1)
+    gz = gaussian_filter(gz, 1)
+
+    logger.info("Detecting points...")
+    on_edge = (dist > -level_set_value) * (dist <= -level_set_value + np.sqrt(3))
+    x, y, z = np.nonzero(on_edge)
+    logger.debug("Number of points = %d" % len(x))
+
+    def _compute_normal(i):
+        p_i, normal_i = np.nan, np.nan
+        grad = np.array([gx[x[i], y[i], z[i]],
+                         gy[x[i], y[i], z[i]],
+                         gz[x[i], y[i], z[i]]])
+        grad_norm = np.linalg.norm(grad)
+        if grad_norm > 0:
+            grad_normalized = grad / grad_norm
+            val = dist[x[i], y[i], z[i]] + level_set_value - np.sqrt(3) / 2
+            p_i = np.array([x[i] - grad_normalized[0] * val,
+                            y[i] - grad_normalized[1] * val,
+                            z[i] - grad_normalized[2] * val])
+            normal_i = -np.array([grad_normalized[0],
+                                  grad_normalized[1],
+                                  grad_normalized[2]])
+        return p_i, normal_i
+
+    from joblib import Parallel
+    from joblib import delayed
+    all_norms = Parallel(n_jobs=-1)(
+        delayed(_compute_normal)(i) for i in tqdm(range(len(x)), desc="Computing point normals"))
+
+    logger.info("Sorting normals...")
+    pts, normals = zip(*all_norms)
+    not_none_idx = np.where(~np.isnan(pts).any(axis=1))[0]  # Detect np.nan (if grad_norm > 0)
+    pts = np.array(pts)[not_none_idx]  # Keep points with a positive gradiant norm
+    normals = np.array(normals)[not_none_idx]  # Keep normals with a positive gradiant norm
+
+    logger.info("Creating Open3D PointCloud instance...")
+    pts = index2point(pts, origin, voxel_size)
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(pts)
+    pcd.normals = o3d.utility.Vector3dVector(normals)
+    pcd.normalize_normals()
+
+    return pcd
+
+
+def crop_point_cloud(point_cloud, bounding_box):
+    """Crops a point cloud by keeping only points inside bounding-box.
+
     Parameters
     ----------
     point_cloud : PointCloud
@@ -486,8 +567,20 @@ def crop_point_cloud(point_cloud, bounding_box):
 
 
 def fit_plane_ransac(point_cloud, inliers=0.8, n_iter=100):
-    """
-    Fits a plane to a point cloud using a Ransac algorithm.
+    """Fits a plane to a point cloud using a Ransac algorithm.
+
+    Parameters
+    ----------
+    point_cloud : PointCloud
+        input point cloud
+    inliers : ??
+        ??
+    n_iter : ??
+        ??
+
+    Returns
+    -------
+
     """
     min_error = np.inf
     argmin_v = None
