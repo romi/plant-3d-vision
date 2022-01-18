@@ -1,22 +1,6 @@
 #!/bin/bash
 
-###############################################################################
-# Example usages:
-###############################################################################
-# 1. Default build options will create `plant3dvision:latest`:
-# $ ./build.sh
-#
-# 2. Build image for a 'githubrunner' user and specify user & group id value:
-# $ ./build.sh -u githubrunner --uid 1003 -g scanner --gid 1003
-#
-# 3. Build image with 'debug' image tag & another 'plant3dvision' branch options:
-# $ ./build.sh -t debug -b 'my_branch'
-
 vtag="latest"
-user=$USER
-uid=$(id -u)
-group=$(id -g -n)
-gid=$(id -g)
 docker_opts=""
 
 usage() {
@@ -25,36 +9,20 @@ usage() {
     "
 
   echo "DESCRIPTION:"
-  echo "  Build a docker image named 'plant3dvision' using Dockerfile in same location.
+  echo "  Build a docker image named 'roboticsmicrofarms/plant-3d-vision' using Dockerfile in same location.
     "
 
   echo "OPTIONS:"
   echo "  -t, --tag
-    Docker image tag to use, default to '$vtag'.
-    "
-  echo "  -u, --user
-    User name to create inside docker image, default to '$user'.
-    "
-  echo "  --uid
-    User id to use with 'user' inside docker image, default to '$uid'.
-    "
-  echo "  -g, --group
-    Group name to create inside docker image, default to 'group'.
-    "
-  echo "  --gid
-    Group id to use with 'user' inside docker image, default to '$gid'.
-    "
+    Docker image tag to use, default to '$vtag'."
   # Docker options:
   echo "  --no-cache
-    Do not use cache when building the image, (re)start from scratch.
-    "
+    Do not use cache when building the image, (re)start from scratch."
   echo "  --pull
-    Always attempt to pull a newer version of the parent image.
-    "
+    Always attempt to pull a newer version of the parent image."
   # General options:
   echo "  -h, --help
-    Output a usage message and exit.
-    "
+    Output a usage message and exit."
 }
 
 while [ "$1" != "" ]; do
@@ -62,22 +30,6 @@ while [ "$1" != "" ]; do
   -t | --tag)
     shift
     vtag=$1
-    ;;
-  -u | --user)
-    shift
-    user=$1
-    ;;
-  --uid)
-    shift
-    uid=$1
-    ;;
-  -g | --group)
-    shift
-    group=$1
-    ;;
-  --gid)
-    shift
-    gid=$1
     ;;
   --no-cache)
     shift
@@ -103,16 +55,10 @@ done
 start_time=`date +%s`
 
 # Start the docker image build:
-docker build -t plant3dvision:$vtag $docker_opts \
-  --build-arg USER_NAME=$user \
-  --build-arg USER_ID=$uid \
-  --build-arg GROUP_NAME=$group \
-  --build-arg GROUP_ID=$gid \
-  -f docker/Dockerfile .
-
-docker_build_status=$?
+docker build -t roboticsmicrofarms/plant-3d-vision:$vtag $docker_opts -f docker/Dockerfile .
 
 # Important to CI/CD pipeline to track docker build failure
+docker_build_status=$?
 if  [ $docker_build_status != 0 ]
 then
   echo "docker build failed with $docker_build_status code"

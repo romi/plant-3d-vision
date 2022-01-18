@@ -27,7 +27,7 @@ jobs:
         steps:
          - name: Run Unit Tests
            run: |
-            ./docker/run.sh -t ${GITHUB_REF##*/} --unittest_cmd
+            ./docker/run.sh -t ${GITHUB_REF##*/} --unittest
 
     integration-tests:
        runs-on: self-hosted
@@ -36,7 +36,7 @@ jobs:
        steps:
         - name: Run Integration Tests
           run: |
-           ./docker/run.sh -v /home/${USER}/ML_models:/home/${USER}/plant-3d-vision/tests/testdata/models/models -t ${GITHUB_REF##*/} --integrationtest_cmd
+           ./docker/run.sh -v /home/${USER}/ML_models:/home/${USER}/plant-3d-vision/tests/testdata/models/models -t ${GITHUB_REF##*/} --integration_test
 
     docker-clean:
        runs-on: self-hosted
