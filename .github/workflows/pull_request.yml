@@ -23,7 +23,7 @@ jobs:
         steps:
          - name: Run Unit Tests
            run: |
-            ./docker/run.sh -t ${{ github.sha }} --unittest_cmd
+            ./docker/run.sh -t ${{ github.sha }} --unittest
 
     integration-tests:
        runs-on: self-hosted
@@ -32,7 +32,7 @@ jobs:
        steps:
         - name: Run Integration Tests
           run: |
-           ./docker/run.sh -v /home/${USER}/ML_models:/home/${USER}/plant-3d-vision/tests/testdata/models/models -t ${{ github.sha }} --integrationtest_cmd
+           ./docker/run.sh -v /home/${USER}/ML_models:/home/${USER}/plant-3d-vision/tests/testdata/models/models -t ${{ github.sha }} --integration_test
 
     docker-clean:
        runs-on: self-hosted

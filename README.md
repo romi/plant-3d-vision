@@ -26,7 +26,7 @@ git submodule init
 git submodule update
 ./docker/build.sh
 ```
-This will create an image docker `plant3dvision:latest`. If you want to tag your image with a specific one, just pass the tag argument as follows
+This will create an image docker `roboticsmicrofarms/plant-3d-vision:latest`. If you want to tag your image with a specific one, just pass the tag argument as follows
 `./docker/build.sh -t mytag`
 
 To show more options (built-in user...), just type `./docker/build.sh -h`.
@@ -64,7 +64,7 @@ This docker image has been tested successfully on:
 Inside the docker image there is a `romi_run_task` command which performs a task on a database according to a passed config file.
 
 In this following example, we will use the test database and config file shipped in this repo:
- - Run the default docker image (`plant3dvision:latest`)
+ - Run the default docker image (`roboticsmicrofarms/plant-3d-vision:latest`)
  - Mount the database (`plant-3d-vision/tests/testdata/`) and configs folder (plant-3d-vision/config/) inside the docker container
  - Perform the task `AnglesAndInternodes` on the database with `geom_pipe_real.toml` config file
 
