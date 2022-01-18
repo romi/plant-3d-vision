@@ -19,7 +19,8 @@ RUN apt-get update && \
     apt-get install -yq --no-install-recommends \
     python3.7 python3.7-dev python3-pip wget emacs-nox && \
     update-alternatives --install /usr/bin/python python /usr/bin/python3.7 10 && \
-    apt-get install -y --no-install-recommends ocl-icd-libopencl1 opencl-headers clinfo libjpeg-dev libffi-dev && \
+    apt-get install -y --no-install-recommends \
+    ocl-icd-libopencl1 opencl-headers clinfo libjpeg-dev libffi-dev && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
     ln -s /usr/lib/x86_64-linux-gnu/libOpenCL.so.1 /usr/lib/libOpenCL.so && \
