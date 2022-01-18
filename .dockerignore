@@ -1,0 +1,29 @@
+# Distribution / packaging
+**/build/
+**/wheels/
+**/*.egg-info/
+**/*.egg
+**/MANIFEST.in
+
+# Unit test / coverage reports
+**/.coverage
+
+# Sphinx documentation
+**/_build/
+**/html/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Environments
+**/.env
+**/.venv
+**/env/
+**/venv/
+
+# Github CI/CD jobs
+**/.github
+
+# IDEs
+**/.vscode
+**/.idea
