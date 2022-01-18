@@ -5,41 +5,43 @@ name: CI
 on: pull_request
 
 jobs:
-    docker-build:
-        runs-on: self-hosted
+  docker-build:
+    runs-on: self-hosted
 
-        steps:
-         - uses: actions/checkout@v1
-           with:
-             submodules: true
-         - name: Build Dockerfile
-           run: |
-            ./docker/build.sh -t ${{ github.sha }} --no-cache
-    
-    unit-tests:
-        runs-on: self-hosted
-        needs: docker-build
-        
-        steps:
-         - name: Run Unit Tests
-           run: |
-            ./docker/run.sh -t ${{ github.sha }} --unittest
+    steps:
+      - uses: actions/checkout@v1
+        with:
+          submodules: true
+      - name: Build Dockerfile
+        run: |
+          docker container prune -f
+          ./docker/build.sh -t ${{ github.sha }} --no-cache
 
-    integration-tests:
-       runs-on: self-hosted
-       needs: docker-build
-        
-       steps:
-        - name: Run Integration Tests
-          run: |
-           ./docker/run.sh -v /home/${USER}/ML_models:/home/${USER}/plant-3d-vision/tests/testdata/models/models -t ${{ github.sha }} --integration_test
+  unit-tests:
+    runs-on: self-hosted
+    needs: docker-build
 
-    docker-clean:
-       runs-on: self-hosted
-       needs: [integration-tests, unit-tests]
-       if: always()
+    steps:
+      - name: Run Unit Tests
+        run: |
+          ./docker/run.sh -t ${{ github.sha }} --unittest
 
-       steps:
-        - name: Remove Docker Image
-          run: |
-            docker image rm plant3dvision:${{ github.sha }}
+  integration-tests:
+    runs-on: self-hosted
+    needs: docker-build
+
+    steps:
+      - name: Run Integration Tests
+        run: |
+          ./docker/run.sh -v /home/${USER}/ML_models:/home/${USER}/plant-3d-vision/tests/testdata/models/models -t ${{ github.sha }} --integration_test
+
+  docker-clean:
+    runs-on: self-hosted
+    needs: [ integration-tests, unit-tests ]
+    if: always()
+
+    steps:
+      - name: Remove Docker Image
+        run: |
+          docker image rm roboticsmicrofarms/plant-3d-vision:${{ github.sha }}
+          docker container prune -f
