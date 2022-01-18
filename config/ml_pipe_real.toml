@@ -85,7 +85,7 @@ min_fruit_size = 0.1
 
 [AnglesAndInternodesEvaluation]
 upstream_task = "AnglesAndInternodes"
-ground_truth = ""
+ground_truth = "ImagesFilesetExists"  # "ImagesFilesetExists" with manual measures / "VirtualPlantObj" with computer generated plants
 free_ends = 0.4
 free_ends_eps = 1e-2
 
