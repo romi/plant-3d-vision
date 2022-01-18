@@ -118,6 +118,6 @@ else
   # Start in non-interactive mode (run the command):
   docker run --gpus all $mount_option \
     --env PYOPENCL_CTX='0' \
-    -it roboticsmicrofarms/plant-3d-vision:$vtag \
+    roboticsmicrofarms/plant-3d-vision:$vtag \
     bash -c "$cmd"
 fi
