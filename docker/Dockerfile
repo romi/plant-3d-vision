@@ -38,7 +38,7 @@ WORKDIR /myapp
 # Copy the sources:
 COPY --chown=${USER_NAME} ./ plant-3d-vision/
 # Download a model file:
-RUN plant-3d-vision/utils/get_model.sh
+RUN plant-3d-vision/docker/get_model.sh
 # Install the required dependencies, sub-modules and plant-3d-vision:
 RUN python -m pip install --upgrade pip && \
     python -m pip install setuptools wheel && \
