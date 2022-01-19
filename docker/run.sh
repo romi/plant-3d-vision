@@ -12,15 +12,15 @@ geom_pipeline_cmd="cd plant-3d-vision/tests/ && ./check_geom_pipe.sh"
 ml_pipeline_cmd="cd plant-3d-vision/tests/ && ./check_ml_pipe.sh"
 gpu_cmd="nvidia-smi"
 
-
 usage() {
   echo "USAGE:"
-  echo "  ./run.sh [OPTIONS]
+  echo "  ./docker/run.sh [OPTIONS]
     "
 
   echo "DESCRIPTION:"
   echo "  Run 'roboticsmicrofarms/plant-3d-vision' container with a mounted local (host) database.
-    "
+  It must be run from the 'plant-3d-vision' repository root folder!
+  "
 
   echo "OPTIONS:"
   echo "  -t, --tag
@@ -83,11 +83,10 @@ while [ "$1" != "" ]; do
     ;;
   -v | --volume)
     shift
-    if [ "$mount_option" == "" ]
-    then
+    if [ "$mount_option" == "" ]; then
       mount_option="-v $1"
     else
-      mount_option="$mount_option -v $1"  # append
+      mount_option="$mount_option -v $1" # append
     fi
     ;;
   -h | --help)
@@ -102,14 +101,12 @@ while [ "$1" != "" ]; do
   shift
 done
 
-# Use 'host database path' & 'docker user' to create a bind mount:
-if [ "$host_db" != "" ]
-then
+# Use 'host database path' $host_db' to create a bind mount to '/myapp/db':
+if [ "$host_db" != "" ]; then
   mount_option="$mount_option -v $host_db:/myapp/db"
 fi
 
-if [ "$cmd" = "" ]
-then
+if [ "$cmd" = "" ]; then
   # Start in interactive mode:
   docker run --gpus all $mount_option \
     --env PYOPENCL_CTX='0' \
