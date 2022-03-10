@@ -260,7 +260,7 @@ class ColmapRunner(object):
         >>> import os
         >>> # os.environ['COLMAP_EXE'] = "geki/colmap"  # Use this to manually switch between local COLMAP install ('colmap') or docker container ('geki/colmap')
         >>> from plant3dvision.colmap import ColmapRunner
-        >>> from plantdb import FSDB
+        >>> from plantdb.fsdb import FSDB
         >>> # - Connect to a ROMI databse to access an 'images' fileset to reconstruct with COLMAP:
         >>> db = FSDB("/data/ROMI/DB")
         >>> db.connect()
@@ -471,7 +471,7 @@ class ColmapRunner(object):
         Examples
         --------
         >>> from plant3dvision.colmap import ColmapRunner
-        >>> from plantdb import FSDB
+        >>> from plantdb.fsdb import FSDB
         >>> # - Connect to a ROMI databse to access an 'images' fileset to reconstruct with COLMAP:
         >>> db = FSDB("/data/ROMI/DB")
         >>> db.connect()
