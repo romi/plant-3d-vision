@@ -1,6 +1,12 @@
 FROM geki/colmap
-LABEL maintainer="Jonathan LEGRAND <jonathan.legrand@ens-lyon.fr>"
 # geki/colmap is based on nvidia/cuda:10.1-devel-ubuntu18.04
+LABEL maintainer="Jonathan LEGRAND <jonathan.legrand@ens-lyon.fr>"
+LABEL corresponding_author="Peter Hanappe <peter@romi-project.eu>"
+LABEL project="Robotics for microfarms"
+LABEL homepage="https://docs.romi-project.eu/documentation/"
+LABEL repository="https://github.com/romi/plantdb"
+LABEL license="LGPL-3.0-or-later"
+LABEL description="Plant reconstruction and phenotyping pipeline."
 
 ENV LANG=C.UTF-8
 ENV PYTHONUNBUFFERED=1
@@ -38,7 +44,7 @@ WORKDIR /myapp
 # Copy the sources:
 COPY --chown=${USER_NAME} ./ plant-3d-vision/
 # Download a model file:
-RUN plant-3d-vision/docker/get_model.sh
+RUN plant-3d-vision/get_model.sh
 # Install the required dependencies, sub-modules and plant-3d-vision:
 RUN python -m pip install --upgrade pip && \
     python -m pip install setuptools wheel && \
