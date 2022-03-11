@@ -390,6 +390,62 @@ def skeleton_from_distance_to_root_clusters(pcd, root_index, binsize, k,
     return cluster_graph, cluster_values
 
 
+def old_vol2pcd(volume, origin, voxel_size, level_set_value=0):
+    """Converts a binary volume into a point cloud with normals.
+    Parameters
+    ----------
+    volume : np.ndarray
+        NxMxP 3D binary numpy array
+    voxel_size: float
+        voxel size
+    level_set_value: float
+        distance of the level set on which the points are sampled
+    Returns
+    -------
+    open3d.geometry.PointCloud
+    """
+    volume = 1.0 * (volume > 0.5)  # variable level ?
+    dist = distance_transform_edt(volume)
+    mdist = distance_transform_edt(1 - volume)
+    logger.critical(f"Max distance transform: {dist.max()}")
+    logger.critical(f"Min distance transform: {dist.min()}")
+    dist = np.where(dist > 0.5, dist - 0.5, -mdist + 0.5)
+
+    gx, gy, gz = np.gradient(dist)
+    gx = gaussian_filter(gx, 1)
+    gy = gaussian_filter(gy, 1)
+    gz = gaussian_filter(gz, 1)
+
+    on_edge = (dist > -level_set_value) * (dist <= -level_set_value + np.sqrt(3))
+    x, y, z = np.nonzero(on_edge)
+    logger.debug("number of points = %d" % len(x))
+
+    pts = np.zeros((0, 3))
+    normals = np.zeros((0, 3))
+    for i in tqdm(range(len(x)), desc="Computing normals"):
+        grad = np.array([gx[x[i], y[i], z[i]],
+                         gy[x[i], y[i], z[i]],
+                         gz[x[i], y[i], z[i]]])
+        grad_norm = np.linalg.norm(grad)
+        if grad_norm > 0:
+            grad_normalized = grad / grad_norm
+            val = dist[x[i], y[i], z[i]] + level_set_value - np.sqrt(3) / 2
+            pts = np.vstack([pts, np.array([x[i] - grad_normalized[0] * val,
+                                            y[i] - grad_normalized[1] * val,
+                                            z[i] - grad_normalized[2] * val])])
+            normals = np.vstack([normals, -np.array([grad_normalized[0],
+                                                     grad_normalized[1],
+                                                     grad_normalized[2]])])
+
+    pts = index2point(pts, origin, voxel_size)
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(pts)
+    pcd.normals = o3d.utility.Vector3dVector(normals)
+    pcd.normalize_normals()
+
+    return pcd
+
+
 def vol2pcd(volume, origin, voxel_size, level_set_value=0):
     """Converts a volume into a point cloud with normals.
 
