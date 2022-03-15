@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 """
 
     plant3dvision - Python tools for the ROMI 3D Scanner

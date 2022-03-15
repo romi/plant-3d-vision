@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import luigi
 import numpy as np
 from romitask import RomiTask

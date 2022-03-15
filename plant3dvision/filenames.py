@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 MEASURES_ID = "measures"
 SKELETON_ID = "skeleton"
 PCD_ID = "point_cloud"
