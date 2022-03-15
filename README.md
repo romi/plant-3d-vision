@@ -140,7 +140,7 @@ In this install instructions, we leverage the `git submodule` functionality to c
     python3 -m pip install ./plantdb/
     python3 -m pip install ./romitask/
     python3 -m pip install ./romiseg/
-    python3 -m pip install ./romicgal/
+    python3 -m pip install ./romicgal/  # or conda install romicgal -c conda-forge -c romi-eu
     python3 -m pip install .
     ```
 4. Test import of `plant3dvision` library:
