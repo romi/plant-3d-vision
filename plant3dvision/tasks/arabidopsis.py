@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import luigi
 import open3d as o3d
 from plant3dvision.log import logger

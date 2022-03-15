@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 from plant3dvision.cl import FIM
 from matplotlib import pyplot as plt
 import numpy as np
