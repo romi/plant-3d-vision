@@ -14,9 +14,15 @@ from collections import Counter
 from os.path import splitext
 
 import matplotlib.pyplot as plt
-from matplotlib import cm
 import numpy as np
 import open3d as o3d
+from matplotlib import cm
+from plant3dvision.metrics import chamfer_distance
+from plant3dvision.metrics import point_cloud_registration_fitness
+from plant3dvision.metrics import set_metrics
+from plant3dvision.metrics import surface_ratio
+from plant3dvision.metrics import volume_ratio
+
 from plantdb import FSDB
 from plantdb.fsdb import LOCK_FILE_NAME
 from plantdb.fsdb import MARKER_FILE_NAME
@@ -25,11 +31,6 @@ from plantdb.io import read_json
 from plantdb.io import read_npz
 from plantdb.io import read_point_cloud
 from plantdb.io import read_triangle_mesh
-from plant3dvision.metrics import chamfer_distance
-from plant3dvision.metrics import point_cloud_registration_fitness
-from plant3dvision.metrics import set_metrics
-from plant3dvision.metrics import surface_ratio
-from plant3dvision.metrics import volume_ratio
 
 dirname, filename = os.path.split(os.path.abspath(__file__))
 logger = logging.getLogger(f'{filename}')
@@ -115,14 +116,14 @@ def pairwise_heatmap(pw_dict, scans_list, task_name, metrics, db, **kwargs):
             if j <= i:
                 continue  # only scan half of the pairwise matrix
             try:
-                data = pw_dict[(scan_i,scan_j)]
+                data = pw_dict[(scan_i, scan_j)]
             except:
-                data = pw_dict[(scan_j,scan_i)]
-            pw_mat[i,j]=data
-            pw_mat[j,i]=data
+                data = pw_dict[(scan_j, scan_i)]
+            pw_mat[i, j] = data
+            pw_mat[j, i] = data
 
     fig, ax = plt.subplots()
-    fig.set_size_inches(n_scans/2., n_scans/2.)
+    fig.set_size_inches(n_scans / 2., n_scans / 2.)
     im = ax.imshow(pw_mat)
 
     # We want to show all ticks...
@@ -138,7 +139,7 @@ def pairwise_heatmap(pw_dict, scans_list, task_name, metrics, db, **kwargs):
 
     # Loop over data dimensions and create text annotations.
     for i in range(n_scans):
-        for j in range(i+1, n_scans):
+        for j in range(i + 1, n_scans):
             text = ax.text(i, j, round(pw_mat[i, j], 1),
                            ha="center", va="center", color="w", size=7)
 
@@ -147,6 +148,7 @@ def pairwise_heatmap(pw_dict, scans_list, task_name, metrics, db, **kwargs):
     fig.colorbar(im)
     fname = kwargs.get("fname", pathlib.Path(db.basedir) / f'{task_name}-{metrics}_heatmap.png')
     fig.savefig(fname)
+
 
 def _get_task_fileset(scan_dataset, task_name):
     """Returns the `Fileset` object produced by `task_name` in given `scan_dataset`.
@@ -295,8 +297,10 @@ def compare_binary_mask(db, task_name):
 
     return
 
+
 def jsonify_tuple_keys(json_dict: dict) -> dict:
     return {f'{k[0]} - {k[1]}': v for k, v in json_dict.items()}
+
 
 def unjsonify_tuple_keys(json_dict: dict) -> dict:
     return {tuple(k.split(' - ')): v for k, v in json_dict.items()}
@@ -307,6 +311,7 @@ def average_pairwise_comparison(fbf_comp_dict: dict) -> float:
         return sum(fbf_comp_dict.values()) / len(fbf_comp_dict.values())
     else:
         return None
+
 
 def compare_pointcloud(db, task_name):
     """Use the chamfer distance to compare point-cloud for each unique pairs of repetition.
@@ -507,10 +512,8 @@ def compare_labelled_pointcloud(db, task_name):
         json.dump({
             'precision': {ulabel: jsonify_tuple_keys(precision[ulabel]) for ulabel in unique_labels},
             'recall': {ulabel: jsonify_tuple_keys(recall[ulabel]) for ulabel in unique_labels},
-            'average pairwise precision': {label: average_precision[label] for label
-                                                          in unique_labels},
-            'average pairwise recall': {label: average_recall[label] for label
-                                                         in unique_labels}
+            'average pairwise precision': {label: average_precision[label] for label in unique_labels},
+            'average pairwise recall': {label: average_recall[label] for label in unique_labels}
         }, out_file)
 
     # Creates a heatmap of the pariwise comparisons:
@@ -753,7 +756,8 @@ def compare_task_output(db, task_name, independant_tests=False):
 
     """
     # List paths where tested task output(s) should be located
-    folder_task_list = [pathlib.Path(db.basedir, scan.id, _get_task_fileset(scan, task_name).id) for scan in db.get_scans() if scan.id != 'models']
+    folder_task_list = [pathlib.Path(db.basedir, scan.id, _get_task_fileset(scan, task_name).id) for scan in
+                        db.get_scans() if scan.id != 'models']
     if len(folder_task_list) == 0:
         raise IOError(f"Output files of task {task_name} for db {db.basedir} are missing")
     # - Performs file-by-file comparisons for the selected task:
@@ -971,7 +975,7 @@ def config_task(task_name, cfg_file, full_pipe, previous_task):
     return task_cfg
 
 
-if __name__ == "__main__":
+def run():
     """
     creates a test db at the root of the db linked to the scan to analyze
     """
@@ -1058,7 +1062,8 @@ if __name__ == "__main__":
     else:
         # If there is something in the root folder that mean you passed a value to `--test_database`
         # And we then consider that it already contains the replicated scans!
-        logger.info(f"Found {n_replicates} scan replicates in existing test database: {', '.join(map(str, scan_replicates))}")
+        logger.info(
+            f"Found {n_replicates} scan replicates in existing test database: {', '.join(map(str, scan_replicates))}")
         # Make sure the lock is OFF!
         marker_file = test_db_path / MARKER_FILE_NAME
         lock_file = test_db_path / LOCK_FILE_NAME
@@ -1082,3 +1087,7 @@ if __name__ == "__main__":
 
     # - Compare the output(s) of the task across replicated scans dataset:
     compare_task_output(test_db, task_cfg["name"], independant_tests=args.full_pipe)
+
+
+if __name__ == "__main__":
+    run()
