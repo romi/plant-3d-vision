@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import luigi
 import numpy as np
 from romitask import RomiTask
@@ -43,7 +46,7 @@ class Voxels(RomiTask):
 
     See Also
     --------
-    cl.Backprojection: The class implementing the Backprojection method.
+    cl.Backprojection: The class implementing the back-projection methods.
 
     """
     upstream_task = None
@@ -73,22 +76,24 @@ class Voxels(RomiTask):
             try:
                 assert labels is not None or len(self.labels) != 0
             except AssertionError:
-                logger.critical("No metadata 'label_names' in `masks_fileset`!")
-                logger.critical(masks_fileset.get_metadata())
+                logger.warning("No metadata 'label_names' in `masks_fileset`!")
+                logger.debug(masks_fileset.get_metadata())
         else:
             labels = list(self.labels)
 
         bounding_box = self.output().get().scan.get_metadata("bounding_box")
+        logger.debug(f"Bounding-box from output: {bounding_box}")
 
         if self.use_colmap_poses:
             colmap_fileset = self.input()['colmap'].get()
             if bounding_box is None:
                 bounding_box = colmap_fileset.get_metadata("bounding_box")
-        if bounding_box is None:
-            bounding_box = ImagesFilesetExists().output().get().get_metadata(
-                "bounding_box")
+            logger.debug(f"Bounding-box from colmap_fileset: {bounding_box}")
 
-        logger.debug(f"Bounding box : {bounding_box}")
+        if bounding_box is None:
+            bounding_box = ImagesFilesetExists().output().get().get_metadata("bounding_box")
+
+        logger.info(f"Bounding box : {bounding_box}")
         x_min, x_max = bounding_box["x"]
         y_min, y_max = bounding_box["y"]
         z_min, z_max = bounding_box["z"]
@@ -103,7 +108,7 @@ class Voxels(RomiTask):
             z_min += displacement["dz"]
             z_max += displacement["dz"]
         except:
-            logger.info("")
+            logger.warning("No 'displacement' found in scan metadata!")
 
         # center = [(x_max + x_min) / 2, (y_max + y_min) / 2, (z_max + z_min) / 2]
         # widths = [x_max - x_min, y_max - y_min, z_max - z_min]
@@ -136,10 +141,9 @@ class Voxels(RomiTask):
             out = {}
             for i, label in enumerate(labels):
                 out[label] = vol[i, :]
-            logger.critical(labels)
+            logger.debug(f"Writing NPZ volume for label: {labels}")
             io.write_npz(outfile, out)
         else:
             io.write_volume(outfile, vol)
 
-        outfile.set_metadata(
-            {'voxel_size': self.voxel_size, 'origin': origin.tolist()})
+        outfile.set_metadata({'voxel_size': self.voxel_size, 'origin': origin.tolist()})

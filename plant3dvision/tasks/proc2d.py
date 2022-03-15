@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import luigi
 import numpy as np
 from plantdb import io
@@ -37,7 +40,9 @@ class Undistorted(FileByFileTask):
             outfi = outfs.create_file(fi.id)
             io.write_image(outfi, x)
             return outfi
-
+        else:
+            logger.error(f"Could not find a camera model in '{fi.filename}' metadata!")
+            return
 
 class Masks(FileByFileTask):
     """ Compute masks using several functions
@@ -52,7 +57,7 @@ class Masks(FileByFileTask):
     type : luigi.Parameter
         "linear", "excess_green" (see Segmentation explanation in documentation)
     parameters : luigi.ListParameter
-        list of scalar parmeters, depends on type
+        list of scalar parameters, depends on type
     dilation : luigi.IntParameter
         by how much to dilate masks if binary
     threshold : luigi.FloatParameter, optional
@@ -60,12 +65,9 @@ class Masks(FileByFileTask):
 
     """
     upstream_task = luigi.TaskParameter(default=Undistorted)
-
     type = luigi.Parameter("linear")
     parameters = luigi.ListParameter(default=[0,1,0])
-    logger.debug(f"Parameters: {parameters}")
     dilation = luigi.IntParameter(default=0)
-
     threshold = luigi.FloatParameter(default=0.3)
 
     def f_raw(self, x):
@@ -76,12 +78,11 @@ class Masks(FileByFileTask):
         logger.debug(f"x shape: {x.shape}")
         if self.type == "linear":
             coefs = self.parameters
-            return (coefs[0] * x[:, :, 0] + coefs[1] * x[:, :, 1] +
-                    coefs[2] * x[:, :, 2])
+            return (coefs[0] * x[:, :, 0] + coefs[1] * x[:, :, 1] + coefs[2] * x[:, :, 2])
         elif self.type == "excess_green":
             return proc2d.excess_green(x)
         else:
-            raise Exception("Unknown masking type")
+            raise Exception(f"Unknown masking type '{self.type}'!")
 
     def f(self, fi, outfs):
         from plant3dvision import proc2d
