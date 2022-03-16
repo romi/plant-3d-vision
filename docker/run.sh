@@ -1,7 +1,7 @@
 #!/bin/bash
 
-host_db='/data/ROMI/DB'
 vtag="latest"
+host_db=$DB_LOCATION
 cmd=''
 mount_option=""
 # Test commands:
@@ -106,15 +106,21 @@ if [ "$host_db" != "" ]; then
   mount_option="$mount_option -v $host_db:/myapp/db"
 fi
 
+# Check if we have a TTY or not
+if [ -t 1 ]; then
+  USE_TTY="-it"
+else
+  USE_TTY=""
+fi
 if [ "$cmd" = "" ]; then
   # Start in interactive mode:
   docker run --gpus all $mount_option \
     --env PYOPENCL_CTX='0' \
-    -it roboticsmicrofarms/plant-3d-vision:$vtag bash
+    $USE_TTY roboticsmicrofarms/plant-3d-vision:$vtag
 else
   # Start in non-interactive mode (run the command):
   docker run --gpus all $mount_option \
     --env PYOPENCL_CTX='0' \
-    roboticsmicrofarms/plant-3d-vision:$vtag \
-    bash -c "$cmd"
+    $USE_TTY roboticsmicrofarms/plant-3d-vision:$vtag \
+    bash -c ". /venv/bin/activate && $cmd"
 fi
