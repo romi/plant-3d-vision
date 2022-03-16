@@ -1,11 +1,10 @@
 FROM nvidia/cuda:10.2-devel-ubuntu18.04
-#FROM nvidia/cuda:11.5.1-devel-ubuntu20.04
 
 # Prevent stop building ubuntu at time zone selection.  
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Prepare and empty machine for building
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     cmake \
     vim \
@@ -25,10 +24,7 @@ RUN apt-get update && apt-get install -y \
     libqt5opengl5-dev \
     libcgal-dev \
     libcgal-qt5-dev \
-    libmetis-dev
-
-# Build and install ceres solver
-RUN apt-get -y install \
+    libmetis-dev \
     libatlas-base-dev \
     libsuitesparse-dev && \
     # Clean package manager:
@@ -36,9 +32,9 @@ RUN apt-get -y install \
     apt-get autoremove && \
     rm -rf /var/lib/apt/lists/*
 
-RUN git clone https://github.com/ceres-solver/ceres-solver.git --branch 1.14.0
-
-RUN cd ceres-solver && \
+# Build and install CERES-SOLVER
+RUN git clone https://github.com/ceres-solver/ceres-solver.git --branch 1.14.0 && \
+    cd ceres-solver && \
     mkdir build && \
     cd build && \
     cmake .. -DBUILD_TESTING=OFF -DBUILD_EXAMPLES=OFF && \
@@ -47,15 +43,8 @@ RUN cd ceres-solver && \
     rm -rf ../ceres-solver
 
 # Build and install COLMAP
-
-# Note: This Dockerfile has been tested using COLMAP pre-release 3.7.
-# Later versions of COLMAP (which will be automatically cloned as default) may
-# have problems using the environment described thus far. If you encounter
-# problems and want to install the tested release, then uncomment the branch
-# specification in the line below
-RUN git clone https://github.com/colmap/colmap.git #--branch 3.7
-
-RUN cd colmap && \
+RUN git clone https://github.com/colmap/colmap.git && \
+    cd colmap && \
     git checkout dev && \
     mkdir build && \
     cd build && \
@@ -64,11 +53,11 @@ RUN cd colmap && \
     make install && \
     rm -rf ../colmap
 
-
 # -----------------------------------------------------------------------------
 # INSTALL PYTHON 3.8
 # Shamelessly taken from official Python image provider for DockerHub:
 # https://github.com/docker-library/python/blob/master/3.8/buster/Dockerfile
+ENV LANG=C.UTF-8
 
 # runtime dependencies
 RUN set -eux; \
