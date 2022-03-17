@@ -63,12 +63,26 @@ ENV LANG=C.UTF-8
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
+        dpkg-dev \
+        gcc \
+        gnupg dirmngr \
         libbluetooth-dev \
+        libbz2-dev \
+        libc6-dev \
+        libexpat1-dev \
+        libffi-dev \
+        libgdbm-dev \
+        liblzma-dev \
+        libncursesw5-dev \
+        libreadline-dev \
+        libsqlite3-dev \
+        libssl-dev \
+        make \
         tk-dev \
         uuid-dev \
         wget \
-        libssl-dev \
-        libffi-dev \
+        xz-utils \
+        zlib1g-dev \
     ; \
     rm -rf /var/lib/apt/lists/*
 
