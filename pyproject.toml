@@ -35,7 +35,7 @@ toml = "^0.10.2"
 tqdm = "^4.63.0"
 trimesh = "^3.10.2"
 # https://python-poetry.org/docs/dependency-specification/#git-dependencies
-romitask = { git = "https://github.com/romi/romitask.git", rev = "57b31bfa" }
+romitask = { git = "https://github.com/romi/romitask.git", rev = "a641767e" }
 plantdb = { git = "https://github.com/romi/plantdb.git", rev = "b51e4955" }
 romiseg = { git = "https://github.com/romi/romiseg.git", rev = "ef3e0942" }
 romicgal = { git = "https://github.com/romi/romicgal.git", rev = "0fd72b25" }
