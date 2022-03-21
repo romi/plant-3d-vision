@@ -201,7 +201,7 @@ class SegmentedPointCloud(RomiTask):
 class TriangleMesh(RomiTask):
     """ Triangulates input point cloud.
 
-    Currently ignores class data and needs only one connected component.
+    Currently, ignores class data and needs only one connected component.
 
     Module: plant3dvision.tasks.proc3d
     Default upstream tasks: PointCloud
@@ -212,6 +212,8 @@ class TriangleMesh(RomiTask):
     upstream_task = luigi.TaskParameter(default=PointCloud)
     library = luigi.Parameter(default="open3d")  # ["cgal", "open3d"]
     filtering = luigi.Parameter(default="most connected triangles")  # ["", "most connected triangles", "largest connected triangles", "dbscan point-cloud"]
+
+    depth = luigi.IntParameter(default=9)  # used by open3d library
 
     def run(self):
         from plant3dvision import proc3d
@@ -224,7 +226,7 @@ class TriangleMesh(RomiTask):
         if self.library == "cgal":
             out = proc3d.pcd2mesh(point_cloud)
         elif self.library == "open3d":
-            out, _ = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(point_cloud)
+            out, _ = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(point_cloud, depth=self.depth)
 
         # If a filtering method based on connected triangles is required, perform it:
         if "connected triangle" in self.filtering:
@@ -236,6 +238,7 @@ class TriangleMesh(RomiTask):
             logger.info(f"Found {n_cluster} clusters of triangles!")
             logger.info(f"Area of each cluster: {cluster_area}.")
             logger.info(f"Number of triangles in each cluster: {cluster_n_triangles}.")
+
         if self.filtering == "most connected triangles":
             # Get the index of the largest cluster in the number of triangles
             largest_cluster_idx = cluster_n_triangles.argmax()
