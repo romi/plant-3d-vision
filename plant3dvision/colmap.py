@@ -15,10 +15,12 @@ from plant3dvision.log import logger
 from plant3dvision.thirdparty import read_model
 
 #: List of valid colmap executable values:
-ALL_COLMAP_EXE = ['colmap', 'geki/colmap']
+ALL_COLMAP_EXE = ['colmap', 'geki/colmap', 'roboticsmicrofarms/colmap']
+#: Default colmap executable:
+DEFAULT_COLMAP = 'roboticsmicrofarms/colmap'
 
 # - Try to get colmap executable to use from '$COLMAP_EXE' environment variable, or set it to use docker container by default:
-COLMAP_EXE = os.environ.get('COLMAP_EXE', 'geki/colmap')
+COLMAP_EXE = os.environ.get('COLMAP_EXE', DEFAULT_COLMAP)
 
 
 def _has_nvidia_gpu():
@@ -225,8 +227,8 @@ class ColmapRunner(object):
 
     """
 
-    def __init__(self, fileset, matcher_method="exhaustive", compute_dense=False, all_cli_args={}, align_pcd=False, use_calibration=False, bounding_box=None,
-                 colmap_exe=COLMAP_EXE):
+    def __init__(self, fileset, matcher_method="exhaustive", compute_dense=False, all_cli_args={}, align_pcd=False,
+                 use_calibration=False, bounding_box=None, colmap_exe=COLMAP_EXE):
         """
         Parameters
         ----------
@@ -590,8 +592,10 @@ class ColmapRunner(object):
         args = [
             '--ref_images_path', f'{self.colmap_ws}/poses.txt',
             '--input_path', f'{self.colmap_ws}/sparse/0',
-            '--output_path', f'{self.colmap_ws}/sparse/0'
+            '--output_path', f'{self.colmap_ws}/sparse/0',
+            '--ref_is_gps', '0'  # new for COLMAP version > 3.6:
         ]
+
         cli_args = self.all_cli_args.get('model_aligner', {"--robust_alignment_max_error": "10"})
         self._colmap_cmd(COLMAP_EXE, 'model_aligner', args, cli_args)
 
@@ -625,14 +629,13 @@ class ColmapRunner(object):
 
         Notes
         -----
-        If a bounding-box was specified at object instantiation and it leads to an empty sparse pointcloud, we returns the non-cropped version.
-        Same goes for dense colored pointcloud.
+        If a bounding-box was specified at object instantiation, and it leads to an empty sparse point-cloud, we return the non-cropped version.
+        Same goes for dense colored point-cloud.
 
         Returns
         -------
         dict
-            Dictionary of point ids (as keys) from sparse reconstruction with
-            following keys:
+            Dictionary of point ids (as keys) from sparse reconstruction with following keys:
                 'id': int
                     id of the point, same as key of higher level
                 'xyz': list
@@ -666,16 +669,16 @@ class ColmapRunner(object):
         dict
             Dictionary of cameras by id, defines used model & other parameters.
         open3d.geometry.PointCloud
-            Pointcloud obtained by sparse reconstruction.
+            Point-cloud obtained by sparse reconstruction.
         open3d.geometry.PointCloud
-            Pointcloud obtained by dense reconstruction, can be `None` if not
+            Point-cloud obtained by dense reconstruction, can be `None` if not
             required.
         dict
             Dictionary of min/max point positions in 'x', 'y' & 'z' directions.
             Defines a bounding box of object position in space.
 
         """
-        # -- Sparse pointcloud reconstruction by COLMAP:
+        # -- Sparse point-cloud reconstruction by COLMAP:
         # - Performs image features extraction:
         self.feature_extractor()
         # - Performs image features matching:
