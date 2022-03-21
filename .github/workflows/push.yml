@@ -49,5 +49,5 @@ jobs:
     steps:
       - name: Remove Docker Image
         run: |
-          docker image rm roboticsmicrofarms/plant-3d-vision:${GITHUB_REF##*/}
+          docker image rm roboticsmicrofarms/plant-3d-vision:${GITHUB_REF##*/} --force
           docker container prune -f
