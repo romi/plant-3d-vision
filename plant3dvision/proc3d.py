@@ -113,7 +113,7 @@ def pcd2vol(pcd, voxel_size, zero_padding=0):
     indices = point2index(pcd_points, origin, voxel_size)
     shape = indices.max(axis=0)
 
-    vol = np.zeros(shape + 2 * zero_padding + 1, dtype=np.float)
+    vol = np.zeros(shape + 2 * zero_padding + 1, dtype=float)
     indices = indices + zero_padding
 
     for i in range(pcd_points.shape[0]):
@@ -667,14 +667,14 @@ def test_cam_planes(pcd, cameras, images, imgdir, X0=None, n=None, scaling=100):
 
     target_image_shape = (int(np.floor(xmax - xmin)), int(np.floor(ymax - ymin)))
 
-    res = np.zeros((target_image_shape[1], target_image_shape[0], 3), dtype=np.float)
+    res = np.zeros((target_image_shape[1], target_image_shape[0], 3), dtype=float)
 
     ks = list(tris.keys())
     ks.sort(key=lambda x: int(x))
 
     for i, k in enumerate(ks):
         img = imageio.imread(os.path.join(imgdir, images[k]["name"]))
-        img = np.array(img, dtype=np.float)
+        img = np.array(img, dtype=float)
         # img = (img - img.mean()) / img.std()
         tri_target = tris[k]
         tri_target[:, 0] -= xmin
