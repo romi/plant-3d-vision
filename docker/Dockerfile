@@ -60,6 +60,7 @@ FROM base AS final
 COPY --from=builder --chown=${USER_NAME} /venv /venv
 COPY --chown=${USER_NAME} ./get_model.sh ./get_model.sh
 COPY --chown=${USER_NAME} ./tests ./tests
+COPY --chown=${USER_NAME} ./config ./config
 # Download a model file:
 RUN ./get_model.sh
 
