@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # Default configuration file used for CNN based pipeline is:
-cfg='../config/ml_pipe_real.toml'
+cfg='config/ml_pipe_real.toml'
 # Default database location:
-db='testdata'
+db='tests/testdata'
 # Default test dataset for CNN based pipeline is the "real_plant":
 dataset="$db/real_plant/"
 # Virtual test dataset:
@@ -15,7 +15,7 @@ MODEL_DIRECTORY="models/models"
 
 usage(){
   echo "USAGE:"
-  echo "  ./check_test_ml_pipe.sh [OPTIONS]
+  echo "  ./tests/check_ml_pipe.sh [OPTIONS]
   "
   echo "DESCRIPTION:"
   echo "  Run the CNN reconstruction pipeline with predefined datasets and configurations.
@@ -43,16 +43,16 @@ usage(){
   "
   echo "EXAMPLES:"
   echo "  #1 - Run the CNN reconstruction pipeline on default 'real plant' test dataset (safe mode):
-  $ ./check_ml_pipe.sh --tmp
+  $ ./tests/check_ml_pipe.sh --tmp
   "
   echo "  #2 - Run the CNN reconstruction pipeline up to the 'SegmentedPointCloud' task on 'virtual plant' test dataset (safe mode):
-  $ ./check_ml_pipe.sh -t SegmentedPointCloud --virtual --tmp
+  $ ./tests/check_ml_pipe.sh -t SegmentedPointCloud --virtual --tmp
   "
-
   echo "  #3 - Run the CNN reconstruction pipeline with another config & test dataset (safe mode):
-  $ ./check_ml_pipe.sh --config ../config/ml_pipe_real.toml --dataset /data/ROMI/DB/arabido_test2/ --tmp
+  $ ./tests/check_ml_pipe.sh --config config/ml_pipe_real.toml --dataset /data/ROMI/DB/arabido_test2/ --tmp
   "
 }
+tmp=0
 while [ "$1" != "" ]; do
   case $1 in
   -c | --config)
@@ -68,12 +68,10 @@ while [ "$1" != "" ]; do
     task=$1
     ;;
   --virtual)
-    shift
     dataset=$v_dataset
-    cfg='../config/ml_pipe_virtual.toml'
+    cfg='config/ml_pipe_virtual.toml'
     ;;
   --tmp)
-    shift
     tmp=1
     ;;
   -h | --help)
@@ -124,7 +122,7 @@ fi
 
 ##### Check machine learning pipeline
 MODEL_DIRECTORY="$db/$MODEL_DIRECTORY"
-# 1. download models
+# 0. download models
 if [ ! -d ${MODEL_DIRECTORY} ]; then
   mkdir -p ${MODEL_DIRECTORY}
   echo "Created missing models directory: ${MODEL_DIRECTORY}."
@@ -136,14 +134,14 @@ if [ ! -f ${MODEL_EPOCH_896_896_50} ]; then
   wget -P ${MODEL_DIRECTORY} https://media.romi-project.eu/data/Resnet_896_896_epoch50.pt
 fi
 
-# 2. clean
+# 1. clean
 romi_run_task Clean $dataset --config $cfg
 
-# 3. run pipeline
+# 2. run pipeline
 echo "romi_run_task $task $dataset --config $cfg"
 romi_run_task $task $dataset --config $cfg
 
-# 4.print informations about tested task
+# 3.print information about tested task
 if [ "$task" = "AnglesAndInternodes" ]; then
   # Also inform about Colmap and PointCloud tasks if tested task is "AnglesAndInternodes"
   echo ""

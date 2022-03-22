@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # Default configuration file used for GEOMETRIC based pipeline is:
-cfg='../config/geom_pipe_real.toml'
+cfg='config/geom_pipe_real.toml'
 # Default database location:
-db='testdata'
+db='tests/testdata'
 # Default test dataset for GEOMETRIC based pipeline is the "real_plant":
 dataset="$db/real_plant/"
 # Virtual test dataset:
@@ -11,9 +11,9 @@ v_dataset="$db/virtual_plant/"
 # Default tested ROMI task for GEOMETRIC based pipeline is "AnglesAndInternodes":
 task='AnglesAndInternodes'
 
-usage(){
+usage() {
   echo "USAGE:"
-  echo "  ./check_test_geom_pipe.sh [OPTIONS]
+  echo "  ./tests/check_geom_pipe.sh [OPTIONS]
   "
   echo "DESCRIPTION:"
   echo "  Run the geometric reconstruction pipeline with predefined datasets and configurations.
@@ -39,14 +39,13 @@ usage(){
   "
   echo "EXAMPLES:"
   echo "  #1 - Run the geometric reconstruction pipeline on default 'real plant' test dataset (safe mode):
-  $ ./check_geom_pipe.sh --tmp
+  $ ./tests/check_geom_pipe.sh --tmp
   "
   echo "  #2 - Run the geometric pipeline up to the 'PointCloud' task on 'virtual plant' test dataset (safe mode):
-  $ ./check_geom_pipe.sh -t PointCloud --virtual --tmp
+  $ ./tests/check_geom_pipe.sh -t PointCloud --virtual --tmp
   "
-
   echo "  #3 - Run a geometric reconstruction pipeline with another config & test dataset (safe mode):
-  $ ./check_geom_pipe.sh --config ../config/geom_pipe_real.toml --dataset /data/ROMI/DB/arabido_test2/ --tmp
+  $ ./check_geom_pipe.sh --config config/geom_pipe_real.toml --dataset /data/ROMI/DB/arabido_test2/ --tmp
   "
 }
 tmp=0
@@ -65,12 +64,10 @@ while [ "$1" != "" ]; do
     task=$1
     ;;
   --virtual)
-    shift
     dataset=$v_dataset
-    cfg='../config/geom_pipe_virtual.toml'
+    cfg='config/geom_pipe_virtual.toml'
     ;;
   --tmp)
-    shift
     tmp=1
     ;;
   -h | --help)
@@ -99,7 +96,7 @@ if [ "$tmp" = 1 ]; then
   # Add the romidb marker file
   touch "$tmp_db/romidb"
   # Get the directory name (last in hierarchy):
-  data_dir=`basename "$dataset"`
+  data_dir=$(basename "$dataset")
   # Add a date prefix to make folder unique and a 'GEOM' tag to further explicit test folder name
   data_dir="$(date +%F_%H-%M-%S)_GEOM_$data_dir"
   # Creates the temporary directory path variable with it
@@ -111,8 +108,9 @@ if [ "$tmp" = 1 ]; then
   # Copy the dataset to new temporary folder
   echo "Copying '$dataset' to '$tmp_dataset'..."
   cp -R "$dataset" "$tmp_dataset"
-  # Finally replace the dataset location by the temporary one
+  # Finally replace the database & dataset locations by the temporary ones
   dataset="$tmp_dataset"
+  db="$tmp_db"
 fi
 
 ##### Check geometric pipeline
@@ -123,7 +121,7 @@ romi_run_task Clean $dataset --config $cfg
 echo "romi_run_task $task $dataset --config $cfg"
 romi_run_task $task $dataset --config $cfg
 
-# 3. print informations about tested task
+# 3. print information about tested task
 if [ "$task" = "AnglesAndInternodes" ]; then
   # Also inform about Colmap and PointCloud tasks if tested task is "AnglesAndInternodes"
   echo ""
