@@ -72,7 +72,7 @@ class Masks(FileByFileTask):
 
     def f_raw(self, x):
         from plant3dvision import proc2d
-        x = np.asarray(x, dtype=np.float)
+        x = np.asarray(x, dtype=float)
         logger.debug(f"x shape: {x.shape}")
         x = rescale_intensity(x, out_range=(0, 1))
         logger.debug(f"x shape: {x.shape}")

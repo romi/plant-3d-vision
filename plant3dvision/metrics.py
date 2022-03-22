@@ -262,7 +262,7 @@ class MaskEvaluator(SetEvaluator):
         return tp, fn, tn, fp
 
     def _to_binary_image(self, matrix):
-        return (matrix != 0).astype(np.int)
+        return (matrix != 0).astype(int)
 
 
 class CompareMaskFilesets():

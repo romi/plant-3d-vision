@@ -59,7 +59,7 @@ class VoxelsGroundTruth(RomiTask):
             res = {}
             min = np.min(x.vertices, axis=0)
             max = np.max(x.vertices, axis=0)
-            arr_size = np.asarray((max - min) / cl.Voxels().voxel_size + 1, dtype=np.int) + 1
+            arr_size = np.asarray((max - min) / cl.Voxels().voxel_size + 1, dtype=int) + 1
             for k in x.meshes.keys():
                 t = o3d.geometry.TriangleMesh()
                 t.triangles = o3d.utility.Vector3iVector(np.asarray(x.meshes[k].faces))
@@ -73,8 +73,7 @@ class VoxelsGroundTruth(RomiTask):
                 class_name = x.meshes[k].materials[0].name
                 arr = np.zeros(arr_size)
                 voxel_size = cl.Voxels().voxel_size
-                origin_idx = np.asarray((v.origin - min) / voxel_size,
-                                        dtype=np.int)
+                origin_idx = np.asarray((v.origin - min) / voxel_size, dtype=int)
                 arr[origin_idx[0]:origin_idx[0] + v.matrix.shape[0],
                 origin_idx[1]:origin_idx[1] + v.matrix.shape[1],
                 origin_idx[2]:origin_idx[2] + v.matrix.shape[2]] = v.matrix
