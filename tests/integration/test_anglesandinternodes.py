@@ -11,7 +11,9 @@ class TestGeomAnglesAndInternodes(unittest.TestCase):
     def test_real_plant(self):
 
         geom_pipe_real_conf = os.path.join(Path(__file__).parents[2], "config/geom_pipe_real.toml")
+        print(f"Testing geometric pipeline with conf: {geom_pipe_real_conf}")
         real_plant_data = os.path.join(Path(__file__).parents[1], "testdata/real_plant/")
+        print(f"Testing geometric pipeline with data: {real_plant_data}")
 
         # Perform a Clean before running the pipe
         process = run_task(geom_pipe_real_conf, "Clean", real_plant_data)
@@ -39,7 +41,9 @@ class TestGeomAnglesAndInternodes(unittest.TestCase):
 
     def test_virtual_plant(self):
         geom_pipe_virtual_conf = os.path.join(Path(__file__).parents[2], "config/geom_pipe_virtual.toml")
+        print(f"Testing geometric pipeline with conf: {geom_pipe_virtual_conf}")
         virtual_plant_data = os.path.join(Path(__file__).parents[1],"testdata/virtual_plant/")
+        print(f"Testing geometric pipeline with data: {virtual_plant_data}")
 
         # Perform a Clean before running the pipe
         process = run_task(geom_pipe_virtual_conf, "Clean", virtual_plant_data)
@@ -68,7 +72,9 @@ class TestGeomAnglesAndInternodes(unittest.TestCase):
 class TestMLAnglesAndInternodes(unittest.TestCase):
     def test_real_plant(self):
         ml_pipe_real_conf = os.path.join(Path(__file__).parents[2], "config/ml_pipe_real.toml")
+        print(f"Testing CNN pipeline with conf: {ml_pipe_real_conf}")
         real_plant_data = os.path.join(Path(__file__).parents[1], "testdata/real_plant/")
+        print(f"Testing CNN pipeline with data: {real_plant_data}")
 
         # Perform a Clean before running the pipe
         process = run_task(ml_pipe_real_conf, "Clean", real_plant_data)
@@ -106,7 +112,9 @@ class TestMLAnglesAndInternodes(unittest.TestCase):
     
     def test_virtual_plant(self):
         ml_virtual_plant_conf = os.path.join(Path(__file__).parents[2], "config/ml_pipe_virtual.toml")
+        print(f"Testing CNN pipeline with conf: {ml_virtual_plant_conf}")
         virtual_plant_data = os.path.join(Path(__file__).parents[1], "testdata/virtual_plant/")
+        print(f"Testing CNN pipeline with data: {virtual_plant_data}")
 
         # Peform a Clean before running the pipe
         process = run_task(ml_virtual_plant_conf, "Clean", virtual_plant_data)
