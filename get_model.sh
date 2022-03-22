@@ -2,7 +2,7 @@
 
 model="Resnet_896_896_epoch50.pt"
 url="https://media.romi-project.eu/data/$model"
-path="plant-3d-vision/tests/testdata/models/models"
+path="tests/testdata/models/models"
 
 if [[ -f "$path/$model" ]]; then
   echo "Found model file $model"
