@@ -9,10 +9,11 @@ from os.path import splitext
 import imageio
 import numpy as np
 import open3d as o3d
-from plantdb import io
 from plant3dvision import proc3d
 from plant3dvision.log import logger
 from plant3dvision.thirdparty import read_model
+
+from plantdb import io
 
 #: List of valid colmap executable values:
 ALL_COLMAP_EXE = ['colmap', 'geki/colmap', 'roboticsmicrofarms/colmap']
@@ -37,6 +38,7 @@ def _has_nvidia_gpu():
             return False
         else:
             return True
+
 
 def colmap_cameras_to_dict(cameras_bin):
     """Convert COLMAP cameras binary file to a dictionary of camera model.
@@ -433,14 +435,16 @@ class ColmapRunner(object):
                 except AssertionError:
                     raise ValueError("Colmap >= 3.6 is required!")
         # - Performs some verifications prior to using docker image with COLMAP:
-        elif colmap_exe == 'geki/colmap':
+        elif colmap_exe in ['geki/colmap', 'roboticsmicrofarms/colmap']:
             import docker
 
             client = docker.from_env()
-            image_name = 'geki/colmap'
-            client.images.pull(image_name, tag='latest')
+            tag = 'latest'
+            if colmap_exe == 'roboticsmicrofarms/colmap':
+                tag = '3.7'
+            client.images.pull(colmap_exe, tag=tag)
         else:
-            raise ValueError("Unknown COLMAP executable!")
+            raise ValueError(f"Unknown COLMAP executable '{colmap_exe}'!")
 
     def get_workdir(self):
         return self.colmap_ws
@@ -454,7 +458,7 @@ class ColmapRunner(object):
 
         Parameters
         ----------
-        colmap_exe : {'colmap', 'geki/colmap'}
+        colmap_exe : {'colmap', 'geki/colmap', 'roboticsmicrofarms/colmap'}
             COLMAP executable to use.
         method : str
             COLMAP method to use, e.g. 'feature_extractor'.
@@ -529,7 +533,12 @@ class ColmapRunner(object):
         for x in cli_args.keys():
             process.extend([x, cli_args[x]])
 
-        if colmap_exe == 'geki/colmap':
+        if colmap_exe in ['geki/colmap', 'roboticsmicrofarms/colmap']:
+            # Defines the tag of the docker image:
+            tag = 'latest'
+            if colmap_exe == 'roboticsmicrofarms/colmap':
+                tag = '3.7'
+
             import docker
             # Initialize docker client manager:
             client = docker.from_env()
@@ -546,9 +555,10 @@ class ColmapRunner(object):
             # Run the command & catch the output:
             if _has_nvidia_gpu():
                 gpu_device = docker.types.DeviceRequest(count=-1, capabilities=[['gpu']])
-                out = client.containers.run('geki/colmap', cmd, environment=varenv, mounts=[mount], device_requests=[gpu_device])
+                out = client.containers.run(colmap_exe + f":{tag}", cmd, environment=varenv, mounts=[mount],
+                                            device_requests=[gpu_device])
             else:
-                out = client.containers.run('geki/colmap', cmd, environment=varenv, mounts=[mount])
+                out = client.containers.run(colmap_exe + f":{tag}", cmd, environment=varenv, mounts=[mount])
             # Add the output of the COLMAP process to the log file:
             self.log_file.writelines(out.decode('utf8'))
         else:
@@ -563,6 +573,7 @@ class ColmapRunner(object):
             '--image_path', f'{self.colmap_ws}/images'
         ]
         cli_args = self.all_cli_args.get('feature_extractor', {})
+        logger.info("Running colmap 'feature_extractor'...")
         self._colmap_cmd(COLMAP_EXE, 'feature_extractor', args, cli_args)
 
     def matcher(self):
@@ -570,9 +581,11 @@ class ColmapRunner(object):
         args = ['--database_path', f'{self.colmap_ws}/database.db']
         if self.matcher_method == 'exhaustive':
             cli_args = self.all_cli_args.get('exhaustive_matcher', {})
+            logger.info("Running colmap 'exhaustive_matcher'...")
             self._colmap_cmd(COLMAP_EXE, 'exhaustive_matcher', args, cli_args)
         elif self.matcher_method == 'sequential':
             cli_args = self.all_cli_args.get('sequential_matcher', {})
+            logger.info("Running colmap 'sequential_matcher'...")
             self._colmap_cmd(COLMAP_EXE, 'sequential_matcher', args, cli_args)
         else:
             raise ValueError(f"Unknown matcher '{self.matcher_method}!")
@@ -585,6 +598,7 @@ class ColmapRunner(object):
             '--output_path', f'{self.colmap_ws}/sparse'
         ]
         cli_args = self.all_cli_args.get('mapper', {})
+        logger.info("Running colmap 'mapper'...")
         self._colmap_cmd(COLMAP_EXE, 'mapper', args, cli_args)
 
     def model_aligner(self):
@@ -595,8 +609,8 @@ class ColmapRunner(object):
             '--output_path', f'{self.colmap_ws}/sparse/0',
             '--ref_is_gps', '0'  # new for COLMAP version > 3.6:
         ]
-
         cli_args = self.all_cli_args.get('model_aligner', {"--robust_alignment_max_error": "10"})
+        logger.info("Running colmap 'model_aligner'...")
         self._colmap_cmd(COLMAP_EXE, 'model_aligner', args, cli_args)
 
     def image_undistorter(self):
@@ -607,12 +621,14 @@ class ColmapRunner(object):
             '--output_path', f'{self.colmap_ws}/dense'
         ]
         cli_args = self.all_cli_args.get('image_undistorter', {})
+        logger.info("Running colmap 'image_undistorter'...")
         self._colmap_cmd(COLMAP_EXE, 'image_undistorter', args, cli_args)
 
     def patch_match_stereo(self):
         """Dense 3D reconstruction / mapping using MVS after running the `image_undistorter` to initialize the workspace."""
         args = ['--workspace_path', f'{self.colmap_ws}/dense']
         cli_args = self.all_cli_args.get('patch_match_stereo', {})
+        logger.info("Running colmap 'patch_match_stereo'...")
         self._colmap_cmd(COLMAP_EXE, 'patch_match_stereo', args, cli_args)
 
     def stereo_fusion(self):
@@ -622,6 +638,7 @@ class ColmapRunner(object):
             '--output_path', f'{self.colmap_ws}/dense/fused.ply'
         ]
         cli_args = self.all_cli_args.get('stereo_fusion', {})
+        logger.info("Running colmap 'stereo_fusion'...")
         self._colmap_cmd(COLMAP_EXE, 'stereo_fusion', args, cli_args)
 
     def run(self):
