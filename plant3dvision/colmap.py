@@ -373,7 +373,7 @@ class ColmapRunner(object):
         # - Initialize the `poses.txt` file for COLMAP:
         self._init_poses()
         # - File object used for logging COLMAP outputs:
-        self.log_file = open(f"{self.colmap_ws}/colmap_log.txt", mode="w")
+        self.log_file = f"{self.colmap_ws}/colmap_log.txt"
         # - Check COLMAP executable to use:
         self._init_exe(colmap_exe)
 
@@ -572,10 +572,12 @@ class ColmapRunner(object):
             else:
                 out = client.containers.run(colmap_exe + f":{tag}", cmd, environment=varenv, mounts=[mount])
             # Add the output of the COLMAP process to the log file:
-            self.log_file.writelines(out.decode('utf8'))
+            with open(self.log_file, mode="w") as f:
+                f.writelines(out.decode('utf8'))
         else:
             logger.debug('Running subprocess: ' + ' '.join(process))
-            subprocess.run(process, check=True, stdout=self.log_file)
+            with open(self.log_file, mode="w") as f:
+                subprocess.run(process, check=True, stdout=f)
         return
 
     def feature_extractor(self):
