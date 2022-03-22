@@ -247,6 +247,12 @@ class ColmapRunner(object):
         bounding_box : dict, optional
             If specified (default ``None``), crop the sparse (& dense) pointcloud(s) with given volume dictionary.
             Specifications: {"x" : [xmin, xmax], "y" : [ymin, ymax], "z" : [zmin, zmax]}.
+        colmap_exe : {'colmap', 'geki/colmap', 'roboticsmicrofarms/colmap'}, optional
+            The executable to use to run the colmap reconstruction steps.
+            'colmap' requires that you compile and install it from sources, see [colmap]_.
+            The others use pre-built docker images, available from docker hub.
+            'geki/colmap' is colmap 3.6 with Ubuntu 18.04 and CUDA 10.1, see [geki_colmap]_
+            'roboticsmicrofarms/colmap' is colmap 3.7 with Ubuntu 18.04 and CUDA 10.2, see [roboticsmicrofarms_colmap]_
 
         Notes
         -----
@@ -257,7 +263,13 @@ class ColmapRunner(object):
         Use ``{"exhaustive_matcher": {"--SiftMatching.use_gpu": "0"}`` or ``{"sequential_matcher": {"--SiftMatching.use_gpu": "0"}`` to force use of CPU during feature matching step.
 
         By default "--robust_alignment_max_error" is set to 10 for pointcloud alignment step.
-        You may change this with ``{"model_aligner": {"--robust_alignment_max_error": "0"}``.
+        You may change it, *e.g.* to 20, with ``{"model_aligner": {"--robust_alignment_max_error": "20"}``.
+
+        References
+        ----------
+        .. [colmap] Install instruction on `colmap.github.io <https://colmap.github.io/install.html>`_.
+        .. [geki_colmap] Colmap docker image on `geki <https://hub.docker.com/r/geki/colmap>`_'s docker hub.
+        .. [roboticsmicrofarms_colmap] Colmap docker image on `roboticsmicrofarms <https://hub.docker.com/repository/docker/roboticsmicrofarms/colmap>`_' docker hub.
 
         Examples
         --------
@@ -571,6 +583,8 @@ class ColmapRunner(object):
         ]
         cli_args = self.all_cli_args.get('feature_extractor', {})
         logger.info("Running colmap 'feature_extractor'...")
+        logger.debug(f"args: {args}")
+        logger.debug(f"cli_args: {cli_args}")
         self._colmap_cmd(COLMAP_EXE, 'feature_extractor', args, cli_args)
 
     def matcher(self):
@@ -579,10 +593,14 @@ class ColmapRunner(object):
         if self.matcher_method == 'exhaustive':
             cli_args = self.all_cli_args.get('exhaustive_matcher', {})
             logger.info("Running colmap 'exhaustive_matcher'...")
+            logger.debug(f"args: {args}")
+            logger.debug(f"cli_args: {cli_args}")
             self._colmap_cmd(COLMAP_EXE, 'exhaustive_matcher', args, cli_args)
         elif self.matcher_method == 'sequential':
             cli_args = self.all_cli_args.get('sequential_matcher', {})
             logger.info("Running colmap 'sequential_matcher'...")
+            logger.debug(f"args: {args}")
+            logger.debug(f"cli_args: {cli_args}")
             self._colmap_cmd(COLMAP_EXE, 'sequential_matcher', args, cli_args)
         else:
             raise ValueError(f"Unknown matcher '{self.matcher_method}!")
@@ -596,6 +614,8 @@ class ColmapRunner(object):
         ]
         cli_args = self.all_cli_args.get('mapper', {})
         logger.info("Running colmap 'mapper'...")
+        logger.debug(f"args: {args}")
+        logger.debug(f"cli_args: {cli_args}")
         self._colmap_cmd(COLMAP_EXE, 'mapper', args, cli_args)
 
     def model_aligner(self):
@@ -608,6 +628,8 @@ class ColmapRunner(object):
         ]
         cli_args = self.all_cli_args.get('model_aligner', {"--robust_alignment_max_error": "10"})
         logger.info("Running colmap 'model_aligner'...")
+        logger.debug(f"args: {args}")
+        logger.debug(f"cli_args: {cli_args}")
         self._colmap_cmd(COLMAP_EXE, 'model_aligner', args, cli_args)
 
     def image_undistorter(self):
@@ -619,6 +641,8 @@ class ColmapRunner(object):
         ]
         cli_args = self.all_cli_args.get('image_undistorter', {})
         logger.info("Running colmap 'image_undistorter'...")
+        logger.debug(f"args: {args}")
+        logger.debug(f"cli_args: {cli_args}")
         self._colmap_cmd(COLMAP_EXE, 'image_undistorter', args, cli_args)
 
     def patch_match_stereo(self):
@@ -626,6 +650,8 @@ class ColmapRunner(object):
         args = ['--workspace_path', f'{self.colmap_ws}/dense']
         cli_args = self.all_cli_args.get('patch_match_stereo', {})
         logger.info("Running colmap 'patch_match_stereo'...")
+        logger.debug(f"args: {args}")
+        logger.debug(f"cli_args: {cli_args}")
         self._colmap_cmd(COLMAP_EXE, 'patch_match_stereo', args, cli_args)
 
     def stereo_fusion(self):
@@ -636,6 +662,8 @@ class ColmapRunner(object):
         ]
         cli_args = self.all_cli_args.get('stereo_fusion', {})
         logger.info("Running colmap 'stereo_fusion'...")
+        logger.debug(f"args: {args}")
+        logger.debug(f"cli_args: {cli_args}")
         self._colmap_cmd(COLMAP_EXE, 'stereo_fusion', args, cli_args)
 
     def run(self):
