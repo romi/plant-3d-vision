@@ -247,7 +247,7 @@ class MaskEvaluator(SetEvaluator):
             raise ValueError("The groundtruth and prediction are different in size: %s vs %s" % (str(groundtruth.shape), str(prediction.shape)))
 
     def _dilate_image(self, image):
-        from scipy.ndimage.morphology import binary_dilation
+        from scipy.ndimage import binary_dilation
         for i in range(self.dilation_amount):
             image = binary_dilation(image > 0)
         return image
