@@ -26,7 +26,7 @@ usage() {
   echo "  -t, --tag
     Docker image tag to use, default to '$vtag'."
   echo "  -db, --database
-    Path to the host database to mount inside docker container, default to '$host_db'."
+    Path to the host database that will be mounted inside docker container, default to '$host_db'."
   echo "  -v, --volume
     Volume mapping for docker, e.g. '/abs/host/dir:/abs/container/dir'.
     Multiple use is allowed."
@@ -112,11 +112,13 @@ if [ -t 1 ]; then
 else
   USE_TTY=""
 fi
+
 if [ "$cmd" = "" ]; then
   # Start in interactive mode:
   docker run --gpus all $mount_option \
     --env PYOPENCL_CTX='0' \
-    $USE_TTY roboticsmicrofarms/plant-3d-vision:$vtag
+    $USE_TTY roboticsmicrofarms/plant-3d-vision:$vtag \
+    bash
 else
   # Start in non-interactive mode (run the command):
   docker run --gpus all $mount_option \
