@@ -41,6 +41,7 @@ USER ${USER_NAME}
 WORKDIR /myapp
 
 FROM base AS builder
+LABEL stage=builder
 
 # Upgrade pip, install poetry and create a venv:
 RUN python3 -m pip install --upgrade pip && \

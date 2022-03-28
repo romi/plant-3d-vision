@@ -43,5 +43,6 @@ jobs:
     steps:
       - name: Remove Docker Image
         run: |
-          docker container prune -f
           docker image rm roboticsmicrofarms/plant-3d-vision:${{ github.sha }} --force
+          docker container prune -f
+          docker image prune --filter label=stage=builder

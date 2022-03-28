@@ -51,3 +51,4 @@ jobs:
         run: |
           docker image rm roboticsmicrofarms/plant-3d-vision:${GITHUB_REF##*/} --force
           docker container prune -f
+          docker image prune --filter label=stage=builder
