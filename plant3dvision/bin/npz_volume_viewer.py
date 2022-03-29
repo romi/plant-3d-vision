@@ -1,3 +1,10 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+Visualize a NPZ volume from Voxels tasks.
+"""
+
 import argparse
 from os.path import join
 from pathlib import Path
@@ -16,6 +23,10 @@ def parsing():
 
     parser.add_argument("dataset",
                         help="Path of the dataset.")
+
+    clust_args = parser.add_argument_group('View options')
+    clust_args.add_argument('--cmap', type=str, default='viridis',
+                            help="The colormap to use.")
 
     return parser
 
@@ -64,21 +75,42 @@ def slider(label, mini, maxi, init, step=1, fmt="%1.0f"):
 
 
 def slice_view(ax, arr, **kwargs):
+    """View a slice of the volume array.
+
+    Parameters
+    ----------
+    axe : matplotlib.axes.Axes
+        The `Axes` instance to update.
+    arr : numpy.ndarray
+        A 2D array to show.
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        The updated `Axes` instance.
+    matplotlib.image.AxesImage
+        The `AxesImage` instance.
+
+    """
     fig_img = ax.imshow(arr, interpolation='none', origin='upper', **kwargs)
     ax.xaxis.tick_top()  # move the x-axis to the top
     return ax, fig_img
 
 
 def view(array, cmap="viridis", **kwargs):
-    """
+    """Volume viewer.
 
     Parameters
     ----------
-    array
-
+    array : numpy.ndarray
+        The volume array to slide trough.
+    cmap : str
+        A valid matploib colormap.
 
     Returns
     -------
+    matplotlib.widgets.Slider
+        The slider instance.
 
     """
     fig, ax = plt.subplots()
@@ -87,7 +119,7 @@ def view(array, cmap="viridis", **kwargs):
     init_slice = kwargs.get('init_slice', 0)
 
     ax, l = slice_view(ax, array[:, :, init_slice], cmap=cmap)
-    # plt.title(title)
+    plt.title(f"NPZ volume for '{kwargs['dataset']}'.")
     fig.colorbar(l, ax=ax)
 
     max_slice = array.shape[-1] - 1
@@ -125,12 +157,13 @@ def run():
             voxels_fs = f.id
 
     voxels_fs = dataset.get_fileset(voxels_fs)
+    # Read the NPZ file:
     npz_path = join(args.dataset, voxels_fs.id, voxels_fs.get_files()[0].filename)
     print(npz_path)
     npz = imageio.volread(npz_path)
     # npz = read_volume(voxels_fs.get_files()[0])
 
-    view(npz[:, :, ::-1])
+    zs = view(npz[:, :, ::-1], cmap=args.cmap, dataset=str(scan_name))
     db.disconnect()
 
 
