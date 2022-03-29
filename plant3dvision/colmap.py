@@ -458,7 +458,7 @@ class ColmapRunner(object):
                 tag = 'latest'
             # Check the image exists locally or download it:
             try:
-                client.images.get(colmap_exe, tag=tag)
+                client.images.get(colmap_exe)
             except ImageNotFound:
                 client.images.pull(colmap_exe, tag=tag)
         else:
