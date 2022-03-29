@@ -18,7 +18,7 @@ from plantdb import io
 #: List of valid colmap executable values:
 ALL_COLMAP_EXE = ['colmap', 'geki/colmap', 'roboticsmicrofarms/colmap']
 #: Default colmap executable:
-DEFAULT_COLMAP = 'roboticsmicrofarms/colmap'
+DEFAULT_COLMAP = ALL_COLMAP_EXE[-1]
 
 # - Try to get colmap executable to use from '$COLMAP_EXE' environment variable, or set it to use docker container by default:
 COLMAP_EXE = os.environ.get('COLMAP_EXE', DEFAULT_COLMAP)
@@ -447,14 +447,20 @@ class ColmapRunner(object):
                 except AssertionError:
                     raise ValueError("Colmap >= 3.6 is required!")
         # - Performs some verifications prior to using docker image with COLMAP:
-        elif colmap_exe in ['geki/colmap', 'roboticsmicrofarms/colmap']:
+        elif colmap_exe.split(":")[0] in ['geki/colmap', 'roboticsmicrofarms/colmap']:
             import docker
-
+            from docker.errors import ImageNotFound
             client = docker.from_env()
-            tag = 'latest'
-            if colmap_exe == 'roboticsmicrofarms/colmap':
-                tag = '3.7'
-            client.images.pull(colmap_exe, tag=tag)
+            # Try to get the tag of the docker image or set it to 'latest' by default:
+            try:
+                colmap_exe, tag = colmap_exe.split(":")
+            except ValueError:
+                tag = 'latest'
+            # Check the image exists locally or download it:
+            try:
+                client.images.get(colmap_exe, tag=tag)
+            except ImageNotFound:
+                client.images.pull(colmap_exe, tag=tag)
         else:
             raise ValueError(f"Unknown COLMAP executable '{colmap_exe}'!")
 
@@ -545,13 +551,13 @@ class ColmapRunner(object):
         for x in cli_args.keys():
             process.extend([x, cli_args[x]])
 
-        if colmap_exe in ['geki/colmap', 'roboticsmicrofarms/colmap']:
-            # Defines the tag of the docker image:
-            tag = 'latest'
-            if colmap_exe == 'roboticsmicrofarms/colmap':
-                tag = '3.7'
-
+        if colmap_exe.split(":")[0] in ['geki/colmap', 'roboticsmicrofarms/colmap']:
             import docker
+            # Try to get the tag of the docker image or set it to 'latest' by default:
+            try:
+                colmap_exe, tag = colmap_exe.split(":")
+            except ValueError:
+                tag = 'latest'
             # Initialize docker client manager:
             client = docker.from_env()
             # Defines environment variables:
