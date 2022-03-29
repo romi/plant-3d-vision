@@ -50,4 +50,4 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
 robustness_comparison = "plant3dvision.bin.robustness_comparison:run"
-robustness_comparison = "plant3dvision.bin.npz_volume_viewer:run"
+npz_volume_viewer = "plant3dvision.bin.npz_volume_viewer:run"
