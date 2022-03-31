@@ -17,18 +17,38 @@ from plant3dvision.filenames import COLMAP_SPARSE_ID
 from plant3dvision.log import logger
 
 
+def compute_calibrated_poses(rotmat, tvec):
+    """Compute the calibrated pose from COLMAP.
+
+    Parameters
+    ----------
+    rotmat : numpy.ndarray
+        Rotation matrix?, should be of shape `(3, 3)`.
+    tvec : numpy.ndarray
+        Translation vector?, should be of shape `(3,)`.
+
+    Returns
+    -------
+    list
+        Calibrated pose, that is the estimated XYZ coordinate of the camera by colmap.
+
+    """
+    pose = np.dot(-rotmat.transpose(), (tvec.transpose()))
+    return np.array(pose).flatten().tolist()
+
+
 def use_calibrated_poses(images_fileset, calibration_scan):
     """Use a calibration scan to add its 'calibrated_pose' to an 'images' fileset.
 
     Parameters
     ----------
-    images_fileset : db.Fileset
+    images_fileset : plantdb.db.Fileset
         Fileset containing source images to use for reconstruction.
-    calibration_scan : db.dataset
+    calibration_scan : plantdb.db.Scan
         Dataset containing calibrated poses to use for reconstruction.
 
     .. warning::
-        This suppose the `images_fileset` & `calibration_scan` were acquired using the same ``ScanPath``!
+        This supposes the `images_fileset` & `calibration_scan` were acquired using the same ``ScanPath``!
 
     """
     # TODO: Add a check, based on metadata, that the two `ScanPath` are the same!
@@ -59,11 +79,7 @@ def use_calibrated_poses(images_fileset, calibration_scan):
         if key is None:
             raise Exception(f"Could not find pose of image '{fi.id}' in calibration scan!")
         # - Compute the 'calibrated_pose':
-        rot = np.array(poses[key]['rotmat'])
-        tvec = np.array(poses[key]['tvec'])
-        # pose = -rot.transpose() * (tvec.transpose())
-        pose = np.dot(-rot.transpose(),(tvec.transpose()))
-        pose = np.array(pose).flatten().tolist()
+        pose = compute_calibrated_poses(np.array(poses[key]['rotmat']), np.array(poses[key]['tvec']))
         # - Assign this calibrated pose to the metadata of the image of the fileset to reconstruct
         # Assignment is order based...
         images_fileset.get_files()[i].set_metadata("calibrated_pose", pose)
@@ -72,8 +88,7 @@ def use_calibrated_poses(images_fileset, calibration_scan):
 
 
 class Colmap(RomiTask):
-    """
-    Task performing a COLMAP SfM reconstruction on the "images" fileset of a dataset.
+    """Task performing a COLMAP SfM reconstruction on the "images" fileset of a dataset.
 
     Attributes
     ----------
