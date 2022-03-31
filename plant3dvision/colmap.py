@@ -4,6 +4,7 @@
 import os
 import subprocess
 import tempfile
+from os.path import join
 from os.path import splitext
 
 import imageio
@@ -467,9 +468,8 @@ class ColmapRunner(object):
     def get_workdir(self):
         return self.colmap_ws
 
-    def _colmap_cmd(self, colmap_exe, method, args, cli_args):
-        """
-        Create & call the COLMAP command to execute.
+    def _colmap_cmd(self, colmap_exe, method, args, cli_args, to_log=True):
+        """Create & call the COLMAP command to execute.
 
         Adapt the COLMAP command to local COLMAP install or use of docker container.
         Deactivate calls to use GPU if not available (test `nvidia-smi`).
@@ -484,6 +484,9 @@ class ColmapRunner(object):
             List of arguments to use with COLMAP, usually from parent function.
         cli_args : dict
             Dictionary of arguments to use with COLMAP, usually from TOML configuration.
+        to_log : bool, optional
+            If ``True`` (default) append the output of the COLMAP command to the log file (``self.log_file``).
+            Else, return it as string.
 
         Raises
         ------
@@ -551,6 +554,7 @@ class ColmapRunner(object):
         for x in cli_args.keys():
             process.extend([x, cli_args[x]])
 
+        out = None
         if colmap_exe.split(":")[0] in ['geki/colmap', 'roboticsmicrofarms/colmap']:
             import docker
             # Try to get the tag of the docker image or set it to 'latest' by default:
@@ -577,14 +581,22 @@ class ColmapRunner(object):
                                             device_requests=[gpu_device])
             else:
                 out = client.containers.run(colmap_exe + f":{tag}", cmd, environment=varenv, mounts=[mount])
-            # Add the output of the COLMAP process to the log file:
-            with open(self.log_file, mode="w") as f:
-                f.writelines(out.decode('utf8'))
+            if to_log:
+                # Append the output of the COLMAP process to the log file:
+                with open(self.log_file, mode="a") as f:
+                    f.writelines(out.decode('utf8'))
+            else:
+                out = out.decode('utf8')
         else:
             logger.debug('Running subprocess: ' + ' '.join(process))
-            with open(self.log_file, mode="w") as f:
-                subprocess.run(process, check=True, stdout=f)
-        return
+            if to_log:
+                # Append the output of the COLMAP process to the log file:
+                with open(self.log_file, mode="a") as f:
+                    subprocess.run(process, check=True, stdout=f)
+            else:
+                out = subprocess.run(process, capture_output=True)
+                out.stdout.decode('utf8')
+        return out
 
     def feature_extractor(self):
         """Perform feature extraction for a set of images."""
@@ -627,7 +639,7 @@ class ColmapRunner(object):
         logger.info("Running colmap 'mapper'...")
         logger.debug(f"args: {args}")
         logger.debug(f"cli_args: {cli_args}")
-        self._colmap_cmd(COLMAP_EXE, 'mapper', args, cli_args)
+        _ = self._colmap_cmd(COLMAP_EXE, 'mapper', args, cli_args)
 
     def model_aligner(self):
         """Align/geo-register model to coordinate system of given camera centers."""
@@ -641,7 +653,17 @@ class ColmapRunner(object):
         logger.info("Running colmap 'model_aligner'...")
         logger.debug(f"args: {args}")
         logger.debug(f"cli_args: {cli_args}")
-        self._colmap_cmd(COLMAP_EXE, 'model_aligner', args, cli_args)
+        _ = self._colmap_cmd(COLMAP_EXE, 'model_aligner', args, cli_args)
+
+    def model_analyzer(self):
+        """Print statistics about reconstructions."""
+        args = [
+            '--path', f'{self.colmap_ws}/sparse/0'
+        ]
+        logger.info("Running colmap 'model_analyzer'...")
+        logger.debug(f"args: {args}")
+        out = self._colmap_cmd(COLMAP_EXE, 'model_analyzer', args, {})
+        logger.info(f"Reconstruction statistics:" + out.decode('utf8').replace('\n', ', '))
 
     def image_undistorter(self):
         """Undistort images and export them for MVS or to external dense reconstruction software."""
@@ -654,7 +676,7 @@ class ColmapRunner(object):
         logger.info("Running colmap 'image_undistorter'...")
         logger.debug(f"args: {args}")
         logger.debug(f"cli_args: {cli_args}")
-        self._colmap_cmd(COLMAP_EXE, 'image_undistorter', args, cli_args)
+        _ = self._colmap_cmd(COLMAP_EXE, 'image_undistorter', args, cli_args)
 
     def patch_match_stereo(self):
         """Dense 3D reconstruction / mapping using MVS after running the `image_undistorter` to initialize the workspace."""
@@ -663,7 +685,7 @@ class ColmapRunner(object):
         logger.info("Running colmap 'patch_match_stereo'...")
         logger.debug(f"args: {args}")
         logger.debug(f"cli_args: {cli_args}")
-        self._colmap_cmd(COLMAP_EXE, 'patch_match_stereo', args, cli_args)
+        _ = self._colmap_cmd(COLMAP_EXE, 'patch_match_stereo', args, cli_args)
 
     def stereo_fusion(self):
         """Fusion of `patch_match_stereo` results into to a colored point cloud."""
@@ -675,7 +697,7 @@ class ColmapRunner(object):
         logger.info("Running colmap 'stereo_fusion'...")
         logger.debug(f"args: {args}")
         logger.debug(f"cli_args: {cli_args}")
-        self._colmap_cmd(COLMAP_EXE, 'stereo_fusion', args, cli_args)
+        _ = self._colmap_cmd(COLMAP_EXE, 'stereo_fusion', args, cli_args)
 
     def run(self):
         """Run a COLMAP SfM reconstruction.
@@ -741,6 +763,8 @@ class ColmapRunner(object):
         # - If required, align sparse pointcloud to coordinate system of given camera centers:
         if self.align_pcd:
             self.model_aligner()
+        # Print statistics about reconstruction.
+        self.model_analyzer()
 
         # -- Convert COLMAP binaries (cameras, images & points) to more accessible formats:
         # - Read computed binary camera models and convert them to OpenCV cameras model
@@ -785,6 +809,8 @@ class ColmapRunner(object):
             self.stereo_fusion()
             # - Read the colored dense pointcloud:
             dense_pcd = o3d.io.read_point_cloud(f'{self.dense_dir}/fused.ply')
+            # Print statistics about reconstruction.
+            self.model_analyzer()
 
         # -- PointCloud(s) cropping by bounding-box & minimal bounding-box estimation:
         # - Try to crop the sparse pointcloud by bounding-box (if any):
@@ -816,5 +842,6 @@ class ColmapRunner(object):
         # bounding_box = {"x": [x_min, x_max],
         #                 "y": [y_min, y_max],
         #                 "z": [z_min, z_max]}
+        logger.info(f"See {self.log_file} for a detailed log about COLMAP jobs...")
 
         return points, images, cameras, sparse_pcd, dense_pcd, self.bounding_box
