@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
+from os.path import join
 from os.path import splitext
 
 import luigi
 import numpy as np
-from romitask.task import RomiTask
-from plantdb import io
 from romitask.task import ImagesFilesetExists
+from romitask.task import RomiTask
+
 from plant3dvision.colmap import ColmapRunner
 from plant3dvision.filenames import COLMAP_CAMERAS_ID
 from plant3dvision.filenames import COLMAP_DENSE_ID
@@ -15,6 +15,7 @@ from plant3dvision.filenames import COLMAP_IMAGES_ID
 from plant3dvision.filenames import COLMAP_POINTS_ID
 from plant3dvision.filenames import COLMAP_SPARSE_ID
 from plant3dvision.log import logger
+from plantdb import io
 
 
 def compute_calibrated_poses(rotmat, tvec):
@@ -51,7 +52,12 @@ def use_calibrated_poses(images_fileset, calibration_scan):
         This supposes the `images_fileset` & `calibration_scan` were acquired using the same ``ScanPath``!
 
     """
-    # TODO: Add a check, based on metadata, that the two `ScanPath` are the same!
+    # Check, that the two `Scan` are compatible:
+    try:
+        assert check_scan_parameters(images_fileset.scan, calibration_scan)
+    except AssertionError:
+        raise ValueError(f"The current scan {images_fileset.scan.id} can not be calibrated by {calibration_scan.id}!")
+
     # - Check a Colmap task has been performed for the calibration scan:
     colmap_fs = [s for s in calibration_scan.get_filesets() if "Colmap" in s.id]
     if len(colmap_fs) == 0:
@@ -85,6 +91,93 @@ def use_calibrated_poses(images_fileset, calibration_scan):
         images_fileset.get_files()[i].set_metadata("calibrated_pose", pose)
 
     return images_fileset
+
+
+def check_scan_parameters(scan_to_calibrate, calibration_scan):
+    """Check the calibration scan and scan to calibrate have the same scanning configuration.
+
+    Parameters
+    ----------
+    scan_to_calibrate : plantdb.fsdb.Scan
+        Dataset containing scan to reconstruct with calibrated poses.
+    calibration_scan : plantdb.fsdb.Scan
+        Dataset containing calibrated poses to use for reconstruction.
+
+    Returns
+    -------
+    bool
+        ``True`` if the scan configurations are the same, else ``False``.
+
+    Examples
+    --------
+    >>> import os
+    >>> from plantdb.fsdb import FSDB
+    >>> from plant3dvision.tasks.colmap import check_scan_parameters
+    >>> db = FSDB(os.environ.get('DB_LOCATION', '/data/ROMI/DB'))
+    >>> db.connect()
+    >>> db.list_scans()
+    >>> calibration_scan = db.get_scan('calibration_scan_36_2')
+    >>> scan_to_calibrate = db.get_scan('test_sgk')
+    >>> check_scan_parameters(scan_to_calibrate, calibration_scan)
+    >>> db.disconnect()
+
+    """
+    import toml
+    with open(join(calibration_scan.path(), 'scan.toml'), 'r') as f:
+        calib_scan_cfg = toml.load(f)
+    with open(join(scan_to_calibrate.path(), 'scan.toml'), 'r') as f:
+        scan2calib_cfg = toml.load(f)
+
+    diff_keys = list(dict(
+        set(calib_scan_cfg['ScanPath']['kwargs'].items()) ^ set(scan2calib_cfg['ScanPath']['kwargs'].items())).keys())
+    print({k: calib_scan_cfg['ScanPath']['kwargs'][k] for k in diff_keys})
+    print({k: scan2calib_cfg['ScanPath']['kwargs'][k] for k in diff_keys})
+
+    same_cfg = False
+    try:
+        assert calib_scan_cfg['CalibrationScan'] == scan2calib_cfg['CalibrationScan']
+    except AssertionError:
+        logger.critical(
+            f"Entries 'CalibrationScan' are not the same for {calibration_scan.id} and {scan_to_calibrate.id}!")
+        diff1, diff2 = _get_diff_between_dict(calib_scan_cfg['CalibrationScan'], scan2calib_cfg['CalibrationScan'])
+        logger.info(f"From calibration scan: {diff1}")
+        logger.info(f"From scan to calibrate: {diff2}")
+    else:
+        same_cfg = True
+
+    try:
+        assert calib_scan_cfg['ScanPath']['class_name'] == scan2calib_cfg['ScanPath']['class_name']
+    except AssertionError:
+        logger.critical(f"Entries 'ScanPath.class_name' are not the same for {calibration_scan.id} and {scan_to_calibrate.id}!")
+        diff1, diff2 = _get_diff_between_dict(calib_scan_cfg['ScanPath']['class_name'],
+                                              scan2calib_cfg['ScanPath']['class_name'])
+        logger.info(f"From calibration scan: {diff1}")
+        logger.info(f"From scan to calibrate: {diff2}")
+        same_cfg = same_cfg and False
+    else:
+        same_cfg = same_cfg and True
+
+    try:
+        assert calib_scan_cfg['ScanPath']['kwargs'] == scan2calib_cfg['ScanPath']['kwargs']
+    except AssertionError:
+        logger.critical(f"Entries 'ScanPath.kwargs' are not the same for {calibration_scan.id} and {scan_to_calibrate.id}!")
+        diff1, diff2 = _get_diff_between_dict(calib_scan_cfg['ScanPath']['kwargs'],
+                                              scan2calib_cfg['ScanPath']['kwargs'])
+        logger.info(f"From calibration scan: {diff1}")
+        logger.info(f"From scan to calibrate: {diff2}")
+        same_cfg = same_cfg and False
+    else:
+        same_cfg = same_cfg and True
+
+    return same_cfg
+
+
+def _get_diff_between_dict(d1, d2):
+    """Return the entries that are different between two dictionaries."""
+    diff_keys = list(dict(set(d1.items()) ^ set(d2.items())).keys())
+    diff1 = {k: d1.get(k, None) for k in diff_keys}
+    diff2 = {k: d2.get(k, None) for k in diff_keys}
+    return diff1, diff2
 
 
 class Colmap(RomiTask):

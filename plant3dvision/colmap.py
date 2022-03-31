@@ -1,19 +1,29 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+"""
+Python wrapper around COLMAP.
+
+You can use multiple sources of colmap executable by setting the ``COLMAP_EXE`` environment variable:
+  - use local installation (from sources) of colmap with ``export COLMAP_EXE='colmap'``
+  - use a docker image with COLMAP 3.6 with ``export COLMAP_EXE='geki/colmap'``
+  - use a docker image with COLMAP 3.7 with ``export COLMAP_EXE='roboticsmicrofarms/colmap'``
+
+Using docker image requires the docker engine to be available on your system and the docker SDK.
+"""
+
 import os
 import subprocess
 import tempfile
-from os.path import join
 from os.path import splitext
 
 import imageio
 import numpy as np
 import open3d as o3d
+
 from plant3dvision import proc3d
 from plant3dvision.log import logger
 from plant3dvision.thirdparty import read_model
-
 from plantdb import io
 
 #: List of valid colmap executable values:
@@ -586,6 +596,7 @@ class ColmapRunner(object):
                 with open(self.log_file, mode="a") as f:
                     f.writelines(out.decode('utf8'))
             else:
+                # Return the container logs decoded:
                 out = out.decode('utf8')
         else:
             logger.debug('Running subprocess: ' + ' '.join(process))
@@ -594,8 +605,9 @@ class ColmapRunner(object):
                 with open(self.log_file, mode="a") as f:
                     subprocess.run(process, check=True, stdout=f)
             else:
+                # Run the subprocess and catch its output to return it decoded
                 out = subprocess.run(process, capture_output=True)
-                out.stdout.decode('utf8')
+                out = out.stdout.decode('utf8')
         return out
 
     def feature_extractor(self):
@@ -608,7 +620,7 @@ class ColmapRunner(object):
         logger.info("Running colmap 'feature_extractor'...")
         logger.debug(f"args: {args}")
         logger.debug(f"cli_args: {cli_args}")
-        self._colmap_cmd(COLMAP_EXE, 'feature_extractor', args, cli_args)
+        _ = self._colmap_cmd(COLMAP_EXE, 'feature_extractor', args, cli_args)
 
     def matcher(self):
         """Perform feature matching after performing feature extraction."""
@@ -618,13 +630,13 @@ class ColmapRunner(object):
             logger.info("Running colmap 'exhaustive_matcher'...")
             logger.debug(f"args: {args}")
             logger.debug(f"cli_args: {cli_args}")
-            self._colmap_cmd(COLMAP_EXE, 'exhaustive_matcher', args, cli_args)
+            _ = self._colmap_cmd(COLMAP_EXE, 'exhaustive_matcher', args, cli_args)
         elif self.matcher_method == 'sequential':
             cli_args = self.all_cli_args.get('sequential_matcher', {})
             logger.info("Running colmap 'sequential_matcher'...")
             logger.debug(f"args: {args}")
             logger.debug(f"cli_args: {cli_args}")
-            self._colmap_cmd(COLMAP_EXE, 'sequential_matcher', args, cli_args)
+            _ = self._colmap_cmd(COLMAP_EXE, 'sequential_matcher', args, cli_args)
         else:
             raise ValueError(f"Unknown matcher '{self.matcher_method}!")
 
@@ -662,8 +674,8 @@ class ColmapRunner(object):
         ]
         logger.info("Running colmap 'model_analyzer'...")
         logger.debug(f"args: {args}")
-        out = self._colmap_cmd(COLMAP_EXE, 'model_analyzer', args, {})
-        logger.info(f"Reconstruction statistics:" + out.decode('utf8').replace('\n', ', '))
+        out = self._colmap_cmd(COLMAP_EXE, 'model_analyzer', args, {}, to_log=False)
+        logger.info(f"Reconstruction statistics: " + out.replace('\n', ', '))
 
     def image_undistorter(self):
         """Undistort images and export them for MVS or to external dense reconstruction software."""
@@ -758,6 +770,7 @@ class ColmapRunner(object):
         self.feature_extractor()
         # - Performs image features matching:
         self.matcher()
+
         # - Performs sparse pointcloud reconstruction:
         self.mapper()
         # - If required, align sparse pointcloud to coordinate system of given camera centers:
@@ -816,7 +829,7 @@ class ColmapRunner(object):
         # - Try to crop the sparse pointcloud by bounding-box (if any):
         if self.bounding_box is not None:
             crop_sparse_pcd = proc3d.crop_point_cloud(sparse_pcd, self.bounding_box)
-            # - Replace the sparse pointcloud with cropped version only if its not empty:
+            # - Replace the sparse pointcloud with cropped version only if it is not empty:
             if len(crop_sparse_pcd.points) == 0:
                 msg = "Empty sparse point cloud after cropping by bounding box!"
                 logger.critical(msg)
@@ -827,7 +840,7 @@ class ColmapRunner(object):
         # - Try to crop the dense pointcloud (if any) by bounding-box (if any):
         if self.bounding_box is not None and self.compute_dense:
             crop_dense_pcd = proc3d.crop_point_cloud(dense_pcd, self.bounding_box)
-            # - Replace the dense pointcloud with cropped version only if its not empty:
+            # - Replace the dense pointcloud with cropped version only if it is not empty:
             if len(crop_dense_pcd.points) == 0:
                 msg = "Empty dense point cloud after cropping by bounding box!"
                 logger.critical(msg)
