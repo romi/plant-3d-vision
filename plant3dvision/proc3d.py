@@ -493,7 +493,7 @@ def vol2pcd(volume, origin, voxel_size, level_set_value=0):
     logger.debug("Number of points = %d" % len(x))
 
     def _compute_normal(i):
-        p_i, normal_i = np.nan, np.nan
+        p_i, normal_i = np.array([np.nan, np.nan, np.nan]), np.array([np.nan, np.nan, np.nan])
         grad = np.array([gx[x[i], y[i], z[i]],
                          gy[x[i], y[i], z[i]],
                          gz[x[i], y[i], z[i]]])
@@ -516,7 +516,7 @@ def vol2pcd(volume, origin, voxel_size, level_set_value=0):
 
     logger.info("Sorting normals...")
     pts, normals = zip(*all_norms)
-    not_none_idx = np.where(~np.isnan(pts).any(axis=1))[0]  # Detect np.nan (if grad_norm > 0)
+    not_none_idx = np.where(~np.isnan(normals).any(axis=1))[0]  # Detect np.nan (if grad_norm > 0)
     pts = np.array(pts)[not_none_idx]  # Keep points with a positive gradiant norm
     normals = np.array(normals)[not_none_idx]  # Keep normals with a positive gradiant norm
 
