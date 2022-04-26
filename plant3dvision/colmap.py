@@ -849,12 +849,13 @@ class ColmapRunner(object):
             else:
                 dense_pcd = crop_dense_pcd
         # - Get the sparse pointcloud bounding-box (min & max in each direction):
-        # points_array = np.asarray(sparse_pcd.points)
-        # x_min, y_min, z_min = points_array.min(axis=0)
-        # x_max, y_max, z_max = points_array.max(axis=0)
-        # bounding_box = {"x": [x_min, x_max],
-        #                 "y": [y_min, y_max],
-        #                 "z": [z_min, z_max]}
+        if self.bounding_box is None:
+            points_array = np.asarray(sparse_pcd.points)
+            x_min, y_min, z_min = points_array.min(axis=0)
+            x_max, y_max, z_max = points_array.max(axis=0)
+            self.bounding_box = {"x": [x_min, x_max],
+                                 "y": [y_min, y_max],
+                                 "z": [z_min, z_max]}
         logger.info(f"See {self.log_file} for a detailed log about COLMAP jobs...")
 
         return points, images, cameras, sparse_pcd, dense_pcd, self.bounding_box
