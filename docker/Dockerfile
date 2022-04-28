@@ -26,13 +26,16 @@ RUN apt-get update && \
     ocl-icd-libopencl1 opencl-headers clinfo libjpeg-dev libffi-dev && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
-    # Ugly fix for OpenCL:
-    ln -s /usr/lib/x86_64-linux-gnu/libOpenCL.so.1 /usr/lib/libOpenCL.so && \
     # Create a non-root user and give it rights over a "myapp" folder:
     adduser --disabled-password --gecos '' ${USER_NAME} && \
-    mkdir -p ${DB_LOCATION} && chown -R ${USER_NAME} /myapp && \
-    mkdir -p /venv && chown -R ${USER_NAME} /venv && \
+    # Create the folder used to mount the database:
+    mkdir -m 777 -p ${DB_LOCATION} && \
+    chown -R ${USER_NAME} /myapp && \
+    # Create a folder to create python venv:
+    mkdir -p /venv && \
+    chown -R ${USER_NAME} /venv && \
     # Ugly fix for OpenCL:
+    ln -s /usr/lib/x86_64-linux-gnu/libOpenCL.so.1 /usr/lib/libOpenCL.so && \
     mkdir -p /etc/OpenCL/vendors && \
     echo "libnvidia-opencl.so.1" > /etc/OpenCL/vendors/nvidia.icd
 # Change to non-root user:
@@ -65,4 +68,4 @@ COPY --chown=${USER_NAME} ./config ./config
 # Download a model file:
 RUN ./get_model.sh
 
-CMD ["./docker-entrypoint.sh"]
+CMD [". /venv/bin/activate && /venv/bin/romi_run_task -h"]
