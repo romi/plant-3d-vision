@@ -61,7 +61,7 @@ class Masks(FileByFileTask):
         The task to use upstream to the `Masks` tasks. It should be a tasks that generates a ``Fileset`` of RGB images.
         It can thus be ``ImagesFilesetExists`` or ``Undistorted``. Defaults to `'Undistorted'`.
     type : luigi.Parameter, optional
-        The type of image tranformation algorithm use prior to masking by thresholding.
+        The type of image tranformation algorithm to use prior to masking by thresholding.
         It can be "linear" or "excess_green". Defaults to `'linear'`.
         Have a look at the documentation [mask_type]_ for more details.
     parameters : luigi.ListParameter, optional
@@ -71,7 +71,7 @@ class Masks(FileByFileTask):
     dilation : luigi.IntParameter, optional
         Dilation factor for the binary mask images. Defaults to `0`.
     threshold : luigi.FloatParameter, optional
-        Binarization threshold applied after transforming the image defaults to ``0.3``.
+        Binarization threshold applied after transforming the image. Defaults to ``0.3``.
 
     See Also
     --------
@@ -80,7 +80,7 @@ class Masks(FileByFileTask):
 
     References
     ----------
-    .. [mask_type] https://docs.romi-project.eu/Scanner/explanations/mask/
+    .. [mask_type] https://docs.romi-project.eu/Scanner/explanations/masks/
 
     """
     upstream_task = luigi.TaskParameter(default=Undistorted)
