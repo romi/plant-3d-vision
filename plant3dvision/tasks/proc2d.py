@@ -3,22 +3,27 @@
 
 import luigi
 import numpy as np
+from skimage.exposure import rescale_intensity
+
+from plant3dvision.log import logger
+from plant3dvision.tasks.colmap import Colmap
 from plantdb import io
 from romitask.task import FileByFileTask
 from romitask.task import FilesetExists
 from romitask.task import ImagesFilesetExists
-from plant3dvision.log import logger
-from plant3dvision.tasks.colmap import Colmap
-from skimage.exposure import rescale_intensity
 
 
 class Undistorted(FileByFileTask):
-    """ Undistorts images using computed intrinsic camera parameters
+    """Fix images distortion using computed intrinsic camera parameters by Colmap.
 
-    Module: plant3dvision.tasks.proc2d
-    Default upstream tasks: Scan, Colmap
-    Upstream task format: Fileset with image files
-    Output fileset format: Fileset with image files
+    This task requires the ``'Colmap'`` task.
+    The output of this task is an image fileset.
+
+    Parameters
+    ----------
+    upstream_task : luigi.TaskParameter, optional
+        The task to use upstream to the `Undistorted` tasks. It should be a tasks that generates a ``Fileset`` of RGB images.
+        It can thus be ``'ImagesFilesetExists'`` or ``'Colmap'``. Defaults to ``'ImagesFilesetExists'``.
 
     """
     upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)
@@ -44,29 +49,43 @@ class Undistorted(FileByFileTask):
             logger.error(f"Could not find a camera model in '{fi.filename}' metadata!")
             return
 
-class Masks(FileByFileTask):
-    """ Compute masks using several functions
 
-    Module: plant3dvision.tasks.proc2d
-    Default upstream tasks: Undistorted
-    Upstream task format: Fileset with image files
-    Output fileset format: Fileset with grayscale or binary image files
-    
+class Masks(FileByFileTask):
+    """ Compute masks from RGB images.
+
+    The output of this task is a binary image fileset.
+
     Parameters
     ----------
-    type : luigi.Parameter
-        "linear", "excess_green" (see Segmentation explanation in documentation)
-    parameters : luigi.ListParameter
-        list of scalar parameters, depends on type
-    dilation : luigi.IntParameter
-        by how much to dilate masks if binary
+    upstream_task : luigi.TaskParameter, optional
+        The task to use upstream to the `Masks` tasks. It should be a tasks that generates a ``Fileset`` of RGB images.
+        It can thus be ``ImagesFilesetExists`` or ``Undistorted``. Defaults to `'Undistorted'`.
+    type : luigi.Parameter, optional
+        The type of image tranformation algorithm use prior to masking by thresholding.
+        It can be "linear" or "excess_green". Defaults to `'linear'`.
+        Have a look at the documentation [mask_type]_ for more details.
+    parameters : luigi.ListParameter, optional
+        List of parameters, only used if `type` is `"linear"`.
+        They are the linear coefficient to apply to each RGB channel of the original image.
+        Defaults to `[0, 1, 0]`.
+    dilation : luigi.IntParameter, optional
+        Dilation factor for the binary mask images. Defaults to `0`.
     threshold : luigi.FloatParameter, optional
-        threshold for binarization, default=0.0
+        Binarization threshold applied after transforming the image defaults to ``0.3``.
+
+    See Also
+    --------
+    plant3dvision.proc2d.linear
+    plant3dvision.proc2d.excess_green
+
+    References
+    ----------
+    .. [mask_type] https://docs.romi-project.eu/Scanner/explanations/mask/
 
     """
     upstream_task = luigi.TaskParameter(default=Undistorted)
     type = luigi.Parameter("linear")
-    parameters = luigi.ListParameter(default=[0,1,0])
+    parameters = luigi.ListParameter(default=[0, 1, 0])
     dilation = luigi.IntParameter(default=0)
     threshold = luigi.FloatParameter(default=0.3)
 
@@ -78,7 +97,7 @@ class Masks(FileByFileTask):
         logger.debug(f"x shape: {x.shape}")
         if self.type == "linear":
             coefs = self.parameters
-            return (coefs[0] * x[:, :, 0] + coefs[1] * x[:, :, 1] + coefs[2] * x[:, :, 2])
+            return proc2d.linear(x, coefs)
         elif self.type == "excess_green":
             return proc2d.excess_green(x)
         else:
@@ -89,10 +108,10 @@ class Masks(FileByFileTask):
         logger.debug(f"Loading file: {fi.filename}")
         x = io.read_image(fi)
         x = self.f_raw(x)
-        
+
         x = x > self.threshold
         if self.dilation > 0:
-           x = proc2d.dilation(x, self.dilation)
+            x = proc2d.dilation(x, self.dilation)
         x = np.array(255 * x, dtype=np.uint8)
 
         outfi = outfs.create_file(fi.id)
@@ -103,6 +122,7 @@ class Masks(FileByFileTask):
 class ModelFileset(FilesetExists):
     # scan_id = luigi.Parameter()
     fileset_id = "models"
+
 
 class Segmentation2D(Masks):
     """ Compute masks using trained deep learning models.
