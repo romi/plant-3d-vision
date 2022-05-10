@@ -300,11 +300,16 @@ class Colmap(RomiTask):
 
         # - Defines if colmap may use a calibration:
         use_calibration = self.calibration_scan_id != ""
-        if self.calibration_scan_id != "":
+        if use_calibration:
             logger.info(f"Using calibration scan: {self.calibration_scan_id}...")
             db = images_fileset.scan.db
             calibration_scan = db.get_scan(self.calibration_scan_id)
             images_fileset = use_calibrated_poses(images_fileset, calibration_scan)
+            # Create the calibration figure:
+            cnc_poses = {im.id: im.get_metadata("approximate_pose") for im in images_fileset.get_files()}
+            colmap_poses = {im.id: im.get_metadata("calibrated_pose") for im in images_fileset.get_files()}
+            calibration_figure(cnc_poses, colmap_poses, path=self.output().get().path(),
+                               scan_id=images_fileset.scan.id, calib_scan_id=str(self.calibration_scan_id))
         else:
             logger.info("No calibration scan defined!")
 
@@ -342,3 +347,111 @@ class Colmap(RomiTask):
             io.write_point_cloud(outfile, dense)
         # - Save the point-cloud bounding-box in task metadata
         self.output().get().set_metadata("bounding_box", bounding_box)
+
+
+def calibration_figure(cnc_poses, colmap_poses, path=None, image_id=False, scan_id=None, calib_scan_id=None):
+    """Create a figure showing the effect of calibration procedure.
+
+    Parameters
+    ----------
+    cnc_poses : dict
+        Image id indexed dictionary of the "approximate poses" (CNC).
+    colmap_poses : dict
+        Image id indexed dictionary of the "calibrated poses" (Colmap).
+    path : str, optional
+        Path where to save the figure.
+    image_id : bool, optional
+        If ``True`` add the image id next to the markers.
+        ``False`` by default.
+    scan_id : str, optional
+        Name of the scan to calibrate.
+    calib_scan_id : str, optional
+        Name of the calibration scan.
+
+    Examples
+    --------
+    >>> import os
+    >>> from plantdb.fsdb import FSDB
+    >>> from plant3dvision.tasks.colmap import calibration_figure
+    >>> from plant3dvision.tasks.colmap import use_calibrated_poses
+    >>> db = FSDB(os.environ.get('DB_LOCATION', '/data/ROMI/DB'))
+    >>> # Example 1 - Compute & use the calibrated poses from/on a calibration scan:
+    >>> db.connect()
+    >>> db.list_scans()
+    >>> scan_id = calib_scan_id = "calibration_scan_350"
+    >>> scan = db.get_scan(scan_id)
+    >>> calib_scan = db.get_scan(calib_scan_id)
+    >>> images_fileset = scan.get_fileset('images')
+    >>> images_fileset = use_calibrated_poses(images_fileset, calib_scan)
+    >>> cnc_poses = {im.id: im.get_metadata("approximate_pose") for im in images_fileset.get_files()}
+    >>> colmap_poses = {im.id: im.get_metadata("calibrated_pose") for im in images_fileset.get_files()}
+    >>> calibration_figure(cnc_poses, colmap_poses, scan_id=scan_id, calib_scan_id=calib_scan_id)
+    >>> db.disconnect()
+    >>> # Example 2 - Compute & use the calibrated poses from/on a scan:
+    >>> db.connect()
+    >>> db.list_scans()
+    >>> scan_id = calib_scan_id = "test_sgk"
+    >>> scan = db.get_scan(scan_id)
+    >>> calib_scan = db.get_scan(calib_scan_id)
+    >>> images_fileset = scan.get_fileset('images')
+    >>> images_fileset = use_calibrated_poses(images_fileset, calib_scan)
+    >>> cnc_poses = {im.id: im.get_metadata("approximate_pose") for im in images_fileset.get_files()}
+    >>> colmap_poses = {im.id: im.get_metadata("calibrated_pose") for im in images_fileset.get_files()}
+    >>> calibration_figure(cnc_poses, colmap_poses, scan_id=scan_id, calib_scan_id=calib_scan_id)
+    >>> db.disconnect()
+    >>> # Example 3 - Compute the calibrated poses with a calibration scan & use it on a scan:
+    >>> db.connect()
+    >>> db.list_scans()
+    >>> scan_id = "test_sgk"  # TODO: change to use a scan with same `z` in `Scan.Path` as calibration scan
+    >>> calib_scan_id = "calibration_scan_350"
+    >>> scan = db.get_scan(scan_id)
+    >>> calib_scan = db.get_scan(calib_scan_id)
+    >>> images_fileset = scan.get_fileset('images')
+    >>> images_fileset = use_calibrated_poses(images_fileset, calib_scan)
+    >>> cnc_poses = {im.id: im.get_metadata("approximate_pose") for im in images_fileset.get_files()}
+    >>> colmap_poses = {im.id: im.get_metadata("calibrated_pose") for im in images_fileset.get_files()}
+    >>> calibration_figure(cnc_poses, colmap_poses, scan_id=scan_id, calib_scan_id=calib_scan_id)
+    >>> db.disconnect()
+
+    """
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+
+    title = f"Colmap calibration - {scan_id}/{calib_scan_id}"
+    plt.title(title)
+
+    x, y, z, pan, tilt = np.array([v for _, v in cnc_poses.items() if v is not None]).T
+    im_ids = [im_id for im_id, v in cnc_poses.items() if v is not None]
+    # Add a red 'x' marker to every non-null CNC coordinates:
+    cnc_scatter = ax.scatter(x, y, marker="x", c="red")
+    cnc_scatter.set_label("CNC poses")
+
+    if image_id:
+        # Add image ids as text:
+        for i, im_id in enumerate(im_ids):
+            ax.text(x[i], y[i], im_id, ha='center', va='bottom')
+
+    # Add a blue '+' marker to every non-null Colmap coordinates:
+    X, Y, Z = np.array([v for _, v in colmap_poses.items() if v is not None]).T
+    colmap_scatter = ax.scatter(X, Y, marker="+", c="blue")
+    colmap_scatter.set_label("Colmap poses")
+
+    # Compute the "mapping" as arrows:
+    XX, YY = [], []
+    U, V = [], []
+    for im_id in colmap_poses.keys():
+        if cnc_poses[im_id] is not None and colmap_poses[im_id] is not None:
+            XX.append(cnc_poses[im_id][0])
+            YY.append(cnc_poses[im_id][1])
+            U.append(colmap_poses[im_id][0] - cnc_poses[im_id][0])
+            V.append(colmap_poses[im_id][1] - cnc_poses[im_id][1])
+    # Show the mapping:
+    q = ax.quiver(XX, YY, U, V, scale_units='xy', scale=1., width=0.003)
+
+    # Add the legend
+    plt.legend()
+
+    if path is not None:
+        plt.savefig(join(path, "calibration.png"))
+    else:
+        plt.show()
