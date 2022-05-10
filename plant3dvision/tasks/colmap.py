@@ -51,6 +51,40 @@ def use_calibrated_poses(images_fileset, calibration_scan):
     .. warning::
         This supposes the `images_fileset` & `calibration_scan` were acquired using the same ``ScanPath``!
 
+    See Also
+    --------
+    plant3dvision.tasks.colmap.check_scan_parameters
+
+    Raises
+    ------
+    ValueError
+        If the `images_fileset` & `calibration_scan` do not have the same scanning (acquisition) parameters.
+
+    Examples
+    --------
+    >>> import os
+    >>> from plantdb.fsdb import FSDB
+    >>> from plant3dvision.tasks.colmap import use_calibrated_poses
+    >>> db = FSDB(os.environ.get('DB_LOCATION', '/data/ROMI/DB'))
+    >>> # Example 1 - Try to use the calibrated poses on a scan with different acquisition parameters:
+    >>> db.connect()
+    >>> db.list_scans()
+    >>> calib_scan = db.get_scan('calibration_scan_350')
+    >>> scan = db.get_scan('sango36')
+    >>> images_fileset = scan.get_fileset('images')
+    >>> _ = use_calibrated_poses(images_fileset, calib_scan)  # raise a ValueError
+    >>> db.disconnect()
+    >>> # Example 2 - Compute & add the calibrated poses to a scan with the same acquisition parameters:
+    >>> db.connect()
+    >>> db.list_scans()
+    >>> calib_scan = db.get_scan('calibration_scan_350')
+    >>> scan = db.get_scan('sango36')  # TODO: change to use a scan with same `z` in `Scan.Path` as calibration scan
+    >>> images_fileset = scan.get_fileset('images')
+    >>> out_fs = use_calibrated_poses(images_fileset, calib_scan)
+    >>> colmap_poses = {im.id: im.get_metadata("calibrated_pose") for im in out_fs.get_files()}
+    >>> print(colmap_poses)
+    >>> db.disconnect()
+
     """
     # Check, that the two `Scan` are compatible:
     try:
