@@ -19,11 +19,27 @@ ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
 
 # Change Shell to 'bash', default is 'sh'
 SHELL [ "/bin/bash", "-c" ]
-# Update package manager & install requirements:
-RUN apt-get update && \
+
+RUN echo "Fix CUDA GPG key..." && \
+    # Install the cuda-keyring package (https://developer.nvidia.com/blog/updating-the-cuda-linux-gpg-repository-key/) \
+    apt-key del 7fa2af80 && \
+    wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/cuda-keyring_1.0-1_all.deb && \
+    dpkg -i cuda-keyring_1.0-1_all.deb && \
+    rm cuda-keyring_1.0-1_all.deb && \
+    # Remove duplicate .list entries (https://developer.nvidia.com/blog/updating-the-cuda-linux-gpg-repository-key/)
+    sed -i '/developer\.download\.nvidia\.com\/compute\/cuda\/repos/d' /etc/apt/sources.list && \
+    # Remove Machine Learning repository (https://forums.developer.nvidia.com/t/updating-the-cuda-linux-gpg-repository-key/212897/8)
+    sed -i '/developer\.download\.nvidia\.com\/compute\/machine-learning\/repos/d' /etc/apt/sources.list.d/* && \
+    rm /etc/apt/sources.list.d/cuda*.list && \
+    echo "Resume dependencies installation..." && \
+    # Update package manager
+    apt-get update && \
+    # Install the required dependencies
     apt-get install -yq --no-install-recommends \
-    wget emacs-nox \
-    ocl-icd-libopencl1 opencl-headers clinfo libjpeg-dev libffi-dev && \
+    emacs-nox \
+    ocl-icd-libopencl1 opencl-headers clinfo \
+    libjpeg-dev libffi-dev && \
+    # Clean-up apt cache
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
     # Create a non-root user and give it rights over a "myapp" folder:
