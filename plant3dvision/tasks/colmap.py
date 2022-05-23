@@ -537,18 +537,21 @@ def calibration_figure(cnc_poses, colmap_poses, path=None, image_id=False, scan_
     """
     # TODO: add XY box for `Scan.metadata.workspace`
     # TODO: add `center_x` & `center_y` from `ScanPath.kwargs`
-
     import matplotlib.pyplot as plt
+    from scipy.spatial import distance
+
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
 
     title = f"Colmap calibration - {scan_id}/{calib_scan_id}"
-    plt.title(title)
+    plt.suptitle(title)
 
     x, y, z, pan, tilt = np.array([v for _, v in cnc_poses.items() if v is not None]).T
     im_ids = [im_id for im_id, v in cnc_poses.items() if v is not None]
     # Add a red 'x' marker to every non-null CNC coordinates:
     cnc_scatter = ax.scatter(x, y, marker="x", c="red")
     cnc_scatter.set_label("CNC poses")
+    plt.xlabel('X')
+    plt.ylabel('Y')
 
     if not image_id:
         im_ids = list(range(len(im_ids)))
@@ -565,12 +568,17 @@ def calibration_figure(cnc_poses, colmap_poses, path=None, image_id=False, scan_
     # Compute the "mapping" as arrows:
     XX, YY = [], []
     U, V = [], []
+    err = []
     for im_id in colmap_poses.keys():
         if cnc_poses[im_id] is not None and colmap_poses[im_id] is not None:
             XX.append(cnc_poses[im_id][0])
             YY.append(cnc_poses[im_id][1])
             U.append(colmap_poses[im_id][0] - cnc_poses[im_id][0])
             V.append(colmap_poses[im_id][1] - cnc_poses[im_id][1])
+            err = distance.euclidean(cnc_poses[im_id][0:3], colmap_poses[im_id][0:3])
+    logger.info(f"Average euclidean distance: {round(np.nanmean(err), 3)}mm.")
+    plt.title(f"Average euclidean distance: {round(np.nanmean(err), 3)}mm.")
+
     # Show the mapping:
     q = ax.quiver(XX, YY, U, V, scale_units='xy', scale=1., width=0.003)
 
