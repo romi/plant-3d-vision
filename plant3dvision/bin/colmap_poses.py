@@ -1,0 +1,45 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+Visualize the camera positions estimated by Colmap tasks.
+"""
+
+import argparse
+from pathlib import Path
+
+from plant3dvision.tasks.colmap import calibration_figure
+from plant3dvision.tasks.colmap import get_cnc_poses
+from plant3dvision.tasks.colmap import get_colmap_poses
+from plantdb.fsdb import FSDB
+
+
+def parsing():
+    DESC = """Visualize the camera positions estimated by Colmap tasks."""
+    parser = argparse.ArgumentParser(description=DESC)
+
+    parser.add_argument("dataset",
+                        help="Path of the dataset.")
+
+    return parser
+
+
+def run():
+    # - Parse the input arguments to variables:
+    parser = parsing()
+    args = parser.parse_args()
+
+    dataset_path = Path(args.dataset)
+    db_location = dataset_path.parent
+    scan_name = dataset_path.name
+
+    db = FSDB(db_location)
+    db.connect()
+
+    dataset = db.get_scan(scan_name)
+    cnc_poses = get_cnc_poses(dataset)
+    colmap_poses = get_colmap_poses(dataset)
+    calibration_figure(cnc_poses, colmap_poses, scan_id=scan_name, calib_scan_id='Colmap')
+
+if __name__ == "__main__":
+    run()

@@ -5,8 +5,6 @@ from os.path import splitext
 
 import luigi
 import numpy as np
-from romitask.task import ImagesFilesetExists
-from romitask.task import RomiTask
 
 from plant3dvision.colmap import ColmapRunner
 from plant3dvision.filenames import COLMAP_CAMERAS_ID
@@ -16,6 +14,8 @@ from plant3dvision.filenames import COLMAP_POINTS_ID
 from plant3dvision.filenames import COLMAP_SPARSE_ID
 from plant3dvision.log import logger
 from plantdb import io
+from romitask.task import ImagesFilesetExists
+from romitask.task import RomiTask
 
 
 def compute_calibrated_poses(rotmat, tvec):
@@ -36,6 +36,108 @@ def compute_calibrated_poses(rotmat, tvec):
     """
     pose = np.dot(-rotmat.transpose(), (tvec.transpose()))
     return np.array(pose).flatten().tolist()
+
+
+def get_cnc_poses(scan_dataset):
+    """Get the CNC poses from a given dataset.
+
+    Parameters
+    ----------
+    scan_dataset : plantdb.db.Scan
+        The scan to get the CNC poses from.
+
+    Returns
+    -------
+    dict
+        Image-id indexed dictionary of CNC poses as X, Y, Z, pan, tilt.
+
+    Examples
+    --------
+    >>> import os
+    >>> from plantdb.fsdb import FSDB
+    >>> from plant3dvision.tasks.colmap import get_cnc_poses
+    >>> db = FSDB(os.environ.get('DB_LOCATION', '/data/ROMI/DB'))
+    >>> # Example 1 - Compute & use the calibrated poses from/on a calibration scan:
+    >>> db.connect()
+    >>> db.list_scans()
+    >>> scan_id = "sango36"
+    >>> scan = db.get_scan(scan_id)
+    >>> cnc_poses = get_cnc_poses(scan)
+    >>> print(cnc_poses)
+    >>> db.disconnect()
+
+    """
+    images_fileset = scan_dataset.get_fileset('images')
+    return {im.id: im.get_metadata("approximate_pose") for im in images_fileset.get_files()}
+
+
+def get_colmap_poses(scan_dataset):
+    """Get the camera poses estimated by colmap fom a given dataset.
+
+    Parameters
+    ----------
+    scan_dataset : plantdb.db.Scan
+        The scan to get the colmap poses from.
+
+    Returns
+    -------
+    dict
+        Image-id indexed dictionary of camera poses as X, Y, Z.
+
+    Examples
+    --------
+    >>> import os
+    >>> from plantdb.fsdb import FSDB
+    >>> from plant3dvision.tasks.colmap import get_colmap_poses
+    >>> db = FSDB(os.environ.get('DB_LOCATION', '/data/ROMI/DB'))
+    >>> # Example 1 - Compute & use the calibrated poses from/on a calibration scan:
+    >>> db.connect()
+    >>> db.list_scans()
+    >>> scan_id = "sango36"
+    >>> scan = db.get_scan(scan_id)
+    >>> colmap_poses = get_colmap_poses(scan)
+    >>> print(colmap_poses)
+    >>> db.disconnect()
+
+    """
+    scan_name = scan_dataset.id
+    # List all filesets and get the one corresponding to the 'Colmap' task:
+    fs = scan_dataset.get_filesets()
+    fs_names = [f.id for f in fs]
+    # Check we have at least one dataset related to the 'Colmap' task:
+    try:
+        assert any([fs_id.startswith("Colmap") for fs_id in fs_names])
+    except AssertionError:
+        logger.error(f"Could not find a Colmap related dataset in '{scan_name}'!")
+        exit(1)
+    # Check we do not have more than one dataset related to the 'Colmap' task:
+    try:
+        assert sum([fs_id.startswith("Colmap") for fs_id in fs_names]) == 1
+    except AssertionError:
+        logger.error(f"Found more than one Colmap related dataset in '{scan_name}'!")
+        exit(1)
+
+    colmap_fs = [f for f in fs if f.id.startswith("Colmap")][0]
+    images_fileset = scan_dataset.get_fileset('images')
+
+    # - Read the JSON file with colmap estimated poses:
+    poses = io.read_json(colmap_fs.get_file(COLMAP_IMAGES_ID))
+
+    colmap_poses = {}
+    for i, fi in enumerate(images_fileset.get_files()):
+        # - Search the calibrated poses (from JSON) matching the calibration image id:
+        key = None
+        for k in poses.keys():
+            if splitext(poses[k]['name'])[0] == fi.id:
+                key = k
+                break
+        # - Raise an error if previous search failed!
+        if key is None:
+            raise Exception(f"Could not find pose of image '{fi.id}' in calibration scan!")
+        # - Compute the 'calibrated_pose':
+        colmap_poses[fi.id] = compute_calibrated_poses(np.array(poses[key]['rotmat']), np.array(poses[key]['tvec']))
+
+    return colmap_poses
 
 
 def use_calibrated_poses(images_fileset, calibration_scan):
@@ -69,16 +171,20 @@ def use_calibrated_poses(images_fileset, calibration_scan):
     >>> # Example 1 - Try to use the calibrated poses on a scan with different acquisition parameters:
     >>> db.connect()
     >>> db.list_scans()
-    >>> calib_scan = db.get_scan('calibration_scan_350')
-    >>> scan = db.get_scan('sango36')
+    >>> scan_id = "sgk3"
+    >>> calib_scan_id = "calibration_scan_350"
+    >>> scan = db.get_scan(scan_id)
+    >>> calib_scan = db.get_scan(calib_scan_id)
     >>> images_fileset = scan.get_fileset('images')
     >>> _ = use_calibrated_poses(images_fileset, calib_scan)  # raise a ValueError
     >>> db.disconnect()
     >>> # Example 2 - Compute & add the calibrated poses to a scan with the same acquisition parameters:
     >>> db.connect()
     >>> db.list_scans()
-    >>> calib_scan = db.get_scan('calibration_scan_350')
-    >>> scan = db.get_scan('sango36')  # TODO: change to use a scan with same `z` in `Scan.Path` as calibration scan
+    >>> scan_id = "sgk3"
+    >>> calib_scan_id = "calibration_350_40_36"
+    >>> scan = db.get_scan(scan_id)
+    >>> calib_scan = db.get_scan(calib_scan_id)
     >>> images_fileset = scan.get_fileset('images')
     >>> out_fs = use_calibrated_poses(images_fileset, calib_scan)
     >>> colmap_poses = {im.id: im.get_metadata("calibrated_pose") for im in out_fs.get_files()}
@@ -164,8 +270,8 @@ def check_scan_parameters(scan_to_calibrate, calibration_scan):
 
     diff_keys = list(dict(
         set(calib_scan_cfg['ScanPath']['kwargs'].items()) ^ set(scan2calib_cfg['ScanPath']['kwargs'].items())).keys())
-    print({k: calib_scan_cfg['ScanPath']['kwargs'][k] for k in diff_keys})
-    print({k: scan2calib_cfg['ScanPath']['kwargs'][k] for k in diff_keys})
+    logger.debug({k: calib_scan_cfg['ScanPath']['kwargs'][k] for k in diff_keys})
+    logger.debug({k: scan2calib_cfg['ScanPath']['kwargs'][k] for k in diff_keys})
 
     same_cfg = False
     try:
@@ -182,7 +288,8 @@ def check_scan_parameters(scan_to_calibrate, calibration_scan):
     try:
         assert calib_scan_cfg['ScanPath']['class_name'] == scan2calib_cfg['ScanPath']['class_name']
     except AssertionError:
-        logger.critical(f"Entries 'ScanPath.class_name' are not the same for {calibration_scan.id} and {scan_to_calibrate.id}!")
+        logger.critical(
+            f"Entries 'ScanPath.class_name' are not the same for {calibration_scan.id} and {scan_to_calibrate.id}!")
         diff1, diff2 = _get_diff_between_dict(calib_scan_cfg['ScanPath']['class_name'],
                                               scan2calib_cfg['ScanPath']['class_name'])
         logger.info(f"From calibration scan: {diff1}")
@@ -194,7 +301,8 @@ def check_scan_parameters(scan_to_calibrate, calibration_scan):
     try:
         assert calib_scan_cfg['ScanPath']['kwargs'] == scan2calib_cfg['ScanPath']['kwargs']
     except AssertionError:
-        logger.critical(f"Entries 'ScanPath.kwargs' are not the same for {calibration_scan.id} and {scan_to_calibrate.id}!")
+        logger.critical(
+            f"Entries 'ScanPath.kwargs' are not the same for {calibration_scan.id} and {scan_to_calibrate.id}!")
         diff1, diff2 = _get_diff_between_dict(calib_scan_cfg['ScanPath']['kwargs'],
                                               scan2calib_cfg['ScanPath']['kwargs'])
         logger.info(f"From calibration scan: {diff1}")
@@ -402,8 +510,21 @@ def calibration_figure(cnc_poses, colmap_poses, path=None, image_id=False, scan_
     >>> # Example 3 - Compute the calibrated poses with a calibration scan & use it on a scan:
     >>> db.connect()
     >>> db.list_scans()
-    >>> scan_id = "test_sgk"  # TODO: change to use a scan with same `z` in `Scan.Path` as calibration scan
-    >>> calib_scan_id = "calibration_scan_350"
+    >>> scan_id = "sgk3"
+    >>> calib_scan_id = "calibration_350_40_36"
+    >>> scan = db.get_scan(scan_id)
+    >>> calib_scan = db.get_scan(calib_scan_id)
+    >>> images_fileset = scan.get_fileset('images')
+    >>> images_fileset = use_calibrated_poses(images_fileset, calib_scan)
+    >>> cnc_poses = {im.id: im.get_metadata("approximate_pose") for im in images_fileset.get_files()}
+    >>> colmap_poses = {im.id: im.get_metadata("calibrated_pose") for im in images_fileset.get_files()}
+    >>> calibration_figure(cnc_poses, colmap_poses, scan_id=scan_id, calib_scan_id=calib_scan_id)
+    >>> db.disconnect()
+    >>> # Example 3 - Compute the calibrated poses with a calibration scan & use it on a scan:
+    >>> db.connect()
+    >>> db.list_scans()
+    >>> scan_id = "Sangoku_90_300_36_1_calib"
+    >>> calib_scan_id = "Sangoku_90_300_36_1_calib"
     >>> scan = db.get_scan(scan_id)
     >>> calib_scan = db.get_scan(calib_scan_id)
     >>> images_fileset = scan.get_fileset('images')
@@ -414,6 +535,9 @@ def calibration_figure(cnc_poses, colmap_poses, path=None, image_id=False, scan_
     >>> db.disconnect()
 
     """
+    # TODO: add XY box for `Scan.metadata.workspace`
+    # TODO: add `center_x` & `center_y` from `ScanPath.kwargs`
+
     import matplotlib.pyplot as plt
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
 
@@ -426,10 +550,12 @@ def calibration_figure(cnc_poses, colmap_poses, path=None, image_id=False, scan_
     cnc_scatter = ax.scatter(x, y, marker="x", c="red")
     cnc_scatter.set_label("CNC poses")
 
-    if image_id:
-        # Add image ids as text:
-        for i, im_id in enumerate(im_ids):
-            ax.text(x[i], y[i], im_id, ha='center', va='bottom')
+    if not image_id:
+        im_ids = list(range(len(im_ids)))
+
+    # Add image or point ids as text:
+    for i, im_id in enumerate(im_ids):
+        ax.text(x[i], y[i], f" {im_id}", ha='left', va='center', fontfamily='monospace')
 
     # Add a blue '+' marker to every non-null Colmap coordinates:
     X, Y, Z = np.array([v for _, v in colmap_poses.items() if v is not None]).T
@@ -455,3 +581,4 @@ def calibration_figure(cnc_poses, colmap_poses, path=None, image_id=False, scan_
         plt.savefig(join(path, "calibration.png"))
     else:
         plt.show()
+    return None
