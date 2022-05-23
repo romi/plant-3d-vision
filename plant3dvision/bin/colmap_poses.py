@@ -40,6 +40,7 @@ def run():
     cnc_poses = get_cnc_poses(dataset)
     colmap_poses = get_colmap_poses(dataset)
     calibration_figure(cnc_poses, colmap_poses, scan_id=scan_name, calib_scan_id='Colmap')
+    db.disconnect()
 
 if __name__ == "__main__":
     run()
