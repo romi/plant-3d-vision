@@ -575,7 +575,7 @@ def calibration_figure(cnc_poses, colmap_poses, path=None, image_id=False, scan_
             YY.append(cnc_poses[im_id][1])
             U.append(colmap_poses[im_id][0] - cnc_poses[im_id][0])
             V.append(colmap_poses[im_id][1] - cnc_poses[im_id][1])
-            err = distance.euclidean(cnc_poses[im_id][0:3], colmap_poses[im_id][0:3])
+            err.append(distance.euclidean(cnc_poses[im_id][0:3], colmap_poses[im_id][0:3]))
     logger.info(f"Average euclidean distance: {round(np.nanmean(err), 3)}mm.")
     plt.title(f"Average euclidean distance: {round(np.nanmean(err), 3)}mm.")
 
