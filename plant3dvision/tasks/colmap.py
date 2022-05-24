@@ -68,7 +68,9 @@ def get_cnc_poses(scan_dataset):
 
     """
     images_fileset = scan_dataset.get_fileset('images')
-    return {im.id: im.get_metadata("approximate_pose") for im in images_fileset.get_files()}
+    approx_poses = {im.id: im.get_metadata("approximate_pose") for im in images_fileset.get_files()}
+    poses = {im.id: im.get_metadata("pose") for im in images_fileset.get_files()}
+    return {im.id: poses[im.id] if poses[im.id] is not None else approx_poses[im.id] for im in images_fileset.get_files()}
 
 
 def get_colmap_poses(scan_dataset):
@@ -457,7 +459,7 @@ class Colmap(RomiTask):
         self.output().get().set_metadata("bounding_box", bounding_box)
 
 
-def calibration_figure(cnc_poses, colmap_poses, path=None, image_id=False, scan_id=None, calib_scan_id=None):
+def calibration_figure(cnc_poses, colmap_poses, path=None, image_id=False, scan_id=None, calib_scan_id=None, **kwargs):
     """Create a figure showing the effect of calibration procedure.
 
     Parameters
@@ -480,19 +482,21 @@ def calibration_figure(cnc_poses, colmap_poses, path=None, image_id=False, scan_
     --------
     >>> import os
     >>> from plantdb.fsdb import FSDB
+    >>> from plant3dvision.tasks.colmap import get_cnc_poses
+    >>> from plant3dvision.tasks.colmap import get_colmap_poses
     >>> from plant3dvision.tasks.colmap import calibration_figure
     >>> from plant3dvision.tasks.colmap import use_calibrated_poses
     >>> db = FSDB(os.environ.get('DB_LOCATION', '/data/ROMI/DB'))
     >>> # Example 1 - Compute & use the calibrated poses from/on a calibration scan:
     >>> db.connect()
     >>> db.list_scans()
-    >>> scan_id = calib_scan_id = "calibration_scan_350"
+    >>> scan_id = calib_scan_id = "calib3_300_90_24"
     >>> scan = db.get_scan(scan_id)
     >>> calib_scan = db.get_scan(calib_scan_id)
-    >>> images_fileset = scan.get_fileset('images')
-    >>> images_fileset = use_calibrated_poses(images_fileset, calib_scan)
-    >>> cnc_poses = {im.id: im.get_metadata("approximate_pose") for im in images_fileset.get_files()}
-    >>> colmap_poses = {im.id: im.get_metadata("calibrated_pose") for im in images_fileset.get_files()}
+    >>> cnc_poses = get_cnc_poses(scan)
+    >>> len(cnc_poses)
+    >>> colmap_poses = get_colmap_poses(calib_scan)
+    >>> len(colmap_poses)
     >>> calibration_figure(cnc_poses, colmap_poses, scan_id=scan_id, calib_scan_id=calib_scan_id)
     >>> db.disconnect()
     >>> # Example 2 - Compute & use the calibrated poses from/on a scan:
@@ -501,10 +505,8 @@ def calibration_figure(cnc_poses, colmap_poses, path=None, image_id=False, scan_
     >>> scan_id = calib_scan_id = "test_sgk"
     >>> scan = db.get_scan(scan_id)
     >>> calib_scan = db.get_scan(calib_scan_id)
-    >>> images_fileset = scan.get_fileset('images')
-    >>> images_fileset = use_calibrated_poses(images_fileset, calib_scan)
-    >>> cnc_poses = {im.id: im.get_metadata("approximate_pose") for im in images_fileset.get_files()}
-    >>> colmap_poses = {im.id: im.get_metadata("calibrated_pose") for im in images_fileset.get_files()}
+    >>> cnc_poses = get_cnc_poses(scan)
+    >>> colmap_poses = get_colmap_poses(calib_scan)
     >>> calibration_figure(cnc_poses, colmap_poses, scan_id=scan_id, calib_scan_id=calib_scan_id)
     >>> db.disconnect()
     >>> # Example 3 - Compute the calibrated poses with a calibration scan & use it on a scan:
@@ -578,9 +580,16 @@ def calibration_figure(cnc_poses, colmap_poses, path=None, image_id=False, scan_
             err.append(distance.euclidean(cnc_poses[im_id][0:3], colmap_poses[im_id][0:3]))
     logger.info(f"Average euclidean distance: {round(np.nanmean(err), 3)}mm.")
     plt.title(f"Average euclidean distance: {round(np.nanmean(err), 3)}mm.")
-
     # Show the mapping:
     q = ax.quiver(XX, YY, U, V, scale_units='xy', scale=1., width=0.003)
+
+    xlims = kwargs.get('xlims', None)
+    ylims = kwargs.get('ylims', None)
+    if xlims is not None and ylims is not None:
+        xmin, xmax = xlims
+        ymin, ymax = ylims
+        plt.vlines([xmin, xmax], ymin, ymax, colors="gray", linestyles="dashed")
+        plt.hlines([ymin, ymax], xmin, xmax, colors="gray", linestyles="dashed")
 
     # Add the legend
     plt.legend()
