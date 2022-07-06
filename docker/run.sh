@@ -124,5 +124,5 @@ else
   docker run --gpus all $mount_option \
     --env PYOPENCL_CTX='0' \
     $USE_TTY roboticsmicrofarms/plant-3d-vision:$vtag \
-    bash -c ". /venv/bin/activate && $cmd"
+    bash -c "$cmd"
 fi

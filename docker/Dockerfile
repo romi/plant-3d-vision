@@ -1,4 +1,4 @@
-FROM roboticsmicrofarms/colmap:3.7 AS base
+FROM roboticsmicrofarms/colmap:3.7
 LABEL maintainer="Jonathan LEGRAND <jonathan.legrand@ens-lyon.fr>"
 LABEL corresponding_author="Peter Hanappe <peter@romi-project.eu>"
 LABEL project="Robotics for microfarms"
@@ -10,6 +10,7 @@ LABEL description="Plant reconstruction and phenotyping pipeline."
 ENV LANG=C.UTF-8
 ENV PYTHONUNBUFFERED=1
 ENV USER_NAME=myuser
+ENV USER_ID=1000
 ENV PATH=$PATH:"/home/${USER_NAME}/.local/bin"
 ENV DB_LOCATION="/myapp/db"
 ENV COLMAP_EXE='colmap'
@@ -42,14 +43,11 @@ RUN echo "Fix CUDA GPG key..." && \
     # Clean-up apt cache
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
-    # Create a non-root user and give it rights over a "myapp" folder:
-    adduser --disabled-password --gecos '' ${USER_NAME} && \
+    # Create a non-root user and give it rights over a "homr" folder:
+    adduser --disabled-password --gecos '' --uid ${USER_ID} ${USER_NAME} && \
+    chown -R ${USER_NAME}: /home/${USER_NAME} && \
     # Create the folder used to mount the database:
     mkdir -m 777 -p ${DB_LOCATION} && \
-    chown -R ${USER_NAME} /myapp && \
-    # Create a folder to create python venv:
-    mkdir -p /venv && \
-    chown -R ${USER_NAME} /venv && \
     # Ugly fix for OpenCL:
     ln -s /usr/lib/x86_64-linux-gnu/libOpenCL.so.1 /usr/lib/libOpenCL.so && \
     mkdir -p /etc/OpenCL/vendors && \
@@ -57,31 +55,25 @@ RUN echo "Fix CUDA GPG key..." && \
 # Change to non-root user:
 USER ${USER_NAME}
 # Change working directory:
-WORKDIR /myapp
+WORKDIR /home/${USER_NAME}
 
-FROM base AS builder
-LABEL stage=builder
+# Upgrade pip
+RUN python3 -m pip install --upgrade pip
 
-# Upgrade pip, install poetry and create a venv:
-RUN python3 -m pip install --upgrade pip && \
-    python3 -m pip install poetry && \
-    python3 -m venv /venv
 # Copy the source files (repository):
-COPY --chown=${USER_NAME} ./ ./
-# In the venv: install dependencies, build a wheel package and install it:
-RUN source /venv/bin/activate && \
-    poetry install -n --no-dev --no-root && \
-    poetry build && \
-    /venv/bin/pip install dist/*.whl
+COPY --chown=${USER_NAME} ./ plant-3d-vision/
 
-FROM base AS final
+# Install the required dependencies, sub-modules and plant-3d-vision:
+RUN cd plant-3d-vision/ && \
+    python3 -m pip install -r plantdb/requirements.txt && \
+    python3 -m pip install plantdb/ && \
+    python3 -m pip install romitask/ && \
+    python3 -m pip install romiseg/ && \
+    python3 -m pip install romicgal/ && \
+    python3 -m pip install dtw/ && \
+    python3 -m pip install -r requirements.txt && \
+    python3 -m pip install . && \
+    rm -rf .cache/pip && \
+    ./get_model.sh
 
-# Copy the venv from the builder:
-COPY --from=builder --chown=${USER_NAME} /venv /venv
-COPY --chown=${USER_NAME} ./get_model.sh ./get_model.sh
-COPY --chown=${USER_NAME} ./tests ./tests
-COPY --chown=${USER_NAME} ./config ./config
-# Download a model file:
-RUN ./get_model.sh
-
-CMD [". /venv/bin/activate && /venv/bin/romi_run_task -h"]
+CMD ["/bin/bash", "-c", "romi_run_task -h"]
