@@ -5,11 +5,11 @@ host_db=$DB_LOCATION
 cmd=''
 mount_option=""
 # Test commands:
-unittest_cmd="python -m unittest discover -s tests/unit/"
-integration_test_cmd="python -m unittest discover -s tests/integration/"
-pipeline_cmd="./tests/check_pipe.sh"
-geom_pipeline_cmd="./tests/check_geom_pipe.sh"
-ml_pipeline_cmd="./tests/check_ml_pipe.sh"
+unittest_cmd="python -m unittest discover -s plant-3d-vision/tests/unit/"
+integration_test_cmd="python -m unittest discover -s plant-3d-vision/tests/integration/"
+pipeline_cmd="cd plant-3d-vision/tests/ && ./check_pipe.sh"
+geom_pipeline_cmd="cd plant-3d-vision/ && ./check_geom_pipe.sh"
+ml_pipeline_cmd="cd plant-3d-vision/ && ./check_ml_pipe.sh"
 gpu_cmd="nvidia-smi"
 
 usage() {
