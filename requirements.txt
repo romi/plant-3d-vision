@@ -1,0 +1,20 @@
+# -*- coding: utf-8 -*-
+setuptools
+wheel
+pywavefront
+trimesh
+appdirs
+colorlog
+docker
+imageio
+luigi==3.0.3
+pandas==1.2.5  # there is a mismatch version with cython inside networkx setup
+networkx
+open3d>= 0.9.0.0  # open3d== 0.9.0.0
+opencv-python== 4.2.0.34
+pybind11
+pyopencl== 2020.2.2
+scikit-image
+toml
+tqdm
+joblib
