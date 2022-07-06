@@ -24,23 +24,19 @@ def parsing():
     return parser
 
 
-def run():
-    # - Parse the input arguments to variables:
-    parser = parsing()
-    args = parser.parse_args()
+# - Parse the input arguments to variables:
+parser = parsing()
+args = parser.parse_args()
 
-    dataset_path = Path(args.dataset)
-    db_location = dataset_path.parent
-    scan_name = dataset_path.name
+dataset_path = Path(args.dataset)
+db_location = dataset_path.parent
+scan_name = dataset_path.name
 
-    db = FSDB(db_location)
-    db.connect()
+db = FSDB(db_location)
+db.connect()
 
-    dataset = db.get_scan(scan_name)
-    cnc_poses = get_cnc_poses(dataset)
-    colmap_poses = get_colmap_poses(dataset)
-    calibration_figure(cnc_poses, colmap_poses, scan_id=scan_name, calib_scan_id='Colmap')
-    db.disconnect()
-
-if __name__ == "__main__":
-    run()
+dataset = db.get_scan(scan_name)
+cnc_poses = get_cnc_poses(dataset)
+colmap_poses = get_colmap_poses(dataset)
+calibration_figure(cnc_poses, colmap_poses, scan_id=scan_name, calib_scan_id='Colmap')
+db.disconnect()

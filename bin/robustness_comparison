@@ -975,119 +975,114 @@ def config_task(task_name, cfg_file, full_pipe, previous_task):
     return task_cfg
 
 
-def run():
-    """
-    creates a test db at the root of the db linked to the scan to analyze
-    """
-    DESC = """ROMI reconstruction & analysis pipeline repeatability test procedure.
+"""
+creates a test db at the root of the db linked to the scan to analyze
+"""
+DESC = """ROMI reconstruction & analysis pipeline repeatability test procedure.
 
-    Analyse the repeatability of a reconstruction & analysis pipeline by:
-    1. duplicating the scan in a temporary folder (and cleaning it if necessary)
-    2. running the pipeline up to the previous task of the task to test
-    3. copying this result to a new database and replicate the dataset
-    4. repeating the task to test for each replicate
-    5. comparing the results pair by pair.
+Analyse the repeatability of a reconstruction & analysis pipeline by:
+1. duplicating the scan in a temporary folder (and cleaning it if necessary)
+2. running the pipeline up to the previous task of the task to test
+3. copying this result to a new database and replicate the dataset
+4. repeating the task to test for each replicate
+5. comparing the results pair by pair.
 
-    Comparison can be done at the scale of the files but also with metrics if a reference can be set.
+Comparison can be done at the scale of the files but also with metrics if a reference can be set.
     
-    To create fully independent tests, we run the pipeline up to the task to test on each replicate.
+To create fully independent tests, we run the pipeline up to the task to test on each replicate.
     
-    Note that in order to use the ML pipeline, you will first have to:
-    1. create an output directory
-    2. use the `--models` argument to copy the CNN trained models required to run the pipeline.
-    """
-    # - Load the JSON config file of the script:
-    c = json.load(open(CONF_FILE))
-    valid_tasks = list(c.keys())
+Note that in order to use the ML pipeline, you will first have to:
+1. create an output directory
+2. use the `--models` argument to copy the CNN trained models required to run the pipeline.
+"""
+# - Load the JSON config file of the script:
+c = json.load(open(CONF_FILE))
+valid_tasks = list(c.keys())
 
-    # TODO: an option to set a reference (or would that be the job of the Evaluation tasks?!)
-    # TODO: use the `pipeline.toml` to defines the previous tasks ?
+# TODO: an option to set a reference (or would that be the job of the Evaluation tasks?!)
+# TODO: use the `pipeline.toml` to defines the previous tasks ?
 
-    parser = argparse.ArgumentParser(description=DESC)
+parser = argparse.ArgumentParser(description=DESC)
 
-    parser.add_argument("scan",
-                        help="scan to use for repeatability analysis")
-    parser.add_argument("task", default="AnglesAndInternodes",
-                        choices=valid_tasks,
-                        help=f"task to test, should be in: {', '.join(valid_tasks)}")
-    parser.add_argument("config_file",
-                        help="path to the TOML config file of the analysis pipeline")
-    parser.add_argument("-n", "--replicate_number", default=2,
-                        help="number of replicate to use for repeatability analysis")
-    parser.add_argument("-f", "--full_pipe", action="store_true", default=False,
-                        help="run the analysis pipeline on each replicate independently")
-    parser.add_argument("-np", "--no_pipeline", action="store_true", default=False,
-                        help="do not run the pipeline, only compare tasks outputs")
-    parser.add_argument("-db", '--test_database',
-                        help="test database location to use. Use at your own risks!")
-    parser.add_argument("--models", default=False,
-                        help="models database location to use with ML pipeline.")
-    # ->Test database path exists:
-    #   - NO: create the directory & use it instead of auto-generated path
-    #   - YES:
-    #     ->Test database contain scan datasets
-    #       - NO: use it instead of auto-generated path
-    #       - YES: use number of scans as replicate number & compute repeatability test
+parser.add_argument("scan",
+                    help="scan to use for repeatability analysis")
+parser.add_argument("task", default="AnglesAndInternodes",
+                    choices=valid_tasks,
+                    help=f"task to test, should be in: {', '.join(valid_tasks)}")
+parser.add_argument("config_file",
+                    help="path to the TOML config file of the analysis pipeline")
+parser.add_argument("-n", "--replicate_number", default=2,
+                    help="number of replicate to use for repeatability analysis")
+parser.add_argument("-f", "--full_pipe", action="store_true", default=False,
+                    help="run the analysis pipeline on each replicate independently")
+parser.add_argument("-np", "--no_pipeline", action="store_true", default=False,
+                    help="do not run the pipeline, only compare tasks outputs")
+parser.add_argument("-db", '--test_database',
+                    help="test database location to use. Use at your own risks!")
+parser.add_argument("--models", default=False,
+                    help="models database location to use with ML pipeline.")
+# ->Test database path exists:
+#   - NO: create the directory & use it instead of auto-generated path
+#   - YES:
+#     ->Test database contain scan datasets
+#       - NO: use it instead of auto-generated path
+#       - YES: use number of scans as replicate number & compute repeatability test
 
-    # - Parse the input arguments to variables:
-    args = parser.parse_args()
-    task2test = args.task
-    replicate_number = int(args.replicate_number)
-    init_scan_path = pathlib.Path(args.scan).expanduser()
-    db_location = init_scan_path.parent
-    root_location = db_location.parent
-    if args.models:
-        models_path = pathlib.Path(args.models).expanduser()
-    else:
-        models_path = None
-    logger.info(f"Got scan path: {init_scan_path}")
+# - Parse the input arguments to variables:
+args = parser.parse_args()
+task2test = args.task
+replicate_number = int(args.replicate_number)
+init_scan_path = pathlib.Path(args.scan).expanduser()
+db_location = init_scan_path.parent
+root_location = db_location.parent
+if args.models:
+    models_path = pathlib.Path(args.models).expanduser()
+else:
+    models_path = None
+logger.info(f"Got scan path: {init_scan_path}")
 
-    # - Task configuration
-    task_cfg = config_task(task2test, args.config_file, args.full_pipe, c[task2test]["prev_task"])
-    # - 'test database' setup & dataset duplication:
-    if args.test_database is not None:
-        logger.info(f"Got a test database location as argument: '{args.test_database}'.")
-        test_db_path = pathlib.Path(args.test_database)
-        test_db_path.mkdir(exist_ok=True)
-    else:
-        # test db is created next to db containing original scan dataset
-        test_db_path = create_test_db(root_location, task_cfg["name"])
+# - Task configuration
+task_cfg = config_task(task2test, args.config_file, args.full_pipe, c[task2test]["prev_task"])
+# - 'test database' setup & dataset duplication:
+if args.test_database is not None:
+    logger.info(f"Got a test database location as argument: '{args.test_database}'.")
+    test_db_path = pathlib.Path(args.test_database)
+    test_db_path.mkdir(exist_ok=True)
+else:
+    # test db is created next to db containing original scan dataset
+    test_db_path = create_test_db(root_location, task_cfg["name"])
 
-    scan_replicates = list([idir.stem for idir in test_db_path.iterdir() if idir.is_dir() and idir.stem != 'models'])
-    n_replicates = len(scan_replicates)
-    # Case without/with scan datasets in the test database root folder
-    if n_replicates == 0:
-        # Duplicate the scan dataset as many times as requested
-        test_scans = fill_test_db(test_db_path, init_scan_path, task_cfg, replicate_number, models_path)
-    else:
-        # If there is something in the root folder that mean you passed a value to `--test_database`
-        # And we then consider that it already contains the replicated scans!
-        logger.info(
-            f"Found {n_replicates} scan replicates in existing test database: {', '.join(map(str, scan_replicates))}")
-        # Make sure the lock is OFF!
-        marker_file = test_db_path / MARKER_FILE_NAME
-        lock_file = test_db_path / LOCK_FILE_NAME
-    try:
-        marker_file.touch()
-    except:
-        pass
-    try:
-        lock_file.unlink()
-        # lock_file.unlink(missing_ok=True)  # missing_ok only available since Python3.8
-    except:
-        pass
+scan_replicates = list([idir.stem for idir in test_db_path.iterdir() if idir.is_dir() and idir.stem != 'models'])
+n_replicates = len(scan_replicates)
+# Case without/with scan datasets in the test database root folder
+if n_replicates == 0:
+    # Duplicate the scan dataset as many times as requested
+    test_scans = fill_test_db(test_db_path, init_scan_path, task_cfg, replicate_number, models_path)
+else:
+    # If there is something in the root folder that mean you passed a value to `--test_database`
+    # And we then consider that it already contains the replicated scans!
+    logger.info(
+        f"Found {n_replicates} scan replicates in existing test database: {', '.join(map(str, scan_replicates))}")
+    # Make sure the lock is OFF!
+    marker_file = test_db_path / MARKER_FILE_NAME
+    lock_file = test_db_path / LOCK_FILE_NAME
+try:
+    marker_file.touch()
+except:
+    pass
+try:
+    lock_file.unlink()
+    # lock_file.unlink(missing_ok=True)  # missing_ok only available since Python3.8
+except:
+    pass
 
-    # - Instantiate ROMI database
-    test_db = FSDB(str(test_db_path))
-    test_db.connect()
+# - Instantiate ROMI database
+test_db = FSDB(str(test_db_path))
+test_db.connect()
 
-    if not args.no_pipeline:
-        # - Repeat task on all replicated scans dataset of the test database:
-        compute_repeatability_test(test_db, task_cfg)
+if not args.no_pipeline:
+    # - Repeat task on all replicated scans dataset of the test database:
+    compute_repeatability_test(test_db, task_cfg)
 
-    # - Compare the output(s) of the task across replicated scans dataset:
-    compare_task_output(test_db, task_cfg["name"], independant_tests=args.full_pipe)
-
-
-if __name__ == "__main__":
-    run()
+# - Compare the output(s) of the task across replicated scans dataset:
+compare_task_output(test_db, task_cfg["name"], independant_tests=args.full_pipe)
