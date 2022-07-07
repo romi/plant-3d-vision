@@ -6,7 +6,7 @@ with open("README.md", "r") as fh:
 opts = dict(
     name='plant3dvision',
     packages=find_packages(),
-    version='0.10.99',
+    version='0.11.0',
     scripts=[
         'bin/robustness_comparison',
         'bin/colmap_poses',
