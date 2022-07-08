@@ -1,4 +1,4 @@
-# Plant 3D Vision v0.10.99 (dev)
+# Plant 3D Vision v0.11.99 (dev)
 
 Documentation about the "Plant Scanner" project can be found [here](https://docs.romi-project.eu/Scanner/).
 
