@@ -28,7 +28,7 @@ mf = cl.mem_flags
 
 prg_dir = os.path.join(os.path.dirname(__file__), 'kernels')
 
-eps = 1e-10
+EPS = 1e-10
 
 with open(os.path.join(prg_dir, 'backprojection.c')) as f:
     backprojection_kernels = cl.Program(ctx, f.read()).build(options="-I%s" % prg_dir)
@@ -41,53 +41,77 @@ with open(os.path.join(prg_dir, 'fim.c')) as f:
 
 
 class Backprojection(object):
-    """
-    This class implements back-projection onto a voxel volume.
+    """Back-projection onto a voxel volume.
 
     Attributes
     ----------
-    shape: list
+    shape : list
         Shape of the voxel volume.
-    origin: list
+    origin : list
         Location of the origin of the voxel space.
-    voxel_size: float
+    voxel_size : float
         Size of voxels.
-    default_value: float
+    default_value : float
         Default value when initializing the voxels (defaults to 0).
-    log: bool
-        If `True`, default `False`, convert the mask to logarithmic values.
-    labels: list
+    log : bool
+        If ``True``, convert the mask to logarithmic values.
+        Defaults to ``False``.
+    labels : list
         List of labels to use in case of ML pipeline, can be `None`.
-    dtype: {numpy.int32, numpy.float32}
+    dtype : {numpy.int32, numpy.float32}
         Data type used for the buffer, depends on initialization `type`.
-    kernel: fun
+    kernel : fun
         Kernel to use for back-projection, depends on initialization `type`.
+    values_h : numpy.ndarray
+        ???
+    values_d : pyopencl.Buffer
+        ???
+    intrinsics_d : pyopencl.Buffer
+        [f_x, f_y, c_x, c_y] ???
+    rot_d : pyopencl.Buffer
+        rotation matrix of the camera pose ???
+    tvec_d : pyopencl.Buffer
+        translation vector of the camera pose ???
+    volinfo_d : pyopencl.Buffer
+        ???
+    shape_d : pyopencl.Buffer
+        ???
 
     See Also
     --------
     kernel.backprojection.c
 
+    Examples
+    --------
+    >>> from plant3dvision import test_db_path
+    >>> from plantdb.fsdb import FSDB
+    >>> db = FSDB(test_db_path())
+    >>> db.connect()
+    >>> from plant3dvision.cl import Backprojection
+    >>> bp = Backprojection([300, 300, 150], [0, 0, 0], .5)
+    >>> vol = bp.process_fileset()
+
     """
 
-    def __init__(self, shape, origin, voxel_size, type="carving",
-                 default_value=0, labels=None, log=False):
+    def __init__(self, shape, origin, voxel_size, type="carving", default_value=0, labels=None, log=False):
         """
         Parameters
         ----------
-        shape: list
+        shape : list
             Shape of the voxel volume.
-        origin: list
+        origin : list
             Location of the origin of the voxel space.
-        voxel_size: float
+        voxel_size : float
             Size of voxels.
-        type: {'carving', 'averaging'}
+        type : {'carving', 'averaging'}
             Method to use for back-projection, defaults to "carving".
-        default_value: float
+        default_value : float
             Default value when initializing the voxels (defaults to 0).
-        labels: list
+        labels : list
             List of labels to use in case of ML pipeline, can be `None`.
-        log: bool
-            If `True`, default `False`, convert the mask to logarithmic values.
+        log : bool
+            If ``True``, convert the mask to logarithmic values.
+            Defaults to ``False``.
 
         """
         self.shape = shape
@@ -103,10 +127,14 @@ class Backprojection(object):
         elif type == "averaging":
             self.dtype = np.float32
             self.kernel = backprojection_kernels.average
+        else:
+            raise ValueError(f"Unknown kernel type {type}, valid values are 'averaging' or 'carving'!")
+
         # Print info about buffer array size and associated memory cost for `self.values_h`:
-        buff_size = np.prod(self.shape) * 4
+        buff_size = np.ones(self.shape, dtype=self.dtype).nbytes
         logger.info(f"Buffer shape is {self.shape}")
         logger.info(f"Required memory for buffer is {buff_size} bytes!")
+
         # Define attributes used to initialize OpenCL buffers:
         self.values_h = None
         self.values_d = None
@@ -129,13 +157,11 @@ class Backprojection(object):
         self.tvec_d = cl.Buffer(ctx, mf.READ_ONLY, np.zeros(3, dtype=np.float32).nbytes)
 
         self.volinfo_d = cl.Buffer(
-            ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=np.array(
-                [*self.origin, self.voxel_size], dtype=np.float32)
+            ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=np.array([*self.origin, self.voxel_size], dtype=np.float32)
         )
 
         self.shape_d = cl.Buffer(
-            ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=np.array(
-                self.shape, dtype=np.int32)
+            ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=np.array(self.shape, dtype=np.int32)
         )
 
     def process_view(self, intrinsics, rot, tvec, mask):
@@ -158,7 +184,8 @@ class Backprojection(object):
             mask = mask / 255
         # logger.critical(self.dtype)
         if self.log and self.dtype == np.float32:
-            mask = np.log(eps + mask)
+            mask = np.log(EPS + mask)
+
         intrinsics_h = np.ascontiguousarray(intrinsics).astype(np.float32)
         rot_h = np.ascontiguousarray(rot).astype(np.float32)
         tvec_h = np.ascontiguousarray(tvec).astype(np.float32)
@@ -188,10 +215,10 @@ class Backprojection(object):
         ----------
         fs : plantdb.DB.Fileset
             Fileset to process.
-        use_colmap_poses: bool
+        use_colmap_poses : bool
             If `True` use the poses estimated by colmap (metadata `colmap_camera`),
             else should be defined in metadata `camera`. Default is `False`
-        invert: bool
+        invert : bool
             If `True`, default `False`, invert the values of the mask file to process.
 
         """
@@ -205,8 +232,7 @@ class Backprojection(object):
         else:
             return self.process_label(fs, use_colmap_poses=use_colmap_poses, invert=invert)
 
-    def process_label(self, fs, label=None, use_colmap_poses=False,
-                      invert=False):
+    def process_label(self, fs, label=None, use_colmap_poses=False, invert=False):
         """Processes a whole fileset for given label.
 
         Parameters
@@ -264,8 +290,7 @@ class Backprojection(object):
 
     def clear(self):
         """Clear computed values from the OpenCL device."""
-        self.values_h = self.default_value * \
-                        np.ones(self.shape).astype(self.dtype)
+        self.values_h = self.default_value * np.ones(self.shape).astype(self.dtype)
         cl.enqueue_copy(queue, self.values_d, self.values_h)
 
 
@@ -301,7 +326,7 @@ class Geodesics():
         idx = []
 
         for i in range(max_iters):
-            kernel = geodesics_program.geodesic
+            kernel = geodesics_kernels.geodesic
             kernel.set_scalar_arg_dtypes([None, None, None, None, None, None,
                                           None, None, None, np.float32])
             kernel(queue, (tips.shape[0],), None,

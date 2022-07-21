@@ -82,6 +82,24 @@ class Masks(FileByFileTask):
     ----------
     .. [mask_type] https://docs.romi-project.eu/Scanner/explanations/masks/
 
+    Examples
+    --------
+    >>> import luigi
+    >>> from plant3dvision import test_db_path
+    >>> from plantdb.fsdb import FSDB
+    >>> db = FSDB(test_db_path())
+    >>> global db
+    >>> db.connect()
+    >>> from romitask.task import ImagesFilesetExists
+    >>> from plant3dvision.tasks.colmap import Colmap
+    >>> from plant3dvision.tasks.proc2d import Masks, Undistorted
+    >>> image_fs = ImagesFilesetExists(db=db, scan_id='real_plant')
+    >>> colmap_task = Colmap(db=db, scan_id='real_plant')
+    >>> undistort_task = Undistorted(db=db, scan_id='real_plant')
+    >>> mask_task = Masks(db=db, scan_id='real_plant', query="{'channel':'rgb'}")
+    >>> luigi.build([image_fs, colmap_task, undistort_task, mask_task], local_scheduler=True)
+    >>> db.disconnect()
+
     """
     upstream_task = luigi.TaskParameter(default=Undistorted)
     type = luigi.Parameter("linear")

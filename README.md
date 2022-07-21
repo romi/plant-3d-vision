@@ -49,7 +49,7 @@ If you want to run a docker image with another tag, you can pass the tag name as
 
 To see more running options (specif tag, command...), type `./docker/run.sh -h`
 
-### Troubleshooting:
+### Troubleshooting
 You must install nvidia gpu drivers, `nvidia-docker` (v2.0) and `nvidia-container-toolkit`. 
 To test if everything is okay:
 ```bash
@@ -77,7 +77,12 @@ Don't forget to replace the paths `path/to/plant-3d-vision` by the correct ones.
 ## Install from sources
 
 ### Install requirements
-`Colmap` is required to run the reconstruction tasks, follow the official install instructions for linux [here](https://colmap.github.io/install.html#linux).
+`Colmap` is required to run the reconstruction tasks.
+
+You have to option:
+
+1. use the `roboticsmicrofarms/colmap:3.7` available from our [docker hub](https://hub.docker.com/repository/docker/roboticsmicrofarms/colmap) [recommended]
+2. follow the official install instructions for linux [here](https://colmap.github.io/install.html#linux).
 
 This library use `pyopencl` and thus require the following system libraries:
 
@@ -153,7 +158,7 @@ If you do not have those tools installed, have a look at the official instructio
     rm testdata/models/models/Resnet_896_896_epoch50.pt
     ```
 
-### Troubleshooting:
+### Troubleshooting
 
 - `ImportError: libGL.so.1: cannot open shared object file: No such file or directory` can be fixed with:
     ```bash

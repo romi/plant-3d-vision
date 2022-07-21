@@ -397,7 +397,7 @@ class ColmapRunner(object):
     def _init_poses(self):
         """Initialize the `poses.txt` file for COLMAP.
 
-        If use of calibration is required, this will initialize a file of "calibrated poses".
+        If the use of calibration is required, this will initialize a file of "calibrated poses".
         Else, if 'pose' is found in one of the files from the 'images' fileset, initialize a file of "exact poses".
         Else (try) to initialize a file of "approximate poses".
 
