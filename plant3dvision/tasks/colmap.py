@@ -316,6 +316,25 @@ def check_scan_parameters(scan_to_calibrate, calibration_scan):
     return same_cfg
 
 
+def check_colmap_cfg(current_cfg, calibration_scan):
+    """Compare the current configuration and the scan configuration for Colmap task."""
+    import toml
+    with open(join(calibration_scan.path(), 'pipeline.toml'), 'r') as f:
+        calib_scan_cfg = toml.load(f)
+
+    print(calib_scan_cfg)
+
+    try:
+        assert calib_scan_cfg['Colmap']['align_pcd'] == current_cfg['Colmap']['align_pcd']
+    except AssertionError:
+        logger.critical(
+            f"Entries 'align_pcd' of task 'Colmap' are not the same for {calibration_scan.id} and current config!")
+        logger.info(f"From calibration scan: {calib_scan_cfg['Colmap']['align_pcd']}")
+        logger.info(f"From scan to calibrate: {current_cfg['Colmap']['align_pcd']}")
+        exit(1)
+    return
+
+
 def _get_diff_between_dict(d1, d2):
     """Return the entries that are different between two dictionaries."""
     diff_keys = list(dict(set(d1.items()) ^ set(d2.items())).keys())
@@ -414,6 +433,7 @@ class Colmap(RomiTask):
             logger.info(f"Using calibration scan: {self.calibration_scan_id}...")
             db = images_fileset.scan.db
             calibration_scan = db.get_scan(self.calibration_scan_id)
+            check_colmap_cfg({'Colmap': {'align_pcd': self.align_pcd}}, calibration_scan)
             images_fileset = use_calibrated_poses(images_fileset, calibration_scan)
             # Create the calibration figure:
             cnc_poses = {im.id: im.get_metadata("approximate_pose") for im in images_fileset.get_files()}
