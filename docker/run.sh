@@ -115,13 +115,13 @@ fi
 
 if [ "$cmd" = "" ]; then
   # Start in interactive mode:
-  docker run --gpus all $mount_option \
+  docker run --rm --gpus all $mount_option \
     --env PYOPENCL_CTX='0' \
     $USE_TTY roboticsmicrofarms/plant-3d-vision:$vtag \
     bash
 else
   # Start in non-interactive mode (run the command):
-  docker run --gpus all $mount_option \
+  docker run --rm --gpus all $mount_option \
     --env PYOPENCL_CTX='0' \
     $USE_TTY roboticsmicrofarms/plant-3d-vision:$vtag \
     bash -c "$cmd"
