@@ -80,7 +80,7 @@ class Masks(FileByFileTask):
 
     References
     ----------
-    .. [mask_type] https://docs.romi-project.eu/Scanner/explanations/masks/
+    .. [mask_type] https://docs.romi-project.eu/plant_imager/explanations/masks/
 
     Examples
     --------

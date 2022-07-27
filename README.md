@@ -1,6 +1,6 @@
 # Plant 3D Vision v0.11.99 (dev)
 
-Documentation about the "Plant Scanner" project can be found [here](https://docs.romi-project.eu/Scanner/).
+Documentation about the "Plant Imager" project can be found [here](https://docs.romi-project.eu/plant_imager/).
 
 # Table of Contents
 - [Building and running with Docker (recommended)](#Docker)
