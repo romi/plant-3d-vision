@@ -77,7 +77,7 @@ upstream_angles = "AnglesAndInternodes"
 upstream_skeleton = "CurveSkeleton"
 upstream_images = "ImagesFilesetExists"
 max_image_size = 1500
-max_point_cloud_size = 10000
+max_point_cloud_size = 10000000
 thumbnail_size = 150
 
 [Clean]
