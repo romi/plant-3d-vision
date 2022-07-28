@@ -41,7 +41,7 @@ class Visualization(RomiTask):
 
     use_colmap_poses = luigi.BoolParameter(default=True)
     max_image_size = luigi.IntParameter(default=1500)
-    max_point_cloud_size = luigi.IntParameter(default=10000)
+    max_point_cloud_size = luigi.IntParameter(default=10000000) # Put a lower threshold if you have low performances in plant-3d-explorer pcd visualization
     thumbnail_size = luigi.IntParameter(default=150)
 
     def __init__(self):

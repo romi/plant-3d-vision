@@ -68,7 +68,7 @@ query = "{\"channel\":\"rgb\"}"  # default is an empty dict '{}'
 use_colmap_poses = false
 upstream_virtualplantobj = "VirtualPlantObj"
 max_image_size = 1500
-max_point_cloud_size = 10000
+max_point_cloud_size = 10000000
 thumbnail_size = 150
 
 ### Evaluation ###
