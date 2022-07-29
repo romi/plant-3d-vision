@@ -2,25 +2,30 @@
 # -*- coding: utf-8 -*-
 
 import os
+import random
 import tempfile
 
 import luigi
 import numpy as np
 import open3d as o3d
-import random
 from plantdb import io
+from romitask.task import DatabaseConfig
+from romitask.task import FilesetTarget
+from romitask.task import ImagesFilesetExists
+from romitask.task import RomiTask
+from romitask.task import Segmentation2DGroundTruthFilesetExists
+from romitask.task import VirtualPlantObj
 from sklearn import decomposition
 
-from romitask.task import FileExists
-from romitask.task import RomiTask, FilesetTarget, ImagesFilesetExists, DatabaseConfig, Segmentation2DGroundTruthFilesetExists, VirtualPlantObj
-from plant3dvision import metrics
 from plant3dvision.log import logger
+from plant3dvision.metrics import CompareMaskFilesets
+from plant3dvision.metrics import CompareSegmentedPointClouds
 from plant3dvision.tasks import cl
 from plant3dvision.tasks import config
 from plant3dvision.tasks import proc2d
 from plant3dvision.tasks import proc3d
 from plant3dvision.tasks.arabidopsis import AnglesAndInternodes
-from plant3dvision.metrics import CompareMaskFilesets, CompareSegmentedPointClouds
+
 
 class EvaluationTask(RomiTask):
     upstream_task = luigi.TaskParameter()
@@ -66,7 +71,7 @@ class VoxelsGroundTruth(RomiTask):
                 t.vertices = o3d.utility.Vector3dVector(np.asarray(x.vertices))
                 t.compute_triangle_normals()
                 o3d.io.write_triangle_mesh(os.path.join(tmpdir, "tmp.stl"),
-                                              t)
+                                           t)
                 m = trimesh.load(os.path.join(tmpdir, "tmp.stl"))
                 v = m.voxelized(cl.Voxels().voxel_size)
 
@@ -198,7 +203,8 @@ class SegmentedPointCloudEvaluation(EvaluationTask):
         labels = self.upstream_task().output_file().get_metadata('labels')
 
         if len(labels) == 0:
-            raise ValueError("The labels parameter is empty. No continuing because the results may not be what expected.")
+            raise ValueError(
+                "The labels parameter is empty. No continuing because the results may not be what expected.")
 
         metrics = CompareSegmentedPointClouds(groundtruth, labels_gt, prediction, labels)
 
@@ -217,7 +223,7 @@ class PointCloudEvaluation(EvaluationTask):
         labels_gt = self.ground_truth().output_file().get_metadata('labels')
 
         res = o3d.pipelines.registration.evaluate_registration(source, target,
-                                                        self.max_distance)
+                                                               self.max_distance)
         eval = {"id": self.upstream_task().task_id}
         eval["all"] = {
             "fitness": res.fitness,
@@ -242,8 +248,8 @@ class PointCloudEvaluation(EvaluationTask):
                 logger.debug("gt points: %i" % len(subpcd_target.points))
                 logger.debug("pcd points: %i" % len(subpcd_source.points))
                 res = o3d.pipelines.registration.evaluate_registration(subpcd_source,
-                                                                subpcd_target,
-                                                                self.max_distance)
+                                                                       subpcd_target,
+                                                                       self.max_distance)
                 eval[l] = {
                     "fitness": res.fitness,
                     "inlier_rmse": res.inlier_rmse
@@ -263,7 +269,8 @@ class Segmentation2DEvaluation(EvaluationTask):
         groundtruth_fileset = self.ground_truth().output().get()
         prediction_fileset = self.upstream_task().output().get()
         if len(self.labels) == 0:
-            raise ValueError("The labels parameter is empty. No continuing because the results may not be what you expected. Please add 'labels = ['...', '...']' to the Segmentation2DEvaluation section in the config file.")
+            raise ValueError(
+                "The labels parameter is empty. No continuing because the results may not be what you expected. Please add 'labels = ['...', '...']' to the Segmentation2DEvaluation section in the config file.")
         metrics = CompareMaskFilesets(groundtruth_fileset,
                                       prediction_fileset,
                                       self.labels,
@@ -342,12 +349,18 @@ class CylinderRadiusGroundTruth(RomiTask):
     """
     Provide a point cloud with a cylindrical shape and a known radius
     """
-    upstream_task = luigi.TaskParameter(ImagesFilesetExists)
-    noise_type = luigi.Parameter(default="")
+    upstream_task = luigi.TaskParameter()
+    radius = luigi.Parameter(default="random")
     nb_points = luigi.IntParameter(default=10000)
 
+    def requires(self):
+        return []
+
     def run(self):
-        radius = random.uniform(1, 100)
+        if self.radius == "random":
+            radius = random.uniform(1, 100)
+        else:
+            radius = float(self.radius)
         height = random.uniform(1, 100)
         zs = np.random.uniform(0, height, self.nb_points)
         thetas = np.random.uniform(0, 2 * np.pi, self.nb_points)
@@ -406,7 +419,7 @@ class CylinderRadiusEvaluation(RomiTask):
 
         output = {"calculated_radius": radius}
         if gt_radius:
-            err = round(abs(radius - gt_radius) / gt_radius*100, 2)
+            err = round(abs(radius - gt_radius) / gt_radius * 100, 2)
             output["gt_radius"] = gt_radius
             output["err (%)"] = err
         io.write_json(self.output_file(), output)
