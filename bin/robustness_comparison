@@ -17,12 +17,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import open3d as o3d
 from matplotlib import cm
+from plant3dvision.metrics import SetMetrics
 from plant3dvision.metrics import chamfer_distance
 from plant3dvision.metrics import point_cloud_registration_fitness
-from plant3dvision.metrics import set_metrics
 from plant3dvision.metrics import surface_ratio
 from plant3dvision.metrics import volume_ratio
-
 from plantdb import FSDB
 from plantdb.fsdb import LOCK_FILE_NAME
 from plantdb.fsdb import MARKER_FILE_NAME
@@ -259,7 +258,7 @@ def compare_binary_mask(db, task_name):
                 ref_mask = read_image(ref_fileset.get_file(sf))
                 flo_mask = read_image(flo_fileset.get_file(sf))
                 # Compute set metrics for each pair of masks:
-                _, _, _, _, p, r = set_metrics(ref_mask, flo_mask)
+                _, _, _, _, p, r = SetMetrics(ref_mask, flo_mask)
                 precision[k][sf] = p
                 recall[k][sf] = r
             # Compute an average & the median for the metrics:
