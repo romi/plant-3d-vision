@@ -349,8 +349,9 @@ class CylinderRadiusGroundTruth(RomiTask):
     """
     Provide a point cloud with a cylindrical shape and a known radius
     """
-    upstream_task = luigi.TaskParameter()
+    upstream_task = luigi.TaskParameter(ImagesFilesetExists)
     radius = luigi.Parameter(default="random")
+    height = luigi.Parameter(default="random")
     nb_points = luigi.IntParameter(default=10000)
 
     def requires(self):
@@ -361,7 +362,11 @@ class CylinderRadiusGroundTruth(RomiTask):
             radius = random.uniform(1, 100)
         else:
             radius = float(self.radius)
-        height = random.uniform(1, 100)
+        if self.height == "random":
+            height = random.uniform(1, 100)
+        else:
+            height = float(self.height)
+
         zs = np.random.uniform(0, height, self.nb_points)
         thetas = np.random.uniform(0, 2 * np.pi, self.nb_points)
         xs = radius * np.cos(thetas)
