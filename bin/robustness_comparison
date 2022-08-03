@@ -11,17 +11,21 @@ import shutil
 import subprocess
 import tempfile
 from collections import Counter
+from collections import OrderedDict
 from os.path import splitext
 
 import matplotlib.pyplot as plt
 import numpy as np
 import open3d as o3d
 from matplotlib import cm
+
 from plant3dvision.metrics import SetMetrics
 from plant3dvision.metrics import chamfer_distance
 from plant3dvision.metrics import point_cloud_registration_fitness
 from plant3dvision.metrics import surface_ratio
 from plant3dvision.metrics import volume_ratio
+from plant3dvision.tasks.colmap import get_cnc_poses
+from plant3dvision.tasks.colmap import get_colmap_poses
 from plantdb import FSDB
 from plantdb.fsdb import LOCK_FILE_NAME
 from plantdb.fsdb import MARKER_FILE_NAME
@@ -35,6 +39,27 @@ dirname, filename = os.path.split(os.path.abspath(__file__))
 logger = logging.getLogger(f'{filename}')
 
 CONF_FILE = os.path.join(dirname, "conf_robustness_comparison.json")
+
+DESC = """ROMI reconstruction & analysis pipeline repeatability test procedure.
+
+Analyse the repeatability of a reconstruction & analysis pipeline by:
+1. duplicating the scan in a temporary folder (and cleaning it if necessary)
+2. running the pipeline up to the previous task of the task to test
+3. copying this result to a new database and replicate the dataset
+4. repeating the task to test for each replicate
+5. comparing the results pair by pair.
+
+Comparison can be done at the scale of the files but also with metrics if a reference can be set.
+
+To create fully independent tests, we run the pipeline up to the task to test on each replicate.
+
+Note that in order to use the ML pipeline, you will first have to:
+1. create an output directory
+2. use the `--models` argument to copy the CNN trained models required to run the pipeline.
+"""
+# - Load the JSON config file of the script:
+c = json.load(open(CONF_FILE))
+valid_tasks = list(c.keys())
 
 
 def save_data_repartition(data, data_type, db):
@@ -156,7 +181,7 @@ def _get_task_fileset(scan_dataset, task_name):
     ----------
     scan_dataset : plantdb.FSDB.Scan
         scan dataset that should contain the unique output of `task_name`
-    task_name : string
+    task_name : str
         name of the task to test
 
     Returns
@@ -188,7 +213,7 @@ def _get_files(scan_dataset, task_name, unique=False):
     ----------
     scan_dataset : plantdb.FSDB.Scan
         scan dataset that should contain the unique output of `task_name`
-    task_name : string
+    task_name : str
         name of the task to test
     unique : bool, optional
         if ``True``, assert that there is only one `File` in the `Fileset`
@@ -217,6 +242,114 @@ def _get_files(scan_dataset, task_name, unique=False):
     return [fs.get_file(f) for f in f_list]
 
 
+def compare_colmap(db, task_name):
+    """Compare the estimated poses by COLMAP.
+
+    Parameters
+    ----------
+    Parameters
+    ----------
+    db : plantdb.FSDB
+        Local ROMI database instance with the replicated scan datasets
+    task_name : str
+        name of the task to test
+
+    Returns
+    -------
+
+    Examples
+    --------
+    >>> import os
+    >>> from plantdb.fsdb import FSDB
+    >>> from plant3dvision.tasks.colmap import get_colmap_poses
+    >>> from plant3dvision.tasks.colmap import get_cnc_poses
+    >>> db = FSDB(os.environ.get('DB_LOCATION', '/home/aurele/Soft/romi_db'))
+    >>> # Example 1 - Compute & use the calibrated poses from/on a calibration scan:
+    >>> db.connect()
+    >>> db.list_scans()
+    >>> scan_id = "sgk_300_90_36"
+    >>> scan = db.get_scan(scan_id)
+    >>> colmap_poses = get_colmap_poses(scan)
+    >>> print(colmap_poses)
+    >>> cnc_poses = get_cnc_poses(scan)
+    >>> print(cnc_poses)
+    >>> db.disconnect()
+
+    """
+    from scipy.spatial.distance import euclidean
+    # List the duplicated `Scan` datasets:
+    scans_list = [scan for scan in db.get_scans() if scan.id != 'models']
+    logger.info(f"Comparing {task_name} output for replicated scans list: {[s.id for s in scans_list]}")
+
+    # - Get CNC poses indexed by image ids:
+    cnc_poses = get_cnc_poses(scans_list[0])
+    # - Get image ids:
+    image_ids = list(cnc_poses.keys())
+
+    # - Get all poses estimated by COLMAP indexed by image id and by replicate id:
+    colmap_poses = {}  # {scan_id: {img_id: [x, y, z]}}
+    poses_array = []
+    for scan in scans_list:
+        colmap_poses[scan.id] = get_colmap_poses(scan)  # {img_id: [x, y, z]}
+        poses_array.append([p for im_id, p in get_colmap_poses(scan).items()])
+
+    # - Get the list of all colmap poses (XYZ) indexed by image id:
+    colmap_poses_by_image = {im: [] for im in colmap_poses[scan.id].keys()}
+    for scan_id, scan_poses in colmap_poses.items():
+        for im_id, pose in scan_poses.items():
+            colmap_poses_by_image[im_id].append(pose)
+
+    # - Compute the distance of estimated colmap poses from the CNC pose for each replicate and image:
+    dist2cnc_pose_by_image = {}
+    for im_id, poses in colmap_poses_by_image.items():
+        xyz_cnc = cnc_poses[im_id][:3]
+        dist2cnc_pose_by_image[im_id] = [euclidean(pose, xyz_cnc) for pose in poses]
+    # Compute the mean distance of estimated colmap poses from the CNC pose for each image:
+    mean_dist_to_cnc = {im_id: np.mean(d2cnc) for im_id, d2cnc in dist2cnc_pose_by_image.items()}
+    mean_dist_to_cnc_rep = {scan.id: np.mean([dist2cnc_pose_by_image[im_id][scan_idx] for im_id in image_ids]) for scan_idx, scan in enumerate(scans_list)}
+
+    # Now compute mean pose per image:
+    mean_pose_by_image = {}
+    for im_id, pose in colmap_poses_by_image.items():
+        mean_pose_by_image[im_id] = np.mean(np.array(pose), axis=0)
+
+    # - Then compute the distance from the mean pose for each replicate:
+    dist2mean_pose_by_image = {}
+    for im_id, mean_pose in mean_pose_by_image.items():
+        dist2mean_pose_by_image[im_id] = [euclidean(colmap_poses[scan.id][im_id], mean_pose) for scan in scans_list]
+    # Compute deviation statistics per image:
+    mean_dist = {im_id: np.mean(d2m) for im_id, d2m in dist2mean_pose_by_image.items()}
+    mean_dist_rep = {scan.id: np.mean([dist2mean_pose_by_image[im_id][scan_idx] for im_id in image_ids]) for scan_idx, scan in enumerate(scans_list)}
+    std_dist = {im_id: np.std(d2m) for im_id, d2m in dist2mean_pose_by_image.items()}
+    # Compute global deviation statistics:
+    global_mean_dist = np.mean([d2m for d2m in dist2mean_pose_by_image.values()])
+    global_mean_dist_to_cnc = np.mean([d2cnc for d2cnc in dist2cnc_pose_by_image.values()])
+
+    with open(pathlib.Path(db.basedir) / f'{task_name}_comparison.json', 'w') as out_file:
+        json.dump({
+            'global mean distance to CNC pose': global_mean_dist_to_cnc,
+            'replicate mean distance to CNC pose': dict_sort_by_values(mean_dist_to_cnc_rep),
+            'mean distance to CNC pose': mean_dist_to_cnc,
+            'global mean distance to mean pose': global_mean_dist,
+            'replicate mean distance to mean pose': dict_sort_by_values(mean_dist_rep),
+            'mean distance to mean pose': mean_dist,
+            'std distance to mean pose': std_dist,
+            'distance to mean pose': dist2mean_pose_by_image
+        }, out_file, indent=2)
+
+    return
+
+
+def dict_sort_by_values(dico) -> OrderedDict:
+    """Returns an OrderedDict instance from value sorted dictionary."""
+    import operator
+    sorted_tuples = sorted(dico.items(), key=operator.itemgetter(1))
+    sorted_dict = OrderedDict()
+    for k, v in sorted_tuples:
+        sorted_dict[k] = v
+
+    return sorted_dict
+
 def compare_binary_mask(db, task_name):
     """Use set metrics to compare binary masks for each unique pairs of repetition.
 
@@ -224,7 +357,7 @@ def compare_binary_mask(db, task_name):
     ----------
     db : plantdb.FSDB
         Local ROMI database instance with the replicated scan datasets
-    task_name : string
+    task_name : str
         name of the task to test
 
     """
@@ -319,7 +452,7 @@ def compare_pointcloud(db, task_name):
     ----------
     db : plantdb.FSDB
         Local ROMI database instance with the replicated scan datasets
-    task_name : string
+    task_name : str
         name of the task to test
 
     """
@@ -532,7 +665,7 @@ def compare_trianglemesh_points(db, task_name):
     ----------
     db : plantdb.FSDB
         Local ROMI database instance with the replicated scan datasets
-    task_name : string
+    task_name : str
         name of the task to test
 
     """
@@ -597,7 +730,7 @@ def compare_curveskeleton_points(db, task_name):
     ----------
     db : plantdb.FSDB
         Local ROMI database instance with the replicated scan datasets
-    task_name : string
+    task_name : str
         name of the task to test
 
     """
@@ -649,7 +782,7 @@ def angles_and_internodes_comparison(db, task_name):
     ----------
     db : plantdb.FSDB
         Local ROMI database instance with the replicated scan datasets
-    task_name : string
+    task_name : str
         name of the task to test
 
     """
@@ -703,7 +836,7 @@ def file_by_file_comparison(db, task_name):
     ----------
     db : plantdb.FSDB
         Local ROMI database instance with the replicated scan datasets
-    task_name : string
+    task_name : str
         name of the task to test
 
     """
@@ -736,7 +869,7 @@ def file_by_file_comparison(db, task_name):
         json.dump({'Similarity (%)': fcmp, 'Mean similarity (%)': average_similarity}, out_file)
 
 
-def compare_task_output(db, task_name, independant_tests=False):
+def compare_task_output(db, task_name, independent_tests=False):
     """
     Method to compare outputs of a task on replicated datasets.
 
@@ -744,9 +877,9 @@ def compare_task_output(db, task_name, independant_tests=False):
     ----------
     db : plantdb.FSDB
         Local ROMI database instance with the replicated scan datasets
-    task_name : string
+    task_name : str
         name of the task to test
-    independant_tests : bool
+    independent_tests : bool
         if ``True`` indicate all tasks were performed independently and will be evaluated, else only evaluate `task_name`
 
     Notes
@@ -754,6 +887,7 @@ def compare_task_output(db, task_name, independant_tests=False):
     The behaviour of this method is configured by the JSON file `CONF_FILE`.
 
     """
+    db.connect()
     # List paths where tested task output(s) should be located
     folder_task_list = [pathlib.Path(db.basedir, scan.id, _get_task_fileset(scan, task_name).id) for scan in
                         db.get_scans() if scan.id != 'models']
@@ -764,7 +898,7 @@ def compare_task_output(db, task_name, independant_tests=False):
     # - Load the metric for the selected task from the JSON configuration file:
     c = json.load(open(CONF_FILE))
     # - Evaluate all tasks if independent tests, else evaluate only tested task:
-    if independant_tests:
+    if independent_tests:
         for task in c.keys():
             try:
                 eval(c[task]["comp_func"] + "(db, task)")
@@ -901,7 +1035,7 @@ def run_pipe(scan_path, task_name, cfg_file):
     ----------
     scan_path : pathlib.Path
         contains information on database
-    task_name : string
+    task_name : str
         task name, must be a key in the CONF_FILE
     cfg_file : string
         name of the configuration file to run the pipeline
@@ -931,13 +1065,13 @@ def compute_repeatability_test(db, task_cfg):
     """
     scans_list = [scan.id for scan in db.get_scans() if scan.id != 'models']
     logger.info(f"Repeating task {task_cfg['name']} on replicated scans list: {scans_list}")
-    test_db.disconnect()  # to allow the luigi pipeline to run!
+    db.disconnect()  # to allow the luigi pipeline to run!
+
     # Execute the task to test for all scans in the test database:
     for copied_scan in scans_list:
         copied_scan_path = pathlib.Path(db.basedir, copied_scan)
         run_pipe(copied_scan_path, task_cfg["name"], task_cfg["config_file"])
-    # Reconnect to the DB before leaving...
-    test_db.connect()
+
     return
 
 
@@ -947,7 +1081,7 @@ def config_task(task_name, cfg_file, full_pipe, previous_task):
 
     Parameters
     ----------
-    task_name : string
+    task_name : str
         task name, must be a key in the CONF_FILE
     cfg_file : string
         name of the configuration file to run the pipeline
@@ -974,114 +1108,104 @@ def config_task(task_name, cfg_file, full_pipe, previous_task):
     return task_cfg
 
 
-"""
-creates a test db at the root of the db linked to the scan to analyze
-"""
-DESC = """ROMI reconstruction & analysis pipeline repeatability test procedure.
+def parsing():
+    # TODO: an option to set a reference (or would that be the job of the Evaluation tasks?!)
+    # TODO: use the `pipeline.toml` to defines the previous tasks ?
 
-Analyse the repeatability of a reconstruction & analysis pipeline by:
-1. duplicating the scan in a temporary folder (and cleaning it if necessary)
-2. running the pipeline up to the previous task of the task to test
-3. copying this result to a new database and replicate the dataset
-4. repeating the task to test for each replicate
-5. comparing the results pair by pair.
+    parser = argparse.ArgumentParser(description=DESC)
 
-Comparison can be done at the scale of the files but also with metrics if a reference can be set.
-    
-To create fully independent tests, we run the pipeline up to the task to test on each replicate.
-    
-Note that in order to use the ML pipeline, you will first have to:
-1. create an output directory
-2. use the `--models` argument to copy the CNN trained models required to run the pipeline.
-"""
-# - Load the JSON config file of the script:
-c = json.load(open(CONF_FILE))
-valid_tasks = list(c.keys())
+    parser.add_argument("scan",
+                        help="scan to use for repeatability analysis")
+    parser.add_argument("task", default="AnglesAndInternodes",
+                        choices=valid_tasks,
+                        help=f"task to test, should be in: {', '.join(valid_tasks)}")
+    parser.add_argument("config_file",
+                        help="path to the TOML config file of the analysis pipeline")
+    parser.add_argument("-n", "--replicate_number", default=2,
+                        help="number of replicate to use for repeatability analysis")
+    parser.add_argument("-f", "--full_pipe", action="store_true", default=False,
+                        help="run the analysis pipeline on each replicate independently")
+    parser.add_argument("-np", "--no_pipeline", action="store_true", default=False,
+                        help="do not run the pipeline, only compare tasks outputs")
+    parser.add_argument("-db", '--test_database',
+                        help="test database location to use. Use at your own risks!")
+    parser.add_argument("--models", default=False,
+                        help="models database location to use with ML pipeline.")
+    # ->Test database path exists:
+    #   - NO: create the directory & use it instead of auto-generated path
+    #   - YES:
+    #     ->Test database contain scan datasets
+    #       - NO: use it instead of auto-generated path
+    #       - YES: use number of scans as replicate number & compute repeatability test
 
-# TODO: an option to set a reference (or would that be the job of the Evaluation tasks?!)
-# TODO: use the `pipeline.toml` to defines the previous tasks ?
+    return parser
 
-parser = argparse.ArgumentParser(description=DESC)
 
-parser.add_argument("scan",
-                    help="scan to use for repeatability analysis")
-parser.add_argument("task", default="AnglesAndInternodes",
-                    choices=valid_tasks,
-                    help=f"task to test, should be in: {', '.join(valid_tasks)}")
-parser.add_argument("config_file",
-                    help="path to the TOML config file of the analysis pipeline")
-parser.add_argument("-n", "--replicate_number", default=2,
-                    help="number of replicate to use for repeatability analysis")
-parser.add_argument("-f", "--full_pipe", action="store_true", default=False,
-                    help="run the analysis pipeline on each replicate independently")
-parser.add_argument("-np", "--no_pipeline", action="store_true", default=False,
-                    help="do not run the pipeline, only compare tasks outputs")
-parser.add_argument("-db", '--test_database',
-                    help="test database location to use. Use at your own risks!")
-parser.add_argument("--models", default=False,
-                    help="models database location to use with ML pipeline.")
-# ->Test database path exists:
-#   - NO: create the directory & use it instead of auto-generated path
-#   - YES:
-#     ->Test database contain scan datasets
-#       - NO: use it instead of auto-generated path
-#       - YES: use number of scans as replicate number & compute repeatability test
+def main(args):
+    task2test = args.task
+    replicate_number = int(args.replicate_number)
+    init_scan_path = pathlib.Path(args.scan).expanduser()
+    db_location = init_scan_path.parent
+    root_location = db_location.parent
+    if args.models:
+        models_path = pathlib.Path(args.models).expanduser()
+    else:
+        models_path = None
+    logger.info(f"Got scan path: {init_scan_path}")
 
-# - Parse the input arguments to variables:
-args = parser.parse_args()
-task2test = args.task
-replicate_number = int(args.replicate_number)
-init_scan_path = pathlib.Path(args.scan).expanduser()
-db_location = init_scan_path.parent
-root_location = db_location.parent
-if args.models:
-    models_path = pathlib.Path(args.models).expanduser()
-else:
-    models_path = None
-logger.info(f"Got scan path: {init_scan_path}")
+    # - Task configuration
+    task_cfg = config_task(task2test, args.config_file, args.full_pipe, c[task2test]["prev_task"])
+    # - 'test database' setup & dataset duplication:
+    if args.test_database is not None:
+        logger.info(f"Got a test database location as argument: '{args.test_database}'.")
+        test_db_path = pathlib.Path(args.test_database)
+        test_db_path.mkdir(exist_ok=True)
+    else:
+        # test db is created next to db containing original scan dataset
+        test_db_path = create_test_db(root_location, task_cfg["name"])
 
-# - Task configuration
-task_cfg = config_task(task2test, args.config_file, args.full_pipe, c[task2test]["prev_task"])
-# - 'test database' setup & dataset duplication:
-if args.test_database is not None:
-    logger.info(f"Got a test database location as argument: '{args.test_database}'.")
-    test_db_path = pathlib.Path(args.test_database)
-    test_db_path.mkdir(exist_ok=True)
-else:
-    # test db is created next to db containing original scan dataset
-    test_db_path = create_test_db(root_location, task_cfg["name"])
+    scan_replicates = list([idir.stem for idir in test_db_path.iterdir() if idir.is_dir() and idir.stem != 'models'])
+    n_replicates = len(scan_replicates)
+    # Case without/with scan datasets in the test database root folder
+    if n_replicates == 0:
+        # Duplicate the scan dataset as many times as requested
+        test_scans = fill_test_db(test_db_path, init_scan_path, task_cfg, replicate_number, models_path)
+    else:
+        # If there is something in the root folder that mean you passed a value to `--test_database`
+        # And we then consider that it already contains the replicated scans!
+        logger.info(
+            f"Found {n_replicates} scan replicates in existing test database: {', '.join(map(str, scan_replicates))}")
+        # Make sure the lock is OFF!
+        marker_file = test_db_path / MARKER_FILE_NAME
+        lock_file = test_db_path / LOCK_FILE_NAME
+    try:
+        marker_file.touch()
+    except:
+        pass
+    try:
+        lock_file.unlink()
+        # lock_file.unlink(missing_ok=True)  # missing_ok only available since Python3.8
+    except:
+        pass
 
-scan_replicates = list([idir.stem for idir in test_db_path.iterdir() if idir.is_dir() and idir.stem != 'models'])
-n_replicates = len(scan_replicates)
-# Case without/with scan datasets in the test database root folder
-if n_replicates == 0:
-    # Duplicate the scan dataset as many times as requested
-    test_scans = fill_test_db(test_db_path, init_scan_path, task_cfg, replicate_number, models_path)
-else:
-    # If there is something in the root folder that mean you passed a value to `--test_database`
-    # And we then consider that it already contains the replicated scans!
-    logger.info(
-        f"Found {n_replicates} scan replicates in existing test database: {', '.join(map(str, scan_replicates))}")
-    # Make sure the lock is OFF!
-    marker_file = test_db_path / MARKER_FILE_NAME
-    lock_file = test_db_path / LOCK_FILE_NAME
-try:
-    marker_file.touch()
-except:
-    pass
-try:
-    lock_file.unlink()
-    # lock_file.unlink(missing_ok=True)  # missing_ok only available since Python3.8
-except:
-    pass
+    # - Instantiate ROMI database
+    test_db = FSDB(str(test_db_path))
+    test_db.connect()
 
-# - Instantiate ROMI database
-test_db = FSDB(str(test_db_path))
-test_db.connect()
+    if not args.no_pipeline:
+        # - Repeat task on all replicated scans dataset of the test database:
+        compute_repeatability_test(test_db, task_cfg)
 
-if not args.no_pipeline:
-    # - Repeat task on all replicated scans dataset of the test database:
-    compute_repeatability_test(test_db, task_cfg)
+    # - Compare the output(s) of the task across replicated scans dataset:
+    compare_task_output(test_db, task_cfg["name"], independent_tests=args.full_pipe)
 
-# - Compare the output(s) of the task across replicated scans dataset:
-compare_task_output(test_db, task_cfg["name"], independant_tests=args.full_pipe)
+
+def run():
+    # - Parse the input arguments to variables:
+    parser = parsing()
+    args = parser.parse_args()
+    main(args)
+
+
+if __name__ == '__main__':
+    run()
