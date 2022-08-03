@@ -368,7 +368,7 @@ class CylinderRadiusGroundTruth(RomiTask):
     Output task format: PLY point-cloud & JSON metadata (with known radius).
 
     """
-    upstream_task = luigi.TaskParameter(ImagesFilesetExists)
+    upstream_task = None
     radius = luigi.Parameter(default="random")
     height = luigi.Parameter(default="random")
     nb_points = luigi.IntParameter(default=10000)
