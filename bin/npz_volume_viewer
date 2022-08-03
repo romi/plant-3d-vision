@@ -136,31 +136,39 @@ def view(array, cmap="viridis", **kwargs):
     return zs
 
 
-# - Parse the input arguments to variables:
-parser = parsing()
-args = parser.parse_args()
+def main(args):
+    dataset_path = Path(args.dataset)
+    db_location = dataset_path.parent
+    scan_name = dataset_path.name
 
-dataset_path = Path(args.dataset)
-db_location = dataset_path.parent
-scan_name = dataset_path.name
+    db = FSDB(db_location)
+    db.connect()
 
-db = FSDB(db_location)
-db.connect()
+    dataset = db.get_scan(scan_name)
+    # List all filesets and get the one corresponding to the 'Voxels' task:
+    fs = dataset.get_filesets()
+    voxels_fs = ""
+    for f in fs:
+        if f.id.startswith("Voxel"):
+            voxels_fs = f.id
 
-dataset = db.get_scan(scan_name)
-# List all filesets and get the one corresponding to the 'Voxels' task:
-fs = dataset.get_filesets()
-voxels_fs = ""
-for f in fs:
-    if f.id.startswith("Voxel"):
-        voxels_fs = f.id
+    voxels_fs = dataset.get_fileset(voxels_fs)
+    # Read the NPZ file:
+    npz_path = join(args.dataset, voxels_fs.id, voxels_fs.get_files()[0].filename)
+    print(npz_path)
+    npz = imageio.volread(npz_path)
+    # npz = read_volume(voxels_fs.get_files()[0])
 
-voxels_fs = dataset.get_fileset(voxels_fs)
-# Read the NPZ file:
-npz_path = join(args.dataset, voxels_fs.id, voxels_fs.get_files()[0].filename)
-print(npz_path)
-npz = imageio.volread(npz_path)
-# npz = read_volume(voxels_fs.get_files()[0])
+    zs = view(npz[:, :, ::-1], cmap=args.cmap, dataset=str(scan_name))
+    db.disconnect()
 
-zs = view(npz[:, :, ::-1], cmap=args.cmap, dataset=str(scan_name))
-db.disconnect()
+
+def run():
+    # - Parse the input arguments to variables:
+    parser = parsing()
+    args = parser.parse_args()
+    main(args)
+
+
+if __name__ == '__main__':
+    run()
