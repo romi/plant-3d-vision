@@ -322,8 +322,6 @@ def check_colmap_cfg(current_cfg, calibration_scan):
     with open(join(calibration_scan.path(), 'pipeline.toml'), 'r') as f:
         calib_scan_cfg = toml.load(f)
 
-    print(calib_scan_cfg)
-
     try:
         assert calib_scan_cfg['Colmap']['align_pcd'] == current_cfg['Colmap']['align_pcd']
     except AssertionError:
@@ -478,6 +476,12 @@ class Colmap(RomiTask):
         # - Save the point-cloud bounding-box in task metadata
         self.output().get().set_metadata("bounding_box", bounding_box)
 
+        from pathlib import Path
+        # - Copy all log files from colmap working directory:
+        workdir = Path(colmap_runner.colmap_ws)
+        for log_path in workdir.glob('*.log'):
+            outfile = self.output_file(log_path.name)
+            outfile.import_file(log_path)
 
 def calibration_figure(cnc_poses, colmap_poses, path=None, image_id=False, scan_id=None, calib_scan_id=None, **kwargs):
     """Create a figure showing the effect of calibration procedure.
