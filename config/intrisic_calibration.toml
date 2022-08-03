@@ -1,0 +1,15 @@
+[CreateCharucoBoard]
+n_squares_x = "14"  # Number of chessboard squares in X direction.
+n_squares_y = "10"  # Number of chessboard squares in Y direction.
+square_length = "2."  # Length of square side, in cm
+marker_length = "1.5"  # Length of marker side, in cm
+aruco_pattern = "DICT_4X4_1000"  # 'DICT_4X4_50', 'DICT_4X4_100', 'DICT_4X4_250', 'DICT_4X4_1000'
+
+[DetectCharuco]
+upstream_task = "ImagesFilesetExists"
+board_fileset = "CreateCharucoBoard"
+min_n_squares = "20"
+
+[IntrinsicCalibration]
+upstream_task = "DetectCharuco"
+board_fileset = "CreateCharucoBoard"

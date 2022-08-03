@@ -7,12 +7,12 @@ appdirs
 colorlog
 docker
 imageio
-pandas==1.2.5  # there is a mismatch version with cython inside networkx setup
+pandas  # there is a mismatch version with cython inside networkx setup
 networkx
 open3d>= 0.9.0.0  # open3d== 0.9.0.0
-opencv-python== 4.2.0.34
+opencv-contrib-python
 pybind11
-pyopencl== 2020.2.2
+pyopencl
 scikit-image
 toml
 joblib
