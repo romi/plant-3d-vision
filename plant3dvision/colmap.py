@@ -384,7 +384,7 @@ class ColmapRunner(object):
         # - Initialize the `poses.txt` file for COLMAP:
         self._init_poses()
         # - File object used for logging COLMAP outputs:
-        self.log_file = f"{self.colmap_ws}/colmap_log.txt"
+        self.log_file = f"{self.colmap_ws}/colmap.log"
         # - Check COLMAP executable to use:
         self._init_exe(colmap_exe)
 
@@ -676,6 +676,9 @@ class ColmapRunner(object):
         logger.debug(f"args: {args}")
         out = self._colmap_cmd(COLMAP_EXE, 'model_analyzer', args, {}, to_log=False)
         logger.info(f"Reconstruction statistics: " + out.replace('\n', ', '))
+        # Save it as a log file:
+        with open(f'{self.colmap_ws}/model_analyzer.log', 'w') as f:
+            f.writelines(out)
 
     def image_undistorter(self):
         """Undistort images and export them for MVS or to external dense reconstruction software."""
