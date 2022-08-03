@@ -2,5 +2,5 @@
 radius="random"
 height="random"
 
-[CylinderRadiusEvaluation]
+[CylinderRadiusEstimation]
 upstream_task="CylinderRadiusGroundTruth"

@@ -346,8 +346,27 @@ class VoxelsEvaluation(EvaluationTask):
 
 
 class CylinderRadiusGroundTruth(RomiTask):
-    """
-    Provide a point cloud with a cylindrical shape and a known radius
+    """Provide a point-cloud with a cylindrical shape and a known radius & height.
+
+    Parameters
+    ----------
+    upstream_task : luigi.TaskParameter, optional
+        The task upstream to `CylinderRadiusEstimation`, defaults to `"ImagesFilesetExists"`.
+        Valid option is: "ImagesFilesetExists".
+    radius : luigi.Parameter, optional
+        The radius of the cylinder to create. Defaults to "random", but can be a float.
+    height : luigi.Parameter, optional
+        The height of the cylinder to create. Defaults to "random", but can be a float.
+    nb_points : luigi.IntParameter, optional
+        The number of points used to create the cylinder point-cloud. Defaults to "10000".
+
+    Notes
+    -----
+    These parameters should be defined in TOML config file given to `romi_run_task` CLI.
+    Module: plant3dvision.tasks.evaluation
+    Upstream task format: None
+    Output task format: PLY point-cloud & JSON metadata (with known radius).
+
     """
     upstream_task = luigi.TaskParameter(ImagesFilesetExists)
     radius = luigi.Parameter(default="random")
@@ -358,38 +377,47 @@ class CylinderRadiusGroundTruth(RomiTask):
         return []
 
     def run(self):
+        # - Get the radius value:
         if self.radius == "random":
             radius = random.uniform(1, 100)
         else:
             radius = float(self.radius)
+        # - Get the height value:
         if self.height == "random":
             height = random.uniform(1, 100)
         else:
             height = float(self.height)
-
+        # - Create the cylinder with known radius, height & number of points:
         zs = np.random.uniform(0, height, self.nb_points)
         thetas = np.random.uniform(0, 2 * np.pi, self.nb_points)
         xs = radius * np.cos(thetas)
         ys = radius * np.sin(thetas)
         cylinder = np.array([xs, ys, zs]).T
-
+        # - Create the cylinder point-cloud:
         gt_cyl = o3d.geometry.PointCloud()
         gt_cyl.points = o3d.utility.Vector3dVector(cylinder)
-        # visualization
+        # - Visualization:
         # o3d.visualization.draw_geometries([gt_cyl])
-
+        # - Write the PLY & metadata:
         io.write_point_cloud(self.output_file(), gt_cyl)
         self.output().get().set_metadata({'radius': radius})
 
 
-class CylinderRadiusEvaluation(RomiTask):
-    """
-    Extract specific features of a cylinder shaped point cloud
+class CylinderRadiusEstimation(RomiTask):
+    """Extract specific features of a cylinder shaped point-cloud.
 
-    Module: romiscan.tasks.calibration_test
-    Default upstream tasks: PointCloud
-    Upstream task format: ply
-    Output task format: json
+    Parameters
+    ----------
+    upstream_task : luigi.TaskParameter, optional
+        The task upstream to `CylinderRadiusEstimation`, defaults to `"CylinderRadiusGroundTruth"`.
+        Valid options are: "CylinderRadiusGroundTruth", "PointCloud".
+
+    Notes
+    -----
+    These parameters should be defined in TOML config file given to `romi_run_task` CLI.
+    Module: plant3dvision.tasks.evaluation
+    Upstream task format: PLY
+    Output task format: JSON result file
 
     """
     upstream_task = luigi.TaskParameter(CylinderRadiusGroundTruth)
@@ -398,9 +426,11 @@ class CylinderRadiusEvaluation(RomiTask):
         return self.upstream_task().output()
 
     def run(self):
+        # - Load the PLY file containing the cylinder point-cloud:
         cylinder_fileset = self.input().get()
         input_file = self.input_file()
         pcd = io.read_point_cloud(input_file)
+        # - Get the ground-truth value for cylinder radius:
         if str(self.upstream_task.task_family) == "CylinderRadiusGroundTruth":
             gt_radius = cylinder_fileset.get_metadata("radius")
         elif str(self.upstream_task.task_family) == "PointCloud":
@@ -411,22 +441,24 @@ class CylinderRadiusEvaluation(RomiTask):
                 logger.warning("No radius measurement specified")
         else:
             gt_radius = None
-
+        # - Compute the radius:
         pcd_points = np.asarray(pcd.points)
         pca = decomposition.PCA(n_components=3)
         pca.fit(pcd_points)
         t_points = np.dot(pca.components_, pcd_points.T).T
+        # - Visualization:
         # gt_cyl = o3d.geometry.PointCloud()
         # gt_cyl.points = o3d.utility.Vector3dVector(t_points)
         # o3d.visualization.draw_geometries([gt_cyl])
         center = t_points.mean(axis=0)
         radius = np.mean(np.sqrt((t_points[:, 0] - center[0]) ** 2 + (t_points[:, 1] - center[1]) ** 2))
-
+        # - Compare obtained radius to GT radius:
         output = {"calculated_radius": radius}
         if gt_radius:
             err = round(abs(radius - gt_radius) / gt_radius * 100, 2)
             output["gt_radius"] = gt_radius
             output["err (%)"] = err
+        # - Write results to JSON:
         io.write_json(self.output_file(), output)
 
 
