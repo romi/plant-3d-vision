@@ -16,15 +16,17 @@ from skimage.morphology import binary_dilation
 EPS = 1e-9
 
 
-def undistort(img, camera):
-    """Uses opencv to undistort an image thanks to a `camera` model.
+def undistort(img, camera_mtx, distortion_vect):
+    """Uses opencv to undistort an image thanks to a camera model.
 
     Parameters
     ----------
     img : numpy.ndarray
         RGB image as an NxMx3 array.
-    camera: dict
-        camera['parameters'] contains the opencv camera parameters.
+    camera_mtx : numpy.array
+        3x3 floating-point camera matrix.
+    distortion_vect : numpy.array
+        Vector of distortion coefficients (k1, k2, p1, p2, k3)
 
     See Also
     --------
@@ -36,12 +38,7 @@ def undistort(img, camera):
         The undistorted RGB (NxMx3) array.
 
     """
-    camera_params = camera['params']
-    mat = np.matrix([[camera_params[0], 0, camera_params[2]],
-                     [0, camera_params[1], camera_params[3]],
-                     [0, 0, 1]])
-    undistort_parameters = np.array(camera_params[4:])
-    undistorted_data = cv2.undistort(img, mat, undistort_parameters)
+    undistorted_data = cv2.undistort(img, camera_mtx, distortion_vect, None)
     return undistorted_data
 
 

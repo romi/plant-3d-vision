@@ -9,6 +9,8 @@ from tqdm import tqdm
 from plant3dvision.log import logger
 from plant3dvision.tasks.colmap import Colmap
 from plantdb import io
+from romitask import DatabaseConfig
+from romitask import FilesetTarget
 from romitask import RomiTask
 from romitask.task import FileByFileTask
 from romitask.task import FilesetExists
@@ -216,24 +218,60 @@ class Undistorted(FileByFileTask):
     upstream_task : luigi.TaskParameter, optional
         The task to use upstream to the `Undistorted` tasks. It should be a tasks that generates a ``Fileset`` of RGB images.
         It can thus be ``'ImagesFilesetExists'`` or ``'Colmap'``. Defaults to ``'ImagesFilesetExists'``.
+    camera_model : luigi.Parameter, optional
+        Source of camera model.
 
     """
     upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)
+    camera_model = luigi.Parameter("Colmap")  # ['Colmap', 'IntrinsicCalibration']
+    camera_model_id = luigi.Parameter(default="")  # To use with 'IntrinsicCalibration'
 
-    def input(self):
-        return self.upstream_task().output()
+    # def input(self):
+    #     return self.upstream_task().output()
 
     def requires(self):
         # return [Colmap(), Scan(), self.upstream_task()]
-        return [Colmap(), self.upstream_task()]
+        if str(self.camera_model).lower() == 'intrinsiccalibration':
+            logger.info(f"Using calibration scan: {self.camera_model_id}...")
+            camera_task = FilesetExists(scan_id=self.camera_model_id, fileset_id='camera_model')
+            return {"camera": camera_task, "images": self.upstream_task()}
+        else:
+            return {"camera": Colmap(), "images": self.upstream_task()}
+
+    def run(self):
+        images_fileset = self.input()["images"].get().get_files(query=self.query)
+        if str(self.camera_model).lower() == 'intrinsiccalibration':
+            camera_file = self.input()['camera'].get().get_file("camera_model")
+            camera_dict = io.read_json(camera_file)
+            camera_mtx = np.array(camera_dict["camera_matrix"], dtype='float32')
+            distortion_vect = np.array(camera_dict["distortion"], dtype='float32')
+        elif str(self.camera_model).lower() == 'colmap':
+            camera_file = self.input()['camera'].get().get_file("cameras")
+            camera_dict = io.read_json(camera_file)
+            camera_params = camera_dict['1']['params']
+            camera_mtx = np.matrix([[camera_params[0], 0, camera_params[2]],
+                                    [0, camera_params[1], camera_params[3]],
+                                    [0, 0, 1]])
+            distortion_vect = np.array(camera_params[4:])
+        else:
+            camera_mtx, distortion_vect = None, None
+
+        self.camera_mtx = camera_mtx
+        self.distortion_vect = distortion_vect
+        output_fileset = self.output().get()
+
+        for fi in tqdm(images_fileset, unit="file"):
+            outfi = self.f(fi, output_fileset)
+            if outfi is not None:
+                m = fi.get_metadata()
+                outm = outfi.get_metadata()
+                outfi.set_metadata({**m, **outm})
 
     def f(self, fi, outfs):
         from plant3dvision import proc2d
-        camera = fi.get_metadata('colmap_camera')
-        if camera is not None:
-            camera_model = camera['camera_model']
+        if self.camera_mtx is not None:
             x = io.read_image(fi)
-            x = proc2d.undistort(x, camera_model)
+            x = proc2d.undistort(x, self.camera_mtx, self.distortion_vect)
             outfi = outfs.create_file(fi.id)
             io.write_image(outfi, x)
             return outfi
