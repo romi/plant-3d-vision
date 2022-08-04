@@ -156,7 +156,12 @@ class IntrinsicCalibration(RomiTask):
     def requires(self):
         return {"board": self.board_fileset(), "markers": self.upstream_task()}
 
+    def output(self):
+        """The output fileset associated to a ``IntrinsicCalibration`` is an 'camera_model' dataset."""
+        return FilesetTarget(DatabaseConfig().scan, "camera_model")
+
     def run(self):
+        from cv2 import CALIB_FIX_K3
         import \
             cv2.aruco as aruco  # requires `opencv-contrib-python`, to get it: `python -m pip install opencv-contrib-python`
         from plant3dvision.camera_intrinsic import get_charuco_board
@@ -184,9 +189,20 @@ class IntrinsicCalibration(RomiTask):
             board=get_charuco_board(**self.aruco_kwargs),
             imageSize=img_shape,
             cameraMatrix=None,
-            distCoeffs=None)
+            distCoeffs=None,
+            flags=CALIB_FIX_K3
+        )
+
         output_file = self.output_file("camera_model")
-        io.write_json(output_file, {"camera_matrix": mtx.tolist(), "distorsion": dist[0].tolist()})
+
+        camera_model = {
+            "height": img_shape[1],
+            "width": img_shape[0],
+            "camera_matrix": mtx.tolist(),
+            "distortion": dist[0].tolist()
+        }
+        io.write_json(output_file, camera_model)
+        return
 
 
 class Undistorted(FileByFileTask):
