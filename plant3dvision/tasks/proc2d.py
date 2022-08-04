@@ -29,7 +29,7 @@ class CreateCharucoBoard(RomiTask):
     square_length : luigi.FloatParameter, optional
         Length of a (chess) square side, in cm. Defaults to `2`.
     marker_length : luigi.FloatParameter, optional
-        Length of a (charuco) marker side, in cm. Defaults to `1.5`.
+        Length of a (ArUco) marker side, in cm. Defaults to `1.5`.
     aruco_dict : luigi.Parameter, optional
         The dictionary of ArUco markers. Defaults to `"DICT_4X4_1000"`.
 
@@ -434,7 +434,7 @@ class Segmentation2D(Masks):
     dilation = luigi.IntParameter(default=1)
 
     def requires(self):
-        """ Override default require method returning `self.upstream_task()`.
+        """ Override default `requires` method returning `self.upstream_task()`.
 
         Computing mask using trained deep learning models requires:
           - a set of image to segment
