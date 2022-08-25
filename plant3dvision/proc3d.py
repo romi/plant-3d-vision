@@ -16,11 +16,12 @@ import imageio
 import networkx as nx
 import numpy as np
 import open3d as o3d
-from plant3dvision.log import logger
 from scipy.ndimage.filters import gaussian_filter
 from scipy.ndimage.morphology import distance_transform_edt
 from skimage.exposure import rescale_intensity
 from tqdm import tqdm
+from plant3dvision.log import logger
+
 
 try:
     import romicgal as cgal

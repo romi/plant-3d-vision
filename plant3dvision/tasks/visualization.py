@@ -9,6 +9,7 @@ from romitask.task import ImagesFilesetExists, VirtualPlantObj
 from plant3dvision.filenames import COLMAP_CAMERAS_ID
 from plant3dvision.filenames import COLMAP_IMAGES_ID
 from plant3dvision.log import logger
+
 from plant3dvision.tasks.arabidopsis import AnglesAndInternodes
 from plant3dvision.tasks.colmap import Colmap, use_calibrated_poses
 from plant3dvision.tasks.proc3d import CurveSkeleton

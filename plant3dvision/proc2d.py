@@ -10,8 +10,10 @@ This module contains all functions for processing of 2D data.
 """
 
 import cv2
-import numpy as np
 from skimage.morphology import binary_dilation
+
+from plant3dvision.log import logger
+
 
 EPS = 1e-9
 

@@ -19,6 +19,7 @@ import numpy as np
 from plant3dvision.log import logger
 
 
+
 def get_main_stem_and_nodes(G, root_node):
     """
     Get main stem and branching nodes from graph.

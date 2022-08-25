@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import open3d as o3d
+from abc import ABC
+from abc import abstractmethod
+
 import numpy as np
-from abc import ABC, abstractmethod
+import open3d as o3d
 
 from plantdb import io
 from plant3dvision.log import logger
@@ -107,9 +109,9 @@ class SetMetrics(ABC):
     ----------
     evaluator: plant3dvision.SetEvaluator
         The domain specific evaluator (ex. MaskEvaluator.
-    groundtruth : numpy.array
+    groundtruth : numpy.ndarray
         The reference binary mask.
-    prediction : numpy.array
+    prediction : numpy.ndarray
         The binary mask to evaluate.
 
     Examples
@@ -205,12 +207,12 @@ class CompareMasks(SetMetrics):
     
     Parameters
     ----------
-    groundtruth: Image as np.array
-        The reference binary mask.
-    prediction : Image as np.array
-        The mask to evaluate.
-    dilation_amount: int
-        Dilate the zones of white pixels by this many pixels before the comparison 
+    groundtruth: np.ndarray
+        The reference binary mask (image).
+    prediction : np.ndarray
+        The binary mask (image) to evaluate.
+    dilation_amount : int
+        Dilate the zones of white pixels by this many pixels before the comparison.
 
     Examples
     --------
@@ -277,7 +279,7 @@ class CompareMaskFilesets():
     labels: List(str)
         The list of labels to evaluate.
     dilation_amount: int
-        Dilate the zones of white pixels by this many pixels before the comparison 
+        Dilate the zones of white pixels by this many pixels before the comparison.
 
     Examples
     --------

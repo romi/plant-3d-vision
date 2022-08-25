@@ -9,6 +9,7 @@ from romitask import RomiTask
 from plantdb import io
 from plant3dvision import proc3d
 from plant3dvision.log import logger
+
 from plant3dvision.tasks import config
 from plant3dvision.tasks.cl import Voxels
 from plant3dvision.tasks.colmap import Colmap

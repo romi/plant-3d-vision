@@ -18,6 +18,7 @@ from romitask.task import VirtualPlantObj
 from sklearn import decomposition
 
 from plant3dvision.log import logger
+
 from plant3dvision.metrics import CompareMaskFilesets
 from plant3dvision.metrics import CompareSegmentedPointClouds
 from plant3dvision.tasks import cl

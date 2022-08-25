@@ -18,6 +18,7 @@ import os
 import numpy as np
 import pyopencl as cl
 from plant3dvision.log import logger
+
 from plant3dvision.proc3d import point2index
 
 from plantdb import io
