@@ -77,7 +77,6 @@ class CreateCharucoBoard(RomiTask):
         }
         for k, v in md.items():
             board_file.set_metadata(k, v)
-        logger.info(f"Print this with the following dimensions: width={width}mm, height={height}mm!")
         return
 
 

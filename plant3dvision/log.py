@@ -48,7 +48,7 @@ def configure_logger(name, log_path="", log_level='INFO'):
     logger.addHandler(console)
     logger.setLevel(getattr(logging, log_level))
 
-    if log_path is not None and log_level != "":
+    if log_path is not None and log_path != "":
         # create file handler:
         fh = logging.FileHandler(path.join(log_path, f'{name}.log'), mode='w')
         fh.setFormatter(simple_formatter)
@@ -57,5 +57,5 @@ def configure_logger(name, log_path="", log_level='INFO'):
     return logger
 
 
-logger = logging.getLogger('plant3dvision').addHandler(logging.NullHandler())
+logger = configure_logger('plant3dvision')
 
