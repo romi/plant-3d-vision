@@ -9,6 +9,11 @@
         "comp_func" : "compare_intrinsic_params"
     },
 
+    "ExtrinsicCalibration": {
+        "prev_task" : "",
+        "comp_func" : ["compare_colmap_poses", "compare_intrinsic_params"]
+    },
+
     "Colmap": {
         "prev_task" : "",
         "comp_func" : ["compare_colmap_poses", "compare_intrinsic_params"]
