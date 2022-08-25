@@ -22,9 +22,10 @@ import numpy as np
 import open3d as o3d
 
 from plant3dvision import proc3d
-from plant3dvision.log import logger
 from plant3dvision.thirdparty import read_model
 from plantdb import io
+from plant3dvision.log import logger
+
 
 #: List of valid colmap executable values:
 ALL_COLMAP_EXE = ['colmap', 'geki/colmap', 'roboticsmicrofarms/colmap']
@@ -137,7 +138,7 @@ def colmap_points_to_pcd(points_bin):
 
 
 def colmap_images_to_dict(images_bin):
-    """Convert COLMAP images binary file to a dictionary of images with metadata.
+    """Convert COLMAP `images` binary file to a dictionary of images with metadata.
 
     Parameters
     ----------
@@ -152,8 +153,7 @@ def colmap_images_to_dict(images_bin):
     # - Read image binary model:
     images = read_model.read_images_binary(images_bin)
     res = {}
-    for key in images.keys():
-        im = images[key]
+    for key, im in images.items():
         res[key] = {
             'id': im.id,
             'qvec': im.qvec.tolist(),
@@ -253,7 +253,7 @@ class ColmapRunner(object):
             If ``True`` (default ``False``), compute dense pointcloud.
             This is time consumming & requires a lot of memory ressources.
         all_cli_args : dict, optional
-            Dictioanry of arguments to pass to colmap command lines, empty by default.
+            Dictionary of arguments to pass to colmap command lines, empty by default.
         align_pcd : bool, optional
             If ``True`` (default ``False``), align spare (& dense) pointcloud(s) coordinate system of given camera centers.
         use_calibration : bool, optional
@@ -291,8 +291,8 @@ class ColmapRunner(object):
         >>> # os.environ['COLMAP_EXE'] = "geki/colmap"  # Use this to manually switch between local COLMAP install ('colmap') or docker container ('geki/colmap')
         >>> from plant3dvision.colmap import ColmapRunner
         >>> from plantdb.fsdb import FSDB
-        >>> # - Connect to a ROMI databse to access an 'images' fileset to reconstruct with COLMAP:
-        >>> db = FSDB("/data/ROMI/DB")
+        >>> # - Connect to a ROMI database to access an 'images' fileset to reconstruct with COLMAP:
+        >>> db = FSDB(os.environ.get('DB_LOCATION', "/data/ROMI/DB/"))
         >>> db.connect()
         >>> # - Select the dataset to reconstruct:
         >>> dataset = db.get_scan("arabido_test4")

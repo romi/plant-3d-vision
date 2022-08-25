@@ -10,7 +10,7 @@ from pathlib import Path
 
 from plant3dvision.tasks.colmap import calibration_figure
 from plant3dvision.tasks.colmap import get_cnc_poses
-from plant3dvision.tasks.colmap import get_colmap_poses
+from plant3dvision.tasks.colmap import compute_colmap_poses
 from plantdb.fsdb import FSDB
 
 
@@ -36,7 +36,7 @@ def main(args):
     # - Get the CNC poses:
     cnc_poses = get_cnc_poses(dataset)
     # - Get the COLMAP poses:
-    colmap_poses = get_colmap_poses(dataset)
+    colmap_poses = compute_colmap_poses(dataset)
     # - Generate the calibration figure:
     calibration_figure(cnc_poses, colmap_poses, scan_id=scan_name, calib_scan_id='Colmap')
     db.disconnect()

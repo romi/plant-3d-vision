@@ -6,6 +6,7 @@ from os.path import splitext
 import luigi
 import numpy as np
 
+from plant3dvision.calibration import calibration_figure
 from plant3dvision.colmap import ColmapRunner
 from plant3dvision.filenames import COLMAP_CAMERAS_ID
 from plant3dvision.filenames import COLMAP_DENSE_ID
@@ -16,6 +17,7 @@ from plant3dvision.log import logger
 from plantdb import io
 from romitask.task import ImagesFilesetExists
 from romitask.task import RomiTask
+
 
 
 def compute_calibrated_poses(rotmat, tvec):
@@ -39,7 +41,7 @@ def compute_calibrated_poses(rotmat, tvec):
 
 
 def get_cnc_poses(scan_dataset):
-    """Get the CNC poses from a given dataset.
+    """Get the CNC poses from the 'images' fileset using "pose" or "approximate_pose" metadata.
 
     Parameters
     ----------
@@ -51,6 +53,15 @@ def get_cnc_poses(scan_dataset):
     dict
         Image-id indexed dictionary of CNC poses as X, Y, Z, pan, tilt.
 
+    Notes
+    -----
+    The 'images' fileset has metadata "pose" when the ``Path`` parameter `exact_pose` is ``True`` during image acquisition.
+    This fileset has metadata "approximate_pose" when the ``Path`` parameter `exact_pose` is ``False`` during image acquisition.
+
+    See Also
+    --------
+    plantimager.hal.AbstractScanner.scan_at
+
     Examples
     --------
     >>> import os
@@ -60,21 +71,58 @@ def get_cnc_poses(scan_dataset):
     >>> # Example 1 - Compute & use the calibrated poses from/on a calibration scan:
     >>> db.connect()
     >>> db.list_scans()
-    >>> scan_id = "sango36"
+    >>> scan_id = "sgk_300_90_36"
     >>> scan = db.get_scan(scan_id)
     >>> cnc_poses = get_cnc_poses(scan)
     >>> print(cnc_poses)
     >>> db.disconnect()
 
     """
-    images_fileset = scan_dataset.get_fileset('images')
-    approx_poses = {im.id: im.get_metadata("approximate_pose") for im in images_fileset.get_files()}
-    poses = {im.id: im.get_metadata("pose") for im in images_fileset.get_files()}
-    return {im.id: poses[im.id] if poses[im.id] is not None else approx_poses[im.id] for im in images_fileset.get_files()}
+    img_fs = scan_dataset.get_fileset('images')
+    approx_poses = {im.id: im.get_metadata("approximate_pose") for im in img_fs.get_files()}
+    poses = {im.id: im.get_metadata("pose") for im in img_fs.get_files()}
+    return {im.id: poses[im.id] if poses[im.id] is not None else approx_poses[im.id] for im in img_fs.get_files()}
 
 
 def get_colmap_poses(scan_dataset):
-    """Get the camera poses estimated by colmap fom a given dataset.
+    """Get the camera poses estimated by colmap from the 'images' fileset using "calibrated_pose" metadata.
+
+    Parameters
+    ----------
+    scan_dataset : plantdb.db.Scan
+        The dataset to get the COLMAP poses from.
+
+    Returns
+    -------
+    dict
+        Image-id indexed dictionary of camera poses as X, Y, Z.
+
+    Notes
+    -----
+    This meas that the
+
+    Examples
+    --------
+    >>> import os
+    >>> from plantdb.fsdb import FSDB
+    >>> from plant3dvision.tasks.colmap import get_colmap_poses
+    >>> db = FSDB(os.environ.get('DB_LOCATION', '/data/ROMI/DB'))
+    >>> # Use the calibrated poses from/on a calibration scan:
+    >>> db.connect()
+    >>> db.list_scans()
+    >>> scan_id = "sango36"
+    >>> scan = db.get_scan(scan_id)
+    >>> colmap_poses = get_colmap_poses(scan)
+    >>> print(colmap_poses)
+    >>> db.disconnect()
+
+    """
+    images_fileset = scan_dataset.get_fileset('images')
+    return {im.id: im.get_metadata("calibrated_pose") for im in images_fileset.get_files()}
+
+
+def compute_colmap_poses(scan_dataset):
+    """Get the camera poses estimated by colmap from a 'Colmap*' fileset using "rotmat" & "tvec" metadata.
 
     Parameters
     ----------
@@ -90,14 +138,14 @@ def get_colmap_poses(scan_dataset):
     --------
     >>> import os
     >>> from plantdb.fsdb import FSDB
-    >>> from plant3dvision.tasks.colmap import get_colmap_poses
+    >>> from plant3dvision.tasks.colmap import compute_colmap_poses
     >>> db = FSDB(os.environ.get('DB_LOCATION', '/data/ROMI/DB'))
     >>> # Example 1 - Compute & use the calibrated poses from/on a calibration scan:
     >>> db.connect()
     >>> db.list_scans()
     >>> scan_id = "sango36"
     >>> scan = db.get_scan(scan_id)
-    >>> colmap_poses = get_colmap_poses(scan)
+    >>> colmap_poses = compute_colmap_poses(scan)
     >>> print(colmap_poses)
     >>> db.disconnect()
 
@@ -211,10 +259,10 @@ def use_calibrated_poses(images_fileset, calibration_scan):
         #     logger.warning(f"More than one 'Colmap' job has been performed on calibration scan '{calibration_scan.id}'!")
     # - Read the JSON file with calibrated poses:
     poses = io.read_json(colmap_fs.get_file(COLMAP_IMAGES_ID))
-    # - Get the 'images' fileset for the calibration scan
-    calibration_images_fileset = calibration_scan.get_fileset("images")
+    # - Get the 'images' fileset from the extrinsic calibration scan
+    calib_img_fs = calibration_scan.get_fileset("images")
     # - Assign the calibrated pose of the i-th calibration image to the i-th image of the fileset to reconstruct
-    for i, fi in enumerate(calibration_images_fileset.get_files()):
+    for i, fi in enumerate(calib_img_fs.get_files()):
         if i >= len(images_fileset.get_files()):
             break  # break the loop if more images in calibration than fileset to reconstruct (should be the two `Line` paths, see `plantimager.path.CalibrationPath`)
         # - Search the calibrated poses (from JSON) matching the calibration image id:
@@ -346,27 +394,48 @@ class Colmap(RomiTask):
 
     Attributes
     ----------
-    upstream_task : luigi.TaskParameter, default=``ImagesFilesetExists``
-        Task upstream of this task.
-    matcher : luigi.Parameter, default="exhaustive"
-        either "exhaustive" or "sequential" (TODO: see colmap documentation)
-    compute_dense : luigi.BoolParameter
-        whether to run the dense colmap to obtain a dense point cloud
-    cli_args : luigi.DictParameter
-        parameters for colmap command line prompts (TODO: see colmap documentation)
-    align_pcd : luigi.BoolParameter, default=True
-        align point cloud on calibrated or metadata poses ?
-    calibration_scan_id : luigi.Parameter, default=""
+    upstream_task : luigi.TaskParameter, optional
+        Task upstream of this task. Defaults to ``ImagesFilesetExists``.
+    matcher : luigi.Parameter, optional
+        Type of matcher to use, choose either "exhaustive" or "sequential".
+        *Exhaustive matcher* tries to match every other image.
+        *Sequential matcher* tries to match successive image, this requires a sequential file name ordering.
+        Defaults to "exhaustive".
+    compute_dense : luigi.BoolParameter, optional
+        Whether to run the dense point cloud reconstruction by COLMAP.Defaults to ``False``.
+    cli_args : luigi.DictParameter, optional
+        Dictionary of arguments to pass to colmap command lines, empty by default.
+    align_pcd : luigi.BoolParameter, optional
+        Whether to "world-align" (scale and geo-reference) the reconstructed model using calibrated or estimated poses.
+        Default to ``True``.
+    calibration_scan_id : luigi.Parameter, optional
         ID of the calibration scan used to replace the "approximate poses" from the Scan task by the "exact poses" from the CalibrationScan task.
+        Default to NO calibration scan.
     bounding_box : luigi.DictParameter, optional
         Volume dictionary used to crop the point-cloud after colmap reconstruction and keep only points associated to the plant.
         By default, it uses the scanner workspace defined in the 'images' fileset.
         Defined as `{'x': [int, int], 'y': [int, int], 'z': [int, int]}`.
+        Defaults to NO bounding-box.
 
     Notes
     -----
     Upstream task format: Fileset with image files.
     Output fileset format: images.json, cameras.json, points3d.json, sparse.ply [, dense.ply]
+
+    **Exhaustive Matching**: If the number of images in your dataset is relatively low (up to several hundreds), this matching mode should be fast enough and leads to the best reconstruction results.
+    Here, every image is matched against every other image, while the block size determines how many images are loaded from disk into memory at the same time.
+
+    **Sequential Matching**: This mode is useful if the images are acquired in sequential order, e.g., by a video camera.
+    In this case, consecutive frames have visual overlap and there is no need to match all image pairs exhaustively.
+    Instead, consecutively captured images are matched against each other.
+    This matching mode has built-in loop detection based on a vocabulary tree, where every N-th image (loop_detection_period) is matched against its visually most similar images (loop_detection_num_images).
+    Note that image file names must be ordered sequentially (e.g., image0001.jpg, image0002.jpg, etc.).
+    The order in the database is not relevant, since the images are explicitly ordered according to their file names.
+    Note that loop detection requires a pre-trained vocabulary tree, that can be downloaded from https://demuc.de/colmap/.
+
+    References
+    ----------
+    .. [#] `COLMAP official tutorial. <https://colmap.github.io/tutorial.html>`_
 
     """
     upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)
@@ -434,7 +503,7 @@ class Colmap(RomiTask):
             check_colmap_cfg({'Colmap': {'align_pcd': self.align_pcd}}, calibration_scan)
             images_fileset = use_calibrated_poses(images_fileset, calibration_scan)
             # Create the calibration figure:
-            cnc_poses = {im.id: im.get_metadata("approximate_pose") for im in images_fileset.get_files()}
+            cnc_poses = get_cnc_poses(images_fileset.scan)
             colmap_poses = {im.id: im.get_metadata("calibrated_pose") for im in images_fileset.get_files()}
             calibration_figure(cnc_poses, colmap_poses, path=self.output().get().path(),
                                scan_id=images_fileset.scan.id, calib_scan_id=str(self.calibration_scan_id))
@@ -482,144 +551,3 @@ class Colmap(RomiTask):
         for log_path in workdir.glob('*.log'):
             outfile = self.output_file(log_path.name)
             outfile.import_file(log_path)
-
-def calibration_figure(cnc_poses, colmap_poses, path=None, image_id=False, scan_id=None, calib_scan_id=None, **kwargs):
-    """Create a figure showing the effect of calibration procedure.
-
-    Parameters
-    ----------
-    cnc_poses : dict
-        Image id indexed dictionary of the "approximate poses" (CNC).
-    colmap_poses : dict
-        Image id indexed dictionary of the "calibrated poses" (Colmap).
-    path : str, optional
-        Path where to save the figure.
-    image_id : bool, optional
-        If ``True`` add the image id next to the markers.
-        ``False`` by default.
-    scan_id : str, optional
-        Name of the scan to calibrate.
-    calib_scan_id : str, optional
-        Name of the calibration scan.
-
-    Examples
-    --------
-    >>> import os
-    >>> from plantdb.fsdb import FSDB
-    >>> from plant3dvision.tasks.colmap import get_cnc_poses
-    >>> from plant3dvision.tasks.colmap import get_colmap_poses
-    >>> from plant3dvision.tasks.colmap import calibration_figure
-    >>> from plant3dvision.tasks.colmap import use_calibrated_poses
-    >>> db = FSDB(os.environ.get('DB_LOCATION', '/data/ROMI/DB'))
-    >>> # Example 1 - Compute & use the calibrated poses from/on a calibration scan:
-    >>> db.connect()
-    >>> db.list_scans()
-    >>> scan_id = calib_scan_id = "calib3_300_90_24"
-    >>> scan = db.get_scan(scan_id)
-    >>> calib_scan = db.get_scan(calib_scan_id)
-    >>> cnc_poses = get_cnc_poses(scan)
-    >>> len(cnc_poses)
-    >>> colmap_poses = get_colmap_poses(calib_scan)
-    >>> len(colmap_poses)
-    >>> calibration_figure(cnc_poses, colmap_poses, scan_id=scan_id, calib_scan_id=calib_scan_id)
-    >>> db.disconnect()
-    >>> # Example 2 - Compute & use the calibrated poses from/on a scan:
-    >>> db.connect()
-    >>> db.list_scans()
-    >>> scan_id = calib_scan_id = "test_sgk"
-    >>> scan = db.get_scan(scan_id)
-    >>> calib_scan = db.get_scan(calib_scan_id)
-    >>> cnc_poses = get_cnc_poses(scan)
-    >>> colmap_poses = get_colmap_poses(calib_scan)
-    >>> calibration_figure(cnc_poses, colmap_poses, scan_id=scan_id, calib_scan_id=calib_scan_id)
-    >>> db.disconnect()
-    >>> # Example 3 - Compute the calibrated poses with a calibration scan & use it on a scan:
-    >>> db.connect()
-    >>> db.list_scans()
-    >>> scan_id = "sgk3"
-    >>> calib_scan_id = "calibration_350_40_36"
-    >>> scan = db.get_scan(scan_id)
-    >>> calib_scan = db.get_scan(calib_scan_id)
-    >>> images_fileset = scan.get_fileset('images')
-    >>> images_fileset = use_calibrated_poses(images_fileset, calib_scan)
-    >>> cnc_poses = {im.id: im.get_metadata("approximate_pose") for im in images_fileset.get_files()}
-    >>> colmap_poses = {im.id: im.get_metadata("calibrated_pose") for im in images_fileset.get_files()}
-    >>> calibration_figure(cnc_poses, colmap_poses, scan_id=scan_id, calib_scan_id=calib_scan_id)
-    >>> db.disconnect()
-    >>> # Example 3 - Compute the calibrated poses with a calibration scan & use it on a scan:
-    >>> db.connect()
-    >>> db.list_scans()
-    >>> scan_id = "Sangoku_90_300_36_1_calib"
-    >>> calib_scan_id = "Sangoku_90_300_36_1_calib"
-    >>> scan = db.get_scan(scan_id)
-    >>> calib_scan = db.get_scan(calib_scan_id)
-    >>> images_fileset = scan.get_fileset('images')
-    >>> images_fileset = use_calibrated_poses(images_fileset, calib_scan)
-    >>> cnc_poses = {im.id: im.get_metadata("approximate_pose") for im in images_fileset.get_files()}
-    >>> colmap_poses = {im.id: im.get_metadata("calibrated_pose") for im in images_fileset.get_files()}
-    >>> calibration_figure(cnc_poses, colmap_poses, scan_id=scan_id, calib_scan_id=calib_scan_id)
-    >>> db.disconnect()
-
-    """
-    # TODO: add XY box for `Scan.metadata.workspace`
-    # TODO: add `center_x` & `center_y` from `ScanPath.kwargs`
-    import matplotlib.pyplot as plt
-    from scipy.spatial import distance
-
-    fig, ax = plt.subplots(1, 1, figsize=(10, 10))
-
-    title = f"Colmap calibration - {scan_id}/{calib_scan_id}"
-    plt.suptitle(title)
-
-    x, y, z, pan, tilt = np.array([v for _, v in cnc_poses.items() if v is not None]).T
-    im_ids = [im_id for im_id, v in cnc_poses.items() if v is not None]
-    # Add a red 'x' marker to every non-null CNC coordinates:
-    cnc_scatter = ax.scatter(x, y, marker="x", c="red")
-    cnc_scatter.set_label("CNC poses")
-    plt.xlabel('X')
-    plt.ylabel('Y')
-
-    if not image_id:
-        im_ids = list(range(len(im_ids)))
-
-    # Add image or point ids as text:
-    for i, im_id in enumerate(im_ids):
-        ax.text(x[i], y[i], f" {im_id}", ha='left', va='center', fontfamily='monospace')
-
-    # Add a blue '+' marker to every non-null Colmap coordinates:
-    X, Y, Z = np.array([v for _, v in colmap_poses.items() if v is not None]).T
-    colmap_scatter = ax.scatter(X, Y, marker="+", c="blue")
-    colmap_scatter.set_label("Colmap poses")
-
-    # Compute the "mapping" as arrows:
-    XX, YY = [], []
-    U, V = [], []
-    err = []
-    for im_id in colmap_poses.keys():
-        if cnc_poses[im_id] is not None and colmap_poses[im_id] is not None:
-            XX.append(cnc_poses[im_id][0])
-            YY.append(cnc_poses[im_id][1])
-            U.append(colmap_poses[im_id][0] - cnc_poses[im_id][0])
-            V.append(colmap_poses[im_id][1] - cnc_poses[im_id][1])
-            err.append(distance.euclidean(cnc_poses[im_id][0:3], colmap_poses[im_id][0:3]))
-    logger.info(f"Average euclidean distance: {round(np.nanmean(err), 3)}mm.")
-    plt.title(f"Average euclidean distance: {round(np.nanmean(err), 3)}mm.")
-    # Show the mapping:
-    q = ax.quiver(XX, YY, U, V, scale_units='xy', scale=1., width=0.003)
-
-    xlims = kwargs.get('xlims', None)
-    ylims = kwargs.get('ylims', None)
-    if xlims is not None and ylims is not None:
-        xmin, xmax = xlims
-        ymin, ymax = ylims
-        plt.vlines([xmin, xmax], ymin, ymax, colors="gray", linestyles="dashed")
-        plt.hlines([ymin, ymax], xmin, xmax, colors="gray", linestyles="dashed")
-
-    # Add the legend
-    plt.legend()
-
-    if path is not None:
-        plt.savefig(join(path, "calibration.png"))
-    else:
-        plt.show()
-    return None
