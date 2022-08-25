@@ -8,9 +8,10 @@ opts = dict(
     packages=find_packages(),
     version='0.12.99',
     scripts=[
-        'bin/robustness_comparison',
         'bin/colmap_poses',
-        'bin/npz_volume_viewer'
+        'bin/create_charuco_board',
+        'bin/npz_volume_viewer',
+        'bin/robustness_evaluation',
     ],
     author='Timothée Wintz',
     author_email='timothee@timwin.fr',
