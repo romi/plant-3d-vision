@@ -1,7 +1,3 @@
-[IntrinsicCalibrationScan]
-n_poses = "20"  # Number of acquisition of the printed ChArUco board
-offset = "5"
-
 [CreateCharucoBoard]
 n_squares_x = "14"  # Number of chessboard squares in X direction.
 n_squares_y = "10"  # Number of chessboard squares in Y direction.
