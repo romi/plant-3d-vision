@@ -390,6 +390,15 @@ class Colmap(RomiTask):
         By default, it uses the scanner workspace defined in the 'images' fileset.
         Defined as `{'x': [int, int], 'y': [int, int], 'z': [int, int]}`.
         Defaults to NO bounding-box.
+    use_gpu : luigi.BoolParameter
+        Defines if the GPU should be used to extract features (feature_extractor) and performs their matching (*_matcher).
+        Defaults to ``True``.
+    single_camera : luigi.BoolParameter
+        Defines if there is only one camera.
+        Defaults to ``True``.
+    robust_alignment_max_error : luigi.IntParameter
+        Maximum alignment error allowed during ``model_aligner`` COLMAP step.
+        Defaults to ``10``.
 
     Notes
     -----
@@ -415,10 +424,14 @@ class Colmap(RomiTask):
     upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)
     matcher = luigi.Parameter(default="exhaustive")
     compute_dense = luigi.BoolParameter(default=False)
-    cli_args = luigi.DictParameter(default={})
     align_pcd = luigi.BoolParameter(default=True)
     calibration_scan_id = luigi.Parameter(default="")
+    camera_model = luigi.Parameter(default="OPENCV")
+    use_gpu = luigi.BoolParameter(default=True)
+    single_camera = luigi.BoolParameter(default=True)
+    robust_alignment_max_error = luigi.IntParameter(default=10)
     bounding_box = luigi.DictParameter(default=None)
+    cli_args = luigi.DictParameter(default={})
 
     def _workspace_as_bounding_box(self):
         """Use the scanner workspace as bounding-box.
@@ -452,9 +465,91 @@ class Colmap(RomiTask):
         #     raise IOError(
         #         "Cannot find suitable bounding box for object in metadata")
         return bounding_box
+    def set_gpu_use(self):
+        """Configure COLMAP CLI parameters to defines GPU usage."""
+        if "feature_extractor" not in self.cli_args:
+            self.cli_args["feature_extractor"] = {}
+        # Determine the type of matcher used:
+        matcher_str = f"{self.matcher}_matcher"
+        if matcher_str not in self.cli_args:
+            self.cli_args[matcher_str] = {}
+        # - Set it for feature extraction step:
+        self.cli_args["feature_extractor"]["--SiftExtraction.use_gpu"] = str(int(self.use_gpu))
+        # - Set it for feature matching step:
+        self.cli_args[matcher_str]["--SiftMatching.use_gpu"] = str(int(self.use_gpu))
+
+    def set_single_camera(self):
+        """Configure COLMAP CLI parameters to use one or more cameras."""
+        if "feature_extractor" not in self.cli_args:
+            self.cli_args["feature_extractor"] = {}
+        # - Define the camera model:
+        self.cli_args["feature_extractor"]["--ImageReader.single_camera"] = str(self.single_camera)
+
+    def set_camera_model(self):
+        """Configure COLMAP CLI parameters to defines camera model."""
+        if "feature_extractor" not in self.cli_args:
+            self.cli_args["feature_extractor"] = {}
+        # - Define the camera model:
+        self.cli_args["feature_extractor"]["--ImageReader.camera_model"] = str(self.camera_model)
+
+    def set_robust_alignment_max_error(self):
+        """Configure COLMAP CLI parameters to defines robust_alignment_max_error in model_aligner."""
+        if "model_aligner" not in self.cli_args:
+            self.cli_args["model_aligner"] = {}
+        # - Define the camera model:
+        self.cli_args["model_aligner"]["--robust_alignment_max_error"] = str(self.robust_alignment_max_error)
+
+    def set_camera_params(self):
+        """Configure COLMAP CLI parameters to defines estimated camera parameters from intrinsic calibration scan."""
+        from plant3dvision.camera import get_camera_model_from_colmap
+        from plant3dvision.camera import colmap_str_params
+        images_fileset = self.input().get()
+        db = images_fileset.scan.db
+        calibration_scan = db.get_scan(self.calibration_scan_id)
+        logger.info(f"Using intrinsic camera parameters from '{calibration_scan.id}'...")
+
+        # - Check an ExtrinsicCalibration task has been performed for the calibration scan:
+        calib_fs = [s for s in calibration_scan.get_filesets() if "ExtrinsicCalibration" in s.id]
+        if len(calib_fs) == 0:
+            raise Exception(
+                f"Could not find a 'ExtrinsicCalibration' fileset in calibration scan '{calibration_scan.id}'!")
+        else:
+            # TODO: What happens if we have more than one 'ExtrinsicCalibration' job ?!
+            if len(calib_fs) > 1:
+                logger.warning(
+                    f"More than one 'ExtrinsicCalibration' found for calibration scan '{calibration_scan.id}'!")
+        # - Get the 'images' fileset from the extrinsic calibration scan
+        cameras_file = calib_fs[0].get_file("cameras")
+        colmap_cameras = io.read_json(cameras_file)
+        cam_dict = get_camera_model_from_colmap(colmap_cameras)
+
+        # - Set 'feature_extractor' parameters:
+        if "feature_extractor" not in self.cli_args:
+            self.cli_args["feature_extractor"] = {}
+        # Define the camera model as OPENCV (as we will pass parameters in this format):
+        self.cli_args["feature_extractor"]["--ImageReader.camera_model"] = "OPENCV"
+        # Set the estimated camera parameters (from calibration scan) in OPENCV format:
+        self.cli_args["feature_extractor"]["--ImageReader.camera_params"] = colmap_str_params(**cam_dict)
+        # - Set 'mapper' parameters:
+        if "mapper" not in self.cli_args:
+            self.cli_args["mapper"] = {}
+        # Prevent refinement of focal length (fx, fy) by COLMAP:
+        self.cli_args["mapper"]["--Mapper.ba_refine_focal_length"] = "0"
+        # Prevent refinement of principal point (cx, cy) by COLMAP:
+        self.cli_args["mapper"]["--Mapper.ba_refine_principal_point"] = "0"
+        # Prevent refinement of extra params (k1, k2, p1, p2) by COLMAP:
+        self.cli_args["mapper"]["--Mapper.ba_refine_extra_params"] = "0"
+
 
     def run(self):
-        images_fileset = self.input().get()
+        self.cli_args = dict(self.cli_args)  # originally an immutable `FrozenOrderedDict`
+        # Set some COLMAP CLI parameters:
+        self.set_gpu_use()
+        self.set_single_camera()
+        self.set_camera_model()
+        self.set_robust_alignment_max_error()
+        if self.calibration_scan_id != "":
+            self.set_camera_params()
 
         # - If no manual definition of cropping bounding-box, try to use the 'workspace' metadata
         if self.bounding_box is None:
@@ -468,7 +563,8 @@ class Colmap(RomiTask):
             bounding_box = dict(self.bounding_box)
             logger.info("Found manual definition of cropping bounding-box!")
 
-        # - Defines if colmap may use a calibration:
+        images_fileset = self.input().get()
+        # - Defines if colmap should use an extrinsic calibration dataset:
         use_calibration = self.calibration_scan_id != ""
         if use_calibration:
             logger.info(f"Using calibration scan: {self.calibration_scan_id}...")

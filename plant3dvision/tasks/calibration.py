@@ -191,9 +191,6 @@ class IntrinsicCalibration(RomiTask):
         The upstream task is the detected markers fileset. Defaults to ``DetectCharuco``.
     board_fileset : luigi.TaskParameter, optional
         The fileset containing the ChArUco used to generate the images fileset. Defaults to ``CreateCharucoBoard``.
-    camera_model : luigi.Parameter, optional
-        The camera model defines the set of estimated parameters.
-        Valid values are ``OPENCV``, ``RADIAL`` or ``SIMPLE_RADIAL`` (ordered by decreasing complexity).
     query : luigi.DictParameter, optional
         Can be used to filter the images. Defaults to no filtering.
 
@@ -225,7 +222,6 @@ class IntrinsicCalibration(RomiTask):
     """
     upstream_task = luigi.TaskParameter(default=DetectCharuco)
     board_fileset = luigi.TaskParameter(default=CreateCharucoBoard)
-    camera_model = luigi.Parameter(default="OPENCV")
     query = luigi.DictParameter(default={})
 
     def requires(self):
@@ -238,13 +234,16 @@ class IntrinsicCalibration(RomiTask):
 
     def run(self):
         """Compute the intrinsic camera parameters for selected model using detected corners & ids."""
+        from plant3dvision.camera import get_opencv_params_dict
+        from plant3dvision.camera import get_radial_params_dict
+        from plant3dvision.camera import get_simple_radial_params_dict
         # Get the 'image' `Fileset` to segment and filter by `query`:
-        markers_fileset = self.input()["markers"].get().get_files()
+        markers_files = self.input()["markers"].get().get_files()
         board_file = self.input()["board"].get().get_file("charuco_board")
         self.aruco_kwargs = board_file.get_metadata()
 
         corners, ids = [], []
-        for markers_file in markers_fileset:
+        for markers_file in markers_files:
             markers = io.read_json(markers_file)
             points = np.array(markers["charuco_corners"])
             points = np.float32(points[:, :])
@@ -256,48 +255,53 @@ class IntrinsicCalibration(RomiTask):
         if len(corners) < 15:
             logger.critical(f"You have {len(corners)} images with markers, this is lower than the recommended 15!")
 
-        # Actual calibration
-        if str(self.camera_model).lower() == "opencv":
-            reproj_error, mtx, dist, rvecs, tvecs, per_view_errors = calibrate_opencv_camera(corners, ids,
-                                                                                             img_shape,
-                                                                                             self.aruco_kwargs)
-        elif str(self.camera_model).lower() == "radial":
-            reproj_error, mtx, dist, rvecs, tvecs, per_view_errors = calibrate_radial_camera(corners, ids,
-                                                                                             img_shape,
-                                                                                             self.aruco_kwargs)
-        elif str(self.camera_model).lower() == "simple_radial":
-            reproj_error, mtx, dist, rvecs, tvecs, per_view_errors = calibrate_simple_radial_camera(corners, ids,
-                                                                                                    img_shape,
-                                                                                                    self.aruco_kwargs)
-        else:
-            logger.critical(f"Unknown camera model '{self.camera_model}'!")
+        markers_file_ids = np.array([f.id for f in markers_files])
+
+        def _export_rms_errors(model, per_view_errors):
+            rms_error_dict = dict(zip(markers_file_ids, per_view_errors.T.tolist()[0]))
+            output_file = self.output_file(f"image_rms_errors-{model.lower()}")
+            io.write_json(output_file, rms_error_dict)
+            # Check we do not have images with a poor RMS error:
+            med_error = np.median(per_view_errors)
+            low, high = med_error - med_error * 0.5, med_error + med_error * 0.5
+            poor_rms = np.array([not low < err < high for err in per_view_errors])
+            poor_rms_img = markers_file_ids[poor_rms].tolist()
+            if len(poor_rms_img) != 0:
+                poor_rms_str = ', '.join([f"{img}: {round(rms_error_dict[img], 3)}" for img in poor_rms_img])
+                logger.warning(
+                    f"Some images have a poor RMS error compared to the median error ({round(med_error, 3)})!")
+                logger.warning(f"{poor_rms_str}")
+
+        # - Actual calibration:
+        # OPENCV model:
+        logger.info("Estimating the camera parameters for the OPENCV model...")
+        reproj_error, mtx, dist, rvecs, tvecs, per_view_errors = calibrate_opencv_camera(corners, ids,
+                                                                                         img_shape,
+                                                                                         self.aruco_kwargs)
+        opencv_model = {"OPENCV": get_opencv_params_dict(mtx, dist[0]) | {'RMS_error': reproj_error}}
+        _export_rms_errors("OPENCV", per_view_errors)
+
+        # RADIAL model:
+        logger.info("Estimating the camera parameters for the RADIAL model...")
+        reproj_error, mtx, dist, rvecs, tvecs, per_view_errors = calibrate_radial_camera(corners, ids,
+                                                                                         img_shape,
+                                                                                         self.aruco_kwargs)
+        radial_model = {"RADIAL": get_radial_params_dict(mtx, dist[0]) | {'RMS_error': reproj_error}}
+        _export_rms_errors("RADIAL", per_view_errors)
+
+        # SIMPLE_RADIAL model:
+        logger.info("Estimating the camera parameters for the SIMPLE_RADIAL model...")
+        reproj_error, mtx, dist, rvecs, tvecs, per_view_errors = calibrate_simple_radial_camera(corners, ids,
+                                                                                                img_shape,
+                                                                                                self.aruco_kwargs)
+        simple_radial_model = {
+            "SIMPLE_RADIAL": get_simple_radial_params_dict(mtx, dist[0]) | {'RMS_error': reproj_error}}
+        _export_rms_errors("SIMPLE_RADIAL", per_view_errors)
 
         # Save the estimated camera parameters as JSON:
         output_file = self.output_file("camera_model")
-        camera_model = {
-            "model": str(self.camera_model).upper(),
-            "RMS_error": reproj_error,
-            "camera_matrix": mtx.tolist(),  # 3x3 floating-point camera matrix.
-            "distortion": dist[0].tolist(),  # distortion coefficients (k1, k2, p1, p2, k3)
-            "height": img_shape[1],
-            "width": img_shape[0],
-        }
+        camera_model = opencv_model | radial_model | simple_radial_model
         io.write_json(output_file, camera_model)
-
-        # Export per view RMS error:
-        markers_files = np.array([f.id for f in markers_fileset])
-        rms_error_dict = dict(zip(markers_files, per_view_errors.T.tolist()[0]))
-        output_file = self.output_file("image_rms_errors")
-        io.write_json(output_file, rms_error_dict)
-        # Check we do not have images with a poor RMS error:
-        med_error = np.median(per_view_errors)
-        low, high = med_error - med_error * 0.5, med_error + med_error * 0.5
-        poor_rms = np.array([not low < err < high for err in per_view_errors])
-        poor_rms_img = markers_files[poor_rms].tolist()
-        if len(poor_rms_img) != 0:
-            poor_rms_str = ', '.join([f"{img}: {round(rms_error_dict[img], 3)}" for img in poor_rms_img])
-            logger.warning(f"Some images have a poor RMS error compared to the median error ({round(med_error, 3)})!")
-            logger.warning(f"{poor_rms_str}")
 
         return
 
@@ -314,6 +318,24 @@ class ExtrinsicCalibration(RomiTask):
         *Exhaustive matcher* tries to match every other image.
         *Sequential matcher* tries to match successive image, this requires a sequential file name ordering.
         Defaults to "exhaustive".
+    intrinsic_calibration_scan_id : luigi.Parameter, optional
+        Refers to a scan used to perform intrinsic calibration of the camera parameters.
+        Setting this will force COLMAP to use those fixed set of parameters.
+        By default, no intrinsic calibration scan is defined.
+    camera_model : luigi.Parameter, optional
+        Defines the type of camera model COLMAP should use for intrinsic camera parameters estimation.
+        Setting an `intrinsic_calibration_scan_id` will override this value to "OPENCV" and no estimation will be carried out.
+        Instead, the estimated intrinsic camera parameters for the corresponding model will be fixed.
+        Defaults to "OPENCV".
+    use_gpu : luigi.BoolParameter
+        Defines if the GPU should be used to extract features (feature_extractor) and performs their matching (*_matcher).
+        Defaults to ``True``.
+    single_camera : luigi.BoolParameter
+        Defines if there is only one camera.
+        Defaults to ``True``.
+    robust_alignment_max_error : luigi.IntParameter
+        Maximum alignment error allowed during ``model_aligner`` COLMAP step.
+        Defaults to ``10``.
     cli_args : luigi.DictParameter, optional
         Dictionary of arguments to pass to colmap command lines, empty by default.
 
@@ -337,7 +359,73 @@ class ExtrinsicCalibration(RomiTask):
     """
     upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)
     matcher = luigi.Parameter(default="exhaustive")
+    intrinsic_calibration_scan_id = luigi.Parameter(default="")
+    camera_model = luigi.Parameter(default="OPENCV")
+    use_gpu = luigi.BoolParameter(default=True)
+    single_camera = luigi.BoolParameter(default=True)
+    robust_alignment_max_error = luigi.IntParameter(default=10)
     cli_args = luigi.DictParameter(default={})
+
+    def set_gpu_use(self):
+        """Configure COLMAP CLI parameters to defines GPU usage."""
+        if "feature_extractor" not in self.cli_args:
+            self.cli_args["feature_extractor"] = {}
+        # Determine the type of matcher used:
+        matcher_str = f"{self.matcher}_matcher"
+        if matcher_str not in self.cli_args:
+            self.cli_args[matcher_str] = {}
+        # - Set it for feature extraction step:
+        self.cli_args["feature_extractor"]["--SiftExtraction.use_gpu"] = str(int(self.use_gpu))
+        # - Set it for feature matching step:
+        self.cli_args[matcher_str]["--SiftMatching.use_gpu"] = str(int(self.use_gpu))
+
+    def set_single_camera(self):
+        """Configure COLMAP CLI parameters to use one or more cameras."""
+        if "feature_extractor" not in self.cli_args:
+            self.cli_args["feature_extractor"] = {}
+        # - Define the camera model:
+        self.cli_args["feature_extractor"]["--ImageReader.single_camera"] = str(self.single_camera)
+
+    def set_camera_model(self):
+        """Configure COLMAP CLI parameters to defines camera model."""
+        if "feature_extractor" not in self.cli_args:
+            self.cli_args["feature_extractor"] = {}
+        # - Define the camera model:
+        self.cli_args["feature_extractor"]["--ImageReader.camera_model"] = str(self.camera_model)
+
+    def set_robust_alignment_max_error(self):
+        """Configure COLMAP CLI parameters to defines robust_alignment_max_error in model_aligner."""
+        if "model_aligner" not in self.cli_args:
+            self.cli_args["model_aligner"] = {}
+        # - Define the camera model:
+        self.cli_args["model_aligner"]["--robust_alignment_max_error"] = str(self.robust_alignment_max_error)
+
+    def set_camera_params(self):
+        """Configure COLMAP CLI parameters to defines estimated camera parameters from intrinsic calibration scan."""
+        from plant3dvision.camera import get_camera_model_from_intrinsic
+        from plant3dvision.camera import colmap_str_params
+        images_fileset = self.input().get()
+        db = images_fileset.scan.db
+        calibration_scan = db.get_scan(self.intrinsic_calibration_scan_id)
+        logger.info(f"Using intrinsic camera parameters from '{calibration_scan.id}'...")
+        cam_dict = get_camera_model_from_intrinsic(calibration_scan, str(self.camera_model))
+        # - Set 'feature_extractor' parameters:
+        if "feature_extractor" not in self.cli_args:
+            self.cli_args["feature_extractor"] = {}
+        # Define the camera model as OPENCV (as we will pass parameters in this format):
+        self.cli_args["feature_extractor"]["--ImageReader.camera_model"] = "OPENCV"
+        # Set the estimated camera parameters (from calibration scan) in OPENCV format:
+        self.cli_args["feature_extractor"]["--ImageReader.camera_params"] = colmap_str_params(str(self.camera_model),
+                                                                                              **cam_dict)
+        # - Set 'mapper' parameters:
+        if "mapper" not in self.cli_args:
+            self.cli_args["mapper"] = {}
+        # Prevent refinement of focal length (fx, fy) by COLMAP:
+        self.cli_args["mapper"]["--Mapper.ba_refine_focal_length"] = "0"
+        # Prevent refinement of principal point (cx, cy) by COLMAP:
+        self.cli_args["mapper"]["--Mapper.ba_refine_principal_point"] = "0"
+        # Prevent refinement of extra params (k1, k2, p1, p2) by COLMAP:
+        self.cli_args["mapper"]["--Mapper.ba_refine_extra_params"] = "0"
 
     def run(self):
         import toml
@@ -345,7 +433,19 @@ class ExtrinsicCalibration(RomiTask):
         from os.path import join
         from plant3dvision.filenames import COLMAP_CAMERAS_ID
         from plant3dvision.calibration import calibration_figure
+        from plant3dvision.camera import format_camera_params
+        from plant3dvision.camera import get_camera_model_from_colmap
         from plant3dvision.tasks.colmap import get_cnc_poses
+
+        self.cli_args = dict(self.cli_args)  # originally an immutable `FrozenOrderedDict`
+        # Set some COLMAP CLI parameters:
+        self.set_gpu_use()
+        self.set_single_camera()
+        self.set_camera_model()
+        self.set_robust_alignment_max_error()
+        if self.intrinsic_calibration_scan_id != "":
+            self.set_camera_params()
+
         images_fileset = self.input().get()
         # Get the scan configuration used to acquire the dataset (with CalibrationScan task):
         scan_cfg = abspath(join(images_fileset.path(), '..', "scan.toml"))
@@ -389,67 +489,6 @@ class ExtrinsicCalibration(RomiTask):
                            scan_id=images_fileset.scan.id, calib_scan_id="", header=camera_str,
                            scan_path_kwargs=scan_cfg["ScanPath"])
 
-        camera_kwargs = get_camera_kwargs(cameras)
+        camera_kwargs = get_camera_model_from_colmap(cameras)
         with open(join(self.output().get().path(), "camera.txt"), 'w') as f:
             f.writelines("\n".join([f"{k}: {v}" for k, v in camera_kwargs.items()]))
-
-
-def get_camera_kwargs(colmap_cameras):
-    """Get a dictionary of named camera parameter depending on camera model."""
-
-    # FIXME: will not work with more than one camera model!
-
-    def _simple_radial(camera_params):
-        """Parameter list is expected in the following order: f, cx, cy, k."""
-        return {'model': "SIMPLE_RADIAL"} | dict(zip(['f', 'cx', 'cy', 'k'], camera_params))
-
-    def _radial(camera_params):
-        """Parameter list is expected in the following order: f, cx, cy, k1, k2."""
-        return {'model': "RADIAL"} | dict(zip(['f', 'cx', 'cy', 'k1', 'k2'], camera_params))
-
-    def _opencv(camera_params):
-        """Parameter list is expected in the following order: fx, fy, cx, cy, k1, k2, p1, p2."""
-        return {'model': "OPENCV"} | dict(zip(['fx', 'fy', 'cx', 'cy', 'k1', 'k2', 'p1', 'p2'], camera_params))
-
-    camera_kwargs = {}
-    if colmap_cameras[1]["model"] == 'SIMPLE_RADIAL':
-        camera_kwargs = _simple_radial(colmap_cameras[1]["params"])
-    elif colmap_cameras[1]["model"] == 'RADIAL':
-        camera_kwargs = _radial(colmap_cameras[1]["params"])
-    elif colmap_cameras[1]["model"] == 'OPENCV':
-        camera_kwargs = _opencv(colmap_cameras[1]["params"])
-        # Check if this is a RADIAL model:
-        if camera_kwargs['fx'] == camera_kwargs['fy'] and camera_kwargs['p1'] == camera_kwargs['p1'] == 0.:
-            camera_kwargs["model"] = "RADIAL"
-            camera_kwargs['f'] = camera_kwargs.pop('fx')
-            camera_kwargs.pop('fy')
-            camera_kwargs.pop('p1')
-            camera_kwargs.pop('p2')
-            # The next lines are a bit silly but useful to get correct key ordering...
-            camera_kwargs['cx'] = camera_kwargs.pop('cx')
-            camera_kwargs['cy'] = camera_kwargs.pop('cy')
-            camera_kwargs['k1'] = camera_kwargs.pop('k1')
-            camera_kwargs['k2'] = camera_kwargs.pop('k2')
-
-    return camera_kwargs
-
-
-def format_camera_params(colmap_cameras):
-    """Format camera parameters from COLMAP camera dictionary."""
-    camera_kwargs = get_camera_kwargs(colmap_cameras)
-    prev_param = list(camera_kwargs.keys())[0]
-    cam_str = f"{prev_param}: {camera_kwargs.pop(prev_param)}"  # should start by 'model' key
-    for k, v in camera_kwargs.items():
-        if v < 0.1:
-            value = f"{v:.2e}"
-        else:
-            value = round(v, 2)
-
-        if k.startswith(prev_param[0]):
-            cam_str += f", {k}: {value}"
-        else:
-            cam_str += "\n"
-            cam_str += f"{k}: {value}"
-        prev_param = k
-
-    return cam_str

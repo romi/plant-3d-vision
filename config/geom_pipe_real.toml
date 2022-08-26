@@ -1,17 +1,22 @@
+[ExtrinsicCalibration]
+upstream_task = "ImagesFilesetExists"
+matcher = "exhaustive"
+intrinsic_calibration_scan_id = "intrinsic_calib_1"  # use a dataset with calibrated intrinsic camera params
+camera_model = "OPENCV"  # get this model if 'intrinsic_calibration_scan_id' is set
+use_gpu = true
+single_camera = true
+robust_alignment_max_error = 10
+
 [Colmap]
 upstream_task = "ImagesFilesetExists"
 matcher = "exhaustive"
+calibration_scan_id = "extrinsic_calib_1"  # use a dataset with calibrated extrinsic camera poses
 compute_dense = false
 align_pcd = true
-calibration_scan_id = ""
-[Colmap.cli_args.feature_extractor]
-"--ImageReader.single_camera" = "1"  # defaults to `0` in COLMAP
-"--SiftExtraction.use_gpu" = "1"
-"--ImageReader.camera_model" = "SIMPLE_RADIAL"
-[Colmap.cli_args.exhaustive_matcher]
-"--SiftMatching.use_gpu" = "1"
-[Colmap.cli_args.model_aligner]
-"--robust_alignment_max_error" = "10"
+use_gpu = true
+single_camera = true
+robust_alignment_max_error = 10
+
 # [Colmap.bounding_box]  # default to None
 # x = [150, 650]
 # y = [150, 650]
