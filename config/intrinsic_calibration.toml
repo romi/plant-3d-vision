@@ -17,4 +17,3 @@ min_n_corners = "20"  # Minimum number of detected corners to export them
 [IntrinsicCalibration]
 upstream_task = "DetectCharuco"
 board_fileset = "CreateCharucoBoard"
-camera_model = "OPENCV"  # defines the estimated parameters
