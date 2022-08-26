@@ -300,8 +300,10 @@ def check_scan_parameters(scan_to_calibrate, calibration_scan):
 
     """
     import toml
+    # Load acquisition config file for calibration scan:
     with open(join(calibration_scan.path(), 'scan.toml'), 'r') as f:
         calib_scan_cfg = toml.load(f)
+    # Load acquisition config file for scan to calibrate:
     with open(join(scan_to_calibrate.path(), 'scan.toml'), 'r') as f:
         scan2calib_cfg = toml.load(f)
 
@@ -310,33 +312,23 @@ def check_scan_parameters(scan_to_calibrate, calibration_scan):
     logger.debug({k: calib_scan_cfg['ScanPath']['kwargs'][k] for k in diff_keys})
     logger.debug({k: scan2calib_cfg['ScanPath']['kwargs'][k] for k in diff_keys})
 
-    same_cfg = False
-    try:
-        assert calib_scan_cfg['CalibrationScan'] == scan2calib_cfg['CalibrationScan']
-    except AssertionError:
-        logger.critical(
-            f"Entries 'CalibrationScan' are not the same for {calibration_scan.id} and {scan_to_calibrate.id}!")
-        diff1, diff2 = _get_diff_between_dict(calib_scan_cfg['CalibrationScan'], scan2calib_cfg['CalibrationScan'])
-        logger.info(f"From calibration scan: {diff1}")
-        logger.info(f"From scan to calibrate: {diff2}")
-    else:
-        same_cfg = True
-
+    # - Check the type of 'ScanPath' is the same:
     try:
         assert calib_scan_cfg['ScanPath']['class_name'] == scan2calib_cfg['ScanPath']['class_name']
     except AssertionError:
         logger.critical(
-            f"Entries 'ScanPath.class_name' are not the same for {calibration_scan.id} and {scan_to_calibrate.id}!")
-        diff1, diff2 = _get_diff_between_dict(calib_scan_cfg['ScanPath']['class_name'],
-                                              scan2calib_cfg['ScanPath']['class_name'])
-        logger.info(f"From calibration scan: {diff1}")
-        logger.info(f"From scan to calibrate: {diff2}")
-        same_cfg = same_cfg and False
+            f"Entry 'ScanPath.class_name' is not the same for {calibration_scan.id} and {scan_to_calibrate.id}!")
+        logger.info(f"From calibration scan: {calib_scan_cfg['ScanPath']['class_name']}")
+        logger.info(f"From scan to calibrate: {scan2calib_cfg['ScanPath']['class_name']}")
+        same_type = False
     else:
-        same_cfg = same_cfg and True
+        same_type = True
 
+    # - Check the parameters of 'ScanPath' are the same:
+    diff_keys = list(dict(
+        set(calib_scan_cfg['ScanPath']['kwargs'].items()) ^ set(scan2calib_cfg['ScanPath']['kwargs'].items())).keys())
     try:
-        assert calib_scan_cfg['ScanPath']['kwargs'] == scan2calib_cfg['ScanPath']['kwargs']
+        assert len(diff_keys) == 0
     except AssertionError:
         logger.critical(
             f"Entries 'ScanPath.kwargs' are not the same for {calibration_scan.id} and {scan_to_calibrate.id}!")
@@ -344,11 +336,11 @@ def check_scan_parameters(scan_to_calibrate, calibration_scan):
                                               scan2calib_cfg['ScanPath']['kwargs'])
         logger.info(f"From calibration scan: {diff1}")
         logger.info(f"From scan to calibrate: {diff2}")
-        same_cfg = same_cfg and False
+        same_params = False
     else:
-        same_cfg = same_cfg and True
+        same_params = True
 
-    return same_cfg
+    return same_type and same_params
 
 
 def check_colmap_cfg(current_cfg, calibration_scan):
@@ -488,7 +480,7 @@ class Colmap(RomiTask):
             db = images_fileset.scan.db
             calibration_scan = db.get_scan(self.calibration_scan_id)
             check_colmap_cfg({'Colmap': {'align_pcd': self.align_pcd}}, calibration_scan)
-            images_fileset = use_calibrated_poses(images_fileset, calibration_scan)
+            images_fileset = use_precalibrated_poses(images_fileset, calibration_scan)
             # Create the calibration figure:
             cnc_poses = get_cnc_poses(images_fileset.scan)
             colmap_poses = {im.id: im.get_metadata("calibrated_pose") for im in images_fileset.get_files()}
