@@ -335,7 +335,7 @@ def calibration_figure(cnc_poses, colmap_poses, path=None, image_id=False, scan_
     >>> scan = db.get_scan(scan_id)
     >>> calib_scan = db.get_scan(calib_scan_id)
     >>> images_fileset = scan.get_fileset('images')
-    >>> images_fileset = use_calibrated_poses(images_fileset, calib_scan)
+    >>> images_fileset = use_precalibrated_poses(images_fileset,calib_scan)
     >>> cnc_poses = {im.id: im.get_metadata("approximate_pose") for im in images_fileset.get_files()}
     >>> colmap_poses = {im.id: im.get_metadata("calibrated_pose") for im in images_fileset.get_files()}
     >>> calibration_figure(cnc_poses, colmap_poses, scan_id=scan_id, calib_scan_id=calib_scan_id)
@@ -348,7 +348,7 @@ def calibration_figure(cnc_poses, colmap_poses, path=None, image_id=False, scan_
     >>> scan = db.get_scan(scan_id)
     >>> calib_scan = db.get_scan(calib_scan_id)
     >>> images_fileset = scan.get_fileset('images')
-    >>> images_fileset = use_calibrated_poses(images_fileset, calib_scan)
+    >>> images_fileset = use_precalibrated_poses(images_fileset,calib_scan)
     >>> cnc_poses = {im.id: im.get_metadata("approximate_pose") for im in images_fileset.get_files()}
     >>> colmap_poses = {im.id: im.get_metadata("calibrated_pose") for im in images_fileset.get_files()}
     >>> calibration_figure(cnc_poses, colmap_poses, scan_id=scan_id, calib_scan_id=calib_scan_id)

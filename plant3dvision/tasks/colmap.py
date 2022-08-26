@@ -190,7 +190,7 @@ def compute_colmap_poses(scan_dataset):
     return colmap_poses
 
 
-def use_calibrated_poses(images_fileset, calibration_scan):
+def use_precalibrated_poses(images_fileset, calibration_scan):
     """Use a calibration scan to add its 'calibrated_pose' to an 'images' fileset.
 
     Parameters
@@ -199,6 +199,7 @@ def use_calibrated_poses(images_fileset, calibration_scan):
         Fileset containing source images to use for reconstruction.
     calibration_scan : plantdb.db.Scan
         Dataset containing calibrated poses to use for reconstruction.
+        Should contain an 'ExtrinsicCalibration' ``Fileset``.
 
     .. warning::
         This supposes the `images_fileset` & `calibration_scan` were acquired using the same ``ScanPath``!
@@ -216,7 +217,7 @@ def use_calibrated_poses(images_fileset, calibration_scan):
     --------
     >>> import os
     >>> from plantdb.fsdb import FSDB
-    >>> from plant3dvision.tasks.colmap import use_calibrated_poses
+    >>> from plant3dvision.tasks.colmap import use_precalibrated_poses
     >>> db = FSDB(os.environ.get('DB_LOCATION', '/data/ROMI/DB'))
     >>> # Example 1 - Try to use the calibrated poses on a scan with different acquisition parameters:
     >>> db.connect()
@@ -226,7 +227,7 @@ def use_calibrated_poses(images_fileset, calibration_scan):
     >>> scan = db.get_scan(scan_id)
     >>> calib_scan = db.get_scan(calib_scan_id)
     >>> images_fileset = scan.get_fileset('images')
-    >>> _ = use_calibrated_poses(images_fileset, calib_scan)  # raise a ValueError
+    >>> _ = use_precalibrated_poses(images_fileset, calib_scan)  # raise a ValueError
     >>> db.disconnect()
     >>> # Example 2 - Compute & add the calibrated poses to a scan with the same acquisition parameters:
     >>> db.connect()
@@ -236,7 +237,7 @@ def use_calibrated_poses(images_fileset, calibration_scan):
     >>> scan = db.get_scan(scan_id)
     >>> calib_scan = db.get_scan(calib_scan_id)
     >>> images_fileset = scan.get_fileset('images')
-    >>> out_fs = use_calibrated_poses(images_fileset, calib_scan)
+    >>> out_fs = use_precalibrated_poses(images_fileset,calib_scan)
     >>> colmap_poses = {im.id: im.get_metadata("calibrated_pose") for im in out_fs.get_files()}
     >>> print(colmap_poses)
     >>> db.disconnect()
@@ -248,37 +249,23 @@ def use_calibrated_poses(images_fileset, calibration_scan):
     except AssertionError:
         raise ValueError(f"The current scan {images_fileset.scan.id} can not be calibrated by {calibration_scan.id}!")
 
-    # - Check a Colmap task has been performed for the calibration scan:
-    colmap_fs = [s for s in calibration_scan.get_filesets() if "Colmap" in s.id]
-    if len(colmap_fs) == 0:
-        raise Exception(f"Could not find a 'Colmap' fileset in calibration scan '{calibration_scan.id}'!")
+    # - Check an ExtrinsicCalibration task has been performed for the calibration scan:
+    calib_fs = [s for s in calibration_scan.get_filesets() if "ExtrinsicCalibration" in s.id]
+    if len(calib_fs) == 0:
+        raise Exception(f"Could not find a 'ExtrinsicCalibration' fileset in calibration scan '{calibration_scan.id}'!")
     else:
-        colmap_fs = colmap_fs[0]
-        # TODO: What happens if we have more than one 'Colmap' job ?!
-        # if len(colmap_fs) > 1:
-        #     logger.warning(f"More than one 'Colmap' job has been performed on calibration scan '{calibration_scan.id}'!")
-    # - Read the JSON file with calibrated poses:
-    poses = io.read_json(colmap_fs.get_file(COLMAP_IMAGES_ID))
+        # TODO: What happens if we have more than one 'ExtrinsicCalibration' job ?!
+        if len(calib_fs) > 1:
+            logger.warning(f"More than one 'ExtrinsicCalibration' found for calibration scan '{calibration_scan.id}'!")
+
     # - Get the 'images' fileset from the extrinsic calibration scan
-    calib_img_fs = calibration_scan.get_fileset("images")
+    calib_img_files = calibration_scan.get_fileset("images").get_files()
     # - Assign the calibrated pose of the i-th calibration image to the i-th image of the fileset to reconstruct
-    for i, fi in enumerate(calib_img_fs.get_files()):
-        if i >= len(images_fileset.get_files()):
-            break  # break the loop if more images in calibration than fileset to reconstruct (should be the two `Line` paths, see `plantimager.path.CalibrationPath`)
-        # - Search the calibrated poses (from JSON) matching the calibration image id:
-        key = None
-        for k in poses.keys():
-            if splitext(poses[k]['name'])[0] == fi.id:
-                key = k
-                break
-        # - Raise an error if previous search failed!
-        if key is None:
-            raise Exception(f"Could not find pose of image '{fi.id}' in calibration scan!")
-        # - Compute the 'calibrated_pose':
-        pose = compute_calibrated_poses(np.array(poses[key]['rotmat']), np.array(poses[key]['tvec']))
+    for i, fi in enumerate(images_fileset.get_files()):
+        # - Assignment is order based...
+        pose = calib_img_files[i].get_metadata("calibrated_pose")
         # - Assign this calibrated pose to the metadata of the image of the fileset to reconstruct
-        # Assignment is order based...
-        images_fileset.get_files()[i].set_metadata("calibrated_pose", pose)
+        fi.set_metadata("calibrated_pose", pose)
 
     return images_fileset
 
