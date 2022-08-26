@@ -19,16 +19,15 @@ from romitask.task import ImagesFilesetExists
 from romitask.task import RomiTask
 
 
-
 def compute_calibrated_poses(rotmat, tvec):
     """Compute the calibrated pose from COLMAP.
 
     Parameters
     ----------
     rotmat : numpy.ndarray
-        Rotation matrix?, should be of shape `(3, 3)`.
+        Rotation matrix, should be of shape `(3, 3)`.
     tvec : numpy.ndarray
-        Translation vector?, should be of shape `(3,)`.
+        Translation vector, should be of shape `(3,)`.
 
     Returns
     -------
@@ -84,35 +83,31 @@ def get_cnc_poses(scan_dataset):
     return {im.id: poses[im.id] if poses[im.id] is not None else approx_poses[im.id] for im in img_fs.get_files()}
 
 
-def get_colmap_poses(scan_dataset):
-    """Get the camera poses estimated by colmap from the 'images' fileset using "calibrated_pose" metadata.
+def get_calibrated_poses(scan_dataset):
+    """Get the calibrated camera poses, estimated by colmap, from the 'images' fileset using "calibrated_pose" metadata.
 
     Parameters
     ----------
     scan_dataset : plantdb.db.Scan
-        The dataset to get the COLMAP poses from.
+        Get the calibrated poses from this scan dataset.
 
     Returns
     -------
     dict
         Image-id indexed dictionary of camera poses as X, Y, Z.
 
-    Notes
-    -----
-    This meas that the
-
     Examples
     --------
     >>> import os
     >>> from plantdb.fsdb import FSDB
-    >>> from plant3dvision.tasks.colmap import get_colmap_poses
+    >>> from plant3dvision.tasks.colmap import get_calibrated_poses
     >>> db = FSDB(os.environ.get('DB_LOCATION', '/data/ROMI/DB'))
     >>> # Use the calibrated poses from/on a calibration scan:
     >>> db.connect()
     >>> db.list_scans()
     >>> scan_id = "sango36"
     >>> scan = db.get_scan(scan_id)
-    >>> colmap_poses = get_colmap_poses(scan)
+    >>> colmap_poses = get_calibrated_poses(scan)
     >>> print(colmap_poses)
     >>> db.disconnect()
 

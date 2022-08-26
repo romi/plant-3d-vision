@@ -28,7 +28,7 @@ from plant3dvision.metrics import surface_ratio
 from plant3dvision.metrics import volume_ratio
 from plant3dvision.tasks.colmap import compute_colmap_poses
 from plant3dvision.tasks.colmap import get_cnc_poses
-from plant3dvision.tasks.colmap import get_colmap_poses
+from plant3dvision.tasks.colmap import get_calibrated_poses
 from plantdb import FSDB
 from plantdb.fsdb import LOCK_FILE_NAME
 from plantdb.fsdb import MARKER_FILE_NAME
@@ -476,7 +476,7 @@ def compare_colmap_poses(db, task_name):
         if task_name.startswith("Colmap"):
             colmap_poses[scan.id] = compute_colmap_poses(scan)  # {img_id: [x, y, z]}
         elif "Calibration" in task_name:
-            colmap_poses[scan.id] = get_colmap_poses(scan)
+            colmap_poses[scan.id] = get_calibrated_poses(scan)
         else:
             logger.critical(f"Nothing defined here for a task named '{task_name}'!")
         poses_array.append([p for im_id, p in colmap_poses[scan.id].items()])
