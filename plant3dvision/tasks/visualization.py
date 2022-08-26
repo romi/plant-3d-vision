@@ -3,22 +3,78 @@
 
 import luigi
 import numpy as np
-from romitask import RomiTask
-from plantdb import io
-from romitask.task import ImagesFilesetExists, VirtualPlantObj
+
 from plant3dvision.filenames import COLMAP_CAMERAS_ID
 from plant3dvision.filenames import COLMAP_IMAGES_ID
 from plant3dvision.log import logger
-
 from plant3dvision.tasks.arabidopsis import AnglesAndInternodes
-from plant3dvision.tasks.colmap import Colmap, use_calibrated_poses
+from plant3dvision.tasks.colmap import Colmap
+from plant3dvision.tasks.evaluation import PointCloudEvaluation
+from plant3dvision.tasks.evaluation import PointCloudGroundTruth
+from plant3dvision.tasks.evaluation import Segmentation2DEvaluation
+from plant3dvision.tasks.evaluation import SegmentedPointCloudEvaluation
 from plant3dvision.tasks.proc3d import CurveSkeleton
 from plant3dvision.tasks.proc3d import PointCloud
 from plant3dvision.tasks.proc3d import TriangleMesh
-from plant3dvision.tasks.evaluation import PointCloudEvaluation, PointCloudGroundTruth, Segmentation2DEvaluation, SegmentedPointCloudEvaluation
+from plantdb import io
+from romitask import RomiTask
+from romitask.task import ImagesFilesetExists
+from romitask.task import VirtualPlantObj
+
 
 class Visualization(RomiTask):
-    """Prepares files for visualization
+    """Prepares files for visualization with ``plant-3d-explorer``.
+
+    Attributes
+    ----------
+    upstream_task : None, optional
+        No upstream task required.
+    upstream_point_cloud : luigi.TaskParameter, optional
+        Upstream task that generate the point-cloud to use in visualizer (plant-3d-explorer).
+        Defaults to ``PointCloud``, no alternatives yet.
+    upstream_mesh : luigi.TaskParameter, optional
+        Upstream task that generate the mesh to use in visualizer (plant-3d-explorer).
+        Defaults to ``TriangleMesh``, no alternatives yet.
+    upstream_colmap : luigi.TaskParameter, optional
+        Upstream task that generate the `images.json` & `camera.json` files  to use in visualizer (plant-3d-explorer).
+        Defaults to ``Colmap``, no alternatives yet.
+    upstream_angles : luigi.TaskParameter, optional
+        Upstream task that generate the 'angles' values to use in visualizer (plant-3d-explorer).
+        Defaults to ``AnglesAndInternodes``, no alternatives yet.
+    upstream_skeleton : luigi.TaskParameter, optional
+        Upstream task that generate the skeleton to use in visualizer (plant-3d-explorer).
+        Defaults to ``CurveSkeleton``, no alternatives yet.
+    upstream_images : luigi.TaskParameter, optional
+        Upstream task that generate the 'images' ``Fileset`` to use in visualizer (plant-3d-explorer).
+        Defaults to ``ImagesFilesetExists``, could be ``VirtualScan``.
+    query : luigi.DictParameter, optional
+        Can be used to filter the images.
+        Defaults to ``{}``, that is NO filtering.
+    upstream_virtualplantobj : luigi.TaskParameter, optional
+        Upstream task that generate the virtual plant OBJ file.
+        Defaults to ``ImagesFilesetExists``, no alternatives yet.
+    upstream_pcd_ground_truth : luigi.TaskParameter, optional
+        Defaults to ``PointCloudGroundTruth``, no alternatives yet.
+    upstream_pcd_evaluation : luigi.TaskParameter, optional
+        Defaults to ``PointCloudEvaluation``, no alternatives yet.
+    upstream_segmentedpcd_evaluation : luigi.TaskParameter, optional
+        Defaults to ``SegmentedPointCloudEvaluation``, no alternatives yet.
+    upstream_segmentation2d_evaluation : luigi.TaskParameter, optional
+        Defaults to ``Segmentation2DEvaluation``, no alternatives yet.
+    use_colmap_poses : luigi.BoolParameter, optional
+        Defaults to ``True``.
+    max_image_size : luigi.IntParameter, optional
+        Maximum allowed image size to load in 3D explorer.
+        Downsize the original image if width or height is greater than this value.
+        Defaults to ``1500``.
+    max_point_cloud_size : luigi.IntParameter, optional
+        Maximum number of points in point-cloud to load in 3D explorer.
+        Downsize the original point-cloud if original point-cloud has more points than this value.
+        Put a lower size if you experience performances issues in 3D explorer.
+        Defaults to ``10000000``.
+    thumbnail_size : luigi.IntParameter, optional
+        Maximum allowed thumbnail size in carousel.
+        Defaults to ``150``.
     """
     upstream_task = None
 
@@ -39,10 +95,9 @@ class Visualization(RomiTask):
     upstream_segmentedpcd_evaluation = luigi.TaskParameter(default=SegmentedPointCloudEvaluation)
     upstream_segmentation2d_evaluation = luigi.TaskParameter(default=Segmentation2DEvaluation)
 
-
     use_colmap_poses = luigi.BoolParameter(default=True)
     max_image_size = luigi.IntParameter(default=1500)
-    max_point_cloud_size = luigi.IntParameter(default=10000000) # Put a lower threshold if you have low performances in plant-3d-explorer pcd visualization
+    max_point_cloud_size = luigi.IntParameter(default=10000000)
     thumbnail_size = luigi.IntParameter(default=150)
 
     def __init__(self):
@@ -91,11 +146,11 @@ class Visualization(RomiTask):
             images = io.read_json(colmap_fileset.get_file(COLMAP_IMAGES_ID))
             camera = io.read_json(colmap_fileset.get_file(COLMAP_CAMERAS_ID))
             camera["bounding_box"] = colmap_fileset.get_metadata("bounding_box")
-        else: # when colmap is not defined, we try to use ground truth poses
+        else:  # when colmap is not defined, we try to use ground truth poses
             # camera handling
             first_image_file = image_files[0]
-            camera_model = first_image_file.get_metadata("camera")["camera_model"] # we just pick the first camera
-            camera_id = "1" # I don't know why the camera_id must be equal to "1", probably Colmap logic
+            camera_model = first_image_file.get_metadata("camera")["camera_model"]  # we just pick the first camera
+            camera_id = "1"  # I don't know why the camera_id must be equal to "1", probably Colmap logic
             camera_model["id"] = camera_id
             camera = {}
             camera[camera_id] = camera_model
@@ -104,7 +159,7 @@ class Visualization(RomiTask):
 
             # images handling
             images = {}
-            img_id = 1 # I don't know why image id's must start by "1" and go up, probably Colmap logic
+            img_id = 1  # I don't know why image id's must start by "1" and go up, probably Colmap logic
             for img in image_files:
                 img_rotmat = img.get_metadata("camera")["rotmat"]
                 img_tvec = img.get_metadata("camera")["tvec"]
@@ -165,7 +220,8 @@ class Visualization(RomiTask):
             if len(point_cloud.points) < self.max_point_cloud_size:
                 point_cloud_lowres = point_cloud
             else:
-                point_cloud_lowres = point_cloud.voxel_down_sample(len(point_cloud.points) // self.max_point_cloud_size + 1)
+                point_cloud_lowres = point_cloud.voxel_down_sample(
+                    len(point_cloud.points) // self.max_point_cloud_size + 1)
             io.write_point_cloud(f, point_cloud_lowres)
             files_metadata["point_cloud"] = point_cloud_file.id
 
@@ -217,7 +273,8 @@ class Visualization(RomiTask):
             if len(pcd_ground_truth.points) < self.max_point_cloud_size:
                 pcd_ground_truth_lowres = pcd_ground_truth
             else:
-                pcd_ground_truth_lowres = pcd_ground_truth.voxel_down_sample(len(pcd_ground_truth.points) // self.max_point_cloud_size + 1)
+                pcd_ground_truth_lowres = pcd_ground_truth.voxel_down_sample(
+                    len(pcd_ground_truth.points) // self.max_point_cloud_size + 1)
             io.write_point_cloud(f, pcd_ground_truth_lowres)
             files_metadata["pcd_ground_truth"] = pcd_ground_truth_file.id
 
