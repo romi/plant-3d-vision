@@ -340,12 +340,16 @@ class ExtrinsicCalibration(RomiTask):
     cli_args = luigi.DictParameter(default={})
 
     def run(self):
+        import toml
+        from os.path import abspath
         from os.path import join
-        from plant3dvision.filenames import COLMAP_IMAGES_ID
         from plant3dvision.filenames import COLMAP_CAMERAS_ID
         from plant3dvision.calibration import calibration_figure
         from plant3dvision.tasks.colmap import get_cnc_poses
         images_fileset = self.input().get()
+        # Get the scan configuration used to acquire the dataset (with CalibrationScan task):
+        scan_cfg = abspath(join(images_fileset.path(), '..', "scan.toml"))
+        scan_cfg = toml.load(scan_cfg)
 
         # - Get CNC images pose from metadata:
         cnc_poses = get_cnc_poses(images_fileset.scan)
@@ -364,10 +368,6 @@ class ExtrinsicCalibration(RomiTask):
         # - Run colmap reconstruction:
         logger.debug("Start a Colmap reconstruction...")
         _, images, cameras, _, _, _ = colmap_runner.run()
-        # -- Export results of Colmap reconstruction to DB:
-        # - Save colmap images dictionary in JSON file:
-        outfile = self.output_file(COLMAP_IMAGES_ID)
-        io.write_json(outfile, images)
         # - Save colmap camera(s) model(s) & parameters in JSON file:
         outfile = self.output_file(COLMAP_CAMERAS_ID)
         io.write_json(outfile, cameras)
@@ -386,7 +386,8 @@ class ExtrinsicCalibration(RomiTask):
         camera_str = format_camera_params(cameras)
         # - Generates a calibration figure showing CNC poses vs. COLMAP estimated poses:
         calibration_figure(cnc_poses, colmap_poses, path=self.output().get().path(),
-                           scan_id=images_fileset.scan.id, calib_scan_id="", header=camera_str)
+                           scan_id=images_fileset.scan.id, calib_scan_id="", header=camera_str,
+                           scan_path_kwargs=scan_cfg["ScanPath"])
 
         camera_kwargs = get_camera_kwargs(cameras)
         with open(join(self.output().get().path(), "camera.txt"), 'w') as f:

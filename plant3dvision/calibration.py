@@ -303,7 +303,7 @@ def calibration_figure(cnc_poses, colmap_poses, path=None, image_id=False, scan_
     >>> from plant3dvision.tasks.colmap import get_cnc_poses
     >>> from plant3dvision.tasks.colmap import compute_colmap_poses
     >>> from plant3dvision.tasks.colmap import calibration_figure
-    >>> from plant3dvision.tasks.colmap import use_calibrated_poses
+    >>> from plant3dvision.tasks.colmap import use_precalibrated_poses
     >>> db = FSDB(os.environ.get('DB_LOCATION', '/data/ROMI/DB'))
     >>> # Example 1 - Compute & use the calibrated poses from/on a calibration scan:
     >>> db.connect()
@@ -361,7 +361,7 @@ def calibration_figure(cnc_poses, colmap_poses, path=None, image_id=False, scan_
     from scipy.spatial import distance
 
     gs_kw = dict(height_ratios=[12, 1])
-    fig, axd = plt.subplots(nrows=2, ncols=1, figsize=(11, 12), constrained_layout=True, gridspec_kw=gs_kw)
+    fig, axd = plt.subplots(nrows=2, ncols=1, figsize=(10, 13), constrained_layout=True, gridspec_kw=gs_kw)
     ax, bxp = axd
 
     title = f"Colmap calibration - {scan_id}"
@@ -398,13 +398,26 @@ def calibration_figure(cnc_poses, colmap_poses, path=None, image_id=False, scan_
     q = ax.quiver(XX, YY, U, V, scale_units='xy', scale=1., width=0.003)
 
     # - Add info about estimation error as title:
-    title = f"Average euclidean distance: {round(np.nanmean(err), 3)}mm"
+    logger.info(f"Average euclidean distance: {round(np.nanmean(err), 3)}mm.")
+    logger.info(f"Median euclidean distance: {round(np.nanmedian(err), 3)}mm.")
+    title = f"Average euclidean distance:"
+    scan_path_kwargs = kwargs.get("scan_path_kwargs", {})
+    if scan_path_kwargs != {}:
+        n_points = scan_path_kwargs['kwargs']['n_points']
+        scan_path = scan_path_kwargs['class_name']
+        title += "\n"
+        title += f"All poses = {round(np.nanmean(err), 3)}mm"
+        title += "\n"
+        title += f"{scan_path} path ({n_points} poses): {round(np.nanmean(err[:n_points]), 3)}mm"
+        logger.info(f"Average euclidean distance {scan_path} path {n_points} poses: {round(np.nanmean(err[:n_points]), 3)}mm")
+        logger.info(f"Median euclidean distance {scan_path} path {n_points} poses: {round(np.nanmedian(err[:n_points]), 3)}mm")
+    else:
+        title += f" {round(np.nanmean(err), 3)}mm"
+
     header = kwargs.pop('header', "")
     if header != "":
         title += "\n" + header
     ax.set_title(title, fontdict={'family': 'monospace', 'size': 'medium'})
-    logger.info(f"Average euclidean distance: {round(np.nanmean(err), 3)}mm.")
-    logger.info(f"Median euclidean distance: {round(np.nanmedian(err), 3)}mm.")
 
     # - Plot the image indexes as text next to CNC points:
     # Get images index:
@@ -434,11 +447,18 @@ def calibration_figure(cnc_poses, colmap_poses, path=None, image_id=False, scan_
     ax.set_aspect('equal')
 
     # - Add a boxplot visu of the euclidean distances (errors)
-    bxp.boxplot([err], vert=False)
+    if scan_path_kwargs != {}:
+        data = [err, err[:n_points]]
+        yticks = ["All poses", f"{scan_path} path"]
+    else:
+        data = [err]
+        yticks = ["All poses"]
+
+    bxp.boxplot(data, vert=False)
     bxp.set_title("CNC vs. COLMAP poses", fontdict={'family': 'monospace', 'size': 'medium'})
-    bxp.set_yticks([])
     bxp.set_xlabel('Euclidean distance (in mm)')
-    # plt.tight_layout()
+    bxp.set_yticklabels(yticks)
+    plt.tight_layout()
     bxp.grid(True, which='major', axis='x', linestyle='dotted')
 
     if path is not None:
