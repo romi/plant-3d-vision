@@ -40,8 +40,8 @@ def chamfer_distance(ref_pcd, flo_pcd):
     >>> import open3d as o3d
     >>> import numpy as np
     >>> from plant3dvision.metrics import chamfer_distance
-    >>> fpath_a = '/data/ROMI/20201119192731_rep_test_AnglesAndInternodes/arabido_test4_0/PointCloud__200_0_1_0_False_4ce2e46446/PointCloud.ply'
-    >>> fpath_b = '/data/ROMI/20201119192731_rep_test_AnglesAndInternodes/arabido_test4_1/PointCloud__200_0_1_0_False_4ce2e46446/PointCloud.ply'
+    >>> fpath_a = '/data/ROMI/20201119192731_eval_AnglesAndInternodes/arabido_test4_0/PointCloud__200_0_1_0_False_4ce2e46446/PointCloud.ply'
+    >>> fpath_b = '/data/ROMI/20201119192731_eval_AnglesAndInternodes/arabido_test4_1/PointCloud__200_0_1_0_False_4ce2e46446/PointCloud.ply'
     >>> pcd_a = o3d.io.read_point_cloud(fpath_a)
     >>> pcd_b = o3d.io.read_point_cloud(fpath_b)
     >>> chamfer_distance(pcd_a, pcd_b)
@@ -82,8 +82,8 @@ def point_cloud_registration_fitness(ref_pcd, flo_pcd, max_distance=2):
     >>> import open3d as o3d
     >>> import numpy as np
     >>> from plant3dvision.metrics import point_cloud_registration_fitness
-    >>> fpath_a = '/data/ROMI/20201119192731_rep_test_AnglesAndInternodes/arabido_test4_0/PointCloud__200_0_1_0_False_4ce2e46446/PointCloud.ply'
-    >>> fpath_b = '/data/ROMI/20201119192731_rep_test_AnglesAndInternodes/arabido_test4_1/PointCloud__200_0_1_0_False_4ce2e46446/PointCloud.ply'
+    >>> fpath_a = '/data/ROMI/20201119192731_eval_AnglesAndInternodes/arabido_test4_0/PointCloud__200_0_1_0_False_4ce2e46446/PointCloud.ply'
+    >>> fpath_b = '/data/ROMI/20201119192731_eval_AnglesAndInternodes/arabido_test4_1/PointCloud__200_0_1_0_False_4ce2e46446/PointCloud.ply'
     >>> pcd_a = o3d.io.read_point_cloud(fpath_a)
     >>> pcd_b = o3d.io.read_point_cloud(fpath_b)
     >>> point_cloud_registration_fitness(pcd_a, pcd_b)

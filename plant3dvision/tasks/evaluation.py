@@ -416,7 +416,6 @@ class CylinderRadiusEstimation(RomiTask):
     Notes
     -----
     These parameters should be defined in TOML config file given to `romi_run_task` CLI.
-    Module: plant3dvision.tasks.evaluation
     Upstream task format: PLY
     Output task format: JSON result file
 
