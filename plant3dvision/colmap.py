@@ -20,12 +20,10 @@ from os.path import splitext
 import imageio
 import numpy as np
 import open3d as o3d
-
 from plant3dvision import proc3d
+from plant3dvision.log import logger
 from plant3dvision.thirdparty import read_model
 from plantdb import io
-from plant3dvision.log import logger
-
 
 #: List of valid colmap executable values:
 ALL_COLMAP_EXE = ['colmap', 'geki/colmap', 'roboticsmicrofarms/colmap']
@@ -856,9 +854,18 @@ class ColmapRunner(object):
             points_array = np.asarray(sparse_pcd.points)
             x_min, y_min, z_min = points_array.min(axis=0)
             x_max, y_max, z_max = points_array.max(axis=0)
-            self.bounding_box = {"x": [x_min, x_max],
-                                 "y": [y_min, y_max],
-                                 "z": [z_min, z_max]}
+            x_margin = (x_max - x_min) * 0.05  # to give a margin of 5% of the axis range
+            y_margin = (y_max - y_min) * 0.05  # to give a margin of 5% of the axis range
+            z_margin = (z_max - z_min) * 0.05  # to give a margin of 5% of the axis range
+            def _lower(val, margin):
+                return np.floor(np.array(val - margin))
+            def _upper(val, margin):
+                return np.ceil(np.array(val + margin))
+
+            self.bounding_box = {"x": [_lower(x_min, x_margin), _upper(x_max, x_margin)],
+                                 "y": [_lower(y_min, y_margin), _upper(y_max, y_margin)],
+                                 "z": [_lower(z_min, z_margin), _upper(z_max, z_margin)]}
+            logger.info(f"Automatically estimated bounding-box: {self.bounding_box}")
         logger.info(f"See {self.log_file} for a detailed log about COLMAP jobs...")
 
         return points, images, cameras, sparse_pcd, dense_pcd, self.bounding_box
