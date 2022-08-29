@@ -139,21 +139,21 @@ def get_camera_model_from_colmap(colmap_cameras):
 
     def _simple_radial(camera_params):
         """Parameter list is expected in the following order: f, cx, cy, k."""
-        model = {'model': "SIMPLE_RADIAL"}
-        params = dict(zip(['f', 'cx', 'cy', 'k'], camera_params))
-        return model.update(params)
+        cam_dict = {'model': "SIMPLE_RADIAL"}
+        cam_dict.update(dict(zip(['f', 'cx', 'cy', 'k'], camera_params)))
+        return cam_dict
 
     def _radial(camera_params):
         """Parameter list is expected in the following order: f, cx, cy, k1, k2."""
-        model = {'model': "RADIAL"}
-        params = dict(zip(['f', 'cx', 'cy', 'k1', 'k2'], camera_params))
-        return model.update(params)
+        cam_dict = {'model': "RADIAL"}
+        cam_dict.update(dict(zip(['f', 'cx', 'cy', 'k1', 'k2'], camera_params)))
+        return cam_dict
 
     def _opencv(camera_params):
         """Parameter list is expected in the following order: fx, fy, cx, cy, k1, k2, p1, p2."""
-        model = {'model': "OPENCV"}
-        params = dict(zip(['fx', 'fy', 'cx', 'cy', 'k1', 'k2', 'p1', 'p2'], camera_params))
-        return model.update(params)
+        cam_dict = {'model': "OPENCV"}
+        cam_dict.update(dict(zip(['fx', 'fy', 'cx', 'cy', 'k1', 'k2', 'p1', 'p2'], camera_params)))
+        return cam_dict
 
     # If loaded from JSON, camera id(s) may be str instead of int:
     new_colmap_cameras = {}
