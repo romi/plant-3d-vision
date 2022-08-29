@@ -123,13 +123,13 @@ def get_camera_model_from_intrinsic(dataset, model="OPENCV"):
 
 
 def colmap_str_params(model, **kwargs):
-    """Convert a """
+    """Convert a camera model dictionary into a COLMAP string of parameters."""
     if model.lower() == 'opencv':
         return f"{kwargs['fx']},{kwargs['fy']},{kwargs['cx']},{kwargs['cy']},{kwargs['k1']},{kwargs['k2']},{kwargs['p1']},{kwargs['p2']}"
     if model.lower() == 'radial':
-        return f"{kwargs['f']},{kwargs['f']},{kwargs['cx']},{kwargs['cy']},{kwargs['k1']},{kwargs['k2']}, 0., 0."
+        return f"{kwargs['f']},{kwargs['f']},{kwargs['cx']},{kwargs['cy']},{kwargs['k1']},{kwargs['k2']},0.,0."
     if model.lower() == 'simple_radial':
-        return f"{kwargs['f']},{kwargs['f']},{kwargs['cx']},{kwargs['cy']},{kwargs['k']}, 0., 0., 0."
+        return f"{kwargs['f']},{kwargs['f']},{kwargs['cx']},{kwargs['cy']},{kwargs['k']},0.,0.,0."
 
 
 def get_camera_model_from_colmap(colmap_cameras):
