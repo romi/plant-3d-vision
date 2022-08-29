@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+
 from os.path import join
 from os.path import splitext
 
@@ -17,17 +18,6 @@ from plantdb import io
 from romitask.task import ImagesFilesetExists
 from romitask.task import RomiTask
 
-
-def recursively_unfreeze(value):
-    """
-    Recursively walks ``Mapping``s and ``list``s and converts them to ``FrozenOrderedDict`` and ``tuples``, respectively.
-    """
-    from collections.abc import Mapping
-    if isinstance(value, Mapping):
-        return dict(((k, recursively_unfreeze(v)) for k, v in value.items()))
-    elif isinstance(value, list) or isinstance(value, tuple):
-        return tuple(recursively_unfreeze(v) for v in value)
-    return value
 
 def compute_calibrated_poses(rotmat, tvec):
     """Compute the calibrated pose from COLMAP.
@@ -475,6 +465,7 @@ class Colmap(RomiTask):
         #     raise IOError(
         #         "Cannot find suitable bounding box for object in metadata")
         return bounding_box
+
     def set_gpu_use(self):
         """Configure COLMAP CLI parameters to defines GPU usage."""
         if "feature_extractor" not in self.cli_args:
@@ -550,8 +541,8 @@ class Colmap(RomiTask):
         # Prevent refinement of extra params (k1, k2, p1, p2) by COLMAP:
         self.cli_args["mapper"]["--Mapper.ba_refine_extra_params"] = "0"
 
-
     def run(self):
+        from plant3dvision.utils import recursively_unfreeze
         self.cli_args = recursively_unfreeze(self.cli_args)  # originally an immutable `FrozenOrderedDict`
         # Set some COLMAP CLI parameters:
         self.set_gpu_use()

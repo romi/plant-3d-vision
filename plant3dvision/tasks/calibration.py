@@ -3,8 +3,6 @@
 
 import luigi
 import numpy as np
-from tqdm import tqdm
-
 from plant3dvision.calibration import calibrate_opencv_camera
 from plant3dvision.calibration import calibrate_radial_camera
 from plant3dvision.calibration import calibrate_simple_radial_camera
@@ -17,6 +15,7 @@ from romitask import FilesetTarget
 from romitask import RomiTask
 from romitask.task import FileByFileTask
 from romitask.task import ImagesFilesetExists
+from tqdm import tqdm
 
 
 class CreateCharucoBoard(RomiTask):
@@ -436,8 +435,9 @@ class ExtrinsicCalibration(RomiTask):
         from plant3dvision.camera import format_camera_params
         from plant3dvision.camera import get_camera_model_from_colmap
         from plant3dvision.tasks.colmap import get_cnc_poses
+        from plant3dvision.utils import recursively_unfreeze
 
-        self.cli_args = dict(self.cli_args)  # originally an immutable `FrozenOrderedDict`
+        self.cli_args = recursively_unfreeze(self.cli_args)  # originally an immutable `FrozenOrderedDict`
         # Set some COLMAP CLI parameters:
         self.set_gpu_use()
         self.set_single_camera()
