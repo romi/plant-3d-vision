@@ -380,28 +380,28 @@ class CylinderRadiusGroundTruth(RomiTask):
     def run(self):
         # - Get the radius value:
         if self.radius == "random":
-            radius = random.uniform(1, 100)
+            self.radius = random.uniform(1, 100)
         else:
-            radius = float(self.radius)
+            self.radius = float(self.radius)
         # - Get the height value:
         if self.height == "random":
-            height = random.uniform(1, 100)
+            self.height = random.uniform(1, 100)
         else:
-            height = float(self.height)
-        # - Create the cylinder with known radius, height & number of points:
-        zs = np.random.uniform(0, height, self.nb_points)
-        thetas = np.random.uniform(0, 2 * np.pi, self.nb_points)
-        xs = radius * np.cos(thetas)
-        ys = radius * np.sin(thetas)
-        cylinder = np.array([xs, ys, zs]).T
+            self.height = float(self.height)
+
         # - Create the cylinder point-cloud:
-        gt_cyl = o3d.geometry.PointCloud()
-        gt_cyl.points = o3d.utility.Vector3dVector(cylinder)
+        from plant3dvision.evaluation import create_cylinder_pcd
+        gt_cyl = create_cylinder_pcd(self.radius, self.height, self.nb_points)
         # - Visualization:
         # o3d.visualization.draw_geometries([gt_cyl])
         # - Write the PLY & metadata:
         io.write_point_cloud(self.output_file(), gt_cyl)
-        self.output().get().set_metadata({'radius': radius})
+        cylinder_md = {
+            'radius': self.radius,
+            'height': self.height,
+            'nb_points': self.nb_points
+        }
+        self.output().get().set_metadata(cylinder_md)
 
 
 class CylinderRadiusEstimation(RomiTask):
@@ -426,10 +426,12 @@ class CylinderRadiusEstimation(RomiTask):
         return self.upstream_task().output()
 
     def run(self):
+        from plant3dvision.evaluation import estimate_cylinder_radius
         # - Load the PLY file containing the cylinder point-cloud:
         cylinder_fileset = self.input().get()
         input_file = self.input_file()
         pcd = io.read_point_cloud(input_file)
+
         # - Get the ground-truth value for cylinder radius:
         if str(self.upstream_task.task_family) == "CylinderRadiusGroundTruth":
             gt_radius = cylinder_fileset.get_metadata("radius")
@@ -441,19 +443,11 @@ class CylinderRadiusEstimation(RomiTask):
                 logger.warning("No radius measurement specified")
         else:
             gt_radius = None
-        # - Compute the radius:
-        pcd_points = np.asarray(pcd.points)
-        pca = decomposition.PCA(n_components=3)
-        pca.fit(pcd_points)
-        t_points = np.dot(pca.components_, pcd_points.T).T
-        # - Visualization:
-        # gt_cyl = o3d.geometry.PointCloud()
-        # gt_cyl.points = o3d.utility.Vector3dVector(t_points)
-        # o3d.visualization.draw_geometries([gt_cyl])
-        center = t_points.mean(axis=0)
-        radius = np.mean(np.sqrt((t_points[:, 0] - center[0]) ** 2 + (t_points[:, 1] - center[1]) ** 2))
-        # - Compare obtained radius to GT radius:
+
+        # - Estimate the cylinder radius from the pcd:
+        radius = estimate_cylinder_radius(pcd)
         output = {"calculated_radius": radius}
+        # - Compare obtained radius to GT radius:
         if gt_radius:
             err = round(abs(radius - gt_radius) / gt_radius * 100, 2)
             output["gt_radius"] = gt_radius
