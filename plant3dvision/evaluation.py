@@ -82,13 +82,14 @@ def estimate_cylinder_radius(pcd):
     cov_matrix = np.cov(pcd_points, rowvar=False)
     eig_val, eig_vec = np.linalg.eig(cov_matrix)
     # Find the axes index corresponding to the circle (should have very close eigen values):
-    x,y = _find_two_closest(eig_val)
+    x, y = _find_two_closest(eig_val)
     # Compute the centered point-cloud:
     t_points = np.dot(eig_vec.T, pcd_points.T).T
     center = t_points.mean(axis=0)
     # Finally estimate the radius:
     radius = np.mean(np.sqrt((t_points[:, x] - center[x]) ** 2 + (t_points[:, y] - center[y]) ** 2))
     return radius
+
 
 def _find_two_closest(values):
     """Find the pair with the closest values for all combination of given `values`."""
