@@ -847,7 +847,7 @@ class ColmapRunner(object):
                 logger.critical("Using non-cropped version!")
                 # Check if we have a DENSE pcd that may contain points inside the bounding-box...
                 # else set to `None` to try automatic
-                if dense_pcd is not None:
+                if dense_pcd is None:
                     self.bounding_box = None
             else:
                 sparse_pcd = crop_sparse_pcd
