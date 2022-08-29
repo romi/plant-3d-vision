@@ -532,36 +532,55 @@ def vol2pcd(volume, origin, voxel_size, level_set_value=0):
 
 
 def crop_point_cloud(point_cloud, bounding_box):
-    """
-    Crops a point cloud by keeping only points inside bounding box.
+    """Crop a point-cloud by keeping points inside the bounding-box.
+
     Parameters
     ----------
-    point_cloud : PointCloud
-        input point cloud
+    point_cloud : open3d.geometry.PointCloud
+        Input point-cloud to crop.
     bounding_box : dict
-        {"x" : [xmin, xmax], "y" : [ymin, ymax], "z" : [zmin, zmax]}
+        An axis indexed bounding-box dictionary like ``{"x": [min, max], "y": [min, max], "z": [min, max]}``
 
     Returns
     -------
-    PointCloud
-    """
-    x_bounds = bounding_box['x']
-    y_bounds = bounding_box['y']
-    z_bounds = bounding_box['z']
+    open3d.geometry.PointCloud
+        The cropped point-cloud.
 
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from plant3dvision.proc3d import crop_point_cloud
+    >>> from plant3dvision.evaluation import create_cylinder_pcd
+    >>> pcd = create_cylinder_pcd(radius=5, height=100)
+    >>> np.max(np.array(pcd.points)[:, 2])  # max coordinate for z-axis
+    99.99793381476627
+    >>> cropped_pcd = crop_point_cloud(pcd, {"x": [0, 10], "y": [0, 10], "z": [0, 10]})
+    >>> np.max(np.array(cropped_pcd.points)[:, 2])  # max coordinate for z-axis
+    9.996078599339487
+
+    """
+    # - Get the ordered axes limits:
+    x_bounds = sorted(bounding_box['x'])
+    y_bounds = sorted(bounding_box['y'])
+    z_bounds = sorted(bounding_box['z'])
+    # Convert the open3d.geometry.PointCloud instance so a Nx3 array of points coordinates:
     points = np.asarray(point_cloud.points)
+    # - Filter the points to keep those within the bounding-box:
+    # Create a boolean tuple of valid points:
     valid_index = ((points[:, 0] > x_bounds[0]) * (points[:, 0] < x_bounds[1]) *
                    (points[:, 1] > y_bounds[0]) * (points[:, 1] < y_bounds[1]) *
                    (points[:, 2] > z_bounds[0]) * (points[:, 2] < z_bounds[1]))
-
+    # Mask the points array with boolean index of valid points:
     points = points[valid_index, :]
+    # Initialize a new `open3d.geometry.PointCloud` instance:
     cropped_point_cloud = o3d.geometry.PointCloud()
+    # Populate it with kept points
     cropped_point_cloud.points = o3d.utility.Vector3dVector(points)
-
+    # If the original point-cloud has normals, add it to the cropped point-cloud instance:
     if point_cloud.has_normals():
         cropped_point_cloud.normals = o3d.utility.Vector3dVector(
             np.asarray(point_cloud.normals)[valid_index, :])
-
+    # If the original point-cloud has normals, add it to the cropped point-cloud instance:
     if point_cloud.has_colors():
         cropped_point_cloud.colors = o3d.utility.Vector3dVector(
             np.asarray(point_cloud.colors)[valid_index, :])
