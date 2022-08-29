@@ -68,9 +68,11 @@ def estimate_cylinder_radius(pcd):
     >>> # Example 1 - Create a long & thin cylinder:
     >>> pcd = create_cylinder_pcd(radius=5, height=100)
     >>> estimate_cylinder_radius(pcd)
+    4.999786856324291
     >>> # Example 2 - Create a short & thick cylinder:
-    >>> pcd_b = create_cylinder_pcd(radius=50, height=5)
-    >>> estimate_cylinder_radius(pcd_b)
+    >>> pcd = create_cylinder_pcd(radius=50, height=5)
+    >>> estimate_cylinder_radius(pcd)
+    49.99988682258448
 
     """
     if isinstance(pcd, o3d.geometry.PointCloud):
@@ -93,10 +95,10 @@ def _find_two_closest(values):
     from itertools import combinations
     idx = range(len(values))
     diff = np.infty
-    pairs = [None, None]
+    pairs = (None, None)
     for combi in combinations(idx, 2):
-        new_diff = np.abs(np.diff([values[c] for c in combi]))
+        new_diff = np.abs(np.diff([values[c] for c in combi]))[0]
         if new_diff < diff:
             diff = new_diff
             pairs = combi
-    return combi
+    return pairs
