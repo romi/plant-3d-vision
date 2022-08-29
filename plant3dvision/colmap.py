@@ -827,31 +827,38 @@ class ColmapRunner(object):
             self.model_analyzer()
 
         # -- PointCloud(s) cropping by bounding-box & minimal bounding-box estimation:
-        # - Try to crop the sparse pointcloud by bounding-box (if any):
-        if self.bounding_box is not None:
-            crop_sparse_pcd = proc3d.crop_point_cloud(sparse_pcd, self.bounding_box)
-            # - Replace the sparse pointcloud with cropped version only if it is not empty:
-            if len(crop_sparse_pcd.points) == 0:
-                msg = "Empty sparse point cloud after cropping by bounding box!"
-                logger.critical(msg)
-                msg = "Using non-cropped version!"
-                logger.critical(msg)
-            else:
-                sparse_pcd = crop_sparse_pcd
+        # WARNING: We try to crop the DENSE point-cloud first as it should contain info missing from the sparse!
         # - Try to crop the dense pointcloud (if any) by bounding-box (if any):
         if self.bounding_box is not None and self.compute_dense:
             crop_dense_pcd = proc3d.crop_point_cloud(dense_pcd, self.bounding_box)
             # - Replace the dense pointcloud with cropped version only if it is not empty:
             if len(crop_dense_pcd.points) == 0:
-                msg = "Empty dense point cloud after cropping by bounding box!"
-                logger.critical(msg)
-                msg = "Using non-cropped version!"
-                logger.critical(msg)
+                logger.critical("Empty dense point cloud after cropping by bounding box!")
+                logger.critical("Using non-cropped version!")
+                self.bounding_box = None
             else:
                 dense_pcd = crop_dense_pcd
-        # - Get the sparse pointcloud bounding-box (min & max in each direction):
+        # - Try to crop the sparse pointcloud by bounding-box (if any):
+        if self.bounding_box is not None:
+            crop_sparse_pcd = proc3d.crop_point_cloud(sparse_pcd, self.bounding_box)
+            # - Replace the sparse pointcloud with cropped version only if it is not empty:
+            if len(crop_sparse_pcd.points) == 0:
+                logger.critical("Empty sparse point cloud after cropping by bounding box!")
+                logger.critical("Using non-cropped version!")
+                # Check if we have a DENSE pcd that may contain points inside the bounding-box...
+                # else set to `None` to try automatic
+                if dense_pcd is not None:
+                    self.bounding_box = None
+            else:
+                sparse_pcd = crop_sparse_pcd
+
+        # - AUTOMATIC estimation of bounding-box from dense (if any) or sparse point-cloud if not manually defined:
         if self.bounding_box is None:
-            points_array = np.asarray(sparse_pcd.points)
+            if dense_pcd is not None:
+                points_array = np.asarray(sparse_pcd.points)
+            else:
+                points_array = np.asarray(sparse_pcd.points)
+            # Get the bounding-box using min & max in each direction +/- 5% of the range in each direction
             x_min, y_min, z_min = points_array.min(axis=0)
             x_max, y_max, z_max = points_array.max(axis=0)
             x_margin = (x_max - x_min) * 0.05  # to give a margin of 5% of the axis range
