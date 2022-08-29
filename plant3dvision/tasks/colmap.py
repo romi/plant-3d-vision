@@ -5,7 +5,6 @@ from os.path import splitext
 
 import luigi
 import numpy as np
-
 from plant3dvision.calibration import calibration_figure
 from plant3dvision.colmap import ColmapRunner
 from plant3dvision.filenames import COLMAP_CAMERAS_ID
@@ -18,6 +17,17 @@ from plantdb import io
 from romitask.task import ImagesFilesetExists
 from romitask.task import RomiTask
 
+
+def recursively_unfreeze(value):
+    """
+    Recursively walks ``Mapping``s and ``list``s and converts them to ``FrozenOrderedDict`` and ``tuples``, respectively.
+    """
+    from collections.abc import Mapping
+    if isinstance(value, Mapping):
+        return dict(((k, recursively_unfreeze(v)) for k, v in value.items()))
+    elif isinstance(value, list) or isinstance(value, tuple):
+        return tuple(recursively_unfreeze(v) for v in value)
+    return value
 
 def compute_calibrated_poses(rotmat, tvec):
     """Compute the calibrated pose from COLMAP.
@@ -542,7 +552,7 @@ class Colmap(RomiTask):
 
 
     def run(self):
-        self.cli_args = dict(self.cli_args)  # originally an immutable `FrozenOrderedDict`
+        self.cli_args = recursively_unfreeze(self.cli_args)  # originally an immutable `FrozenOrderedDict`
         # Set some COLMAP CLI parameters:
         self.set_gpu_use()
         self.set_single_camera()
