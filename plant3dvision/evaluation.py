@@ -104,10 +104,15 @@ def _find_two_closest(values):
     return pairs
 
 
-def align_sequences(pred_angles, angles_gt, pred_internodes, internodes_gt):
+def align_sequences(pred_angles, angles_gt, pred_internodes, internodes_gt, **kwargs):
     """Align sequences of angles and internodes with DTW."""
     from dtw import DTW
+    from dtw.metrics import mixed_dist
     from dtw.tasks.search_free_ends import brute_force_free_ends_search
+
+    free_ends = kwargs.get('free_ends', (0, 1))
+    free_ends_eps = kwargs.get('free_ends_eps', 1e-4)
+    n_jobs = kwargs.get('n_jobs', -1)
 
     # Creates the ground-truth array of angles and internodes:
     seq_gt = np.array([angles_gt, internodes_gt]).T
@@ -123,8 +128,8 @@ def align_sequences(pred_angles, angles_gt, pred_internodes, internodes_gt):
                       mixed_type=[True, False], mixed_spread=[1, max_in], mixed_weight=[0.5, 0.5],
                       names=["Angles", "Internodes"])
     # Performs brute force search (parallel):
-    free_ends, n_cost = brute_force_free_ends_search(dtwcomputer, max_value=self.free_ends,
-                                                     free_ends_eps=self.free_ends_eps, n_jobs=self.n_jobs)
+    free_ends, n_cost = brute_force_free_ends_search(dtwcomputer, max_value=free_ends,
+                                                     free_ends_eps=free_ends_eps, n_jobs=n_jobs)
     # Set the found `free_ends` parameter by brute force search:
     dtwcomputer.free_ends = free_ends
     # Re-run DTW alignment:

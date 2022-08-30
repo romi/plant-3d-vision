@@ -521,7 +521,8 @@ class AnglesAndInternodesEvaluation(EvaluationTask):
         if self.to_degrees:
             pred_angles = list(map(degrees, pred_angles))  # convert radians to degrees
 
-        dtwcomputer = align_sequences(pred_angles, angles_gt, pred_internodes, internodes_gt)
+        dtwcomputer = align_sequences(pred_angles, angles_gt, pred_internodes, internodes_gt,
+                                      free_ends=self.free_ends, free_ends_eps=self.free_ends_eps, n_jobs=self.n_jobs)
 
         # - Export results:
         # Export the alignment figure:
