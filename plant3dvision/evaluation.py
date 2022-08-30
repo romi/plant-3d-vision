@@ -21,7 +21,6 @@ def create_cylinder_pcd(radius, height, nb_points=10000):
     -------
     open3d.geometry.PointCloud
         An open3d instance with a cylinder point-cloud.
-    float
 
     Examples
     --------
@@ -103,3 +102,31 @@ def _find_two_closest(values):
             diff = new_diff
             pairs = combi
     return pairs
+
+
+def align_sequences(pred_angles, angles_gt, pred_internodes, internodes_gt):
+    """Align sequences of angles and internodes with DTW."""
+    from dtw import DTW
+    from dtw.tasks.search_free_ends import brute_force_free_ends_search
+
+    # Creates the ground-truth array of angles and internodes:
+    seq_gt = np.array([angles_gt, internodes_gt]).T
+    # Creates the predicted array of angles and internodes:
+    seq_predicted = np.array([pred_angles, pred_internodes]).T
+
+    # Set some DTW parameter based on the obtained sequences:
+    max_ref = max(seq_gt[:, 1])
+    max_test = max(seq_predicted[:, 1])
+    max_in = max(max_ref, max_test)
+    # Initialize a DWT instance:
+    dtwcomputer = DTW(seq_predicted, seq_gt, constraints="merge_split", free_ends=(0, 1), ldist=mixed_dist,
+                      mixed_type=[True, False], mixed_spread=[1, max_in], mixed_weight=[0.5, 0.5],
+                      names=["Angles", "Internodes"])
+    # Performs brute force search (parallel):
+    free_ends, n_cost = brute_force_free_ends_search(dtwcomputer, max_value=self.free_ends,
+                                                     free_ends_eps=self.free_ends_eps, n_jobs=self.n_jobs)
+    # Set the found `free_ends` parameter by brute force search:
+    dtwcomputer.free_ends = free_ends
+    # Re-run DTW alignment:
+    dtwcomputer.run()
+    return dtwcomputer

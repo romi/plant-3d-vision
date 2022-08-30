@@ -499,10 +499,9 @@ class AnglesAndInternodesEvaluation(EvaluationTask):
 
     def run(self):
         from math import degrees
-        from dtw import DTW
-        from dtw.tasks.search_free_ends import brute_force_free_ends_search
-        from dtw.metrics import mixed_dist
         from os.path import join
+        from plant3dvision.evaluation import align_sequences
+        from plant3dvision.utils import jsonify
 
         if str(self.ground_truth.task_family) == "VirtualPlantObj":
             # retrieve the angles and internodes ground truth from generated plants metadata
@@ -524,63 +523,19 @@ class AnglesAndInternodesEvaluation(EvaluationTask):
         if self.to_degrees:
             pred_angles = list(map(degrees, pred_angles))  # convert radians to degrees
 
-        # Creates the ground-truth array of angles and internodes:
-        seq_gt = np.array([angles_gt, internodes_gt]).T
-        # Creates the predicted array of angles and internodes:
-        seq_predicted = np.array([pred_angles, pred_internodes]).T
+        dtwcomputer = align_sequences(pred_angles, angles_gt, pred_internodes, internodes_gt)
 
-        # Set some of the DTW parameter based on the obtained sequences:
-        max_ref = max(seq_gt[:, 1])
-        max_test = max(seq_predicted[:, 1])
-        max_in = max(max_ref, max_test)
-        # Initialize a DWT instance:
-        dtwcomputer = DTW(seq_predicted, seq_gt, constraints="merge_split", free_ends=(0, 1), ldist=mixed_dist,
-                          mixed_type=[True, False], mixed_spread=[1, max_in], mixed_weight=[0.5, 0.5],
-                          names=["Angles", "Internodes"])
-        # Performs brute force search (parallel):
-        free_ends, n_cost = brute_force_free_ends_search(dtwcomputer, max_value=self.free_ends,
-                                                         free_ends_eps=self.free_ends_eps, n_jobs=self.n_jobs)
-        # Set the found `free_ends` parameter by brute force search:
-        dtwcomputer.free_ends = free_ends
-        # Re-run DTW alignment:
-        dtwcomputer.run()
-        # Export results:
+        # - Export results:
+        # Export the alignment figure:
         outfs = self.output().get()
         f = outfs.create_file("alignment_figure.png")
         f_path = join(f.db.basedir, f.get_scan().id, f.get_fileset().id, f.id)
         dtwcomputer.plot_results(f_path, valrange=[(0, 360), None])
+        # Export the text alignment results:
         results = dtwcomputer.get_results()
         summary = dtwcomputer.summarize()
-
-        def jsonify(data: dict) -> dict:
-            from collections.abc import Iterable
-            json_data = {}
-            for k, v in data.items():
-                # logger.info(f"{k}:{v}")
-                if isinstance(v, Iterable):
-                    if len(v) == 0:
-                        json_data[k] = 'None'
-                        continue
-                    if isinstance(v, np.ndarray):
-                        v = v.tolist()
-                    if isinstance(v[0], float):
-                        json_data[k] = list(map(float, v))
-                    elif isinstance(v[0], np.int64):
-                        json_data[k] = list(map(int, v))
-                    else:
-                        json_data[k] = v
-                else:
-                    if isinstance(v, float):
-                        json_data[k] = float(v)
-                    elif isinstance(v, np.int64):
-                        json_data[k] = int(v)
-                    else:
-                        json_data[k] = v
-            return json_data
-
         # JSONify the results from DTW as np.array can't be exported as such:
         json_results = {}
         json_results.update(jsonify(summary))
         json_results.update(jsonify(results))
-
         io.write_json(self.output_file(), json_results)
