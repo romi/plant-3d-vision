@@ -3,10 +3,13 @@
 
 import luigi
 import open3d as o3d
-from plant3dvision.log import logger
-from romitask import RomiTask
-from plantdb import io
+
 from plant3dvision.tasks.proc3d import CurveSkeleton
+from plantdb import io
+from romitask import RomiTask
+from romitask.log import configure_logger
+
+logger = configure_logger(__name__)
 
 
 class TreeGraph(RomiTask):
@@ -59,20 +62,21 @@ class AnglesAndInternodes(RomiTask):
         task_name = str(self.upstream_task.task_family)
         from plant3dvision import arabidopsis
 
-        if task_name == "TreeGraph": # angles and internodes from graph
+        if task_name == "TreeGraph":  # angles and internodes from graph
             t = io.read_graph(self.input_file())
             measures = arabidopsis.compute_angles_and_internodes(t)
 
         # angles and internodes from point cloud
         else:
-            if task_name == "ClusteredMesh": # mesh to point cloud
+            if task_name == "ClusteredMesh":  # mesh to point cloud
                 stem_meshes = [io.read_triangle_mesh(f) for f in self.input().get().get_files(query={"label": "stem"})]
                 stem_mesh = o3d.geometry.TriangleMesh()
                 for m in stem_meshes:
                     stem_mesh = stem_mesh + m
                 stem_pcd = o3d.geometry.PointCloud(stem_mesh.vertices)
 
-                organ_meshes = [io.read_triangle_mesh(f) for f in self.input().get().get_files(query={"label": self.organ_type})]
+                organ_meshes = [io.read_triangle_mesh(f) for f in
+                                self.input().get().get_files(query={"label": self.organ_type})]
                 organ_pcd_list = [o3d.geometry.PointCloud(o.vertices) for o in organ_meshes]
 
             elif task_name == "OrganSegmentation":
@@ -89,9 +93,10 @@ class AnglesAndInternodes(RomiTask):
                 raise ValueError("upstream task not implemented, choose among : TreeGraph, ClusteredMesh "
                                  "or OrganSegmentation")
 
-            measures = arabidopsis.angles_and_internodes_from_point_cloud(stem_pcd, organ_pcd_list, self.characteristic_length,
-                                                      self.stem_axis, self.stem_axis_inverted,
-                                                      self.min_elongation_ratio, self.min_fruit_size)
+            measures = arabidopsis.angles_and_internodes_from_point_cloud(stem_pcd, organ_pcd_list,
+                                                                          self.characteristic_length,
+                                                                          self.stem_axis, self.stem_axis_inverted,
+                                                                          self.min_elongation_ratio,
+                                                                          self.min_fruit_size)
 
         io.write_json(self.output_file(), measures)
-

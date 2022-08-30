@@ -20,8 +20,10 @@ from scipy.ndimage.filters import gaussian_filter
 from scipy.ndimage.morphology import distance_transform_edt
 from skimage.exposure import rescale_intensity
 from tqdm import tqdm
-from plant3dvision.log import logger
 
+from romitask.log import configure_logger
+
+logger = configure_logger(__name__)
 
 try:
     import romicgal as cgal

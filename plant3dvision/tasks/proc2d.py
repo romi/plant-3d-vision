@@ -3,15 +3,17 @@
 
 import luigi
 import numpy as np
-from plant3dvision.log import logger
+from skimage.exposure import rescale_intensity
+from tqdm import tqdm
 
 from plant3dvision.tasks.colmap import Colmap
 from plantdb import io
+from romitask.log import configure_logger
 from romitask.task import FileByFileTask
 from romitask.task import FilesetExists
 from romitask.task import ImagesFilesetExists
-from skimage.exposure import rescale_intensity
-from tqdm import tqdm
+
+logger = configure_logger(__name__)
 
 
 class Undistorted(FileByFileTask):

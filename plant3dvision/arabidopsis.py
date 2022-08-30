@@ -2,23 +2,21 @@
 # -*- coding: utf-8 -*-
 
 """
-romican.arabidopsis
--------------------
+This module contains all function related to the segmentation of arabidopsis from its curve skeleton.
 
-This module contains all function related to the segmentation of arabidopsis
-from its curve skeleton. The two main functionalities are:
-
-    * Computing a tree  from the curve skeleton
-    * Estimating the angle between successive fruits from the tree.
+The two main functionalities are:
+ * Computing a tree  from the curve skeleton
+ * Estimating the angle between successive fruits from the tree.
 """
 import collections
 import operator
 
 import networkx as nx
 import numpy as np
-from plant3dvision.log import logger
 
+from romitask.log import configure_logger
 
+logger = configure_logger(__name__)
 
 def get_main_stem_and_nodes(G, root_node):
     """
@@ -102,7 +100,6 @@ def compute_mst(G, main_stem, nodes):
         else:
             distance_to_node[n] = max_dist
         # distance_to_node[n] = min(distances[i][n] for i in nodes)
-
 
     def node_penalty(u, v):
         if u in main_stem or v in main_stem:
@@ -367,7 +364,6 @@ def angles_and_internodes_from_point_cloud(stem_pcd, organ_pcd_list, characteris
         list of angles, internodes and fruit points
     """
     import open3d
-    from plantdb import io
 
     stem_points = np.asarray(stem_pcd.points)
 

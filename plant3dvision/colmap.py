@@ -20,10 +20,13 @@ from os.path import splitext
 import imageio
 import numpy as np
 import open3d as o3d
+
 from plant3dvision import proc3d
-from plant3dvision.log import logger
 from plant3dvision.thirdparty import read_model
 from plantdb import io
+from romitask.log import configure_logger
+
+logger = configure_logger(__name__)
 
 #: List of valid colmap executable values:
 ALL_COLMAP_EXE = ['colmap', 'geki/colmap', 'roboticsmicrofarms/colmap']
@@ -864,8 +867,10 @@ class ColmapRunner(object):
             x_margin = (x_max - x_min) * 0.05  # to give a margin of 5% of the axis range
             y_margin = (y_max - y_min) * 0.05  # to give a margin of 5% of the axis range
             z_margin = (z_max - z_min) * 0.05  # to give a margin of 5% of the axis range
+
             def _lower(val, margin):
                 return np.floor(np.array(val - margin))
+
             def _upper(val, margin):
                 return np.ceil(np.array(val + margin))
 

@@ -6,6 +6,7 @@ from os.path import splitext
 
 import luigi
 import numpy as np
+
 from plant3dvision.calibration import calibration_figure
 from plant3dvision.colmap import ColmapRunner
 from plant3dvision.filenames import COLMAP_CAMERAS_ID
@@ -13,10 +14,12 @@ from plant3dvision.filenames import COLMAP_DENSE_ID
 from plant3dvision.filenames import COLMAP_IMAGES_ID
 from plant3dvision.filenames import COLMAP_POINTS_ID
 from plant3dvision.filenames import COLMAP_SPARSE_ID
-from plant3dvision.log import logger
 from plantdb import io
+from romitask.log import configure_logger
 from romitask.task import ImagesFilesetExists
 from romitask.task import RomiTask
+
+logger = configure_logger(__name__)
 
 
 def compute_calibrated_poses(rotmat, tvec):

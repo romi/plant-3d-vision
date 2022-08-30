@@ -5,15 +5,16 @@ import luigi
 import numpy as np
 import open3d as o3d
 
-from romitask import RomiTask
-from plantdb import io
 from plant3dvision import proc3d
-from plant3dvision.log import logger
-
 from plant3dvision.tasks import config
 from plant3dvision.tasks.cl import Voxels
 from plant3dvision.tasks.colmap import Colmap
 from plant3dvision.tasks.proc2d import Segmentation2D
+from plantdb import io
+from romitask import RomiTask
+from romitask.log import configure_logger
+
+logger = configure_logger(__name__)
 
 
 class PointCloud(RomiTask):
@@ -212,7 +213,8 @@ class TriangleMesh(RomiTask):
     """
     upstream_task = luigi.TaskParameter(default=PointCloud)
     library = luigi.Parameter(default="open3d")  # ["cgal", "open3d"]
-    filtering = luigi.Parameter(default="most connected triangles")  # ["", "most connected triangles", "largest connected triangles", "dbscan point-cloud"]
+    filtering = luigi.Parameter(
+        default="most connected triangles")  # ["", "most connected triangles", "largest connected triangles", "dbscan point-cloud"]
 
     depth = luigi.IntParameter(default=9)  # used by open3d library
 
@@ -378,7 +380,8 @@ class OrganSegmentation(RomiTask):
                 f.set_metadata("label", label)
                 continue
             # DBSCAN clustering:
-            clustered_arr = np.array(label_pcd.cluster_dbscan(eps=self.eps, min_points=self.min_points, print_progress=True))
+            clustered_arr = np.array(
+                label_pcd.cluster_dbscan(eps=self.eps, min_points=self.min_points, print_progress=True))
 
             ids = np.unique(clustered_arr)
             n_ids = len(ids)

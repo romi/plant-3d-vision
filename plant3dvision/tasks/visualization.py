@@ -6,7 +6,6 @@ import numpy as np
 
 from plant3dvision.filenames import COLMAP_CAMERAS_ID
 from plant3dvision.filenames import COLMAP_IMAGES_ID
-from plant3dvision.log import logger
 from plant3dvision.tasks.arabidopsis import AnglesAndInternodes
 from plant3dvision.tasks.colmap import Colmap
 from plant3dvision.tasks.evaluation import PointCloudEvaluation
@@ -18,8 +17,11 @@ from plant3dvision.tasks.proc3d import PointCloud
 from plant3dvision.tasks.proc3d import TriangleMesh
 from plantdb import io
 from romitask import RomiTask
+from romitask.log import configure_logger
 from romitask.task import ImagesFilesetExists
 from romitask.task import VirtualPlantObj
+
+logger = configure_logger(__name__)
 
 
 class Visualization(RomiTask):

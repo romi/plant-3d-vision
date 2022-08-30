@@ -3,19 +3,22 @@
 
 import luigi
 import numpy as np
+from tqdm import tqdm
+
 from plant3dvision.calibration import calibrate_opencv_camera
 from plant3dvision.calibration import calibrate_radial_camera
 from plant3dvision.calibration import calibrate_simple_radial_camera
 from plant3dvision.colmap import ColmapRunner
-from plant3dvision.log import logger
 from plant3dvision.tasks.colmap import compute_calibrated_poses
 from plantdb import io
 from romitask import DatabaseConfig
 from romitask import FilesetTarget
 from romitask import RomiTask
+from romitask.log import configure_logger
 from romitask.task import FileByFileTask
 from romitask.task import ImagesFilesetExists
-from tqdm import tqdm
+
+logger = configure_logger(__name__)
 
 
 class CreateCharucoBoard(RomiTask):

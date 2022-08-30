@@ -12,8 +12,9 @@ This module contains all functions for processing of 2D data.
 import cv2
 from skimage.morphology import binary_dilation
 
-from plant3dvision.log import logger
+from romitask.log import configure_logger
 
+logger = configure_logger(__name__)
 
 EPS = 1e-9
 

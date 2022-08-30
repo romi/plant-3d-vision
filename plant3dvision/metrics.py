@@ -8,7 +8,9 @@ import numpy as np
 import open3d as o3d
 
 from plantdb import io
-from plant3dvision.log import logger
+from romitask.log import configure_logger
+
+logger = configure_logger(__name__)
 
 
 def chamfer_distance(ref_pcd, flo_pcd):
@@ -99,7 +101,7 @@ class SetEvaluator(ABC):
     def evaluate(self, groundtruth, prediction):
         pass
 
-    
+
 class SetMetrics(ABC):
     """Compare two arrays as sets. Non-binary arrays can be passed as
     argument. Any value equal to zero will be considered as zero, any
@@ -151,26 +153,26 @@ class SetMetrics(ABC):
         self._miou_count = 0
         if groundtruth is not None and prediction is not None:
             self._compare(groundtruth, prediction)
-    
+
     def __add__(self, other):
         self._update_metrics(other.tp, other.fn, other.tn, other.fp)
         return self
-    
+
     def add(self, groundtruth, prediction):
         self._compare(groundtruth, prediction)
-        
+
     def __str__(self):
         return str(self.as_dict())
-        
+
     def as_dict(self):
         return {'tp': self.tp, 'fn': self.fn, 'tn': self.tn, 'fp': self.fp,
                 'precision': self.precision(), 'recall': self.recall(),
-                'miou': self.miou() }
-        
+                'miou': self.miou()}
+
     def _compare(self, groundtruth, prediction):
         tp, fn, tn, fp = self.evaluator.evaluate(groundtruth, prediction)
         self._update_metrics(tp, fn, tn, fp)
-            
+
     def _update_metrics(self, tp, fn, tn, fp):
         self.tp += tp
         self.fn += fn
@@ -230,30 +232,33 @@ class CompareMasks(SetMetrics):
     >>> print(metrics.miou())
 
     """
+
     def __init__(self, groundtruth, prediction, dilation_amount=0):
         super(CompareMasks, self).__init__(MaskEvaluator(dilation_amount),
                                            groundtruth,
                                            prediction)
-        
+
+
 class MaskEvaluator(SetEvaluator):
     def __init__(self, dilation_amount=0):
         self.dilation_amount = dilation_amount
-        
+
     def evaluate(self, groundtruth, prediction):
         self._assert_same_size(groundtruth, prediction)
         prediction = self._dilate_image(prediction)
         return self._compute_metrics(groundtruth, prediction)
-    
+
     def _assert_same_size(self, groundtruth, prediction):
         if groundtruth.shape != prediction.shape:
-            raise ValueError("The groundtruth and prediction are different in size: %s vs %s" % (str(groundtruth.shape), str(prediction.shape)))
+            raise ValueError("The groundtruth and prediction are different in size: %s vs %s" % (
+            str(groundtruth.shape), str(prediction.shape)))
 
     def _dilate_image(self, image):
         from scipy.ndimage import binary_dilation
         for i in range(self.dilation_amount):
             image = binary_dilation(image > 0)
         return image
-    
+
     def _compute_metrics(self, groundtruth, prediction):
         groundtruth = self._to_binary_image(groundtruth)
         prediction = self._to_binary_image(prediction)
@@ -295,12 +300,13 @@ class CompareMaskFilesets():
     >>> print(metrics.results)
 
     """
+
     def __init__(self, groundtruth_fileset, prediction_fileset, labels, dilation_amount=0):
         self.groundtruth_fileset = groundtruth_fileset
         self.prediction_fileset = prediction_fileset
         self.labels = labels
         self.dilation_amount = dilation_amount
-        self.results = { 'evaluation-results': {}}
+        self.results = {'evaluation-results': {}}
         self.assure_matching_images()
         self.compare_predictions_to_ground_truths()
 
@@ -331,7 +337,7 @@ class CompareMaskFilesets():
                 if len(groundtruth) != 1:
                     logger.warning(f"Ground truth lacks file for label '{label}' and shot_id '{shot_id}'")
                     raise ValueError("Missing file in groundtruth")
-                       
+
     def compare_predictions_to_ground_truths(self):
         for label in self.labels:
             metrics = self.compare_label(label)
@@ -344,7 +350,7 @@ class CompareMaskFilesets():
         for prediction_file in prediction_files:
             metrics_file = self.evaluate_prediction(prediction_file, label)
             self.results['evaluation-results'][prediction_file.id] = metrics_file.as_dict()
-            metrics_label += metrics_file 
+            metrics_label += metrics_file
         return metrics_label
 
     def get_prediction_file(self, shot_id, label):
@@ -366,8 +372,8 @@ class CompareMaskFilesets():
         shot_id = prediction_file.get_metadata('shot_id')
         query = {'channel': label, 'shot_id': shot_id}
         files = self.groundtruth_fileset.get_files(query=query)
-        return files[0] # already checked that there exists only one
-    
+        return files[0]  # already checked that there exists only one
+
     def load_prediction_image(self, prediction):
         return self.read_binary_image(prediction)
 
@@ -394,6 +400,7 @@ class CompareSegmentedPointClouds():
     --------
 
     """
+
     def __init__(self, groundtruth, groundtruth_labels, prediction, prediction_labels):
         self.groundtruth = groundtruth
         self.prediction = prediction
@@ -403,11 +410,11 @@ class CompareSegmentedPointClouds():
         self.results = {}
         self._assure_sizes()
         self._evaluate()
-        
+
     def _assure_sizes(self):
         self.assure_size(self.groundtruth, self.groundtruth_labels)
         self.assure_size(self.prediction, self.prediction_labels)
-        
+
     def assure_size(self, pointcloud, labels):
         num_points, _ = np.asarray(pointcloud.points).shape
         if num_points != len(labels):
@@ -418,7 +425,7 @@ class CompareSegmentedPointClouds():
         self._compare_groundtruth_to_prediction()
         self._compare_prediction_to_groundtruth()
         self._compute_miou()
-        
+
     def _compare_groundtruth_to_prediction(self):
         res = self._compare(self.groundtruth, self.groundtruth_labels,
                             self.prediction, self.prediction_labels)
@@ -438,11 +445,11 @@ class CompareSegmentedPointClouds():
                 self.results['miou'][label] = (iou_1 + iou_2) / 2.0
             else:
                 self.results['miou'][label] = None
-        
+
     def _compare(self, source, source_labels, target, target_labels):
         results = self._init_results()
         search_tree = self._build_search_tree(target)
-        
+
         for index, point in enumerate(source.points):
             source_label = source_labels[index]
             target_label = self._get_label_closest_point(search_tree, point, target_labels)
@@ -452,66 +459,66 @@ class CompareSegmentedPointClouds():
         self._compute_recall(results)
         self._compute_iou(results)
         return results
-    
+
     def _build_search_tree(self, pcl):
         return o3d.geometry.KDTreeFlann(pcl)
-        
+
     def _get_closest_point(self, tree, p):
         [k, indices, _] = tree.search_knn_vector_3d(p, 1)
         return indices[0]
-    
+
     def _get_label_closest_point(self, tree, p, labels):
         index = self._get_closest_point(tree, p)
         return labels[index]
 
     def _evalulate_labels(self, results, source_label, target_label):
         for label in self.unique_labels:
-            if source_label == label  and target_label == label:
+            if source_label == label and target_label == label:
                 results[label]["tp"] += 1
-            elif source_label == label  and target_label != label:
+            elif source_label == label and target_label != label:
                 results[label]["fp"] += 1
             elif source_label != label and target_label == label:
                 results[label]["fn"] += 1
             else:
                 results[label]["tn"] += 1
-    
+
     def _init_results(self):
         results = {}
         for label in self.unique_labels:
-            results[label] = { "tp": 0, "fp": 0, "tn": 0, "fn": 0,
-                               "precision": None, "recall": None, "iou": None }
+            results[label] = {"tp": 0, "fp": 0, "tn": 0, "fn": 0,
+                              "precision": None, "recall": None, "iou": None}
         return results
-    
+
     def _compute_precision(self, results):
         for label in self.unique_labels:
             self._compute_precision_label(label, results)
-        
+
     def _compute_recall(self, results):
         for label in self.unique_labels:
             self._compute_recall_label(label, results)
-        
+
     def _compute_iou(self, results):
         for label in self.unique_labels:
             self._compute_iou_label(label, results)
-        
+
     def _compute_precision_label(self, label, results):
         denominator = results[label]["tp"] + results[label]["fp"]
         if denominator > 0:
             results[label]["precision"] = results[label]["tp"] / denominator
-            
+
     def _compute_recall_label(self, label, results):
         denominator = results[label]["tp"] + results[label]["fn"]
         if denominator > 0:
             results[label]["recall"] = results[label]["tp"] / denominator
-            
+
     def _compute_iou_label(self, label, results):
         denominator = (results[label]["tp"]
                        + results[label]["fn"]
                        + results[label]["fp"])
-        if denominator > 0:        
+        if denominator > 0:
             results[label]["iou"] = results[label]["tp"] / denominator
-            
-    
+
+
 def surface_ratio(ref_tmesh, flo_tmesh):
     """Returns the min/max surface ratio of two triangular meshes.
 
@@ -539,6 +546,7 @@ def surface_ratio(ref_tmesh, flo_tmesh):
     ref_s = ref_tmesh.get_surface_area()
     flo_s = flo_tmesh.get_surface_area()
     return min([ref_s, flo_s]) / max([ref_s, flo_s])
+
 
 def volume_ratio(ref_tmesh, flo_tmesh):
     """Returns the min/max volume ratio of two triangular meshes.

@@ -17,11 +17,12 @@ import os
 
 import numpy as np
 import pyopencl as cl
-from plant3dvision.log import logger
 
 from plant3dvision.proc3d import point2index
-
 from plantdb import io
+from romitask.log import configure_logger
+
+logger = configure_logger(__name__)
 
 ctx = cl.create_some_context()
 queue = cl.CommandQueue(ctx)
