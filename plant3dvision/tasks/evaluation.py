@@ -8,17 +8,8 @@ import tempfile
 import luigi
 import numpy as np
 import open3d as o3d
-from plantdb import io
-from romitask.task import DatabaseConfig
-from romitask.task import FilesetTarget
-from romitask.task import ImagesFilesetExists
-from romitask.task import RomiTask
-from romitask.task import Segmentation2DGroundTruthFilesetExists
-from romitask.task import VirtualPlantObj
-from sklearn import decomposition
 
 from plant3dvision.log import logger
-
 from plant3dvision.metrics import CompareMaskFilesets
 from plant3dvision.metrics import CompareSegmentedPointClouds
 from plant3dvision.tasks import cl
@@ -26,6 +17,13 @@ from plant3dvision.tasks import config
 from plant3dvision.tasks import proc2d
 from plant3dvision.tasks import proc3d
 from plant3dvision.tasks.arabidopsis import AnglesAndInternodes
+from plantdb import io
+from romitask.task import DatabaseConfig
+from romitask.task import FilesetTarget
+from romitask.task import ImagesFilesetExists
+from romitask.task import RomiTask
+from romitask.task import Segmentation2DGroundTruthFilesetExists
+from romitask.task import VirtualPlantObj
 
 
 class EvaluationTask(RomiTask):
