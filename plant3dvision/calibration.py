@@ -302,7 +302,7 @@ def calibration_figure(cnc_poses, colmap_poses, path=None, image_id=False, scan_
     >>> import os
     >>> from plantdb.fsdb import FSDB
     >>> from plant3dvision.tasks.colmap import get_cnc_poses
-    >>> from plant3dvision.tasks.colmap import compute_colmap_poses
+    >>> from plant3dvision.tasks.colmap import compute_colmap_poses_from_camera_json
     >>> from plant3dvision.tasks.colmap import calibration_figure
     >>> from plant3dvision.tasks.colmap import use_precalibrated_poses
     >>> db = FSDB(os.environ.get('DB_LOCATION', '/data/ROMI/DB'))
@@ -314,7 +314,7 @@ def calibration_figure(cnc_poses, colmap_poses, path=None, image_id=False, scan_
     >>> calib_scan = db.get_scan(calib_scan_id)
     >>> cnc_poses = get_cnc_poses(scan)
     >>> len(cnc_poses)
-    >>> colmap_poses = compute_colmap_poses(calib_scan)
+    >>> colmap_poses = compute_colmap_poses_from_camera_json(calib_scan)
     >>> len(colmap_poses)
     >>> calibration_figure(cnc_poses, colmap_poses, scan_id=scan_id, calib_scan_id=calib_scan_id)
     >>> db.disconnect()
@@ -325,7 +325,7 @@ def calibration_figure(cnc_poses, colmap_poses, path=None, image_id=False, scan_
     >>> scan = db.get_scan(scan_id)
     >>> calib_scan = db.get_scan(calib_scan_id)
     >>> cnc_poses = get_cnc_poses(scan)
-    >>> colmap_poses = compute_colmap_poses(calib_scan)
+    >>> colmap_poses = compute_colmap_poses_from_camera_json(calib_scan)
     >>> calibration_figure(cnc_poses, colmap_poses, scan_id=scan_id, calib_scan_id=calib_scan_id)
     >>> db.disconnect()
     >>> # Example 3 - Compute the calibrated poses with a calibration scan & use it on a scan:

@@ -19,16 +19,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import open3d as o3d
 from matplotlib import cm
-
-from plant3dvision.log import configure_logger
 from plant3dvision.metrics import SetMetrics
 from plant3dvision.metrics import chamfer_distance
 from plant3dvision.metrics import point_cloud_registration_fitness
 from plant3dvision.metrics import surface_ratio
 from plant3dvision.metrics import volume_ratio
-from plant3dvision.tasks.colmap import compute_colmap_poses
-from plant3dvision.tasks.colmap import get_cnc_poses
+from plant3dvision.tasks.colmap import compute_colmap_poses_from_camera_json
 from plant3dvision.tasks.colmap import get_calibrated_poses
+from plant3dvision.tasks.colmap import get_cnc_poses
 from plantdb import FSDB
 from plantdb.fsdb import LOCK_FILE_NAME
 from plantdb.fsdb import MARKER_FILE_NAME
@@ -37,6 +35,8 @@ from plantdb.io import read_json
 from plantdb.io import read_npz
 from plantdb.io import read_point_cloud
 from plantdb.io import read_triangle_mesh
+from romitask.log import configure_logger
+from tqdm import tqdm
 
 dirname, filename = os.path.split(os.path.abspath(__file__))
 
@@ -474,7 +474,7 @@ def compare_colmap_poses(db, task_name):
     poses_array = []
     for scan in scans_list:
         if task_name.startswith("Colmap"):
-            colmap_poses[scan.id] = compute_colmap_poses(scan)  # {img_id: [x, y, z]}
+            colmap_poses[scan.id] = compute_colmap_poses_from_camera_json(scan)  # {img_id: [x, y, z]}
         elif "Calibration" in task_name:
             colmap_poses[scan.id] = get_calibrated_poses(scan)
         else:
@@ -1106,11 +1106,14 @@ def compare_task_output(db, task_name, independent_tests=False):
             comp_func = [comp_func]  # make a list to work in following loop
         # - More than one comparison function can be applied to a same task!
         for func in comp_func:
+            logger.info(f"Comparing '{task_name}' outputs with '{func}'...")
             try:
                 eval(func + "(db, task_name)")
             except NameError:
                 logger.warning(f"The comparison function `{func}` "
                                "(defined in robustness_evaluation.json) does NOT exist!")
+            except:
+                logger.error(f"The comparison function `{func}` failed!")
 
     # - Evaluate all tasks if independent tests, else evaluate only tested task:
     if independent_tests:
@@ -1372,7 +1375,7 @@ def main(args):
         logger.info(f"Repeating task {task_cfg['name']} on replicated scans list: {scans_list}")
         test_db.disconnect()  # to allow the luigi pipelines to run!
         # - Execute the task to evaluate for all replicated datasets:
-        for replicated_scan in scans_list:
+        for replicated_scan in tqdm(scans_list, unit='replicate'):
             replicated_scan_path = pathlib.Path(test_db.basedir, replicated_scan)
             romi_run_task(replicated_scan_path, task_cfg["name"], task_cfg["config_file"])
 

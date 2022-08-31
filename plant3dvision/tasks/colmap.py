@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
+import sys
 from os.path import join
 from os.path import splitext
 
@@ -119,7 +119,7 @@ def get_calibrated_poses(scan_dataset):
     return {im.id: im.get_metadata("calibrated_pose") for im in images_fileset.get_files()}
 
 
-def compute_colmap_poses(scan_dataset):
+def compute_colmap_poses_from_metadata(scan_dataset):
     """Get the camera poses estimated by colmap from a 'Colmap*' fileset using "rotmat" & "tvec" metadata.
 
     Parameters
@@ -136,14 +136,56 @@ def compute_colmap_poses(scan_dataset):
     --------
     >>> import os
     >>> from plantdb.fsdb import FSDB
-    >>> from plant3dvision.tasks.colmap import compute_colmap_poses
+    >>> from plant3dvision.tasks.colmap import compute_colmap_poses_from_camera_json
+    >>> db = FSDB(os.environ.get('DB_LOCATION', '/data/ROMI/DB'))
+    >>> # Example 1 - Compute & use the calibrated poses from/on a calibration scan:
+    >>> db.connect()
+    >>> db.list_scans()
+    >>> scan_id = "sgk_300_90_36"
+    >>> scan = db.get_scan(scan_id)
+    >>> colmap_poses = compute_colmap_poses_from_camera_json(scan)
+    >>> print(colmap_poses)
+    >>> db.disconnect()
+
+    """
+    images_fileset = scan_dataset.get_fileset('images')
+
+    colmap_poses = {}
+    for i, fi in enumerate(images_fileset.get_files()):
+        md_i = fi.get_metadata()
+        rotmat = md_i['colmap_camera']['rotmat']
+        tvec = md_i['colmap_camera']['tvec']
+        # - Compute the 'calibrated_pose' estimated by COLMAP:
+        colmap_poses[fi.id] = compute_calibrated_poses(np.array(rotmat), np.array(tvec))
+
+    return colmap_poses
+
+
+def compute_colmap_poses_from_camera_json(scan_dataset):
+    """Get the camera poses estimated by colmap from a 'Colmap*' fileset using "rotmat" & "tvec" metadata.
+
+    Parameters
+    ----------
+    scan_dataset : plantdb.db.Scan
+        The scan to get the colmap poses from.
+
+    Returns
+    -------
+    dict
+        Image-id indexed dictionary of camera poses as X, Y, Z.
+
+    Examples
+    --------
+    >>> import os
+    >>> from plantdb.fsdb import FSDB
+    >>> from plant3dvision.tasks.colmap import compute_colmap_poses_from_camera_json
     >>> db = FSDB(os.environ.get('DB_LOCATION', '/data/ROMI/DB'))
     >>> # Example 1 - Compute & use the calibrated poses from/on a calibration scan:
     >>> db.connect()
     >>> db.list_scans()
     >>> scan_id = "sango36"
     >>> scan = db.get_scan(scan_id)
-    >>> colmap_poses = compute_colmap_poses(scan)
+    >>> colmap_poses = compute_colmap_poses_from_camera_json(scan)
     >>> print(colmap_poses)
     >>> db.disconnect()
 
@@ -157,13 +199,13 @@ def compute_colmap_poses(scan_dataset):
         assert any([fs_id.startswith("Colmap") for fs_id in fs_names])
     except AssertionError:
         logger.error(f"Could not find a Colmap related dataset in '{scan_name}'!")
-        exit(1)
+        sys.exit("No 'Colmap*' dataset!")
     # Check we do not have more than one dataset related to the 'Colmap' task:
     try:
         assert sum([fs_id.startswith("Colmap") for fs_id in fs_names]) == 1
     except AssertionError:
         logger.error(f"Found more than one Colmap related dataset in '{scan_name}'!")
-        exit(1)
+        sys.exit("More than one 'Colmap*' dataset!")
 
     colmap_fs = [f for f in fs if f.id.startswith("Colmap")][0]
     images_fileset = scan_dataset.get_fileset('images')
@@ -179,11 +221,12 @@ def compute_colmap_poses(scan_dataset):
             if splitext(poses[k]['name'])[0] == fi.id:
                 key = k
                 break
-        # - Raise an error if previous search failed!
+        # - Log an error if previous search failed!
         if key is None:
-            raise Exception(f"Could not find pose of image '{fi.id}' in calibration scan!")
-        # - Compute the 'calibrated_pose':
-        colmap_poses[fi.id] = compute_calibrated_poses(np.array(poses[key]['rotmat']), np.array(poses[key]['tvec']))
+            logger.error(f"Missing camera pose of image '{fi.id}' in scan '{scan_name}'!")
+        else:
+            # - Compute the 'calibrated_pose':
+            colmap_poses[fi.id] = compute_calibrated_poses(np.array(poses[key]['rotmat']), np.array(poses[key]['tvec']))
 
     return colmap_poses
 

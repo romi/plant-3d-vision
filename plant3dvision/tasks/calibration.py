@@ -151,8 +151,7 @@ class DetectCharuco(FileByFileTask):
 
         """
         import cv2
-        import \
-            cv2.aruco as aruco  # requires `opencv-contrib-python`, to get it: `python -m pip install opencv-contrib-python`
+        import cv2.aruco as aruco
         aruco_params = aruco.DetectorParameters_create()
         aruco_dict = aruco.Dictionary_get(getattr(aruco, self.aruco_kwargs['aruco_pattern']))
         image = io.read_image(fi)
@@ -469,16 +468,18 @@ class ExtrinsicCalibration(RomiTask):
             bounding_box=None
         )
         # - Run colmap reconstruction:
-        logger.debug("Start a Colmap reconstruction...")
+        logger.info("Start a Colmap reconstruction...")
         _, images, cameras, _, _, _ = colmap_runner.run()
         # - Save colmap camera(s) model(s) & parameters in JSON file:
         outfile = self.output_file(COLMAP_CAMERAS_ID)
         io.write_json(outfile, cameras)
+        logger.info(cameras)
 
         # - Update `images`dict  to be indexed by `File.filename` and keep only required 'rotmat' & 'tvec':
         images = {img["name"]: {'rotmat': img['rotmat'], 'tvec': img['tvec']} for i, img in images.items()}
 
         # - Estimate images pose with COLMAP rotation and translation matrices:
+        logger.info("Estimate images pose with COLMAP rotation and translation matrices...")
         colmap_poses = {}
         for i, fi in enumerate(images_fileset.get_files()):
             colmap_poses[fi.id] = compute_calibrated_poses(np.array(images[fi.filename]['rotmat']),
@@ -486,12 +487,24 @@ class ExtrinsicCalibration(RomiTask):
             # - Export the estimated pose to the image metadata:
             fi.set_metadata("calibrated_pose", colmap_poses[fi.id])
 
-        camera_str = format_camera_params(cameras)
+        # Use of try/except strategy to avoid failure of luigi pipeline (destroy all fileset!)
+        try:
+            camera_str = format_camera_params(cameras)
+        except:
+            logger.warning("Could not format the camera parameters from COLMAP camera!")
+            logger.info(f"COLMAP camera: {cameras}")
+            camera_str = ""
         # - Generates a calibration figure showing CNC poses vs. COLMAP estimated poses:
         calibration_figure(cnc_poses, colmap_poses, path=self.output().get().path(),
                            scan_id=images_fileset.scan.id, calib_scan_id="", header=camera_str,
                            scan_path_kwargs=scan_cfg["ScanPath"])
 
-        camera_kwargs = get_camera_model_from_colmap(cameras)
-        with open(join(self.output().get().path(), "camera.txt"), 'w') as f:
-            f.writelines("\n".join([f"{k}: {v}" for k, v in camera_kwargs.items()]))
+        # Use of try/except strategy to avoid failure of luigi pipeline (destroy all fileset!)
+        try:
+            camera_kwargs = get_camera_model_from_colmap(cameras)
+        except:
+            logger.warning("Could not format the camera parameters from COLMAP camera!")
+            logger.info(f"COLMAP camera: {cameras}")
+        else:
+            with open(join(self.output().get().path(), "camera.txt"), 'w') as f:
+                f.writelines("\n".join([f"{k}: {v}" for k, v in camera_kwargs.items()]))
