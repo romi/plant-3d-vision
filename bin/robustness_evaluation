@@ -333,17 +333,16 @@ def compare_intrinsic_params(db, task_name):
     """
     from plantdb import io
 
-    def _get_intrinsic_calibration_params(scan):
+    def _get_intrinsic_calibration_params(scan, model_name):
+        from plant3dvision.camera import get_camera_arrays_from_params
         # - Get the camera model JSON file and load it:
         camera_file = scan.get_fileset("camera_model").get_file("camera_model")
-        camera_dict = io.read_json(camera_file)
-        # - Get the camera matrix :
-        camera = np.array(camera_dict["camera_matrix"], dtype='float32')
-        # - Get the distortion parameters (k1, k2, p1, p2 as k3 is set to 0)
-        distortion = np.array(camera_dict["distortion"], dtype='float32')[:4]
+        camera_params = io.read_json(camera_file)[model_name]
+        # - Get the camera matrix & the distortion parameters:
+        camera, distortion = get_camera_arrays_from_params(model_name, **camera_params)
         return camera, distortion
 
-    def _get_colmap_camera_params_from_images_metadata(scan):
+    def _get_colmap_camera_params_from_images_metadata(scan, model_name):
         # FIXME: will not work with more than one camera model!
         # - Get the 'images' `Fileset`:
         images_fs = scan.get_fileset("images")
@@ -353,26 +352,30 @@ def compare_intrinsic_params(db, task_name):
         camera_dict = image_f.get_metadata()["colmap_camera"]["camera_model"]
         camera_params = camera_dict['params']
         # - Get the camera matrix :
-        camera = np.matrix([[camera_params[0], 0, camera_params[2]],
+        camera = np.array([[camera_params[0], 0, camera_params[2]],
                             [0, camera_params[1], camera_params[3]],
-                            [0, 0, 1]])
+                            [0, 0, 1]], dtype='float32')
         # - Get the distortion parameters (k1, k2, p1, p2):
         distortion = np.array(camera_params[4:])
         return camera, distortion
 
-    def _get_colmap_camera_params_from_cameras_json(scan):
+    def _get_colmap_camera_params_from_cameras_json(scan, model_name):
         # FIXME: will not work with more than one camera model!
         # - Get the camera model JSON file and load it:
         camera_file = _get_task_fileset(scan, task_name).get_file("cameras")
         camera_dict = io.read_json(camera_file)
         camera_params = camera_dict['1']['params']
         # - Get the camera matrix :
-        camera = np.matrix([[camera_params[0], 0, camera_params[2]],
+        camera = np.array([[camera_params[0], 0, camera_params[2]],
                             [0, camera_params[1], camera_params[3]],
-                            [0, 0, 1]])
+                            [0, 0, 1]], dtype='float32')
         # - Get the distortion parameters (k1, k2, p1, p2):
         distortion = np.array(camera_params[4:])
         return camera, distortion
+
+    # List the duplicated `Scan` datasets:
+    scans_list = [scan for scan in db.get_scans() if scan.id != 'models']
+    logger.info(f"Comparing {task_name} output for replicated scans list: {[s.id for s in scans_list]}")
 
     # Defines the method to use to get the estimated intrinsic parameters:
     if task_name == "Colmap":
@@ -384,66 +387,71 @@ def compare_intrinsic_params(db, task_name):
     else:
         raise ValueError(f"Unknown task `{task_name}` for comparison of estimated intrinsic camera parameters!")
 
-    # List the duplicated `Scan` datasets:
-    scans_list = [scan for scan in db.get_scans() if scan.id != 'models']
-    logger.info(f"Comparing {task_name} output for replicated scans list: {[s.id for s in scans_list]}")
+    def _compare_models(model):
+        camera = {}
+        distortion = {}
+        for scan in scans_list:
+            # - Get the camera matrix and distortion parameters (k1, k2, p1, p2 as k3 is set to 0):
+            camera[scan.id], distortion[scan.id] = _get_intrinsic_params(scan, model)
 
-    camera = {}
-    distortion = {}
-    for scan in scans_list:
-        # - Get the camera matrix and distortion parameters (k1, k2, p1, p2 as k3 is set to 0):
-        camera[scan.id], distortion[scan.id] = _get_intrinsic_params(scan)
+        # - Compute average camera matrix:
+        mean_camera = np.mean(list(camera.values()), axis=0)
+        logging.debug(f"Average camera matrix:\n{mean_camera}")
+        # - Compute average distortion parameters:
+        mean_distortion = np.mean(list(distortion.values()), axis=0)
+        logging.debug(f"Average distortion parameters:\n{mean_distortion}")
 
-    # - Compute average camera matrix:
-    mean_camera = np.mean(list(camera.values()), axis=0)
-    logging.debug(f"Average camera matrix:\n{mean_camera}")
-    # - Compute average distortion parameters:
-    mean_distortion = np.mean(list(distortion.values()), axis=0)
-    logging.debug(f"Average distortion parameters:\n{mean_distortion}")
+        # - Compute deviation to average:
+        camera_mean_dev = {}
+        distortion_mean_dev = {}
+        for scan in scans_list:
+            # - Compute deviation of each camera from average camera:
+            camera_mean_dev[scan.id] = np.array(mean_camera - camera[scan.id]).tolist()
+            # - Compute deviation of each distortion parameters from average distortion parameters:
+            distortion_mean_dev[scan.id] = np.array(mean_distortion - distortion[scan.id]).tolist()
 
-    # - Compute deviation to average:
-    camera_mean_dev = {}
-    distortion_mean_dev = {}
-    for scan in scans_list:
-        # - Compute deviation of each camera from average camera:
-        camera_mean_dev[scan.id] = np.array(mean_camera - camera[scan.id]).tolist()
-        # - Compute deviation of each distortion parameters from average distortion parameters:
-        distortion_mean_dev[scan.id] = np.array(mean_distortion - distortion[scan.id]).tolist()
+        def _get_fx_fy_cx_cy(camera_mtx):
+            return camera_mtx[0, 0], camera_mtx[1, 1], camera_mtx[0, 2], camera_mtx[1, 2]
 
-    def _get_fx_fy_cx_cy(camera_mtx):
-        return camera_mtx[0, 0], camera_mtx[1, 1], camera_mtx[0, 2], camera_mtx[1, 2]
+        mean_fx, mean_fy, mean_cx, mean_cy = _get_fx_fy_cx_cy(mean_camera)
+        # - Compute the ABSOLUTE deviation of camera parameters (fx, fy, cx, cy) from their respective average:
+        cam_params_dev_to_mean = []
+        for scan in scans_list:
+            fx, fy, cx, cy = _get_fx_fy_cx_cy(camera[scan.id])
+            cam_params_dev_to_mean.append([abs(mean_fx - fx), abs(mean_fy - fy), abs(mean_cx - cx), abs(mean_cy - cy)])
+        # - Compute the mean deviation of camera parameters (fx, fy, cx, cy) from their respective average:
+        mean_fx_dev, mean_fy_dev, mean_cx_dev, mean_cy_dev = np.mean(np.array(cam_params_dev_to_mean), axis=0)
 
-    mean_fx, mean_fy, mean_cx, mean_cy = _get_fx_fy_cx_cy(mean_camera)
-    # - Compute the ABSOLUTE deviation of camera parameters (fx, fy, cx, cy) from their respective average:
-    cam_params_dev_to_mean = []
-    for scan in scans_list:
-        fx, fy, cx, cy = _get_fx_fy_cx_cy(camera[scan.id])
-        cam_params_dev_to_mean.append([abs(mean_fx - fx), abs(mean_fy - fy), abs(mean_cx - cx), abs(mean_cy - cy)])
-    # - Compute the mean deviation of camera parameters (fx, fy, cx, cy) from their respective average:
-    mean_fx_dev, mean_fy_dev, mean_cx_dev, mean_cy_dev = np.mean(np.array(cam_params_dev_to_mean), axis=0)
+        mean_k1, mean_k2, mean_p1, mean_p2 = mean_distortion
+        # - Compute the ABSOLUTE deviation of distortion parameters (k1, k2, p1, p2) from their respective average:
+        dist_params_dev_to_mean = []
+        for scan in scans_list:
+            k1, k2, p1, p2 = distortion[scan.id]
+            dist_params_dev_to_mean.append([abs(mean_k1 - k1), abs(mean_k2 - k2), abs(mean_p1 - p1), abs(mean_p2 - p2)])
+        # - Compute the mean deviation of distortion parameters (k1, k2, p1, p2) from their respective average:
+        mean_k1_dev, mean_k2_dev, mean_p1_dev, mean_p2_dev = np.mean(np.array(dist_params_dev_to_mean), axis=0)
 
-    mean_k1, mean_k2, mean_p1, mean_p2 = mean_distortion
-    # - Compute the ABSOLUTE deviation of distortion parameters (k1, k2, p1, p2) from their respective average:
-    dist_params_dev_to_mean = []
-    for scan in scans_list:
-        k1, k2, p1, p2 = distortion[scan.id]
-        dist_params_dev_to_mean.append([abs(mean_k1 - k1), abs(mean_k2 - k2), abs(mean_p1 - p1), abs(mean_p2 - p2)])
-    # - Compute the mean deviation of distortion parameters (k1, k2, p1, p2) from their respective average:
-    mean_k1_dev, mean_k2_dev, mean_p1_dev, mean_p2_dev = np.mean(np.array(dist_params_dev_to_mean), axis=0)
+        json_fname = f'{task_name}{"_"+model if model!="" else ""}_intrinsic_params_comparison.json'
+        with open(pathlib.Path(db.basedir) / json_fname, 'w') as out_file:
+            json.dump({
+                'mean fx deviation from average fx': float(mean_fx_dev),
+                'mean fy deviation from average fy': float(mean_fy_dev),
+                'mean cx deviation from average cx': float(mean_cx_dev),
+                'mean cy deviation from average cy': float(mean_cy_dev),
+                'mean k1 deviation from average k1': float(mean_k1_dev),
+                'mean k2 deviation from average k2': float(mean_k2_dev),
+                'mean p1 deviation from average p1': float(mean_p1_dev),
+                'mean p2 deviation from average p2': float(mean_p2_dev),
+                'deviation to average camera': camera_mean_dev,
+                'deviation to average distortion': distortion_mean_dev,
+            }, out_file, indent=2)
 
-    with open(pathlib.Path(db.basedir) / f'{task_name}_intrinsic_params_comparison.json', 'w') as out_file:
-        json.dump({
-            'mean fx deviation from average fx': float(mean_fx_dev),
-            'mean fy deviation from average fy': float(mean_fy_dev),
-            'mean cx deviation from average cx': float(mean_cx_dev),
-            'mean cy deviation from average cy': float(mean_cy_dev),
-            'mean k1 deviation from average k1': float(mean_k1_dev),
-            'mean k2 deviation from average k2': float(mean_k2_dev),
-            'mean p1 deviation from average p1': float(mean_p1_dev),
-            'mean p2 deviation from average p2': float(mean_p2_dev),
-            'deviation to average camera': camera_mean_dev,
-            'deviation to average distortion': distortion_mean_dev,
-        }, out_file, indent=2)
+    if task_name == "IntrinsicCalibration":
+        for model in ["OPENCV", "RADIAL", "SIMPLE_RADIAL"]:
+            _compare_models(model)
+    else:
+        _compare_models("")
+
 
     return
 
