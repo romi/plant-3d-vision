@@ -16,3 +16,4 @@ pyopencl
 scikit-image
 toml
 joblib
+matplotlib
