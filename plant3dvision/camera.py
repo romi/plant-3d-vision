@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 from plantdb import io
+from romitask.log import configure_logger
+
+logger = configure_logger(__name__)
 
 #: The list of valid camera models.
 VALID_MODELS = ["OPENCV", "RADIAL", "SIMPLE_RADIAL"]
@@ -157,9 +160,11 @@ def get_camera_model_from_colmap(colmap_cameras):
 
     # If loaded from JSON, camera id(s) may be str instead of int:
     new_colmap_cameras = {}
-    for key in colmap_cameras:
+    for key, value in colmap_cameras.items():
         if isinstance(key, str):
-            new_colmap_cameras[int(key)] = colmap_cameras[key]
+            new_colmap_cameras[int(key)] = value
+        else:
+            new_colmap_cameras[key] = value
     colmap_cameras = new_colmap_cameras.copy()
     del new_colmap_cameras
 
