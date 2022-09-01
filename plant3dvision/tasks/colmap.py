@@ -494,6 +494,7 @@ class Colmap(RomiTask):
     compute_dense = luigi.BoolParameter(default=False)
     align_pcd = luigi.BoolParameter(default=True)
     calibration_scan_id = luigi.Parameter(default="")
+    use_calibration_camera = luigi.BoolParameter(default=True)
     camera_model = luigi.Parameter(default="OPENCV")
     use_gpu = luigi.BoolParameter(default=True)
     single_camera = luigi.BoolParameter(default=True)
@@ -621,7 +622,7 @@ class Colmap(RomiTask):
         self.set_single_camera()
         self.set_camera_model()
         self.set_robust_alignment_max_error()
-        if self.calibration_scan_id != "":
+        if self.calibration_scan_id != "" and self.use_calibration_camera:
             self.set_camera_params()
 
         # - If no manual definition of cropping bounding-box, try to use the 'workspace' metadata
