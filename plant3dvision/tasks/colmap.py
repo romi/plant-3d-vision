@@ -15,6 +15,7 @@ from plant3dvision.filenames import COLMAP_IMAGES_ID
 from plant3dvision.filenames import COLMAP_POINTS_ID
 from plant3dvision.filenames import COLMAP_SPARSE_ID
 from plantdb import io
+from romitask import DatabaseConfig
 from romitask.log import configure_logger
 from romitask.task import ImagesFilesetExists
 from romitask.task import RomiTask
@@ -637,20 +638,35 @@ class Colmap(RomiTask):
             bounding_box = dict(self.bounding_box)
             logger.info("Found manual definition of cropping bounding-box!")
 
+        current_scan = DatabaseConfig().scan
         images_fileset = self.input().get()
         # - Defines if colmap should use an extrinsic calibration dataset:
         use_calibration = self.calibration_scan_id != ""
         if use_calibration:
-            logger.info(f"Using calibration scan: {self.calibration_scan_id}...")
+            logger.info(f"Checking calibration scan compatibility with current scan...")
+            # Check we can use this calibration scan with this scan dataset:
             db = images_fileset.scan.db
             calibration_scan = db.get_scan(self.calibration_scan_id)
-            check_colmap_cfg({'Colmap': {'align_pcd': self.align_pcd}}, calibration_scan)
+            current_cfg = {'single_camera': self.single_camera, 'camera_model': self.camera_model}
+            check_colmap_cfg(current_cfg, current_scan, calibration_scan)
+            logger.info(f"Using poses from calibration scan: {self.calibration_scan_id}...")
             images_fileset = use_precalibrated_poses(images_fileset, calibration_scan)
-            # Create the calibration figure:
+            # - Create the calibration figure:
             cnc_poses = get_cnc_poses(images_fileset.scan)
             colmap_poses = {im.id: im.get_metadata("calibrated_pose") for im in images_fileset.get_files()}
+            camera_str = ""
+            if self.use_calibration_camera:
+                from plant3dvision.camera import format_camera_params
+                cameras = self._get_colmap_cameras_from_calib_scan(calibration_scan)
+                # Use of try/except strategy to avoid failure of luigi pipeline (destroy all fileset!)
+                try:
+                    camera_str = format_camera_params(cameras)
+                except:
+                    logger.warning("Could not format the camera parameters from COLMAP camera!")
+                    logger.info(f"COLMAP camera: {cameras}")
             calibration_figure(cnc_poses, colmap_poses, path=self.output().get().path(),
-                               scan_id=images_fileset.scan.id, calib_scan_id=str(self.calibration_scan_id))
+                               scan_id=images_fileset.scan.id, calib_scan_id=str(self.calibration_scan_id),
+                               header=camera_str)
         else:
             logger.info("No calibration scan defined!")
 
