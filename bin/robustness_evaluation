@@ -7,13 +7,13 @@ import filecmp
 import json
 import logging
 import os
-import pathlib
 import shutil
 import subprocess
 import tempfile
 from collections import Counter
 from collections import OrderedDict
 from os.path import splitext
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -353,8 +353,8 @@ def compare_intrinsic_params(db, task_name):
         camera_params = camera_dict['params']
         # - Get the camera matrix :
         camera = np.array([[camera_params[0], 0, camera_params[2]],
-                            [0, camera_params[1], camera_params[3]],
-                            [0, 0, 1]], dtype='float32')
+                           [0, camera_params[1], camera_params[3]],
+                           [0, 0, 1]], dtype='float32')
         # - Get the distortion parameters (k1, k2, p1, p2):
         distortion = np.array(camera_params[4:])
         return camera, distortion
@@ -367,15 +367,15 @@ def compare_intrinsic_params(db, task_name):
         camera_params = camera_dict['1']['params']
         # - Get the camera matrix :
         camera = np.array([[camera_params[0], 0, camera_params[2]],
-                            [0, camera_params[1], camera_params[3]],
-                            [0, 0, 1]], dtype='float32')
+                           [0, camera_params[1], camera_params[3]],
+                           [0, 0, 1]], dtype='float32')
         # - Get the distortion parameters (k1, k2, p1, p2):
         distortion = np.array(camera_params[4:])
         return camera, distortion
 
     # List the duplicated `Scan` datasets:
     scans_list = [scan for scan in db.get_scans() if scan.id != 'models']
-    logger.info(f"Comparing {task_name} output for replicated scans list: {[s.id for s in scans_list]}")
+    logger.info(f"Comparing {task_name} outputs for replicated scans list: {[s.id for s in scans_list]}")
 
     # Defines the method to use to get the estimated intrinsic parameters:
     if task_name == "Colmap":
@@ -396,10 +396,10 @@ def compare_intrinsic_params(db, task_name):
 
         # - Compute average camera matrix:
         mean_camera = np.mean(list(camera.values()), axis=0)
-        logging.debug(f"Average camera matrix:\n{mean_camera}")
+        logger.debug(f"Average camera matrix:\n{mean_camera}")
         # - Compute average distortion parameters:
         mean_distortion = np.mean(list(distortion.values()), axis=0)
-        logging.debug(f"Average distortion parameters:\n{mean_distortion}")
+        logger.debug(f"Average distortion parameters:\n{mean_distortion}")
 
         # - Compute deviation to average:
         camera_mean_dev = {}
@@ -431,8 +431,8 @@ def compare_intrinsic_params(db, task_name):
         # - Compute the mean deviation of distortion parameters (k1, k2, p1, p2) from their respective average:
         mean_k1_dev, mean_k2_dev, mean_p1_dev, mean_p2_dev = np.mean(np.array(dist_params_dev_to_mean), axis=0)
 
-        json_fname = f'{task_name}{"_"+model if model!="" else ""}_intrinsic_params_comparison.json'
-        with open(pathlib.Path(db.basedir) / json_fname, 'w') as out_file:
+        json_fname = f'{task_name}{"_" + model if model != "" else ""}_intrinsic_params_comparison.json'
+        with open(Path(db.basedir) / json_fname, 'w') as out_file:
             json.dump({
                 'mean fx deviation from average fx': float(mean_fx_dev),
                 'mean fy deviation from average fy': float(mean_fy_dev),
@@ -451,7 +451,6 @@ def compare_intrinsic_params(db, task_name):
             _compare_models(model)
     else:
         _compare_models("")
-
 
     return
 
@@ -523,7 +522,7 @@ def compare_colmap_poses(db, task_name):
     global_mean_dist = np.mean([d2m for d2m in dist2mean_pose_by_image.values()])
     global_mean_dist_to_cnc = np.mean([d2cnc for d2cnc in dist2cnc_pose_by_image.values()])
 
-    with open(pathlib.Path(db.basedir) / f'{task_name}_colmap_poses_comparison.json', 'w') as out_file:
+    with open(Path(db.basedir) / f'{task_name}_colmap_poses_comparison.json', 'w') as out_file:
         json.dump({
             'global mean distance to CNC pose': global_mean_dist_to_cnc,
             'replicate mean distance to CNC pose': dict_sort_by_values(mean_dist_to_cnc_rep),
@@ -576,8 +575,8 @@ def compare_binary_mask(db, task_name):
             # Get `Fileset` with mask files:
             flo_fileset = _get_task_fileset(flo_scan, task_name)
             # Compare the two mask files list to get the list of 'same files" (ie. with same name)
-            ref_dir = pathlib.Path(db.basedir, ref_scan.id, ref_fileset.id)
-            flo_dir = pathlib.Path(db.basedir, flo_scan.id, flo_fileset.id)
+            ref_dir = Path(db.basedir, ref_scan.id, ref_fileset.id)
+            flo_dir = Path(db.basedir, flo_scan.id, flo_fileset.id)
             common_files = filecmp.dircmp(ref_dir, flo_dir).common_files
             # Remove the extension as the `Fileset.get_file()` method does not accept it!
             common_files = [splitext(sf)[0] for sf in common_files]
@@ -617,7 +616,7 @@ def compare_binary_mask(db, task_name):
     print(f"Global median recall: between pairs of repetitions {global_median_recall}")
 
     # Write a JSON summary file of the comparison:
-    with open(pathlib.Path(db.basedir) / f'{task_name}_binary_mask_comparison.json', 'w') as out_file:
+    with open(Path(db.basedir) / f'{task_name}_binary_mask_comparison.json', 'w') as out_file:
         json.dump({
             'mean precision': mean_precision, 'mean recall': mean_recall,
             'median precision': median_precision, 'median recall': median_recall,
@@ -678,7 +677,7 @@ def compare_pointcloud(db, task_name):
     print(f"Average residuals: {average_residuals}")
 
     # Write a JSON summary file of the comparison:
-    with open(pathlib.Path(db.basedir) / f'{task_name}_pointcloud_comparison.json', 'w') as out_file:
+    with open(Path(db.basedir) / f'{task_name}_pointcloud_comparison.json', 'w') as out_file:
         json.dump({
             'chamfer distances': jsonify_tuple_keys(chamfer_dist),
             'fitness': jsonify_tuple_keys(fitness),
@@ -747,7 +746,7 @@ def compare_voxels(db, task_name):
               f"{label}: {average_mean_abs_dev[label]}")
 
     # Write a JSON summary file of the comparison:
-    with open(pathlib.Path(db.basedir) / f'{task_name}_voxels_comparison.json', 'w') as out_file:
+    with open(Path(db.basedir) / f'{task_name}_voxels_comparison.json', 'w') as out_file:
         json.dump({
             'sum of square difference': {label: jsonify_tuple_keys(r2[label]) for label in labels},
             'mean absolute deviation': {label: jsonify_tuple_keys(mean_abs_dev[label]) for label in labels},
@@ -761,10 +760,10 @@ def compare_voxels(db, task_name):
     for label in labels:
         metric_str = f'{label} sum of square difference'
         pairwise_heatmap(r2[label], scans_list, metric_str, task_name, db,
-                         fname=pathlib.Path(db.basedir) / f"{task_name}-{metric_str.replace(' ', '_')}_heatmap.png")
+                         fname=Path(db.basedir) / f"{task_name}-{metric_str.replace(' ', '_')}_heatmap.png")
         metric_str = f'{label} mean absolute deviation'
         pairwise_heatmap(mean_abs_dev[label], scans_list, f'{label} mean absolute deviation', task_name, db,
-                         fname=pathlib.Path(db.basedir) / f"{task_name}-{metric_str.replace(' ', '_')}_heatmap.png")
+                         fname=Path(db.basedir) / f"{task_name}-{metric_str.replace(' ', '_')}_heatmap.png")
 
     return
 
@@ -846,7 +845,7 @@ def compare_labelled_pointcloud(db, task_name):
               f"{label}: {average_recall[label]}")
 
     # Write a JSON summary file of the comparison:
-    with open(pathlib.Path(db.basedir) / f'{task_name}_labelled_pointcloud_comparison.json', 'w') as out_file:
+    with open(Path(db.basedir) / f'{task_name}_labelled_pointcloud_comparison.json', 'w') as out_file:
         json.dump({
             'precision': {ulabel: jsonify_tuple_keys(precision[ulabel]) for ulabel in unique_labels},
             'recall': {ulabel: jsonify_tuple_keys(recall[ulabel]) for ulabel in unique_labels},
@@ -858,10 +857,10 @@ def compare_labelled_pointcloud(db, task_name):
     for ulabel in unique_labels:
         metric_str = f'{ulabel} precision'
         pairwise_heatmap(precision[ulabel], scans_list, metric_str, task_name, db,
-                         fname=pathlib.Path(db.basedir) / f"{task_name}-{metric_str.replace(' ', '_')}_heatmap.png")
+                         fname=Path(db.basedir) / f"{task_name}-{metric_str.replace(' ', '_')}_heatmap.png")
         metric_str = f'{ulabel} recall'
         pairwise_heatmap(recall[ulabel], scans_list, f'{ulabel} recall', task_name, db,
-                         fname=pathlib.Path(db.basedir) / f"{task_name}-{metric_str.replace(' ', '_')}_heatmap.png")
+                         fname=Path(db.basedir) / f"{task_name}-{metric_str.replace(' ', '_')}_heatmap.png")
     return
 
 
@@ -917,7 +916,7 @@ def compare_trianglemesh_points(db, task_name):
     print(f"Average volume ratio (closer to 1.0 is better) between pairs of repetitions: {average_vol_ratio}")
 
     # Write a JSON summary file of the comparison:
-    with open(pathlib.Path(db.basedir) / f'{task_name}_trianglemesh_points_comparison.json', 'w') as out_file:
+    with open(Path(db.basedir) / f'{task_name}_trianglemesh_points_comparison.json', 'w') as out_file:
         json.dump({
             'chamfer distances': jsonify_tuple_keys(chamfer_dist),
             'surface ratio': jsonify_tuple_keys(surf_ratio),
@@ -970,7 +969,7 @@ def compare_curveskeleton_points(db, task_name):
     print(f"\nAverage Chamfer distance (lower is better) between pairs of repetitions: {average_chamfer_dist}")
 
     # Write a JSON summary file of the comparison:
-    with open(pathlib.Path(db.basedir) / f'{task_name}_curveskeleton_points_comparison.json', 'w') as out_file:
+    with open(Path(db.basedir) / f'{task_name}_curveskeleton_points_comparison.json', 'w') as out_file:
         json.dump({'chamfer distances': chamfer_dist,
                    'average chamfer distance': average_chamfer_dist}, out_file)
 
@@ -1022,11 +1021,11 @@ def angles_and_internodes_comparison(db, task_name):
               if angles_and_internodes[scan_num]["nb_organs"] == max_occurrence_nb_organs]
     internodes = [angles_and_internodes[scan_num]["internodes"] for scan_num in angles_and_internodes
                   if angles_and_internodes[scan_num]["nb_organs"] == max_occurrence_nb_organs]
-    save_data_repartition(angles, "angles", pathlib.Path(db.basedir))
-    save_data_repartition(internodes, "internodes", pathlib.Path(db.basedir))
+    save_data_repartition(angles, "angles", Path(db.basedir))
+    save_data_repartition(internodes, "internodes", Path(db.basedir))
 
     # Write a JSON summary file of the comparison:
-    with open(pathlib.Path(db.basedir) / f'{task_name}_comparison.json', 'w') as out_file:
+    with open(Path(db.basedir) / f'{task_name}_comparison.json', 'w') as out_file:
         json.dump({
             'Min number of organs detected': min(nb_organs),
             'Max number of organs detected': max(nb_organs),
@@ -1053,8 +1052,8 @@ def file_by_file_comparison(db, task_name):
         if t + 1 > len(scans_list):
             break
         for flo_scan in scans_list[t + 1:]:
-            ref_dir = pathlib.Path(db.basedir, ref_scan.id, _get_task_fileset(ref_scan, task_name).id)
-            flo_dir = pathlib.Path(db.basedir, flo_scan.id, _get_task_fileset(flo_scan, task_name).id)
+            ref_dir = Path(db.basedir, ref_scan.id, _get_task_fileset(ref_scan, task_name).id)
+            flo_dir = Path(db.basedir, flo_scan.id, _get_task_fileset(flo_scan, task_name).id)
             n_diff = len(filecmp.dircmp(ref_dir, flo_dir).diff_files)
             n_same = len(filecmp.dircmp(ref_dir, flo_dir).same_files)
             if n_same == 0:
@@ -1072,7 +1071,7 @@ def file_by_file_comparison(db, task_name):
         print()
 
     # Write a JSON summary file of the comparison:
-    with open(pathlib.Path(db.basedir) / 'filebyfile_comparison.json', 'w') as out_file:
+    with open(Path(db.basedir) / 'filebyfile_comparison.json', 'w') as out_file:
         json.dump({'Similarity (%)': fcmp, 'Mean similarity (%)': average_similarity}, out_file)
 
 
@@ -1098,7 +1097,7 @@ def compare_task_output(db, task_name, independent_tests=False):
     """
     db.connect()
     # List paths where tested task output(s) should be located
-    folder_task_list = [pathlib.Path(db.basedir, scan.id, _get_task_fileset(scan, task_name).id) for scan in
+    folder_task_list = [Path(db.basedir, scan.id, _get_task_fileset(scan, task_name).id) for scan in
                         db.get_scans() if scan.id != 'models']
     if len(folder_task_list) == 0:
         raise IOError(f"Output files of task {task_name} for db {db.basedir} are missing")
@@ -1222,7 +1221,7 @@ def create_test_db_path(root_location, task_name, suffix=""):
         if not suffix.startswith("_"):
             suffix = f"_{suffix}"
         folder_name += suffix
-    return pathlib.Path(root_location / folder_name)
+    return Path(root_location / folder_name)
 
 
 def create_test_db(root_location, task_name, suffix=""):
@@ -1313,21 +1312,25 @@ def config_task(task_name, cfg_file, full_pipe, previous_task):
     return task_cfg
 
 
-def main(args):
+def main():
+    # - Parse the input arguments to variables:
+    parser = parsing()
+    args = parser.parse_args()
+
     # - Get the path to the initial scan dataset:
-    init_scan_path = pathlib.Path(args.scan).expanduser()
+    init_scan_path = Path(args.scan).expanduser()
     # - Path to the local database that contain the initial scan dataset:
     db_location = init_scan_path.parent
     # - Path to the local database
     root_location = db_location.parent
-    # - Load the JSON config file of the script:
+    # - Load the JSON config file `robustness_evaluation.json`:
     config = json.load(open(CONF_FILE))
     # - Task configuration
     task_cfg = config_task(args.task, args.config_file, args.full_pipe, config[args.task]["prev_task"])
 
     # - Defines the "test database", setup & dataset duplication:
-    if args.test_database is not None:
-        test_db_path = pathlib.Path(args.test_database)
+    if args.test_database != "":
+        test_db_path = Path(args.test_database)
         test_db_path.mkdir(exist_ok=True)
     else:
         # test db is created next to db containing original scan dataset
@@ -1340,7 +1343,7 @@ def main(args):
 
     # - Get the path to the CNN model
     if args.models:
-        models_path = pathlib.Path(args.models).expanduser()
+        models_path = Path(args.models).expanduser()
     else:
         models_path = None
 
@@ -1384,19 +1387,12 @@ def main(args):
         test_db.disconnect()  # to allow the luigi pipelines to run!
         # - Execute the task to evaluate for all replicated datasets:
         for replicated_scan in tqdm(scans_list, unit='replicate'):
-            replicated_scan_path = pathlib.Path(test_db.basedir, replicated_scan)
+            replicated_scan_path = Path(test_db.basedir, replicated_scan)
             romi_run_task(replicated_scan_path, task_cfg["name"], task_cfg["config_file"])
 
     # - Compare the output(s) of the task(s) between replicated datasets:
     compare_task_output(test_db, task_cfg["name"], independent_tests=args.full_pipe)
 
 
-def run():
-    # - Parse the input arguments to variables:
-    parser = parsing()
-    args = parser.parse_args()
-    main(args)
-
-
 if __name__ == '__main__':
-    run()
+    main()
