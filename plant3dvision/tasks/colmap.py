@@ -391,20 +391,35 @@ def check_scan_parameters(scan_to_calibrate, calibration_scan):
     return same_type and same_params
 
 
-def check_colmap_cfg(current_cfg, calibration_scan):
-    """Compare the current configuration and the scan configuration for Colmap task."""
+def check_colmap_cfg(current_cfg, current_scan, calibration_scan):
+    """Compare the current configuration and the calibration scan configuration.
+
+    Parameters
+    ----------
+    current_cfg : dict
+        Current configuration of the Colmap task.
+        Should be restricted to meaningful parameters to compare.
+    current_scan : plantdb.db.Scan
+        Current scan dataset to reconstruct.
+    calibration_scan : plantdb.db.Scan
+        Calibration scan dataset to use (for camera poses).
+    """
     import toml
     with open(join(calibration_scan.path(), 'pipeline.toml'), 'r') as f:
         calib_scan_cfg = toml.load(f)
 
-    try:
-        assert calib_scan_cfg['Colmap']['align_pcd'] == current_cfg['Colmap']['align_pcd']
-    except AssertionError:
-        logger.critical(
-            f"Entries 'align_pcd' of task 'Colmap' are not the same for {calibration_scan.id} and current config!")
-        logger.info(f"From calibration scan: {calib_scan_cfg['Colmap']['align_pcd']}")
-        logger.info(f"From scan to calibrate: {current_cfg['Colmap']['align_pcd']}")
-        exit(1)
+    same_cfg = True
+    for param, value in current_cfg.items():
+        calib_value = calib_scan_cfg['ExtrinsicCalibration'][param]
+        try:
+            assert calib_value == value
+        except AssertionError:
+            logger.critical(f"Argument '{param}' is not the same for {calibration_scan.id} and current config!")
+            logger.info(f"From calibration scan: {calib_value}")
+            logger.info(f"From scan to calibrate: {value}")
+            same_cfg = False
+        if not same_cfg:
+            sys.exit(f"Can not use extrinsic calibration scan '{calibration_scan.id}' on '{current_scan.id}'!")
     return
 
 
