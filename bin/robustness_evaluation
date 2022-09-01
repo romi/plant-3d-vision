@@ -18,6 +18,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import open3d as o3d
+import toml
 from matplotlib import cm
 from plant3dvision.metrics import SetMetrics
 from plant3dvision.metrics import chamfer_distance
@@ -89,7 +90,7 @@ def parsing():
                         help="Run the whole Reconstruction & Quantification pipeline on each replicate independently.")
     parser.add_argument("-np", "--no_pipeline", action="store_true", default=False,
                         help="Do not run the pipeline, only compare tasks outputs.")
-    parser.add_argument("-db", '--test_database', type=str,
+    parser.add_argument("-db", '--test_database', type=str, default="",
                         help="test database location to use. Use at your own risks!")
     parser.add_argument("--models", default=False,
                         help="Models database location to use with ML pipeline.")
@@ -230,7 +231,7 @@ def pairwise_heatmap(pw_dict, scans_list, task_name, metrics, db, **kwargs):
     ax.set_title(f"Pairwise heatmap for {task_name} {metrics}")
     plt.tight_layout()
     cbar = fig.colorbar(im, shrink=0.7, format="%.2e")
-    fname = kwargs.get("fname", pathlib.Path(db.basedir) / f'{task_name}-{metrics}_heatmap.png')
+    fname = kwargs.get("fname", Path(db.basedir) / f'{task_name}-{metrics}_heatmap.png')
     fig.savefig(fname)
     return
 
@@ -472,7 +473,19 @@ def compare_colmap_poses(db, task_name):
     logger.info(f"Comparing {task_name} output for replicated scans list: {[s.id for s in scans_list]}")
 
     # - Get CNC poses indexed by image ids:
-    cnc_poses = get_cnc_poses(scans_list[0])
+    cnc_poses = {}
+    n = 0
+    while cnc_poses == {} and n < len(scans_list):
+        cnc_poses = get_cnc_poses(scans_list[n])
+        n_imgs = len(scans_list[n].get_fileset('images').get_files())
+        n_poses = len(cnc_poses)
+        if n_poses != n_imgs:
+            cnc_poses = {}
+        n += 1
+    if cnc_poses == {}:
+        logger.critical(f"Could not get CNC poses for any of the duplicated scan!")
+        return
+
     # - Get image ids:
     image_ids = list(cnc_poses.keys())
 
@@ -1114,13 +1127,15 @@ def compare_task_output(db, task_name, independent_tests=False):
         # - More than one comparison function can be applied to a same task!
         for func in comp_func:
             logger.info(f"Comparing '{task_name}' outputs with '{func}'...")
-            try:
-                eval(func + "(db, task_name)")
-            except NameError:
-                logger.warning(f"The comparison function `{func}` "
-                               "(defined in robustness_evaluation.json) does NOT exist!")
-            except:
-                logger.error(f"The comparison function `{func}` failed!")
+            eval(func + "(db, task_name)")
+            # try:
+            #     eval(func + "(db, task_name)")
+            # except NameError:
+            #     logger.warning(f"The comparison function `{func}` "
+            #                    "(defined in robustness_evaluation.json) does NOT exist!")
+            # except Exception as e:
+            #     logger.error(f"The comparison function `{func}` failed!")
+            #     logger.error(e)
 
     # - Evaluate all tasks if independent tests, else evaluate only tested task:
     if independent_tests:
@@ -1130,7 +1145,7 @@ def compare_task_output(db, task_name, independent_tests=False):
         _perform_comparison(db, comparison_config, task_name)
 
 
-def fill_test_db(test_db, init_scan_path, task_cfg, nb, models_path):
+def fill_test_db(test_db, init_scan_path, task_cfg, nb, models_path=None, extra_scans=None):
     """
     From an initial scan, copy it in temporary folder, cleans it,
     runs the pipe to the comparison point task and copy the scan a certain
@@ -1159,41 +1174,75 @@ def fill_test_db(test_db, init_scan_path, task_cfg, nb, models_path):
     created_copied_scans = []
     # Initialize a temporary directory use to store scan dataset before cleaning and running previous tasks to task to analyse:
     with tempfile.TemporaryDirectory() as tmp_dir:
-        # Get the path of the temporary ROMI database
-        tmp_path = pathlib.Path(tmp_dir)
-        tmp_scan_folder = pathlib.Path(tmp_path / f"tmp_{scan_name}")
-        logger.info(f"Created a temporary folder '{tmp_scan_folder}'")
-        # Creates the `romidb` marker for active FSDB
-        with open(pathlib.Path(tmp_path / MARKER_FILE_NAME), 'w'):
+        tmp_path = Path(tmp_dir)
+        # - Get the path of the temporary ROMI database
+        tmp_scan_folder = tmp_path / f"tmp_{scan_name}"
+        logger.info(f"Create a temporary directory '{tmp_scan_folder}'.")
+        # - Create the `MARKER_FILE_NAME` marker for an active `plantdb.FSDB`
+        logger.info(f"Create the `{MARKER_FILE_NAME}` marker for an active `plantdb.FSDB`.")
+        with open(tmp_path / MARKER_FILE_NAME, 'w'):
             pass
-        logger.info("Duplicating the scan dataset to a temporary folder...")
-        # if models are needed, copies models folder to temporary folder
-        if models_path:
-            try:
-                shutil.copytree(str(models_path), str(tmp_path / "models"))
-                shutil.copytree(str(models_path), str(test_db / "models"))
-            except:
-                pass
 
+        # - If ML models are needed, copy them...
+        if models_path is not None:
+            logger.info("Duplicate the ML models datasets...")
+            # ...to temporary directory
+            dest = tmp_path / "models"
+            try:
+                shutil.copytree(str(models_path), str(dest))
+            except:
+                logger.error(f"Failed to copy '{models_path}' to '{dest}'!")
+            # ...to final directory
+            dest = test_db / "models"
+            try:
+                shutil.copytree(str(models_path), str(dest))
+            except:
+                logger.error(f"Failed to copy '{models_path}' to '{dest}'!")
+
+        logger.info("Duplicate the extra scan dataset...")
+        # - If extra scans are needed, copy them...
+        if extra_scans is not None:
+            for x_scan in extra_scans:
+                # ...to temporary directory
+                dest = tmp_path / x_scan.name
+                try:
+                    shutil.copytree(str(x_scan), str(dest))
+                except:
+                    logger.error(f"Failed to copy '{x_scan}' to '{dest}'!")
+                # ...to final directory
+                dest = test_db / x_scan.name
+                try:
+                    shutil.copytree(str(x_scan), str(dest))
+                except:
+                    logger.error(f"Failed to copy '{x_scan}' to '{dest}'!")
+
+        logger.info("Duplicate the 'test scan dataset'...")
         # Duplicate the initial scan dataset to the temporary folder
-        shutil.copytree(str(init_scan_path), str(tmp_scan_folder))
+        try:
+            shutil.copytree(str(init_scan_path), str(tmp_scan_folder))
+        except:
+            logger.error(f"Failed to copy '{init_scan_path}' to '{tmp_scan_folder}'!")
+
         # Check for previous analysis & if yes, clean the dataset
-        init_configuration_file = pathlib.Path(tmp_scan_folder / "pipeline.toml")
+        init_configuration_file = tmp_scan_folder / "pipeline.toml"
         if init_configuration_file.is_file():
             logger.info("Using detected configuration pipeline backup file to clean the scan dataset!")
             print(str(init_configuration_file))
             romi_run_task(tmp_scan_folder, "Clean", str(init_configuration_file))
-        # Run the previous task on the temporary copy
+
+        # Run the previous task on the temporary copy, if any:
         if task_cfg["previous_task"]:
             logger.info(f"Running {task_cfg['previous_task']} pipeline on the scan dataset!")
             romi_run_task(tmp_scan_folder, task_cfg["previous_task"], task_cfg["config_file"])
+
+        # Duplicate the results of the previous task to the test database:
         logger.info(f"Copying previous run of {task_cfg['previous_task']} pipeline...")
-        # Duplicate the results of the previous task to the test database
         for i in range(nb):
             logger.info(f"Copy #{i}...")
-            copied_scan_name = pathlib.Path(test_db / f"{scan_name}_{i}")
+            copied_scan_name = Path(test_db / f"{scan_name}_{i}")
             shutil.copytree(str(tmp_scan_folder), str(copied_scan_name))
             created_copied_scans.append(copied_scan_name)
+
     return created_copied_scans
 
 
@@ -1338,8 +1387,21 @@ def main():
 
     global logger
     logger = configure_logger(filename, test_db_path, args.log_level)
-    logger.info(f"Path to the initial scan dataset is: {init_scan_path}")
-    logger.info(f"Got a test database location as argument: '{args.test_database}'.")
+    logger.info(f"Path to the test dataset is: {init_scan_path}")
+    if args.test_database != "":
+        logger.info(f"Got a manually defined test database location: '{args.test_database}'.")
+
+    # - Search pipeline config for '*calibration_scan_id':
+    pipeline_cfg = toml.load(open(args.config_file, 'r'))
+    extra_scans = []
+    for section, cfg_dict in pipeline_cfg.items():
+        for k, v in cfg_dict.items():
+            if "calibration_scan_id" in k:
+                extra_scans.append(db_location / v)
+    nx = len(extra_scans)
+    if nx != 0:
+        extra_scans_str = ', '.join([xs.name for xs in extra_scans])
+        logger.info(f"Found '{nx}' calibration scan{'s' if nx > 1 else ''} to copy: {extra_scans_str}")
 
     # - Get the path to the CNN model
     if args.models:
@@ -1353,7 +1415,7 @@ def main():
     # Case without/with scan datasets in the test database root folder
     if n_replicates == 0:
         # Duplicate the scan dataset as many times as requested
-        test_scans = fill_test_db(test_db_path, init_scan_path, task_cfg, replicate_number, models_path)
+        test_scans = fill_test_db(test_db_path, init_scan_path, task_cfg, replicate_number, models_path, extra_scans)
     else:
         # If there is something in the root folder that mean you passed a value to `--test_database`
         # And we then consider that it already contains the replicated scans!
