@@ -568,15 +568,8 @@ class Colmap(RomiTask):
         # - Define the camera model:
         self.cli_args["model_aligner"]["--robust_alignment_max_error"] = str(self.robust_alignment_max_error)
 
-    def set_camera_params(self):
-        """Configure COLMAP CLI parameters to defines estimated camera parameters from intrinsic calibration scan."""
-        from plant3dvision.camera import get_camera_model_from_colmap
-        from plant3dvision.camera import colmap_str_params
-        images_fileset = self.input().get()
-        db = images_fileset.scan.db
-        calibration_scan = db.get_scan(self.calibration_scan_id)
-        logger.info(f"Using intrinsic camera parameters from '{calibration_scan.id}'...")
-
+    @staticmethod
+    def _get_colmap_cameras_from_calib_scan(calibration_scan):
         # - Check an ExtrinsicCalibration task has been performed for the calibration scan:
         calib_fs = [s for s in calibration_scan.get_filesets() if "ExtrinsicCalibration" in s.id]
         if len(calib_fs) == 0:
@@ -589,7 +582,18 @@ class Colmap(RomiTask):
                     f"More than one 'ExtrinsicCalibration' found for calibration scan '{calibration_scan.id}'!")
         # - Get the 'images' fileset from the extrinsic calibration scan
         cameras_file = calib_fs[0].get_file("cameras")
-        colmap_cameras = io.read_json(cameras_file)
+        return io.read_json(cameras_file)
+
+    def set_camera_params(self):
+        """Configure COLMAP CLI parameters to defines estimated camera parameters from intrinsic calibration scan."""
+        from plant3dvision.camera import get_camera_model_from_colmap
+        from plant3dvision.camera import colmap_str_params
+        images_fileset = self.input().get()
+        db = images_fileset.scan.db
+        calibration_scan = db.get_scan(self.calibration_scan_id)
+        logger.info(f"Using intrinsic camera parameters from '{calibration_scan.id}'...")
+
+        colmap_cameras = self._get_colmap_cameras_from_calib_scan(calibration_scan)
         cam_dict = get_camera_model_from_colmap(colmap_cameras)
 
         # - Set 'feature_extractor' parameters:
