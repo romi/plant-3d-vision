@@ -83,7 +83,14 @@ def get_cnc_poses(scan_dataset):
     img_fs = scan_dataset.get_fileset('images')
     approx_poses = {im.id: im.get_metadata("approximate_pose") for im in img_fs.get_files()}
     poses = {im.id: im.get_metadata("pose") for im in img_fs.get_files()}
-    return {im.id: poses[im.id] if poses[im.id] is not None else approx_poses[im.id] for im in img_fs.get_files()}
+    cnc_poses = {im.id: poses[im.id] if poses[im.id] is not None else approx_poses[im.id] for im in img_fs.get_files()}
+    # Filter-out 'None' pose:
+    cnc_poses = {im_id: pose for im_id, pose in cnc_poses.items() if poses is not None}
+    n_poses = len(cnc_poses)
+    n_imgs = len(img_fs.get_files())
+    if n_poses != n_imgs:
+        logger.warning(f"Number of obtained CNC poses ({n_poses}) and images ({n_imgs}) differs!")
+    return cnc_poses
 
 
 def get_calibrated_poses(scan_dataset):
