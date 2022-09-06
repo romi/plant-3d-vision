@@ -132,7 +132,32 @@ class PointCloud(RomiTask):
 
 
 class SegmentedPointCloud(RomiTask):
-    """ Segments an existing point cloud using 2D pictures
+    """Segments an existing point cloud using 2D pictures.
+
+    Attributes
+    ----------
+    upstream_task : luigi.TaskParameter, optional
+        Task upstream of this task, should provide a point cloud.
+        Should be either ``Colmap`` or ``PointCloud``.
+        Defaults to ``Colmap``.
+    upstream_segmentation : luigi.TaskParameter, optional
+        Task upstream of this task, should provide a 2D segmentation of the 'images'.
+        Defaults to ``Segmentation2D``.
+    use_colmap_poses : luigi.BoolParameter, optional
+        Defaults to ``True``.
+
+    See Also
+    --------
+    plant3dvision.proc3d.backproject_points
+
+    Notes
+    -----
+    Upstream task format: PLY point cloud file.
+    Upstream segmentation task format: colored image file.
+    Output task format: PLY colored (labelled) point cloud file.
+
+    If the upstream task is set to ``Colmap``, the dense point cloud have to be reconstructed by COLMAP.
+
     """
     upstream_task = luigi.TaskParameter(default=Colmap)
     upstream_segmentation = luigi.TaskParameter(default=Segmentation2D)
@@ -191,9 +216,7 @@ class SegmentedPointCloud(RomiTask):
             intrinsics = camera["camera_model"]["params"]
             K = np.array([[intrinsics[0], 0, intrinsics[2]],
                           [0, intrinsics[1], intrinsics[3]], [0, 0, 1]])
-            pixels = np.asarray(
-                proc3d.backproject_points(pts, K, rotmat, tvec) + 0.5,
-                dtype=int)
+            pixels = np.asarray(proc3d.backproject_points(pts, K, rotmat, tvec) + 0.5, dtype=int)
 
             label_idx = labels.index(label)
             mask = io.read_image(fi)
@@ -226,14 +249,44 @@ class SegmentedPointCloud(RomiTask):
 
 
 class TriangleMesh(RomiTask):
-    """ Triangulates input point cloud.
+    """Triangulates input point cloud.
 
-    Currently, ignores class data and needs only one connected component.
+    Attributes
+    ----------
+    upstream_task  : luigi.TaskParameter, optional
+        Task upstream of this task, should provide a point cloud.
+        Defaults to ``PointCloud``.
+    library : luigi.Parameter, optional
+        The library to mesh the point cloud, choose either "cgal" or "open3d".
+        If "cgal", use the ``poisson_mesh`` method from the CGAL library, see [CGAL]_.
+        If "open3d", use the ``create_from_point_cloud_poisson`` method from the Open3D library, see [Open3D]_.
+        Defaults to ``"open3d"``.
+    filtering : luigi.Parameter, optional
+        The filtering method to apply to obtained triangle mesh, if any.
+        Valid choices are "most connected triangles", "largest connected triangles" or "".
+        "most connected triangles": get the largest cluster of triangles in terms of "number of triangles".
+        "largest connected triangles": get the largest cluster of triangles in terms of "total triangle area".
+        Defaults to ``"most connected triangles"``, use ``""`` to deactivate filtering.
+    depth : luigi.IntParameter, optional
+        Depth parameter used by Open3D to mesh the point cloud, see [o3d_tri_poisson]_ for more details.
+        Defaults to ``9``.
 
-    Module: plant3dvision.tasks.proc3d
-    Default upstream tasks: PointCloud
-    Upstream task format: ply file
-    Output task format: ply triangle mesh file
+    See Also
+    --------
+    plant3dvision.proc3d.pcd2mesh
+    cgal.poisson_mesh
+    o3d.geometry.TriangleMesh.create_from_point_cloud_poisson
+
+    Notes
+    -----
+    Currently, ignores class data and needs only one connected component, use ``ClusteredMesh`` instead.
+    Upstream task format: PLY point cloud file.
+    Output task format: PLY triangle mesh file.
+
+    References
+    ----------
+    .. [CGAL] `Poisson Surface Reconstruction user manual <https://doc.cgal.org/latest/Poisson_surface_reconstruction_3/index.html>`_.
+    .. [o3d_tri_poisson] `Open3D's TriangleMesh API <http://www.open3d.org/docs/latest/python_api/open3d.geometry.TriangleMesh.html#open3d.geometry.TriangleMesh.create_from_point_cloud_poisson>`_.
 
     """
     upstream_task = luigi.TaskParameter(default=PointCloud)
@@ -286,9 +339,30 @@ class TriangleMesh(RomiTask):
 
 
 class ClusteredMesh(RomiTask):
+    """Triangulate input labelled point cloud.
+
+    Attributes
+    ----------
+    upstream_task : luigi.TaskParameter, optional
+        The task upstream to this one, should provide a segmented point cloud.
+        Defaults to ``SegmentedPointCloud``.
+    depth : luigi.IntParameter, optional
+        Depth parameter used by Open3D to mesh the point cloud, see [o3d_tri_poisson]_ for more details.
+        Defaults to ``9``.
+
+    See Also
+    --------
+    o3d.geometry.TriangleMesh.create_from_point_cloud_poisson
+
+    Notes
+    -----
+    Upstream task format: PLY (multiclass) voxel volume file.
+    Output task format: PLY triangle mesh file per label.
+
+    """
     upstream_task = luigi.TaskParameter(default=SegmentedPointCloud)
-    min_vol = luigi.FloatParameter(default=1.0)
-    min_length = luigi.FloatParameter(default=10.0)
+
+    depth = luigi.IntParameter(default=9)  # used by open3d library
 
     def run(self):
         x = io.read_point_cloud(self.input_file())
@@ -317,7 +391,7 @@ class ClusteredMesh(RomiTask):
             pcd.normals = o3d.utility.Vector3dVector(normals)
             pcd.colors = o3d.utility.Vector3dVector(colors)
             # Mesh the point cloud (built with the points corresponding to the label)
-            t, _ = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(pcd)
+            t, _ = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(pcd, depth=self.depth)
             t.compute_adjacency_list()
             k, cc, _ = t.cluster_connected_triangles()
             k = np.asarray(k)
@@ -336,24 +410,36 @@ class ClusteredMesh(RomiTask):
 class OrganSegmentation(RomiTask):
     """Organ detection using DBSCAN clustering on the SegmentedPointCloud.
 
+    Attributes
+    ----------
+    upstream_task : luigi.TaskParameter, optional
+        The task upstream to this one, should provide a segmented point cloud.
+        Defaults to ``SegmentedPointCloud``.
+    eps : luigi.FloatParameter, optional
+        The maximum euclidean distance between two samples for one to be considered as in the neighborhood of the other.
+        This is not a maximum bound on the distances of points within a cluster.
+        Defaults to ``2.0``.
+    min_points : luigi.IntParameter, optional
+        The number of points in a neighborhood for a point to be considered as a core point.
+        This includes the point itself.
+        Defaults to ``5``.
+
+    See Also
+    --------
+    open3d.geometry.PointCloud.cluster_dbscan
+
+    Notes
+    -----
     This is done for each semantic label ('flower', 'fruit', ...) of the labelled point cloud,
     except for the stem as it is considered to be one organ.
     This task is suitable to detect organs on a point cloud where organs are detached from each other since
     it use the DBSCAN clustering method with a density estimator.
+    See [o3d_pcd_cluster_dbscan] & [DBSCAN]_ for more details.
 
-    Attributes
+    References
     ----------
-    upstream_task : luigi.TaskParameter
-        Upstream task.
-        `SegmentedPointCloud` by default.
-    eps : luigi.FloatParameter
-        The maximum euclidean distance between two samples for one to be considered as in the neighborhood of the other.
-        This is not a maximum bound on the distances of points within a cluster.
-        `2.0` by default.
-    min_points : luigi.IntParameter
-        The number of points in a neighborhood for a point to be considered as a core point.
-        This includes the point itself.
-        `5` by default.
+    .. [o3d_pcd_cluster_dbscan] `Open3D's PointCloud API <http://www.open3d.org/docs/latest/python_api/open3d.geometry.PointCloud.html#open3d.geometry.PointCloud.cluster_dbscan>`_.
+    .. [DBSCAN] `Scikit-learn user guide for DBSCAN <https://scikit-learn.org/stable/modules/clustering.html#dbscan>`_.
 
     """
     upstream_task = luigi.TaskParameter(default=SegmentedPointCloud)
@@ -368,11 +454,12 @@ class OrganSegmentation(RomiTask):
         pcd : open3d.geometry.PointCloud
             A PointCloud instance with points.
         labels : list
-            List of labels associated to the points.
+            The list of labels associated to the points.
         label : str
             Label used to select points from point cloud.
 
         Returns
+        -------
         open3d.geometry.PointCloud
             A point cloud containing only the points associated to the selected label.
         """
@@ -423,12 +510,22 @@ class OrganSegmentation(RomiTask):
 
 
 class CurveSkeleton(RomiTask):
-    """ Creates a 3D curve skeleton.
+    """Creates a 3D curve skeleton from a triangle mesh.
 
-    Module: plant3dvision.tasks.proc3d
-    Default upstream tasks: TriangleMesh
-    Upstream task format: ply triangle mesh
-    Output task format: json with two entries "points" and "lines" (TODO: precise)
+    Attributes
+    ----------
+    upstream_task : luigi.TaskParameter
+        The task upstream to this one, should provide a triangle mesh.
+        Defaults to ``TriangleMesh``.
+
+    See Also
+    --------
+    plant3dvision.proc3d.skeletonize
+
+    Notes
+    -----
+    Upstream task format: PLY triangle mesh file.
+    Output task format: JSON file with two entries "points" and "lines". (TODO: be a bit more precise)
 
     """
     upstream_task = luigi.TaskParameter(default=TriangleMesh)
@@ -441,9 +538,27 @@ class CurveSkeleton(RomiTask):
 
 
 class VoxelsWithPrior(RomiTask):
-    """
-    Assign class to voxel adjusting for the possibility that
-    projection can be wrongly labeled.
+    """Assign class to voxel adjusting for the possibility that projection can be wrongly labeled.
+
+    Attributes
+    ----------
+    upstream_task : luigi.TaskParameter, optional
+        The task upstream to this one, should provide an NPZ voxel volume.
+        Defaults to ``Voxels``.
+    recall : luigi.DictParameter, optional
+        ???.
+        Defaults to ``{}``.
+    specificity : luigi.DictParameter, optional
+        ???.
+        Defaults to ``{}``.
+    n_views : luigi.IntParameter
+        ???.
+
+    Notes
+    -----
+    Upstream task format: NPZ (multiclass) voxel volume file.
+    Output task format: NPZ (multiclass) voxel volume file.
+
     """
     upstream_task = luigi.TaskParameter(default=Voxels)
     recall = luigi.DictParameter(default={})
@@ -454,21 +569,19 @@ class VoxelsWithPrior(RomiTask):
         prediction_file = self.upstream_task().output().get().get_files()[0]
         voxels = io.read_npz(prediction_file)
         out = {}
-        l = list(voxels.keys())
-        for c in l:
-            if c in self.recall:
-                recall = self.recall[c]
+        labels = list(voxels.keys())
+        for label in labels:
+            if label in self.recall:
+                recall = self.recall[label]
             else:
                 continue
-            if c in self.specificity:
-                specificity = self.specificity[c]
+            if label in self.specificity:
+                specificity = self.specificity[label]
             else:
                 continue
-            l0 = (self.n_views - voxels[c]) * np.log(specificity) + voxels[
-                c] * np.log(1 - specificity)
-            l1 = (self.n_views - voxels[c]) * np.log(1 - recall) + voxels[
-                c] * np.log(recall)
-            out[c] = l1 - l0
+            l0 = (self.n_views - voxels[label]) * np.log(specificity) + voxels[label] * np.log(1 - specificity)
+            l1 = (self.n_views - voxels[label]) * np.log(1 - recall) + voxels[label] * np.log(recall)
+            out[label] = l1 - l0
 
         outfs = self.output().get()
         outfile = self.output_file()
