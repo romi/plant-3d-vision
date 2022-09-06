@@ -121,7 +121,7 @@ def colmap_points_to_pcd(points_bin):
     Returns
     -------
     open3d.geometry.PointCloud
-        Colored pointcloud object.
+        Colored point cloud object.
     """
     # - Read reconstructed binary sparse model:
     points = read_model.read_points3d_binary(points_bin)
@@ -217,8 +217,40 @@ def cameras_model_to_opencv_model(cameras):
 
 
 class ColmapRunner(object):
-    """
-    Object wrapping COLMAP SfM methods to apply to an image fileset.
+    """COLMAP SfM methods wrapper, to apply to an 'image' fileset.
+
+    Attributes
+    ----------
+    fileset : plantdb.db.Fileset
+        The `Fileset` containing source images to use for reconstruction.
+    matcher_method : {'exhaustive', 'sequential'}
+        Method to use to perform feature matching operation.
+    compute_dense : bool
+        If ``True``, it will compute the dense point cloud.
+    all_cli_args : dict
+        Dictionary of arguments to pass to colmap command lines.
+    align_pcd : bool
+        If ``True``, it will align spare (& dense) point cloud(s) coordinate system of given camera centers.
+    use_calibration : bool
+        If ``True``, it will use the "calibrated_poses" metadata from the 'images' `fileset` as camera poses (XYZ).
+        Else, it will use the "pose" metadata (exact poses) if they exist or the "approximate_pose" if they do not.
+        This is used when initializing the `poses.txt` file for COLMAP.
+    bounding_box : dict or None
+        If set, should contain the cropping boundaries for each axis.
+        This is applied to the sparse (and dense) point cloud.
+        If not set, an automatic guess using the dense (if any) or sparse point cloud is performed.
+    colmap_ws : str
+        COLMAP working directory.
+        Can be defined with an environment variable named `COLMAP_WS`.
+        Else will be automatically created in temporary directory.
+    imgs_dir : str
+        Path to COLMAP 'images' directory.
+    sparse_dir : str
+        Path to COLMAP 'sparse' directory.
+    dense_dir : str
+        Path to COLMAP 'dense' directory.
+    log_file : str
+        Path to the file used to log some of COLMAP stdout.
 
     Notes
     -----
@@ -246,21 +278,21 @@ class ColmapRunner(object):
         """
         Parameters
         ----------
-        fileset : db.Fileset
-            Fileset containing source images to use for reconstruction.
+        fileset : plantdb.db.Fileset
+            The `Fileset` containing source images to use for reconstruction.
         matcher_method : {'exhaustive', 'sequential'}, optional
-            Method to use to performs feature matching operation, default is 'exhaustive'.
+            Method to use to perform feature matching operation, default is 'exhaustive'.
         compute_dense : bool, optional
-            If ``True`` (default ``False``), compute dense pointcloud.
+            If ``True`` (default ``False``), compute dense point cloud.
             This is time consumming & requires a lot of memory ressources.
         all_cli_args : dict, optional
             Dictionary of arguments to pass to colmap command lines, empty by default.
         align_pcd : bool, optional
-            If ``True`` (default ``False``), align spare (& dense) pointcloud(s) coordinate system of given camera centers.
+            If ``True`` (default ``False``), align spare (& dense) point cloud(s) coordinate system of given camera centers.
         use_calibration : bool, optional
-            If ``True`` (default ``False``),  use "calibrated_pose" instead of "pose" metadata for pointcloud alignment.
+            If ``True`` (default ``False``),  use "calibrated_pose" instead of "pose" metadata for point cloud alignment.
         bounding_box : dict, optional
-            If specified (default ``None``), crop the sparse (& dense) pointcloud(s) with given volume dictionary.
+            If specified (default ``None``), crop the sparse (& dense) point cloud(s) with given volume dictionary.
             Specifications: {"x" : [xmin, xmax], "y" : [ymin, ymax], "z" : [zmin, zmax]}.
         colmap_exe : {'colmap', 'geki/colmap', 'roboticsmicrofarms/colmap'}, optional
             The executable to use to run the colmap reconstruction steps.
@@ -277,7 +309,7 @@ class ColmapRunner(object):
 
         Use ``{"exhaustive_matcher": {"--SiftMatching.use_gpu": "0"}`` or ``{"sequential_matcher": {"--SiftMatching.use_gpu": "0"}`` to force use of CPU during feature matching step.
 
-        By default "--robust_alignment_max_error" is set to 10 for pointcloud alignment step.
+        By default "--robust_alignment_max_error" is set to 10 for point cloud alignment step.
         You may change it, *e.g.* to 20, with ``{"model_aligner": {"--robust_alignment_max_error": "20"}``.
 
         References
@@ -331,18 +363,18 @@ class ColmapRunner(object):
         >>> colmap = ColmapRunner(fs, all_cli_args=args)
         >>> colmap.feature_extractor()  #1 - Extract features from images
         >>> colmap.matcher()  #2 - Match extracted features from images, requires `feature_extractor()`
-        >>> colmap.mapper()  #3 - Sparse pointcloud reconstruction, requires `matcher()`
-        >>> colmap.model_aligner()  #4 - OPTIONAL, align sparse pointcloud to coordinate system of given camera centers
+        >>> colmap.mapper()  #3 - Sparse point cloud reconstruction, requires `matcher()`
+        >>> colmap.model_aligner()  #4 - OPTIONAL, align sparse point cloud to coordinate system of given camera centers
         >>> colmap.image_undistorter()  #5 - OPTIONAL, undistort images, required by `patch_match_stereo()`
-        >>> colmap.patch_match_stereo()  #6 - OPTIONAL, dense pointcloud reconstruction
-        >>> colmap.stereo_fusion()  #7 - OPTIONAL, dense pointcloud coloring, requires `patch_match_stereo()`
+        >>> colmap.patch_match_stereo()  #6 - OPTIONAL, dense point cloud reconstruction
+        >>> colmap.stereo_fusion()  #7 - OPTIONAL, dense point cloud coloring, requires `patch_match_stereo()`
         >>> # After step #3, you can access the generated cameras model:
         >>> cameras = colmap_cameras_to_dict(f'{colmap.sparse_dir}/0/cameras.bin')
         >>> # After step #3, you can access the generated images model:
         >>> images = colmap_images_to_dict(f'{colmap.sparse_dir}/0/images.bin')
-        >>> # After step #3, you can access the generated sparse pointcloud model:
+        >>> # After step #3, you can access the generated sparse point cloud model:
         >>> sparse_pcd = colmap_points_to_pcd(f'{colmap.sparse_dir}/0/points3D.bin')
-        >>> # After step #7, you can access the generated dense colored pointcloud model:
+        >>> # After step #7, you can access the generated dense colored point cloud model:
         >>> dense_pcd = open3d.io.read_point_cloud(f'{colmap.dense_dir}/fused.ply')
 
         >>> # -- Example of a one-line COLMAP SfM reconstruction based on instance initialization:
@@ -408,42 +440,48 @@ class ColmapRunner(object):
         Some files may be missing from the `poses.txt` file if they don't have the required metadata!
 
         """
+        # - Search if "exact poses" can be found in all 'images' fileset metadata:
+        exact_poses = all([f.get_metadata('pose') is not None for f in self.fileset.get_files()])
+        # - Defines "where" (which metadata) to get the "camera pose" from:
+        if self.use_calibration:
+            pose_md = 'calibrated_pose'  # `ExtrinsicCalibration` case
+        elif exact_poses:
+            pose_md = 'pose'  # `VirtualScan` case
+        else:
+            pose_md = 'approximate_pose'  # `Scan` case
+
         # - File object containing COLMAP camera poses:
-        posefile = open(f"{self.colmap_ws}/poses.txt", mode='w')
-        # - Search if 'pose' is in one of the files from the 'images' fileset:
-        # If found, that mean we have "exact poses" (from VirtualScan)!
-        # TODO: shouldn't we make sure that 'pose' is in ALL of the files from the 'images' fileset instead?!
-        exact_poses = False
-        for f in self.fileset.get_files():
-            if f.get_metadata('pose') is not None:
-                exact_poses = True
-        # - Try to get the pose from each file metadata:
-        for i, file in enumerate(self.fileset.get_files()):
-            # - Make sure the file 'exists', if not ????
-            filepath = os.path.join(self.imgs_dir, file.filename)
-            if not os.path.isfile(filepath):
-                go = True
-                if 'channel' in file.metadata.keys():
-                    if file.metadata['channel'] != 'rgb':
-                        go = False
-                if go:
-                    im = io.read_image(file)
-                    im = im[:, :, :3]  # remove alpha channel
-                    imageio.imwrite(filepath, im)
-            # - Try to get the calibrated/exact/approximate pose accordingly, may be None:
-            if self.use_calibration:
-                p = file.get_metadata('calibrated_pose')
-            elif exact_poses:
-                p = file.get_metadata('pose')  # VirtualScan case!
-            else:
-                p = file.get_metadata('approximate_pose')
-            # - If a 'pose' (calibrated/exact/approximate) was found for the file, add it to the COLMAP poses file:
-            if p is not None:
-                s = '%s %d %d %d\n' % (file.filename, p[0], p[1], p[2])
-                posefile.write(s)
-        posefile.close()
+        with open(f"{self.colmap_ws}/poses.txt", mode='w') as pose_file:
+            # - Try to get the camera pose from each image file metadata to a `poses.txt` file:
+            for img_f in self.fileset.get_files():
+                # - Try to get the calibrated/exact/approximate pose accordingly, may be None:
+                p = img_f.get_metadata(pose_md)
+                # - If a 'pose' (calibrated/exact/approximate) was found for the file, add it to the COLMAP poses file:
+                if p is not None:
+                    s = f"{img_f.filename}, {p[0]}, {p[1]}, {p[2]}" + "\n"
+                    pose_file.write(s)
+                else:
+                    logger.error(f"Missing '{pose_md}' metadata for '{img_f.id}' file!")
+
+        return
 
     def _init_exe(self, colmap_exe):
+        """Perform some tests prior to using COLMAP to make sure we have what we need.
+
+        Parameters
+        ----------
+        colmap_exe : {'colmap', 'geki/colmap', 'roboticsmicrofarms/colmap'}
+            The executable to use to run the colmap reconstruction steps.
+            'colmap' requires that you compile and install it from sources, see [colmap]_.
+            The others use pre-built docker images, available from docker hub.
+            'geki/colmap' is colmap 3.6 with Ubuntu 18.04 and CUDA 10.1, see [geki_colmap]_
+            'roboticsmicrofarms/colmap' is colmap 3.7 with Ubuntu 18.04 and CUDA 10.2, see [roboticsmicrofarms_colmap]_
+
+        References
+        ----------
+        .. [roboticsmicrofarms_colmap] Colmap docker image on `roboticsmicrofarms <https://hub.docker.com/repository/docker/roboticsmicrofarms/colmap>`_' docker hub.
+
+        """
         # - Performs some verifications prior to using system install of COLMAP:
         if colmap_exe == 'colmap':
             # Check `colmap` is available system-wide:
@@ -490,11 +528,11 @@ class ColmapRunner(object):
         colmap_exe : {'colmap', 'geki/colmap', 'roboticsmicrofarms/colmap'}
             COLMAP executable to use.
         method : str
-            COLMAP method to use, e.g. 'feature_extractor'.
+            COLMAP method to use, _e.g._ 'feature_extractor'.
         args : list
-            List of arguments to use with COLMAP, usually from parent function.
+            A list of arguments to use with COLMAP, usually from parent function.
         cli_args : dict
-            Dictionary of arguments to use with COLMAP, usually from TOML configuration.
+            A dictionary of arguments to use with COLMAP, usually from TOML configuration.
         to_log : bool, optional
             If ``True`` (default) append the output of the COLMAP command to the log file (``self.log_file``).
             Else, return it as string.
@@ -720,8 +758,8 @@ class ColmapRunner(object):
 
         Notes
         -----
-        If a bounding-box was specified at object instantiation, and it leads to an empty sparse point-cloud, we return the non-cropped version.
-        Same goes for dense colored point-cloud.
+        If a bounding-box was specified at object instantiation, and it leads to an empty sparse point cloud, we return
+         the non-cropped version. Same goes for dense (colored) point cloud.
 
         Returns
         -------
@@ -769,15 +807,15 @@ class ColmapRunner(object):
             Defines a bounding box of object position in space.
 
         """
-        # -- Sparse point-cloud reconstruction by COLMAP:
+        # -- Sparse point cloud reconstruction by COLMAP:
         # - Performs image features extraction:
         self.feature_extractor()
         # - Performs image features matching:
         self.matcher()
 
-        # - Performs sparse pointcloud reconstruction:
+        # - Performs sparse point cloud reconstruction:
         self.mapper()
-        # - If required, align sparse pointcloud to coordinate system of given camera centers:
+        # - If required, align sparse point cloud to coordinate system of given camera centers:
         if self.align_pcd:
             self.model_aligner()
         # Print statistics about reconstruction.
@@ -789,12 +827,12 @@ class ColmapRunner(object):
         cameras = cameras_model_to_opencv_model(cameras)
         # - Read computed image binary models:
         images = colmap_images_to_dict(f'{self.sparse_dir}/0/images.bin')
-        # - Read reconstructed binary sparse model, convert to pointcloud and dictionary
+        # - Read reconstructed binary sparse model, convert to point cloud and dictionary
         sparse_pcd = colmap_points_to_pcd(f'{self.sparse_dir}/0/points3D.bin')
         points = colmap_points_to_dict(f'{self.sparse_dir}/0/points3D.bin')
-        # - Raise an error if sparse pointcloud is empty:
+        # - Raise an error if sparse point cloud is empty:
         if len(sparse_pcd.points) == 0:
-            msg = "Reconstructed sparse pointcloud is EMPTY!"
+            msg = "Reconstructed sparse point cloud is EMPTY!"
             raise Exception(msg)
 
         # -- Export computed COLMAP camera model to metadata for each file of the input fileset:
@@ -814,36 +852,36 @@ class ColmapRunner(object):
                 }
                 fi.set_metadata("colmap_camera", camera)
 
-        # -- If required, performs dense pointcloud reconstruction:
+        # -- If required, performs dense point cloud reconstruction:
         dense_pcd = None
         if self.compute_dense:
             # - Undistort images prior to dense reconstruction & initialize workspace:
             self.image_undistorter()
-            # - Dense 3D pointcloud reconstruction:
+            # - Dense 3D point cloud reconstruction:
             self.patch_match_stereo()
-            # - Performs coloring of the dense pointcloud:
+            # - Performs coloring of the dense point cloud:
             self.stereo_fusion()
-            # - Read the colored dense pointcloud:
+            # - Read the colored dense point cloud:
             dense_pcd = o3d.io.read_point_cloud(f'{self.dense_dir}/fused.ply')
             # Print statistics about reconstruction.
             self.model_analyzer()
 
         # -- PointCloud(s) cropping by bounding-box & minimal bounding-box estimation:
-        # WARNING: We try to crop the DENSE point-cloud first as it should contain info missing from the sparse!
-        # - Try to crop the dense pointcloud (if any) by bounding-box (if any):
+        # WARNING: We try to crop the DENSE point cloud first as it should contain info missing from the sparse!
+        # - Try to crop the dense point cloud (if any) by bounding-box (if any):
         if self.bounding_box is not None and self.compute_dense:
             crop_dense_pcd = proc3d.crop_point_cloud(dense_pcd, self.bounding_box)
-            # - Replace the dense pointcloud with cropped version only if it is not empty:
+            # - Replace the dense point cloud with cropped version only if it is not empty:
             if len(crop_dense_pcd.points) == 0:
                 logger.critical("Empty dense point cloud after cropping by bounding box!")
                 logger.critical("Using non-cropped version!")
                 self.bounding_box = None
             else:
                 dense_pcd = crop_dense_pcd
-        # - Try to crop the sparse pointcloud by bounding-box (if any):
+        # - Try to crop the sparse point cloud by bounding-box (if any):
         if self.bounding_box is not None:
             crop_sparse_pcd = proc3d.crop_point_cloud(sparse_pcd, self.bounding_box)
-            # - Replace the sparse pointcloud with cropped version only if it is not empty:
+            # - Replace the sparse point cloud with cropped version only if it is not empty:
             if len(crop_sparse_pcd.points) == 0:
                 logger.critical("Empty sparse point cloud after cropping by bounding box!")
                 logger.critical("Using non-cropped version!")
@@ -854,7 +892,7 @@ class ColmapRunner(object):
             else:
                 sparse_pcd = crop_sparse_pcd
 
-        # - AUTOMATIC estimation of bounding-box from dense (if any) or sparse point-cloud if not manually defined:
+        # - AUTOMATIC estimation of bounding-box from dense (if any) or sparse point cloud if not manually defined:
         if self.bounding_box is None:
             if dense_pcd is not None:
                 points_array = np.asarray(sparse_pcd.points)
