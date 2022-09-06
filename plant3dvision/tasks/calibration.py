@@ -235,9 +235,9 @@ class IntrinsicCalibration(RomiTask):
 
     def run(self):
         """Compute the intrinsic camera parameters for selected model using detected corners & ids."""
-        from plant3dvision.camera import get_opencv_params_dict
-        from plant3dvision.camera import get_radial_params_dict
-        from plant3dvision.camera import get_simple_radial_params_dict
+        from plant3dvision.camera import get_opencv_params_from_arrays
+        from plant3dvision.camera import get_radial_params_from_arrays
+        from plant3dvision.camera import get_simple_radial_params_from_arrays
         # Get the 'image' `Fileset` to segment and filter by `query`:
         markers_files = self.input()["markers"].get().get_files()
         board_file = self.input()["board"].get().get_file("charuco_board")
@@ -279,7 +279,7 @@ class IntrinsicCalibration(RomiTask):
         reproj_error, mtx, dist, rvecs, tvecs, per_view_errors = calibrate_opencv_camera(corners, ids,
                                                                                          img_shape,
                                                                                          self.aruco_kwargs)
-        opencv_model = {"OPENCV": get_opencv_params_dict(mtx, dist[0]) | {'RMS_error': reproj_error}}
+        opencv_model = {"OPENCV": get_opencv_params_from_arrays(mtx, dist[0]) | {'RMS_error': reproj_error}}
         _export_rms_errors("OPENCV", per_view_errors)
 
         # RADIAL model:
@@ -287,7 +287,7 @@ class IntrinsicCalibration(RomiTask):
         reproj_error, mtx, dist, rvecs, tvecs, per_view_errors = calibrate_radial_camera(corners, ids,
                                                                                          img_shape,
                                                                                          self.aruco_kwargs)
-        radial_model = {"RADIAL": get_radial_params_dict(mtx, dist[0]) | {'RMS_error': reproj_error}}
+        radial_model = {"RADIAL": get_radial_params_from_arrays(mtx, dist[0]) | {'RMS_error': reproj_error}}
         _export_rms_errors("RADIAL", per_view_errors)
 
         # SIMPLE_RADIAL model:
@@ -296,7 +296,7 @@ class IntrinsicCalibration(RomiTask):
                                                                                                 img_shape,
                                                                                                 self.aruco_kwargs)
         simple_radial_model = {
-            "SIMPLE_RADIAL": get_simple_radial_params_dict(mtx, dist[0]) | {'RMS_error': reproj_error}}
+            "SIMPLE_RADIAL": get_simple_radial_params_from_arrays(mtx, dist[0]) | {'RMS_error': reproj_error}}
         _export_rms_errors("SIMPLE_RADIAL", per_view_errors)
 
         # Save the estimated camera parameters as JSON:

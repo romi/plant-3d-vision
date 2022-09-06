@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import numpy as np
+
 from plantdb import io
 from romitask.log import configure_logger
 
@@ -10,7 +11,7 @@ logger = configure_logger(__name__)
 VALID_MODELS = ["OPENCV", "RADIAL", "SIMPLE_RADIAL"]
 
 
-def get_opencv_params_dict(mtx, dist):
+def get_opencv_params_from_arrays(mtx, dist):
     """Return a dictionary for an 'OPENCV' model with parameters: fx, fy, cx, cy, k1, k2, p1, p2.
 
     Parameters
@@ -39,7 +40,7 @@ def get_opencv_params_dict(mtx, dist):
     return params
 
 
-def get_radial_params_dict(mtx, dist):
+def get_radial_params_from_arrays(mtx, dist):
     """Return a dictionary for a 'RADIAL' model with parameters: f, cx, cy, k1, k2.
 
     Parameters
@@ -65,7 +66,7 @@ def get_radial_params_dict(mtx, dist):
     return params
 
 
-def get_simple_radial_params_dict(mtx, dist):
+def get_simple_radial_params_from_arrays(mtx, dist):
     """Return a dictionary for a 'SIMPLE RADIAL' model with parameters: f, cx, cy, k.
 
     Parameters
@@ -89,11 +90,22 @@ def get_simple_radial_params_dict(mtx, dist):
     }
     return params
 
+
+def get_camera_params_from_arrays(model, **params):
+    """Return a camera matrix and distortion vector for a given model from parameters."""
+    if model.lower() == 'opencv':
+        return get_opencv_params_from_arrays(**params)
+    if model.lower() == 'radial':
+        return get_radial_params_from_arrays(**params)
+    if model.lower() == 'simple_radial':
+        return get_simple_radial_params_from_arrays(**params)
+
+
 def get_opencv_model_from_params(fx, fy, cx, cy, k1, k2, p1, p2, **kwargs):
     """Return a camera matrix and distortion vector for an 'OPENCV' model from parameters."""
-    camera = np.array([[fx, 0 , cx],
-                       [0 , fy, cy],
-                       [0 , 0 , 1 ]], dtype='float32')
+    camera = np.array([[fx, 0, cx],
+                       [0, fy, cy],
+                       [0, 0, 1]], dtype='float32')
     distortion = np.array([k1, k2, p1, p2], dtype='float32')
     return camera, distortion
 
@@ -109,9 +121,9 @@ def get_radial_model_from_params(f, cx, cy, k1, k2, **kwargs):
 
 def get_simple_radial_model_from_params(f, cx, cy, k, **kwargs):
     """Return a camera matrix and distortion vector for a 'SIMPLE RADIAL' model from parameters."""
-    camera = np.array([[f, 0 , cx],
-                       [0 , f, cy],
-                       [0 , 0 , 1 ]], dtype='float32')
+    camera = np.array([[f, 0, cx],
+                       [0, f, cy],
+                       [0, 0, 1]], dtype='float32')
     distortion = np.array([k, 0., 0., 0.], dtype='float32')
     return camera, distortion
 
