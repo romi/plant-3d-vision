@@ -15,12 +15,12 @@ def create_cylinder_pcd(radius, height, nb_points=10000):
     height : int or float
         The height of the cylinder to create.
     nb_points : int, optional
-        The number of points used to create the cylinder point-cloud. Defaults to "10000".
+        The number of points used to create the cylinder point cloud. Defaults to "10000".
 
     Returns
     -------
     open3d.geometry.PointCloud
-        An open3d instance with a cylinder point-cloud.
+        An open3d instance with a cylinder point cloud.
 
     Examples
     --------
@@ -40,7 +40,7 @@ def create_cylinder_pcd(radius, height, nb_points=10000):
     xs = radius * np.cos(thetas)
     ys = radius * np.sin(thetas)
     cylinder = np.array([xs, ys, zs]).T
-    # - Create the cylinder point-cloud:
+    # - Create the cylinder point cloud:
     gt_cyl = o3d.geometry.PointCloud()
     gt_cyl.points = o3d.utility.Vector3dVector(cylinder)
 
@@ -48,12 +48,12 @@ def create_cylinder_pcd(radius, height, nb_points=10000):
 
 
 def estimate_cylinder_radius(pcd):
-    """Estimate the radius of a cylinder-like point-cloud.
+    """Estimate the radius of a cylinder-like point cloud.
 
     Parameters
     ----------
     pcd : numpy.ndarray or open3d.geometry.PointCloud
-        A numpy array of coordinates or a point-cloud, both describing a cylinder-like point-cloud.
+        A numpy array of coordinates or a point cloud, both describing a cylinder-like point cloud.
 
     Returns
     -------
@@ -82,7 +82,7 @@ def estimate_cylinder_radius(pcd):
     eig_val, eig_vec = np.linalg.eig(cov_matrix)
     # Find the axes index corresponding to the circle (should have very close eigen values):
     x, y = _find_two_closest(eig_val)
-    # Compute the centered point-cloud:
+    # Compute the centered point cloud:
     t_points = np.dot(eig_vec.T, pcd_points.T).T
     center = t_points.mean(axis=0)
     # Finally estimate the radius:

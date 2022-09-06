@@ -32,7 +32,7 @@ class Visualization(RomiTask):
     upstream_task : None, optional
         No upstream task required.
     upstream_point_cloud : luigi.TaskParameter, optional
-        Upstream task that generate the point-cloud to use in visualizer (plant-3d-explorer).
+        Upstream task that generate the point cloud to use in visualizer (plant-3d-explorer).
         Defaults to ``PointCloud``, no alternatives yet.
     upstream_mesh : luigi.TaskParameter, optional
         Upstream task that generate the mesh to use in visualizer (plant-3d-explorer).
@@ -70,8 +70,8 @@ class Visualization(RomiTask):
         Downsize the original image if width or height is greater than this value.
         Defaults to ``1500``.
     max_point_cloud_size : luigi.IntParameter, optional
-        Maximum number of points in point-cloud to load in 3D explorer.
-        Downsize the original point-cloud if original point-cloud has more points than this value.
+        Maximum number of points in point cloud to load in 3D explorer.
+        Downsize the original point cloud if original point cloud has more points than this value.
         Put a lower size if you experience performances issues in 3D explorer.
         Defaults to ``10000000``.
     thumbnail_size : luigi.IntParameter, optional

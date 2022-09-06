@@ -16,7 +16,7 @@ logger = configure_logger(__name__)
 def chamfer_distance(ref_pcd, flo_pcd):
     """Compute the symmetric chamfer distance between two point clouds.
 
-    Let T be a template pointcloud and F a flaoting point cloud.
+    Let T be a template point cloud and F a flaoting point cloud.
     Let p2p_dist be the Euclidian distance between two points t & f.
     The Chamfer distance is:
     CH_dist = 1/|T| * sum_t(p2p_dist(t, f)) + 1/|F| * sum_f(p2p_dist(f, t))
@@ -56,7 +56,7 @@ def chamfer_distance(ref_pcd, flo_pcd):
 
 
 def point_cloud_registration_fitness(ref_pcd, flo_pcd, max_distance=2):
-    """Compute fitness & inliers RMSE after point-clouds registration.
+    """Compute fitness & inliers RMSE after point clouds registration.
 
     Parameters
     ----------

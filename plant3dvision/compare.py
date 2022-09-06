@@ -245,7 +245,7 @@ def _get_files(scan_dataset, task_name, unique=False):
         try:
             assert len(f_list) == 1
         except AssertionError:
-            raise AssertionError("This method can only compare tasks that output a single point-cloud!")
+            raise AssertionError("This method can only compare tasks that output a single point cloud!")
     # - Return the `File` objects:
     return [fs.get_file(f) for f in f_list]
 
@@ -551,7 +551,7 @@ def compare_binary_mask(db, task_name, scans_list):
 
 
 def compare_pointcloud(db, task_name, scans_list):
-    """Use the chamfer distance to compare point-cloud for each unique pairs of repetition.
+    """Use the chamfer distance to compare point cloud for each unique pairs of repetition.
 
     Parameters
     ----------
@@ -670,7 +670,7 @@ def compare_voxels(db, task_name, scans_list):
 
 
 def compare_labelled_pointcloud(db, task_name, scans_list):
-    """Use the closed point in neighborhood trees to compare labelled point-clouds.
+    """Use the closed point in neighborhood trees to compare labelled point clouds.
 
     Parameters
     ----------
@@ -706,7 +706,7 @@ def compare_labelled_pointcloud(db, task_name, scans_list):
             flo_pcd = read_point_cloud(flo_pcd_file)
             flo_labels = flo_pcd_file.get_metadata('labels')
             res = {ulabel: {"tp": 0, "fp": 0, "tn": 0, "fn": 0} for ulabel in unique_labels}
-            # For each point of the floating point-cloud...
+            # For each point of the floating point cloud...
             for i, pts in enumerate(flo_pcd.points):
                 # ... get its label
                 label_i = flo_labels[i]
@@ -755,7 +755,7 @@ def compare_labelled_pointcloud(db, task_name, scans_list):
 
 
 def compare_trianglemesh_points(db, task_name, scans_list):
-    """Use the chamfer distance to compare mesh vertices point-cloud for each unique pairs of repetition.
+    """Use the chamfer distance to compare mesh vertices point cloud for each unique pairs of repetition.
 
     Parameters
     ----------
@@ -810,7 +810,7 @@ def compare_trianglemesh_points(db, task_name, scans_list):
 
 
 def compare_curveskeleton_points(db, task_name, scans_list):
-    """Use the chamfer distance to compare point-cloud for each unique pairs of repetition.
+    """Use the chamfer distance to compare point cloud for each unique pairs of repetition.
 
     Parameters
     ----------

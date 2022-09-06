@@ -534,19 +534,19 @@ def vol2pcd(volume, origin, voxel_size, level_set_value=0):
 
 
 def crop_point_cloud(point_cloud, bounding_box):
-    """Crop a point-cloud by keeping points inside the bounding-box.
+    """Crop a point cloud by keeping points inside the bounding-box.
 
     Parameters
     ----------
     point_cloud : open3d.geometry.PointCloud
-        Input point-cloud to crop.
+        Input point cloud to crop.
     bounding_box : dict
         An axis indexed bounding-box dictionary like ``{"x": [min, max], "y": [min, max], "z": [min, max]}``
 
     Returns
     -------
     open3d.geometry.PointCloud
-        The cropped point-cloud.
+        The cropped point cloud.
 
     Examples
     --------
@@ -578,11 +578,11 @@ def crop_point_cloud(point_cloud, bounding_box):
     cropped_point_cloud = o3d.geometry.PointCloud()
     # Populate it with kept points
     cropped_point_cloud.points = o3d.utility.Vector3dVector(points)
-    # If the original point-cloud has normals, add it to the cropped point-cloud instance:
+    # If the original point cloud has normals, add it to the cropped point cloud instance:
     if point_cloud.has_normals():
         cropped_point_cloud.normals = o3d.utility.Vector3dVector(
             np.asarray(point_cloud.normals)[valid_index, :])
-    # If the original point-cloud has normals, add it to the cropped point-cloud instance:
+    # If the original point cloud has normals, add it to the cropped point cloud instance:
     if point_cloud.has_colors():
         cropped_point_cloud.colors = o3d.utility.Vector3dVector(
             np.asarray(point_cloud.colors)[valid_index, :])

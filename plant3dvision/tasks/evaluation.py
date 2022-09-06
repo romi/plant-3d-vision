@@ -347,7 +347,7 @@ class VoxelsEvaluation(EvaluationTask):
 
 
 class CylinderRadiusGroundTruth(RomiTask):
-    """Provide a point-cloud with a cylindrical shape and a known radius & height.
+    """Provide a point cloud with a cylindrical shape and a known radius & height.
 
     Parameters
     ----------
@@ -359,14 +359,14 @@ class CylinderRadiusGroundTruth(RomiTask):
     height : luigi.Parameter, optional
         The height of the cylinder to create. Defaults to "random", but can be a float.
     nb_points : luigi.IntParameter, optional
-        The number of points used to create the cylinder point-cloud. Defaults to "10000".
+        The number of points used to create the cylinder point cloud. Defaults to "10000".
 
     Notes
     -----
     These parameters should be defined in TOML config file given to `romi_run_task` CLI.
     Module: plant3dvision.tasks.evaluation
     Upstream task format: None
-    Output task format: PLY point-cloud & JSON metadata (with known radius).
+    Output task format: PLY point cloud & JSON metadata (with known radius).
 
     """
     upstream_task = None
@@ -389,7 +389,7 @@ class CylinderRadiusGroundTruth(RomiTask):
         else:
             self.height = float(self.height)
 
-        # - Create the cylinder point-cloud:
+        # - Create the cylinder point cloud:
         from plant3dvision.evaluation import create_cylinder_pcd
         gt_cyl = create_cylinder_pcd(self.radius, self.height, self.nb_points)
         # - Visualization:
@@ -405,7 +405,7 @@ class CylinderRadiusGroundTruth(RomiTask):
 
 
 class CylinderRadiusEstimation(RomiTask):
-    """Extract specific features of a cylinder shaped point-cloud.
+    """Extract specific features of a cylinder shaped point cloud.
 
     Parameters
     ----------
@@ -427,7 +427,7 @@ class CylinderRadiusEstimation(RomiTask):
 
     def run(self):
         from plant3dvision.evaluation import estimate_cylinder_radius
-        # - Load the PLY file containing the cylinder point-cloud:
+        # - Load the PLY file containing the cylinder point cloud:
         cylinder_fileset = self.input().get()
         input_file = self.input_file()
         pcd = io.read_point_cloud(input_file)

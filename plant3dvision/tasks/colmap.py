@@ -462,7 +462,7 @@ class Colmap(RomiTask):
         ID of the calibration scan used to replace the "approximate poses" from the Scan task by the "exact poses" from the CalibrationScan task.
         Default to NO calibration scan.
     bounding_box : luigi.DictParameter, optional
-        Volume dictionary used to crop the point-cloud after colmap reconstruction and keep only points associated to the plant.
+        Volume dictionary used to crop the point cloud after colmap reconstruction and keep only points associated to the plant.
         By default, it uses the scanner workspace defined in the 'images' fileset.
         Defined as `{'x': [int, int], 'y': [int, int], 'z': [int, int]}`.
         Defaults to NO bounding-box.
@@ -536,7 +536,7 @@ class Colmap(RomiTask):
             except:
                 pass
 
-        # An Error should not be raised as it force to know the pointcloud geometry
+        # An Error should not be raised as it force to know the point cloud geometry
         #  before even attempting its reconstruction.
         # if bounding_box is None:
         #     raise IOError(
@@ -695,7 +695,7 @@ class Colmap(RomiTask):
         if dense is not None:
             outfile = self.output_file(COLMAP_DENSE_ID)
             io.write_point_cloud(outfile, dense)
-        # - Save the point-cloud bounding-box in task metadata
+        # - Save the point cloud bounding-box in task metadata
         self.output().get().set_metadata("bounding_box", bounding_box)
 
         from pathlib import Path

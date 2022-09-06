@@ -239,7 +239,7 @@ class TriangleMesh(RomiTask):
     upstream_task = luigi.TaskParameter(default=PointCloud)
     library = luigi.Parameter(default="open3d")  # ["cgal", "open3d"]
     filtering = luigi.Parameter(
-        default="most connected triangles")  # ["", "most connected triangles", "largest connected triangles", "dbscan point-cloud"]
+        default="most connected triangles")  # ["", "most connected triangles", "largest connected triangles", "dbscan point cloud"]
 
     depth = luigi.IntParameter(default=9)  # used by open3d library
 
@@ -247,8 +247,8 @@ class TriangleMesh(RomiTask):
         from plant3dvision import proc3d
         point_cloud = io.read_point_cloud(self.input_file())
 
-        # TODO: Add DBSCAN clustering method to filter the point-cloud prior to meshing
-        if self.filtering == "dbscan point-cloud":
+        # TODO: Add DBSCAN clustering method to filter the point cloud prior to meshing
+        if self.filtering == "dbscan point cloud":
             raise NotImplementedError("Coming soon!")
 
         if self.library == "cgal":
@@ -370,7 +370,7 @@ class OrganSegmentation(RomiTask):
         labels : list
             List of labels associated to the points.
         label : str
-            Label used to select points from pointcloud.
+            Label used to select points from point cloud.
 
         Returns
         open3d.geometry.PointCloud
@@ -388,7 +388,7 @@ class OrganSegmentation(RomiTask):
         return pcd.select_by_index(list(idx_mask))
 
     def run(self):
-        # Read the pointcloud from the `upstream_task`
+        # Read the point cloud from the `upstream_task`
         labelled_pcd = io.read_point_cloud(self.input_file())
         # Initialize the output FileSet object.
         output_fileset = self.output().get()
