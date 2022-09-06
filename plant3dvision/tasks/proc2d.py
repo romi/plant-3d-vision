@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import sys
 
 import luigi
 import numpy as np
 from skimage.exposure import rescale_intensity
 from tqdm import tqdm
 
+from plant3dvision.camera import colmap_params_from_kwargs
 from plant3dvision.tasks.colmap import Colmap
 from plantdb import io
 from romitask.log import configure_logger
@@ -32,44 +34,56 @@ class Undistorted(FileByFileTask):
 
     """
     upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)
-    camera_model = luigi.Parameter("Colmap")  # ['Colmap', 'IntrinsicCalibration']
-    camera_model_id = luigi.Parameter(default="")  # To use with 'IntrinsicCalibration'
-
-    # def input(self):
-    #     return self.upstream_task().output()
+    camera_model_src = luigi.Parameter("Colmap")  # ['Colmap', 'IntrinsicCalibration', 'ExtrinsicCalibration']
+    camera_model = luigi.Parameter(default="OPENCV")  # set it if `camera_model_src = 'IntrinsicCalibration'`
+    intrinsic_calib_scan_id = luigi.Parameter(default="")  # set this to a scan with an `IntrinsicCalibration` task
+    extrinsic_calib_scan_id = luigi.Parameter(default="")  # set this to a scan with an `ExtrinsicCalibration` task
 
     def requires(self):
-        # return [Colmap(), Scan(), self.upstream_task()]
-        if str(self.camera_model).lower() == 'intrinsiccalibration':
-            logger.info(f"Using calibration scan: {self.camera_model_id}...")
-            camera_task = FilesetExists(scan_id=self.camera_model_id, fileset_id='camera_model')
-            return {"camera": camera_task, "images": self.upstream_task()}
+        from plant3dvision.tasks.calibration import ExtrinsicCalibrationExists
+        from plant3dvision.tasks.calibration import IntrinsicCalibrationExists
+        if self.extrinsic_calib_scan_id == "" and str(self.camera_model_src).lower() == 'intrinsiccalibration':
+            logger.critical("If you use an IntrinsicCalibration as source for camera model, you have to define `extrinsic_calib_scan_id`!")
+            sys.exit("Missing poses estimation in IntrinsicCalibration.")
+
+        if self.intrinsic_calib_scan_id != "":
+            intrinsic_calib_scan = IntrinsicCalibrationExists(scan_id=self.intrinsic_calib_scan_id,
+                                                            camera_model=self.camera_model)
+        if self.extrinsic_calib_scan_id != "":
+            extrinsic_calib_scan = ExtrinsicCalibrationExists(scan_id=self.extrinsic_calib_scan_id)
+
+        if str(self.camera_model_src).lower() == 'intrinsiccalibration':
+            logger.info(f"Using intrinsic calibration scan: {self.intrinsic_calib_scan_id}...")
+            return {"camera": intrinsic_calib_scan, "images": self.upstream_task()}
+        elif str(self.camera_model_src).lower() == 'extrinsiccalibration':
+            logger.info(f"Using extrinsic calibration scan: {self.extrinsic_calib_scan_id}...")
+            return {"camera": extrinsic_calib_scan, "images": self.upstream_task()}
         else:
             return {"camera": Colmap(), "images": self.upstream_task()}
 
     def run(self):
+        poses = None
+        colmap_camera = None
+        if str(self.camera_model_src).lower() == 'intrinsiccalibration':
+            from plant3dvision.camera import get_camera_params_from_arrays
+            camera_params = get_camera_params_from_arrays(self.camera_model)
+            params = colmap_params_from_kwargs(**camera_params)
+            colmap_camera = {"camera_model": {"camera_model": self.camera_model, "params": params}}
+        elif str(self.camera_model_src).lower() == 'extrinsiccalibration':
+            from plant3dvision.camera import get_camera_arrays_from_params
+            colmap_camera, poses = self.input()['camera']
+
         images_fileset = self.input()["images"].get().get_files(query=self.query)
-        if str(self.camera_model).lower() == 'intrinsiccalibration':
-            camera_file = self.input()['camera'].get().get_file("camera_model")
-            camera_dict = io.read_json(camera_file)
-            camera_mtx = np.array(camera_dict["camera_matrix"], dtype='float32')
-            distortion_vect = np.array(camera_dict["distortion"], dtype='float32')
-        elif str(self.camera_model).lower() == 'colmap':
-            camera_file = self.input()['camera'].get().get_file("cameras")
-            camera_dict = io.read_json(camera_file)
-            camera_params = camera_dict['1']['params']
-            camera_mtx = np.matrix([[camera_params[0], 0, camera_params[2]],
-                                    [0, camera_params[1], camera_params[3]],
-                                    [0, 0, 1]])
-            distortion_vect = np.array(camera_params[4:])
-        else:
-            camera_mtx, distortion_vect = None, None
-
-        self.camera_mtx = camera_mtx
-        self.distortion_vect = distortion_vect
         output_fileset = self.output().get()
-
         for fi in tqdm(images_fileset, unit="file"):
+            # Add 'calibrated_pose' to image metadata
+            if poses is not None:
+                fi.set_metadata({'calibrated_pose': poses[fi.id]})
+            # Add 'colmap_camera' to image metadata
+            if str(self.camera_model_src).lower() == 'intrinsiccalibration':
+                fi.set_metadata({'colmap_camera': colmap_camera})
+            elif str(self.camera_model_src).lower() == 'extrinsiccalibration':
+                fi.set_metadata({'colmap_camera': colmap_camera[fi.id]})
             outfi = self.f(fi, output_fileset)
             if outfi is not None:
                 m = fi.get_metadata()
@@ -78,9 +92,13 @@ class Undistorted(FileByFileTask):
 
     def f(self, fi, outfs):
         from plant3dvision import proc2d
-        if self.camera_mtx is not None:
-            x = io.read_image(fi)
-            x = proc2d.undistort(x, self.camera_mtx, self.distortion_vect)
+        from plant3dvision.camera import get_camera_kwargs_from_images_metadata
+        from plant3dvision.camera import get_camera_arrays_from_params
+        x = io.read_image(fi)
+        cam_kwargs = get_camera_kwargs_from_images_metadata(fi)
+        if cam_kwargs is not None:
+            camera_mtx, distortion_vect = get_camera_arrays_from_params(**cam_kwargs)
+            x = proc2d.undistort(x, camera_mtx, distortion_vect)
             outfi = outfs.create_file(fi.id)
             io.write_image(outfi, x)
             return outfi
@@ -90,7 +108,7 @@ class Undistorted(FileByFileTask):
 
 
 class Masks(FileByFileTask):
-    """ Compute masks from RGB images.
+    """Compute masks from RGB images.
 
     The output of this task is a binary image fileset.
 
