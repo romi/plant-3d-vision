@@ -18,23 +18,49 @@ logger = configure_logger(__name__)
 
 
 class PointCloud(RomiTask):
-    """ Computes a point cloud from volumetric voxel data (either single or multiclass).
+    """Computes a point cloud from volumetric voxel data (either single or multiclass).
 
-    Module: plant3dvision.tasks.proc3d
-    Default upstream tasks: Voxels
+    Attributes
+    ----------
+    upstream_task : luigi.TaskParameter, optional
+        The task to use upstream to the `PointCloud` tasks. Restricted to ``'Voxels'`` for now.
+        Defaults to ``'Voxels'``.
+    level_set_value : luigi.FloatParameter, optional
+        ???
+        Defaults to ``1.0``.
+    background_prior : luigi.FloatParameter, optional
+        ???
+        Used only if `labels` were defined in upstream tasks (multiclass).
+        Defaults to ``1.0``.
+    min_contrast : luigi.FloatParameter, optional
+        ???
+        Used only if `labels` were defined in upstream tasks (multiclass).
+        Defaults to ``10.0``.
+    min_score : luigi.FloatParameter, optional
+        ???
+        Used only if `labels` were defined in upstream tasks (multiclass).
+        Defaults to ``0.2``.
+
+    See Also
+    --------
+    plant3dvision.proc3d.vol2pcd
+
+    Notes
+    -----
     Upstream task format: npz file with as many 3D array as classes
     Output task format: single point cloud in ply. Metadata may include label name if multiclass.
 
     """
     upstream_task = luigi.TaskParameter(default=Voxels)
     level_set_value = luigi.FloatParameter(default=1.0)
-    log = luigi.BoolParameter(default=False)
-    background_prior = luigi.FloatParameter(default=1.0)
-    min_contrast = luigi.FloatParameter(default=10.0)
-    min_score = luigi.FloatParameter(default=0.2)
+
+    background_prior = luigi.FloatParameter(default=1.0)  # only used if labels were defined (multiclass)
+    min_contrast = luigi.FloatParameter(default=10.0)  # only used if labels were defined (multiclass)
+    min_score = luigi.FloatParameter(default=0.2)  # only used if labels were defined (multiclass)
 
     def run(self):
         ifile = self.input_file()
+        # Guess if it's a labelled volume:
         try:
             voxels = io.read_npz(ifile)
             if (len(voxels.keys()) == 1):
@@ -45,6 +71,7 @@ class PointCloud(RomiTask):
         except:
             voxels = io.read_volume(ifile)
             multiclass = False
+
         if multiclass:
             l = list(voxels.keys())
             # background_idx = l.index("background")
@@ -82,8 +109,7 @@ class PointCloud(RomiTask):
                         pred_c *= (pred_c > (self.min_contrast * pred_no_c))
                     pred_c *= (pred_c > self.min_score)
 
-                    out = proc3d.vol2pcd(pred_c, origin, voxel_size,
-                                         self.level_set_value)
+                    out = proc3d.vol2pcd(pred_c, origin, voxel_size, self.level_set_value)
                     color = np.zeros((len(out.points), 3))
                     if l[i] in colors:
                         color[:] = np.asarray(colors[l[i]])
@@ -100,8 +126,7 @@ class PointCloud(RomiTask):
         else:
             origin = np.array(ifile.get_metadata('origin'))
             voxel_size = float(ifile.get_metadata('voxel_size'))
-            out = proc3d.vol2pcd(voxels, origin, voxel_size,
-                                 self.level_set_value)
+            out = proc3d.vol2pcd(voxels, origin, voxel_size, self.level_set_value)
             io.write_point_cloud(self.output_file(), out)
             self.output_file().set_metadata({'voxel_size': voxel_size})
 
