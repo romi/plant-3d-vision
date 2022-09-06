@@ -135,7 +135,8 @@ class Backprojection(object):
         # Print info about buffer array size and associated memory cost for `self.values_h`:
         buff_size = np.ones(self.shape, dtype=self.dtype).nbytes
         logger.info(f"Buffer shape is {self.shape}")
-        logger.info(f"Required memory for buffer is {buff_size} bytes!")
+        from plant3dvision.utils import auto_format_bytes
+        logger.info(f"Required memory for buffer is {auto_format_bytes(buff_size)}!")
 
         # Define attributes used to initialize OpenCL buffers:
         self.values_h = None
