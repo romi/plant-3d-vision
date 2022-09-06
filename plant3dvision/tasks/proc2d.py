@@ -21,16 +21,28 @@ logger = configure_logger(__name__)
 class Undistorted(FileByFileTask):
     """Fix images distortion using computed intrinsic camera parameters by Colmap.
 
-    This task requires the ``'Colmap'`` task.
-    The output of this task is an image fileset.
-
-    Parameters
+    Attributes
     ----------
     upstream_task : luigi.TaskParameter, optional
         The task to use upstream to the `Undistorted` tasks. It should be a tasks that generates a ``Fileset`` of RGB images.
         It can thus be ``'ImagesFilesetExists'`` or ``'Colmap'``. Defaults to ``'ImagesFilesetExists'``.
+    camera_model_src : luigi.Parameter, optional
+        Source of the camera model, can be in ['Colmap', 'IntrinsicCalibration', 'ExtrinsicCalibration']
     camera_model : luigi.Parameter, optional
-        Source of camera model.
+        Name of the camera model to get if `camera_model_src='IntrinsicCalibration'`.
+    intrinsic_calib_scan_id : luigi.Parameter, optional
+        Name of the intrinsic calibration scan (dataset) to use. Used only if  `camera_model_src='IntrinsicCalibration'`.
+    extrinsic_calib_scan_id : luigi.Parameter, optional
+        Name of the extrinsic calibration scan (dataset) to use. Used only if  `camera_model_src='ExtrinsicCalibration'`.
+
+    See Also
+    --------
+    plant3dvision.proc2d.undistort
+
+    Notes
+    -----
+    This task requires the ``'Colmap'`` task.
+    The output of this task is an image fileset.
 
     """
     upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)
