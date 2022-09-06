@@ -436,7 +436,7 @@ class ExtrinsicCalibration(RomiTask):
         from plant3dvision.filenames import COLMAP_CAMERAS_ID
         from plant3dvision.calibration import calibration_figure
         from plant3dvision.camera import format_camera_params
-        from plant3dvision.camera import get_camera_model_from_colmap
+        from plant3dvision.camera import get_camera_kwargs_from_colmap_json
         from plant3dvision.tasks.colmap import get_cnc_poses
         from plant3dvision.utils import recursively_unfreeze
 
@@ -470,21 +470,19 @@ class ExtrinsicCalibration(RomiTask):
         )
         # - Run colmap reconstruction:
         logger.info("Start a Colmap reconstruction...")
-        _, images, cameras, _, _, _ = colmap_runner.run()
+        _, _, cameras, _, _, _ = colmap_runner.run()
         # - Save colmap camera(s) model(s) & parameters in JSON file:
         outfile = self.output_file(COLMAP_CAMERAS_ID)
         io.write_json(outfile, cameras)
         logger.info(cameras)
 
-        # - Update `images`dict  to be indexed by `File.filename` and keep only required 'rotmat' & 'tvec':
-        images = {img["name"]: {'rotmat': img['rotmat'], 'tvec': img['tvec']} for i, img in images.items()}
-
         # - Estimate images pose with COLMAP rotation and translation matrices:
-        logger.info("Estimate images pose with COLMAP rotation and translation matrices...")
+        logger.info("Estimate image poses with COLMAP rotation and translation matrices...")
         colmap_poses = {}
-        for i, fi in enumerate(images_fileset.get_files()):
-            colmap_poses[fi.id] = compute_calibrated_poses(np.array(images[fi.filename]['rotmat']),
-                                                           np.array(images[fi.filename]['tvec']))
+        for fi in images_fileset.get_files():
+            rotmat = np.array(fi.get_metadata("colmap_camera")['rotmat'])
+            tvec = np.array(fi.get_metadata("colmap_camera")['tvec'])
+            colmap_poses[fi.id] = compute_calibrated_poses(rotmat, tvec)
             # - Export the estimated pose to the image metadata:
             fi.set_metadata("calibrated_pose", colmap_poses[fi.id])
 
@@ -502,7 +500,7 @@ class ExtrinsicCalibration(RomiTask):
 
         # Use of try/except strategy to avoid failure of luigi pipeline (destroy all fileset!)
         try:
-            camera_kwargs = get_camera_model_from_colmap(cameras)
+            camera_kwargs = get_camera_kwargs_from_colmap_json(cameras)
         except:
             logger.warning("Could not format the camera parameters from COLMAP camera!")
             logger.info(f"COLMAP camera: {cameras}")
