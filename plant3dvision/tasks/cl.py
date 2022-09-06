@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import sys
 
 import luigi
 import numpy as np
@@ -17,90 +18,93 @@ logger = configure_logger(__name__)
 class Voxels(RomiTask):
     """ Computes a volume from backprojection of 2D segmented images.
 
-    Module: plant3dvision.tasks.cl
-    Default upstream tasks:
-        - upstream_mask: Masks
-        - upstream_colmap: Colmap
-    Upstream task format:
-        - upstream_mask: Fileset with grayscale images
-        - upstream_colmap: Output of Colmap task
-    Output fileset format: npz file with as many arrays as classes
-
-    Parameters
+    Attributes
     ----------
+    upstream_mask : luigi.TaskParameter, optional
+        Upstream task that generate the masks.
+        Defaults to ``Masks``.
+    upstream_colmap : luigi.TaskParameter, optional
+        Upstream task that generate the camera intrinsics (fx, fy, cx, cy) & poses ('rotmat', 'tvec').
+        Defaults to ``Colmap``.
+    camera_metadata : luigi.Parameter, optional
+        Name of the entry to get from the images metadata dictionary.
+        Use it to get the camera intrinsics (fx, fy, cx, cy) & poses ('rotmat', 'tvec').
+        Defaults to ``colmap_camera``.
     voxel_size : luigi.FloatParameter
-        size of one side of voxels
+        Size of a (square) voxel, to compare with the `bounding_box` to reconstruct.
+        That is if ``voxel_size=1.``, then the final shape of the _volume_ is the same as the ``bounding_box``.
+        defaults to ``1.``.
     type : luigi.Parameter in {"carving", "averaging"}
-        Type of backprojection to performs. (TODO: See 3D documentation)
-    labels : luigi.ListParameter
-        ???
-    use_colmap_poses : luigi.BoolParameter, optional
-        Either use precomputed camera poses or output from the Colmap task,
-        default=True
-    log : luigi.BoolParameter, optional
-        in the case of "averaging" type, whether to apply log when averaging
-        values, default=True.
+        Type of back-projection to performs.
     invert : luigi.BoolParameter, optional
-        ???, default=True
-    multiclass : luigi.BoolParameter, optional
-        whether input data is single class or multiclass (e.g as an output of
-        Segmentation2D), default=False
-        DEPRECATED ? Not used in the code...
+        If ``True``, invert the values of the mask.
+        Defaults to ``False``.
+    labels : luigi.ListParameter
+        List of labels to use from a labelled mask dataset.
+    log : luigi.BoolParameter, optional
+        If ``True``, convert the mask images to logarithmic values for 'averaging' `type` prior to back-projection.
+        Defaults to ``False``.
 
     See Also
     --------
-    cl.Backprojection: The class implementing the back-projection methods.
+    plant3dvision.cl.Backprojection
+
+    Notes
+    -----
+    Upstream task format:
+        - upstream_mask: `Fileset` with grayscale images
+        - upstream_colmap: Output of Colmap task
+    Output fileset format: NPZ file with as many arrays as `self.labels`
 
     """
     upstream_task = None
     upstream_mask = luigi.TaskParameter(default=Masks)
     upstream_colmap = luigi.TaskParameter(default=Colmap)
 
-    use_colmap_poses = luigi.BoolParameter(default=True)
+    camera_metadata = luigi.Parameter(default='colmap_camera')  # camera definition (intrinsic & poses) in metadata
     voxel_size = luigi.FloatParameter(default=1.0)
     type = luigi.Parameter(default="carving")
     log = luigi.BoolParameter(default=True)
 
     invert = luigi.BoolParameter(default=False)
     labels = luigi.ListParameter(default=[])
+    bounding_box = luigi.DictParameter(default=None)
 
     def requires(self):
-        if self.use_colmap_poses:
-            return {'masks': self.upstream_mask(),
-                    'colmap': self.upstream_colmap()}
+        if self.upstream_colmap.task_family == 'Colmap':
+            return {'masks': self.upstream_mask(), 'colmap': self.upstream_colmap()}
         else:
-            return {'masks': self.upstream_mask()}  # , 'colmap': None}
+            return {'masks': self.upstream_mask()}
 
     def run(self):
-        from plant3dvision import cl
+        from plant3dvision.cl import Backprojection
         masks_fileset = self.input()['masks'].get()
-        if len(self.labels) == 0:
-            labels = masks_fileset.get_metadata("label_names")
-            try:
-                assert labels is not None or len(self.labels) != 0
-            except AssertionError:
-                logger.warning("No metadata 'label_names' in `masks_fileset`!")
-                logger.debug(masks_fileset.get_metadata())
-        else:
-            labels = list(self.labels)
 
-        bounding_box = self.output().get().scan.get_metadata("bounding_box")
-        logger.debug(f"Bounding-box from output: {bounding_box}")
-
-        if self.use_colmap_poses:
+        # - Define bounding-box to use to define the shape of the voxel array:
+        # Get it from the `Scan` metadata:
+        if self.bounding_box is None:
+            self.bounding_box = self.output().get().scan.get_metadata("bounding_box")
+        logger.debug(f"Bounding-box from scan metadata: {self.bounding_box}")
+        # Get it from Colmap if required:
+        if self.bounding_box is None and self.upstream_colmap.task_family == 'Colmap':
             colmap_fileset = self.input()['colmap'].get()
-            if bounding_box is None:
-                bounding_box = colmap_fileset.get_metadata("bounding_box")
-            logger.debug(f"Bounding-box from colmap_fileset: {bounding_box}")
+            if self.bounding_box is None:
+                self.bounding_box = colmap_fileset.get_metadata("bounding_box")
+            logger.debug(f"Bounding-box from Colmap fileset: {self.bounding_box}")
+        # Try to get it from 'images' metadata in last resort:
+        if self.bounding_box is None:
+            self.bounding_box = ImagesFilesetExists().output().get().get_metadata("bounding_box")
 
-        if bounding_box is None:
-            bounding_box = ImagesFilesetExists().output().get().get_metadata("bounding_box")
+        if self.bounding_box is None:
+            logger.critical(f"Could not obtain valid bounding-box for {self.scan_id}!")
+            sys.exit("Error with bounding-box definition!")
+        else:
+            logger.info(f"Bounding-box to use: {self.bounding_box}")
 
-        logger.info(f"Bounding box : {bounding_box}")
-        x_min, x_max = bounding_box["x"]
-        y_min, y_max = bounding_box["y"]
-        z_min, z_max = bounding_box["z"]
-
+        # - Check if any displacement exists, and use it to modify the shape of the voxel array (to create):
+        x_min, x_max = self.bounding_box["x"]
+        y_min, y_max = self.bounding_box["y"]
+        z_min, z_max = self.bounding_box["z"]
         try:
             scan = masks_fileset.scan
             displacement = scan.get_metadata("displacement")
@@ -113,33 +117,39 @@ class Voxels(RomiTask):
         except:
             logger.warning("No 'displacement' found in scan metadata!")
 
-        # center = [(x_max + x_min) / 2, (y_max + y_min) / 2, (z_max + z_min) / 2]
-        # widths = [x_max - x_min, y_max - y_min, z_max - z_min]
-
+        # - Define the shape of the voxel array (to create with `Backprojection`)
         nx = int((x_max - x_min) / self.voxel_size) + 1
         ny = int((y_max - y_min) / self.voxel_size) + 1
         nz = int((z_max - z_min) / self.voxel_size) + 1
-
+        # - Defines the origin of the voxel array (to create with `Backprojection`)
         origin = np.array([x_min, y_min, z_min])
+        # - Define labels to use with `Backprojection`, if any:
+        if len(self.labels) == 0:
+            # Try to automatically get labels from the Mask metadata:
+            labels = masks_fileset.get_metadata("label_names")
+            try:
+                assert labels is not None and len(labels) != 0
+            except AssertionError:
+                logger.warning("No metadata 'label_names' in `masks_fileset`!")
+                logger.debug(masks_fileset.get_metadata())
+        else:
+            # Defines labels to use in case of semantic labelled masks:
+            labels = list(self.labels)
 
-        logger.debug("Running `cl.Backprojection`...")
-        sc = cl.Backprojection(
-            [nx, ny, nz], [x_min, y_min, z_min], self.voxel_size,
-            type=self.type, labels=labels, log=self.log)
+        logger.debug("Initialize `Backprojection` instance...")
+        sc = Backprojection(shape=[nx, ny, nz], origin=[x_min, y_min, z_min], voxel_size=float(self.voxel_size),
+                            type=str(self.type), labels=labels, log=bool(self.log))
+        logger.debug("Processing the mask fileset...")
+        vol = sc.process_fileset(masks_fileset, str(self.camera_metadata), bool(self.invert))
+        logger.debug(f"Voxel volume shape: {vol.shape}")
+        logger.debug(f"Voxel volume size: {vol.size}")
 
-        logger.debug("Running `sc.process_fileset`...")
-        vol = sc.process_fileset(masks_fileset,
-                                 use_colmap_poses=self.use_colmap_poses,
-                                 invert=self.invert)  # , images)
-        if self.log:
+        # If conversion to log was requested, convert back applying `np.exp`
+        if self.log and self.type == "averaging":
             vol = np.exp(vol)
             vol[vol > 1] = 1.0
-        logger.debug("size = %i" % vol.size)
-        # outfs = self.output().get()
-        outfile = self.output_file()
 
-        # logger.debug("sc.get_labels(masks_fileset):")
-        # logger.debug(sc.get_labels(masks_fileset))
+        outfile = self.output_file()
         if labels is not None:
             out = {}
             for i, label in enumerate(labels):
