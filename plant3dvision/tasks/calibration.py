@@ -15,6 +15,7 @@ from romitask import DatabaseConfig
 from romitask import FilesetTarget
 from romitask import RomiTask
 from romitask.log import configure_logger
+from romitask.task import DatasetExists
 from romitask.task import FileByFileTask
 from romitask.task import ImagesFilesetExists
 
@@ -508,3 +509,61 @@ class ExtrinsicCalibration(RomiTask):
         else:
             with open(join(self.output().get().path(), "camera.txt"), 'w') as f:
                 f.writelines("\n".join([f"{k}: {v}" for k, v in camera_kwargs.items()]))
+
+
+class IntrinsicCalibrationExists(DatasetExists):
+    """Task that requires a dataset (scan) with an 'camera_model' fileset to exist."""
+    camera_model = luigi.Parameter(default="OPENCV")
+
+    def output(self):
+        from plant3dvision.camera import get_camera_arrays_from_params
+        db = DatabaseConfig().scan.db
+        calibration_scan = db.get_scan(self.scan_id)
+        calib_fs = calibration_scan.get_filesets('camera_model')
+        cameras = io.read_json(calib_fs.get_file("cameras"))
+        camera, distortion = get_camera_arrays_from_params(cameras[str(self.camera_model)])
+        return camera, distortion
+
+    def complete(self):
+        return True
+
+    def run(self):
+        db = DatabaseConfig().scan.db
+        calibration_scan = db.get_scan(self.scan_id)
+        if calibration_scan is None:
+            raise OSError(f"Scan {self.scan_id} does not exist!")
+        # - Check an ExtrinsicCalibration task has been performed for the calibration scan:
+        calib_fs = calibration_scan.get_filesets('camera_model')
+        if len(calib_fs) == 0:
+            raise Exception(f"Could not find an 'camera_model' fileset in calibration scan '{calibration_scan.id}'!")
+
+
+class ExtrinsicCalibrationExists(DatasetExists):
+    """Task that requires a dataset (scan) with an 'ExtrinsicCalibration*' fileset to exist."""
+
+    def output(self):
+        db = DatabaseConfig().scan.db
+        calibration_scan = db.get_scan(self.scan_id)
+        images_fs = calibration_scan.get_fileset('images')
+        poses = {im.id: im.get_metadata("calibrated_pose") for im in images_fs.get_files()}
+        colmap_camera = {im.id: im.get_metadata("colmap_camera") for im in images_fs.get_files()}
+        return colmap_camera, poses
+
+    def complete(self):
+        return True
+
+    def run(self):
+        db = DatabaseConfig().scan.db
+        calibration_scan = db.get_scan(self.scan_id)
+        if calibration_scan is None:
+            raise OSError(f"Scan {self.scan_id} does not exist!")
+        # - Check an ExtrinsicCalibration task has been performed for the calibration scan:
+        calib_fs = [s for s in calibration_scan.get_filesets() if "ExtrinsicCalibration" in s.id]
+        if len(calib_fs) == 0:
+            raise Exception(
+                f"Could not find an 'ExtrinsicCalibration' fileset in calibration scan '{calibration_scan.id}'!")
+        else:
+            # TODO: What happens if we have more than one 'ExtrinsicCalibration' job ?!
+            if len(calib_fs) > 1:
+                logger.warning(
+                    f"More than one 'ExtrinsicCalibration' found for calibration scan '{calibration_scan.id}'!")
