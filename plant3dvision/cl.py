@@ -69,11 +69,11 @@ class Backprojection(object):
     values_d : pyopencl.Buffer
         ???
     intrinsics_d : pyopencl.Buffer
-        [f_x, f_y, c_x, c_y] ???
+        [f_x, f_y, c_x, c_y] focal length in x&y and optical center in x&y.
     rot_d : pyopencl.Buffer
-        rotation matrix of the camera pose ???
+        rotation matrix of the camera pose.
     tvec_d : pyopencl.Buffer
-        translation vector of the camera pose ???
+        translation vector of the camera pose.
     volinfo_d : pyopencl.Buffer
         ???
     shape_d : pyopencl.Buffer
@@ -166,6 +166,7 @@ class Backprojection(object):
         self.shape_d = cl.Buffer(
             ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=np.array(self.shape, dtype=np.int32)
         )
+        return
 
     def process_view(self, intrinsics, rot, tvec, mask):
         """Process a new view.
@@ -184,7 +185,7 @@ class Backprojection(object):
         """
         if self.dtype == np.float32 and mask.dtype == np.uint8:
             logger.debug("type is uint8")
-            mask = mask / 255
+            mask = np.array(mask / 255.).astype(self.dtype)
         # logger.critical(self.dtype)
         if self.log and self.dtype == np.float32:
             mask = np.log(EPS + mask)
@@ -205,86 +206,76 @@ class Backprojection(object):
                     self.intrinsics_d, self.rot_d,
                     self.tvec_d, self.volinfo_d, self.shape_d)
         queue.finish()
+        return
 
     def values(self):
         """Gets computed values from the OpenCL device."""
         cl.enqueue_copy(queue, self.values_h, self.values_d)
         return self.values_h
 
-    def process_fileset(self, fs, use_colmap_poses=False, invert=False):
+    def process_fileset(self, fs, camera_metadata, invert=False):
         """Processes a whole fileset.
 
         Parameters
         ----------
         fs : plantdb.DB.Fileset
             Fileset to process.
-        use_colmap_poses : bool
-            If `True` use the poses estimated by colmap (metadata `colmap_camera`),
-            else should be defined in metadata `camera`. Default is `False`
-        invert : bool
-            If `True`, default `False`, invert the values of the mask file to process.
+        camera_metadata : str
+            Name of the metadata to use to get the camera intrinsics (fx, fy, cx, cy) & poses.
+        invert : bool, optional
+            If ``True``, invert the values of the mask file to process.
+            Defaults to ``False``.
 
         """
         if self.labels is not None:
-            labels = self.labels
-            logger.debug(f"labels: {labels}")
-            result = np.zeros((len(labels), *self.shape))
-            for i, l in enumerate(labels):
-                result[i, :] = self.process_label(fs, l, use_colmap_poses, invert=invert)
+            result = np.zeros((len(self.labels), *self.shape))
+            for i, label in enumerate(self.labels):
+                logger.info(f"Processing label '{label}'...")
+                result[i, :] = self.process_label(fs, camera_metadata, label, invert)
             return result
         else:
-            return self.process_label(fs, use_colmap_poses=use_colmap_poses, invert=invert)
+            return self.process_label(fs, camera_metadata, None, invert=invert)
 
-    def process_label(self, fs, label=None, use_colmap_poses=False, invert=False):
+    def process_label(self, fs, camera_metadata, label=None, invert=False):
         """Processes a whole fileset for given label.
 
         Parameters
         ----------
         fs : plantdb.DB.Fileset
             Fileset to process.
-        label: str
+        camera_metadata : str
+            Name of the metadata to use to get the camera intrinsics (fx, fy, cx, cy) & poses ('rotmat', 'tvec').
+        label: str, optional
             Name of the label to process, can be `None`.
-        use_colmap_poses: bool
-            If `True` use the poses estimated by colmap (metadata `colmap_camera`),
-            else should be defined in metadata `camera`. Default is `False`
-        invert: bool
-            If `True`, default `False`, invert the values of the mask file to
-            process.
+        invert: bool, optional
+            If ``True``, invert the values of the mask file to process.
+            Defaults to ``False``.
 
         """
-        self.clear()
-        if label is not None:
-            logger.debug("processing label %s" % label)
-
+        self.clear()  # clear
         for fi in fs.get_files():
             # Skip file if not of the right label (when defined)
             if label is not None and fi.get_metadata("channel") != label:
                 continue
             logger.debug("processing file %s" % fi.id)
-
-            if use_colmap_poses:
-                cam = fi.get_metadata('colmap_camera')
-            else:
-                cam = fi.get_metadata('camera')
-
+            # Get camera dictionary from mask metadata
+            cam = fi.get_metadata(camera_metadata)
             if cam is None:
                 logger.warning("Could not get camera pose for view, skipping...")
                 continue
-
-            camera_model = cam["camera_model"]
-
-            width = camera_model['width']
-            height = camera_model['height']
-            intrinsics = camera_model['params'][0:4]
-
+            # Load camera intrinsic parameters:
+            intrinsics = cam["camera_model"]['params'][0:4]
+            # Load camera poses as rotation matrix and translation vector:
             rot = sum(cam['rotmat'], [])
             tvec = cam['tvec']
+            # Load mask image:
             mask = io.read_image(fi)
+            # Invert mask if required:
             if invert and mask.dtype == np.uint8:
                 mask = 255 - mask
             if invert and mask.dtype == np.float32:
                 mask = 1.0 - mask
-
+            # Process the view:
             self.process_view(intrinsics, rot, tvec, mask)
 
         result = self.values()
@@ -295,6 +286,7 @@ class Backprojection(object):
         """Clear computed values from the OpenCL device."""
         self.values_h = self.default_value * np.ones(self.shape).astype(self.dtype)
         cl.enqueue_copy(queue, self.values_d, self.values_h)
+        return
 
 
 class Geodesics():
