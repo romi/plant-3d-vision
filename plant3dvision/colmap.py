@@ -798,16 +798,15 @@ class ColmapRunner(object):
             raise Exception(msg)
 
         # -- Export computed COLMAP camera model to metadata for each file of the input fileset:
-        for i, fi in enumerate(self.fileset.get_files()):
-            # - Try to match the file id (from input fileset) to one from COLMAP image model
-            key = None
-            for k in images.keys():
-                img_name = splitext(images[k]['name'])[0]
-                if img_name == fi.id or img_name == fi.get_metadata('image_id'):
-                    key = k
-                    break  # break "search loop" when match is found!
-            # - If match is found, add a 'colmap_camera' entry to the file metadata:
-            if key is not None:
+        img_names = {splitext(images[k]['name'])[0]: k for k in images.keys()}  # image id indexed dict
+        for fi in self.fileset.get_files():
+            try:
+                # - Try to match the file id (from input fileset) to one from COLMAP image model
+                key = img_names[fi.id]
+            except KeyError:
+                logger.error(f"No pose & camera model defined by COLMAP for image '{fi.id}'!")
+            else:
+                # - If match is found, add a 'colmap_camera' entry to the file metadata:
                 camera = {
                     "rotmat": images[key]["rotmat"],
                     "tvec": images[key]["tvec"],

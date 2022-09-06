@@ -6,7 +6,6 @@ from os.path import splitext
 
 import luigi
 import numpy as np
-
 from plant3dvision.calibration import calibration_figure
 from plant3dvision.colmap import ColmapRunner
 from plant3dvision.filenames import COLMAP_CAMERAS_ID
@@ -406,8 +405,16 @@ def check_colmap_cfg(current_cfg, current_scan, calibration_scan):
         Calibration scan dataset to use (for camera poses).
     """
     import toml
-    with open(join(calibration_scan.path(), 'pipeline.toml'), 'r') as f:
+    calib_backup_cfg = join(calibration_scan.path(), 'pipeline.toml')
+    with open(calib_backup_cfg, 'r') as f:
         calib_scan_cfg = toml.load(f)
+    # Inform whether the backup config was found or not
+    if calib_scan_cfg == {}:
+        logger.critical(f"Could not obtain valid backup config from {calibration_scan.id}!")
+        logger.info(f"Tried to load from: {calib_backup_cfg}")
+        sys.exit("Missing backup configuration file from calibration scan!")
+    else:
+        logger.info(f"Loaded backup config from {calibration_scan.id}!")
 
     same_cfg = True
     for param, value in current_cfg.items():
@@ -570,33 +577,18 @@ class Colmap(RomiTask):
         # - Define the camera model:
         self.cli_args["model_aligner"]["--robust_alignment_max_error"] = str(self.robust_alignment_max_error)
 
-    @staticmethod
-    def _get_colmap_cameras_from_calib_scan(calibration_scan):
-        # - Check an ExtrinsicCalibration task has been performed for the calibration scan:
-        calib_fs = [s for s in calibration_scan.get_filesets() if "ExtrinsicCalibration" in s.id]
-        if len(calib_fs) == 0:
-            raise Exception(
-                f"Could not find a 'ExtrinsicCalibration' fileset in calibration scan '{calibration_scan.id}'!")
-        else:
-            # TODO: What happens if we have more than one 'ExtrinsicCalibration' job ?!
-            if len(calib_fs) > 1:
-                logger.warning(
-                    f"More than one 'ExtrinsicCalibration' found for calibration scan '{calibration_scan.id}'!")
-        # - Get the 'images' fileset from the extrinsic calibration scan
-        cameras_file = calib_fs[0].get_file("cameras")
-        return io.read_json(cameras_file)
-
     def set_camera_params(self):
         """Configure COLMAP CLI parameters to defines estimated camera parameters from intrinsic calibration scan."""
-        from plant3dvision.camera import get_camera_model_from_colmap
         from plant3dvision.camera import colmap_str_params
+        from plant3dvision.camera import get_camera_kwargs_from_colmap_json
+        from plant3dvision.camera import get_colmap_cameras_from_calib_scan
         images_fileset = self.input().get()
         db = images_fileset.scan.db
         calibration_scan = db.get_scan(self.calibration_scan_id)
         logger.info(f"Using intrinsic camera parameters from '{calibration_scan.id}'...")
 
-        colmap_cameras = self._get_colmap_cameras_from_calib_scan(calibration_scan)
-        cam_dict = get_camera_model_from_colmap(colmap_cameras)
+        colmap_cameras = get_colmap_cameras_from_calib_scan(calibration_scan)
+        cam_dict = get_camera_kwargs_from_colmap_json(colmap_cameras)
 
         # - Set 'feature_extractor' parameters:
         if "feature_extractor" not in self.cli_args:
@@ -657,7 +649,8 @@ class Colmap(RomiTask):
             camera_str = ""
             if self.use_calibration_camera:
                 from plant3dvision.camera import format_camera_params
-                cameras = self._get_colmap_cameras_from_calib_scan(calibration_scan)
+                from plant3dvision.camera import get_colmap_cameras_from_calib_scan
+                cameras = get_colmap_cameras_from_calib_scan(calibration_scan)
                 # Use of try/except strategy to avoid failure of luigi pipeline (destroy all fileset!)
                 try:
                     camera_str = format_camera_params(cameras)
