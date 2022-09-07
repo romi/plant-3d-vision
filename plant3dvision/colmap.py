@@ -436,7 +436,7 @@ class ColmapRunner(object):
 
         Notes
         -----
-        This `poses.txt` file is used by the `model_aligner` method.
+        This ``poses.txt`` file is used by the ``model_aligner`` method.
         Some files may be missing from the `poses.txt` file if they don't have the required metadata!
 
         """

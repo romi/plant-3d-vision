@@ -458,9 +458,28 @@ class Colmap(RomiTask):
     align_pcd : luigi.BoolParameter, optional
         Whether to "world-align" (scale and geo-reference) the reconstructed model using calibrated or estimated poses.
         Default to ``True``.
-    calibration_scan_id : luigi.Parameter, optional
-        ID of the calibration scan used to replace the "approximate poses" from the Scan task by the "exact poses" from the CalibrationScan task.
-        Default to NO calibration scan.
+    intrinsic_calibration_scan_id : luigi.Parameter, optional
+        If set, get the intrinsic camera parameters from this scan dataset.
+        These intrinsic parameters will be set in COLMAP ``feature_extractor`` and will not be refined by ``mapper``.
+        Using this requires to set the ``camera_model`` attribute, in order to select one model from those estimated.
+        Obviously, it requires to run the ``IntrinsicCalibration`` task on this dataset prior to using it here.
+        If ``extrinsic_calibration_scan_id`` is specified this does nothing!
+        Defaults to NO intrinsic calibration scan.
+    camera_model : luigi.Parameter, optional
+        If no intrinsic or extrinsic calibration scan is defined, this select the camera model to estimate by COLMAP.
+        If an ``intrinsic_calibration_scan_id`` is specified, this select the intrinsic parameters to set in COLMAP.
+        If an ``extrinsic_calibration_scan_id`` is specified and `use_calibration_camera` is ``True``, this does nothing!
+        Defaults to "OPENCV" camera model.
+    extrinsic_calibration_scan_id : luigi.Parameter, optional
+        If set, get the extrinsic camera parameters from this scan dataset.
+        These extrinsic parameter will be set in COLMAP ``poses.txt`` file using the estimated "calibrated_poses" metadata.
+        Obviously, it requires to run the ``ExtrinsicCalibration`` task on this dataset prior to using it here.
+        If set and ``use_calibration_camera`` is ``True``, also get the intrinsic camera parameters from this scan dataset.
+        That case does NOT require to set the ``camera_model`` attribute, as they will be in "OPENCV" format.
+        Defaults to NO extrinsic calibration scan.
+    use_calibration_camera : luigi.BoolParameter, optional
+        If ``True``, use the intrinsic parameters from ``extrinsic_calibration_scan_id``.
+        Else, estimate the intrinsic parameters automatically.
     bounding_box : luigi.DictParameter, optional
         Volume dictionary used to crop the point cloud after colmap reconstruction and keep only points associated to the plant.
         By default, it uses the scanner workspace defined in the 'images' fileset.
@@ -501,7 +520,8 @@ class Colmap(RomiTask):
     matcher = luigi.Parameter(default="exhaustive")
     compute_dense = luigi.BoolParameter(default=False)
     align_pcd = luigi.BoolParameter(default=True)
-    calibration_scan_id = luigi.Parameter(default="")
+    intrinsic_calibration_scan_id = luigi.Parameter(default="")
+    extrinsic_calibration_scan_id = luigi.Parameter(default="")
     use_calibration_camera = luigi.BoolParameter(default=True)
     camera_model = luigi.Parameter(default="OPENCV")
     use_gpu = luigi.BoolParameter(default=True)
@@ -577,18 +597,23 @@ class Colmap(RomiTask):
         # - Define the camera model:
         self.cli_args["model_aligner"]["--robust_alignment_max_error"] = str(self.robust_alignment_max_error)
 
-    def set_camera_params(self):
+    def set_camera_params(self, calibration_scan_id, calib_type):
         """Configure COLMAP CLI parameters to defines estimated camera parameters from intrinsic calibration scan."""
         from plant3dvision.camera import colmap_str_params
         from plant3dvision.camera import get_camera_kwargs_from_colmap_json
         from plant3dvision.camera import get_colmap_cameras_from_calib_scan
+        from plant3dvision.camera import get_camera_model_from_intrinsic
         images_fileset = self.input().get()
         db = images_fileset.scan.db
-        calibration_scan = db.get_scan(self.calibration_scan_id)
+        calibration_scan = db.get_scan(calibration_scan_id)
         logger.info(f"Using intrinsic camera parameters from '{calibration_scan.id}'...")
 
-        colmap_cameras = get_colmap_cameras_from_calib_scan(calibration_scan)
-        cam_dict = get_camera_kwargs_from_colmap_json(colmap_cameras)
+        if calib_type == "intrinsic":
+            cam_dict = get_camera_model_from_intrinsic(calibration_scan, str(self.camera_model))
+            cam_dict.update({"model": str(self.camera_model)})
+        else:
+            colmap_cameras = get_colmap_cameras_from_calib_scan(calibration_scan)
+            cam_dict = get_camera_kwargs_from_colmap_json(colmap_cameras)
 
         # - Set 'feature_extractor' parameters:
         if "feature_extractor" not in self.cli_args:
@@ -615,8 +640,12 @@ class Colmap(RomiTask):
         self.set_single_camera()
         self.set_camera_model()
         self.set_robust_alignment_max_error()
-        if self.calibration_scan_id != "" and self.use_calibration_camera:
-            self.set_camera_params()
+
+        if self.extrinsic_calibration_scan_id != "":
+            if self.use_calibration_camera:
+                self.set_camera_params(self.extrinsic_calibration_scan_id, 'extrinsic')
+        elif self.intrinsic_calibration_scan_id != "":
+            self.set_camera_params(self.intrinsic_calibration_scan_id, 'intrinsic')
 
         # - If no manual definition of cropping bounding-box, try to use the 'workspace' metadata
         if self.bounding_box is None:
@@ -633,15 +662,16 @@ class Colmap(RomiTask):
         current_scan = DatabaseConfig().scan
         images_fileset = self.input().get()
         # - Defines if colmap should use an extrinsic calibration dataset:
-        use_calibration = self.calibration_scan_id != ""
+        use_calibration = self.extrinsic_calibration_scan_id != ""
         if use_calibration:
             logger.info(f"Checking calibration scan compatibility with current scan...")
             # Check we can use this calibration scan with this scan dataset:
             db = images_fileset.scan.db
-            calibration_scan = db.get_scan(self.calibration_scan_id)
+            calibration_scan = db.get_scan(self.extrinsic_calibration_scan_id)
             current_cfg = {'single_camera': self.single_camera, 'camera_model': self.camera_model}
             check_colmap_cfg(current_cfg, current_scan, calibration_scan)
-            logger.info(f"Using poses from calibration scan: {self.calibration_scan_id}...")
+            # - Get pre-calibrated poses from extrinsic calib scan and set them as "calibrated_pose" metadata in current images fileset
+            logger.info(f"Using poses from calibration scan: {self.extrinsic_calibration_scan_id}...")
             images_fileset = use_precalibrated_poses(images_fileset, calibration_scan)
             # - Create the calibration figure:
             cnc_poses = get_cnc_poses(images_fileset.scan)
@@ -658,7 +688,7 @@ class Colmap(RomiTask):
                     logger.warning("Could not format the camera parameters from COLMAP camera!")
                     logger.info(f"COLMAP camera: {cameras}")
             calibration_figure(cnc_poses, colmap_poses, path=self.output().get().path(),
-                               scan_id=images_fileset.scan.id, calib_scan_id=str(self.calibration_scan_id),
+                               scan_id=images_fileset.scan.id, calib_scan_id=str(self.extrinsic_calibration_scan_id),
                                header=camera_str)
         else:
             logger.info("No calibration scan defined!")
@@ -671,7 +701,7 @@ class Colmap(RomiTask):
             self.compute_dense,
             self.cli_args,
             self.align_pcd,
-            use_calibration,
+            use_calibration,  # impact the ``poses.txt`` file
             bounding_box
         )
         # - Run colmap reconstruction:
