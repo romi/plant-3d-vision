@@ -93,7 +93,7 @@ def file_by_file_comparison(db, task_name, scan_replicates):
 
     Parameters
     ----------
-    db : plantdb.FSDB
+    db : plantdb.fsdb.FSDB
         Local ROMI database instance with the replicated scan datasets
     task_name : str
         name of the task to evaluation
@@ -134,7 +134,7 @@ def compare_task_output(db, task_name, scan_replicates, independent_runs=False):
 
     Parameters
     ----------
-    db : plantdb.FSDB
+    db : plantdb.fsdb.FSDB
         Local ROMI database instance with the replicated scan datasets
     task_name : str
         Name of the task to evaluation.
@@ -171,7 +171,7 @@ def compare_task_output(db, task_name, scan_replicates, independent_runs=False):
     comparison_config = json.load(open(CONF_FILE))
 
     def _perform_comparison(db, comparison_config, task_name, valid_replicates):
-        # Get the list of `plantdb.FSDB.Scan` instances to compare:
+        # Get the list of `plantdb.fsdb.Scan` instances to compare:
         valid_replicates = [db.get_scan(scan.name) for scan in valid_replicates]
         # - Get the comparison function(s) from the `robustness_evaluation` JSON configuration file
         comp_func = comparison_config[task_name]["comp_func"]
@@ -242,8 +242,8 @@ def fill_eval_db(eval_db, init_scan, config, previous_task, nb, models_path=None
         # - Get the path of the temporary ROMI database
         tmp_scan_folder = tmp_path / f"tmp_{init_scan.name}"
         logger.info(f"Create a temporary directory '{tmp_scan_folder}'.")
-        # - Create the `MARKER_FILE_NAME` marker for an active `plantdb.FSDB`
-        logger.info(f"Create the `{MARKER_FILE_NAME}` marker for an active `plantdb.FSDB`.")
+        # - Create the `MARKER_FILE_NAME` marker for an active `plantdb.fsdb.FSDB`
+        logger.info(f"Create the `{MARKER_FILE_NAME}` marker for an active `plantdb.fsdb.FSDB`.")
         with open(tmp_path / MARKER_FILE_NAME, 'w'):
             pass
 
@@ -379,7 +379,7 @@ def initialize_eval_db(test_db="", **kwargs):
         test_db = Path(test_db)
     # Create the evaluation DB directory:
     test_db.mkdir(exist_ok=True)
-    # - Creates the marker file to be able to get a `plantdb.FSDB` instance:
+    # - Creates the marker file to be able to get a `plantdb.fsdb.FSDB` instance:
     marker_file = test_db / MARKER_FILE_NAME
     marker_file.touch()
     return test_db

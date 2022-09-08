@@ -174,14 +174,14 @@ def _get_task_fileset(scan_dataset, task_name):
 
     Parameters
     ----------
-    scan_dataset : plantdb.FSDB.Scan
+    scan_dataset : plantdb.fsdb.Scan
         Dataset where to take the `Fileset` related to `task_name`.
     task_name : str
         Name of the task that generated the `Fileset`.
 
     Returns
     -------
-    plantdb.FSDB.Scan.Fileset
+    plantdb.fsdb.Fileset
         A `Fileset` instance produced by `task_name` in given `scan_dataset`
 
     Raises
@@ -218,7 +218,7 @@ def _get_files(scan_dataset, task_name, unique=False):
 
     Parameters
     ----------
-    scan_dataset : plantdb.FSDB.Scan
+    scan_dataset : plantdb.fsdb.Scan
         Dataset where to take the `Fileset` related to `task_name`.
     task_name : str
         Name of the task that generated the `File` in the `Fileset`.
@@ -227,7 +227,7 @@ def _get_files(scan_dataset, task_name, unique=False):
 
     Returns
     -------
-    list(plantdb.FSDB.Scan.Fileset.File)
+    list(plantdb.fsdb.File)
         The `File` objects produced by `task_name` in given `scan_dataset`
 
     Raises
@@ -255,11 +255,11 @@ def compare_intrinsic_params(db, task_name, scans_list):
 
     Parameters
     ----------
-    db : plantdb.FSDB
+    db : plantdb.fsdb.FSDB
         Local ROMI database instance with the replicated scan datasets
     task_name : str
         name of the task to test
-    scans_list : list of plantdb.FSDB.Scan
+    scans_list : list of plantdb.fsdb.Scan
         List of `Scan` instance to compare.
 
     References
@@ -394,11 +394,11 @@ def compare_colmap_poses(db, task_name, scans_list):
 
     Parameters
     ----------
-    db : plantdb.FSDB
+    db : plantdb.fsdb.FSDB
         Local ROMI database instance with the replicated scan datasets
     task_name : str
         name of the task to test
-    scans_list : list of plantdb.FSDB.Scan
+    scans_list : list of plantdb.fsdb.Scan
         List of `Scan` instance to compare.
 
     """
@@ -488,11 +488,11 @@ def compare_binary_mask(db, task_name, scans_list):
 
     Parameters
     ----------
-    db : plantdb.FSDB
+    db : plantdb.fsdb.FSDB
         Local ROMI database instance with the replicated scan datasets
     task_name : str
         name of the task to test
-    scans_list : list of plantdb.FSDB.Scan
+    scans_list : list of plantdb.fsdb.Scan
         List of `Scan` instance to compare.
 
     """
@@ -555,11 +555,11 @@ def compare_pointcloud(db, task_name, scans_list):
 
     Parameters
     ----------
-    db : plantdb.FSDB
+    db : plantdb.fsdb.FSDB
         Local ROMI database instance with the replicated scan datasets
     task_name : str
         name of the task to test
-    scans_list : list of plantdb.FSDB.Scan
+    scans_list : list of plantdb.fsdb.Scan
         List of `Scan` instance to compare.
 
     """
@@ -609,11 +609,11 @@ def compare_voxels(db, task_name, scans_list):
 
     Parameters
     ----------
-    db : plantdb.FSDB
+    db : plantdb.fsdb.FSDB
         Local ROMI database instance with the replicated scan datasets
     task_name : str
         name of the task to test
-    scans_list : list of plantdb.FSDB.Scan
+    scans_list : list of plantdb.fsdb.Scan
         List of `Scan` instance to compare.
 
     """
@@ -674,11 +674,11 @@ def compare_labelled_pointcloud(db, task_name, scans_list):
 
     Parameters
     ----------
-    db : plantdb.FSDB
+    db : plantdb.fsdb.FSDB
         Local ROMI database instance with the replicated scan datasets
     task_name : str
         name of the task to test
-    scans_list : list of plantdb.FSDB.Scan
+    scans_list : list of plantdb.fsdb.Scan
         List of `Scan` instance to compare.
 
     """
@@ -759,11 +759,11 @@ def compare_trianglemesh_points(db, task_name, scans_list):
 
     Parameters
     ----------
-    db : plantdb.FSDB
+    db : plantdb.fsdb.FSDB
         Local ROMI database instance with the replicated scan datasets
     task_name : str
         name of the task to test
-    scans_list : list of plantdb.FSDB.Scan
+    scans_list : list of plantdb.fsdb.Scan
         List of `Scan` instance to compare.
 
     """
@@ -814,11 +814,11 @@ def compare_curveskeleton_points(db, task_name, scans_list):
 
     Parameters
     ----------
-    db : plantdb.FSDB
+    db : plantdb.fsdb.FSDB
         Local ROMI database instance with the replicated scan datasets
     task_name : str
         name of the task to test
-    scans_list : list of plantdb.FSDB.Scan
+    scans_list : list of plantdb.fsdb.Scan
         List of `Scan` instance to compare.
 
     """
@@ -862,11 +862,11 @@ def compare_angles_and_internodes(db, task_name, scans_list):
 
     Parameters
     ----------
-    db : plantdb.FSDB
+    db : plantdb.fsdb.FSDB
         Local ROMI database instance with the replicated scan datasets
     task_name : str
         name of the task to test
-    scans_list : list of plantdb.FSDB.Scan
+    scans_list : list of plantdb.fsdb.Scan
         List of `Scan` instance to compare.
 
     """

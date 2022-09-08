@@ -129,14 +129,14 @@ class DetectCharuco(FileByFileTask):
 
         Parameters
         ----------
-        fi : plantdb.FSDB.File
+        fi : plantdb.fsdb.File
             Image file to use for detection and labelling of ChArUco corners.
-        outfs : plantdb.FSDB.Fileset
+        outfs : plantdb.fsdb.Fileset
             Fileset where to save the JSON files with detected ChArUco corners & ids.
 
         Returns
         -------
-        plantdb.FSDB.File
+        plantdb.fsdb.File
             The File instance (JSON) with saved ChArUco corners and ids.
 
         See Also
