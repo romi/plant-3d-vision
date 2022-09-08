@@ -12,11 +12,13 @@ A more comprehensive documentation about the "Plant Imager" project can be found
 - [Building and running with Docker (recommended)](#building-and-running-with-docker-recommended)
     * [Building the image](#building-the-image)
     * [Running the container](#running-the-container)
-    * [Performing a task with `romi_run_task`](#performing-a-task-with-romi_run_task)
 - [Install from sources](#install-from-sources)
     * [Install requirements](#install-requirements)
     * [Install sources](#install-sources)
-    * [Troubleshooting](#troubleshooting)
+- [Usage](#usage)
+    * [Docker container](#docker-container)
+    * [Conda environment](#conda-environment)
+- [Troubleshooting](#troubleshooting)
 
 
 ## Building and running with Docker (recommended)
@@ -54,30 +56,10 @@ If you want to run a docker image with another tag, you can pass the tag name as
 
 To see more running options (specif tag, command...), type `./docker/run.sh -h`
 
-### Troubleshooting
-You must install nvidia gpu drivers, `nvidia-docker` (v2.0) and `nvidia-container-toolkit`. 
-To test if everything is okay:
-```bash
-./docker/run.sh --gpu_test
-```
 
 This docker image has been tested successfully on:
 `docker --version=19.03.6 | nvidia driver version=450.102.04 | CUDA version=11.0`
 
-### Performing a task with `romi_run_task`
-Inside the docker image there is a `romi_run_task` command which performs a task on a database according to a config file.
-
-In the following example, we will use the test database and config file shipped in this repository:
- - Run the default docker image (`roboticsmicrofarms/plant-3d-vision:latest`)
- - Mount the database (`plant-3d-vision/tests/testdata/`) and configs folder (`plant-3d-vision/config/`) inside the docker container
- - Perform the task `AnglesAndInternodes` on the database with `geom_pipe_real.toml` config file
-
-```bash
-./docker/run.sh -v /path/to/plant-3d-vision/tests/testdata/:/home/$USER/database/ -v /path/to/plant-3d-vision/config/:/home/$USER/config
-romi_run_task --config ~/config/geom_pipe_real.toml AnglesAndInternodes ~/database/real_plant/
-```
-
-Don't forget to replace the paths `path/to/plant-3d-vision` by the correct ones.
 
 
 ## Install from sources
@@ -181,8 +163,45 @@ In this install instructions, we use `conda`, have a look at the official instal
     rm testdata/models/models/Resnet_896_896_epoch50.pt
     ```
 
-### Troubleshooting
 
+## Usage
+
+### Docker container
+Inside the docker image there is a `romi_run_task` command which performs a task on a database according to a config file.
+
+In the following example, we will use the test database and config file shipped in this repository:
+ - Start a docker container using `roboticsmicrofarms/plant-3d-vision:latest`
+ - Mount the database (`plant-3d-vision/tests/testdata/`) and configs folder (`plant-3d-vision/config/`) inside the docker container
+ - Perform the task `AnglesAndInternodes` on the database with `geom_pipe_real.toml` config file
+
+```bash
+./docker/run.sh -v /path/to/plant-3d-vision/tests/testdata/:/home/$USER/database/ -v /path/to/plant-3d-vision/config/:/home/$USER/config
+romi_run_task --config ~/config/geom_pipe_real.toml AnglesAndInternodes ~/database/real_plant/
+```
+
+Don't forget to replace the paths `path/to/plant-3d-vision` by the correct ones.
+
+
+### Conda environment
+To execute a pre-defined task and its upstream tasks, like `AnglesAndInternodes`, on the provided test scan dataset `real_plant` using the appropriate example pipeline configuration file `geom_pipe_real.toml` (from the repository root directory):
+```shell
+cp -R tests/testdata /tmp/.  # copy the test DB to the temporary directory
+conda activate plant3dvision  # activate the conda environment
+romi_run_task --config config/geom_pipe_real.toml AnglesAndInternodes /tmp/testdata/real_plant/
+```
+
+
+## Troubleshooting
+
+### Docker
+You must install nvidia gpu drivers, `nvidia-docker` (v2.0) and `nvidia-container-toolkit`. 
+To test if everything is okay:
+```bash
+./docker/run.sh --gpu_test
+```
+
+
+### OpenCL
 - `ImportError: libGL.so.1: cannot open shared object file: No such file or directory` can be fixed with:
     ```bash
     apt-get install libgl1-mesa-glx
