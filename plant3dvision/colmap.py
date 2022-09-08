@@ -427,6 +427,22 @@ class ColmapRunner(object):
         os.makedirs(self.sparse_dir, exist_ok=True)
         os.makedirs(self.dense_dir, exist_ok=True)
 
+    def _image_in_colmap_dir(self, img_f):
+        """Check the image exists in the COLMAP 'images' directory, if not create it.
+
+        Parameters
+        ----------
+        img_f : plantdb.fsdb.File
+            The image file that should exist in the COLMAP 'images' directory.
+        """
+        filepath = os.path.join(self.imgs_dir, img_f.filename)
+        img_md = img_f.metadata
+        if not os.path.isfile(filepath) and 'channel' in img_md and img_md['channel'] == 'rgb':
+            im = io.read_image(img_f)
+            im = im[:, :, :3]  # remove alpha channel
+            imageio.imwrite(filepath, im)
+        return
+
     def _init_poses(self):
         """Initialize the `poses.txt` file for COLMAP.
 
@@ -454,6 +470,8 @@ class ColmapRunner(object):
         with open(f"{self.colmap_ws}/poses.txt", mode='w') as pose_file:
             # - Try to get the camera pose from each image file metadata to a `poses.txt` file:
             for img_f in self.fileset.get_files():
+                # - Check the image exists in the COLMAP 'images' directory, if not create it:
+                self._image_in_colmap_dir(img_f)
                 # - Try to get the calibrated/exact/approximate pose accordingly, may be None:
                 p = img_f.get_metadata(pose_md)
                 # - If a 'pose' (calibrated/exact/approximate) was found for the file, add it to the COLMAP poses file:
