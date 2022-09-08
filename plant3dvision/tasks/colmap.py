@@ -8,6 +8,7 @@ import luigi
 import numpy as np
 from plant3dvision.calibration import calibration_figure
 from plant3dvision.colmap import ColmapRunner
+from plant3dvision.colmap import compute_estimated_pose
 from plant3dvision.filenames import COLMAP_CAMERAS_ID
 from plant3dvision.filenames import COLMAP_DENSE_ID
 from plant3dvision.filenames import COLMAP_IMAGES_ID
@@ -20,26 +21,6 @@ from romitask.task import ImagesFilesetExists
 from romitask.task import RomiTask
 
 logger = configure_logger(__name__)
-
-
-def compute_calibrated_poses(rotmat, tvec):
-    """Compute the calibrated pose from COLMAP.
-
-    Parameters
-    ----------
-    rotmat : numpy.ndarray
-        Rotation matrix, should be of shape `(3, 3)`.
-    tvec : numpy.ndarray
-        Translation vector, should be of shape `(3,)`.
-
-    Returns
-    -------
-    list
-        Calibrated pose, that is the estimated XYZ coordinate of the camera by colmap.
-
-    """
-    pose = np.dot(-rotmat.transpose(), (tvec.transpose()))
-    return np.array(pose).flatten().tolist()
 
 
 def get_cnc_poses(scan_dataset):
@@ -163,7 +144,7 @@ def compute_colmap_poses_from_metadata(scan_dataset):
         rotmat = md_i['colmap_camera']['rotmat']
         tvec = md_i['colmap_camera']['tvec']
         # - Compute the 'calibrated_pose' estimated by COLMAP:
-        colmap_poses[fi.id] = compute_calibrated_poses(np.array(rotmat), np.array(tvec))
+        colmap_poses[fi.id] = compute_estimated_pose(np.array(rotmat), np.array(tvec))
 
     return colmap_poses
 
@@ -233,7 +214,7 @@ def compute_colmap_poses_from_camera_json(scan_dataset):
             logger.error(f"Missing camera pose of image '{fi.id}' in scan '{scan_name}'!")
         else:
             # - Compute the 'calibrated_pose':
-            colmap_poses[fi.id] = compute_calibrated_poses(np.array(poses[key]['rotmat']), np.array(poses[key]['tvec']))
+            colmap_poses[fi.id] = compute_estimated_pose(np.array(poses[key]['rotmat']), np.array(poses[key]['tvec']))
 
     return colmap_poses
 

@@ -9,7 +9,7 @@ from plant3dvision.calibration import calibrate_opencv_camera
 from plant3dvision.calibration import calibrate_radial_camera
 from plant3dvision.calibration import calibrate_simple_radial_camera
 from plant3dvision.colmap import ColmapRunner
-from plant3dvision.tasks.colmap import compute_calibrated_poses
+from plant3dvision.colmap import compute_estimated_pose
 from plantdb import io
 from romitask import DatabaseConfig
 from romitask import FilesetTarget
@@ -484,7 +484,7 @@ class ExtrinsicCalibration(RomiTask):
             rotmat = np.array(fi.get_metadata("colmap_camera")['rotmat'])
             tvec = np.array(fi.get_metadata("colmap_camera")['tvec'])
             # Compute the XYZ pose:
-            colmap_poses[fi.id] = compute_calibrated_poses(rotmat, tvec)
+            colmap_poses[fi.id] = compute_estimated_pose(rotmat, tvec)
             # Export the estimated pose to the image metadata:
             fi.set_metadata("calibrated_pose", colmap_poses[fi.id])
 

@@ -216,6 +216,26 @@ def cameras_model_to_opencv_model(cameras):
     return cameras
 
 
+def compute_estimated_pose(rotmat, tvec):
+    """Compute the estimated pose from COLMAP.
+
+    Parameters
+    ----------
+    rotmat : numpy.ndarray
+        Rotation matrix, should be of shape `(3, 3)`.
+    tvec : numpy.ndarray
+        Translation vector, should be of shape `(3,)`.
+
+    Returns
+    -------
+    list
+        Calibrated pose, that is the estimated XYZ coordinate of the camera by colmap.
+
+    """
+    pose = np.dot(-rotmat.transpose(), (tvec.transpose()))
+    return np.array(pose).flatten().tolist()
+
+
 class ColmapRunner(object):
     """COLMAP SfM methods wrapper, to apply to an 'image' fileset.
 
@@ -476,7 +496,7 @@ class ColmapRunner(object):
                 p = img_f.get_metadata(pose_md)
                 # - If a 'pose' (calibrated/exact/approximate) was found for the file, add it to the COLMAP poses file:
                 if p is not None:
-                    s = f"{img_f.filename}, {p[0]}, {p[1]}, {p[2]}" + "\n"
+                    s = f"{img_f.filename} {p[0]} {p[1]} {p[2]}\n"
                     pose_file.write(s)
                 else:
                     logger.error(f"Missing '{pose_md}' metadata for '{img_f.id}' file!")
@@ -869,6 +889,8 @@ class ColmapRunner(object):
                     "camera_model": cameras[images[key]['camera_id']]
                 }
                 fi.set_metadata("colmap_camera", camera)
+                estimated_pose = compute_estimated_pose(np.array(images[key]["rotmat"]), np.array(images[key]["tvec"]))
+                fi.set_metadata("estimated_pose", estimated_pose)
 
         # -- If required, performs dense point cloud reconstruction:
         dense_pcd = None
