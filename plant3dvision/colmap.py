@@ -21,6 +21,7 @@ import imageio
 import numpy as np
 import open3d as o3d
 
+import plantdb
 from plant3dvision import proc3d
 from plant3dvision.thirdparty import read_model
 from plantdb import io
@@ -259,7 +260,7 @@ class ColmapRunner(object):
         If set, should contain the cropping boundaries for each axis.
         This is applied to the sparse (and dense) point cloud.
         If not set, an automatic guess using the dense (if any) or sparse point cloud is performed.
-    colmap_ws : str
+    colmap_workdir : str
         COLMAP working directory.
         Can be defined with an environment variable named `COLMAP_WS`.
         Else will be automatically created in temporary directory.
@@ -294,7 +295,7 @@ class ColmapRunner(object):
     """
 
     def __init__(self, fileset, matcher_method="exhaustive", compute_dense=False, all_cli_args={}, align_pcd=False,
-                 use_calibration=False, bounding_box=None, colmap_exe=COLMAP_EXE):
+                 use_calibration=False, bounding_box=None, **kwargs):
         """
         Parameters
         ----------
@@ -314,23 +315,19 @@ class ColmapRunner(object):
         bounding_box : dict, optional
             If specified (default ``None``), crop the sparse (& dense) point cloud(s) with given volume dictionary.
             Specifications: {"x" : [xmin, xmax], "y" : [ymin, ymax], "z" : [zmin, zmax]}.
-        colmap_exe : {'colmap', 'geki/colmap', 'roboticsmicrofarms/colmap'}, optional
+
+        Other Parameters
+        ----------------
+        colmap_exe : {'colmap', 'geki/colmap', 'roboticsmicrofarms/colmap'}
             The executable to use to run the colmap reconstruction steps.
             'colmap' requires that you compile and install it from sources, see [colmap]_.
             The others use pre-built docker images, available from docker hub.
             'geki/colmap' is colmap 3.6 with Ubuntu 18.04 and CUDA 10.1, see [geki_colmap]_
             'roboticsmicrofarms/colmap' is colmap 3.7 with Ubuntu 18.04 and CUDA 10.2, see [roboticsmicrofarms_colmap]_
-
-        Notes
-        -----
-        Use ``{"feature_extractor": {"--ImageReader.single_camera": "1"}}`` to specifies a single camera model.
-
-        Use ``{"feature_extractor": {"--SiftExtraction.use_gpu": "0"}`` to force use of CPU during feature extraction step.
-
-        Use ``{"exhaustive_matcher": {"--SiftMatching.use_gpu": "0"}`` or ``{"sequential_matcher": {"--SiftMatching.use_gpu": "0"}`` to force use of CPU during feature matching step.
-
-        By default "--robust_alignment_max_error" is set to 10 for point cloud alignment step.
-        You may change it, *e.g.* to 20, with ``{"model_aligner": {"--robust_alignment_max_error": "20"}``.
+        file_query : dictionary
+            A query on metadata to filter the selected files from the given `fileset`.
+            For example ``{'channel': 'rgb'}`` will keep only the files with a 'channel' metadata equal to 'rgb'.
+            Defaults to ``None``.
 
         References
         ----------
@@ -415,31 +412,29 @@ class ColmapRunner(object):
 
         """
         # -- Initialize attributes:
-        self.fileset = fileset  # FSDB.db.fileset
+        self.fileset = fileset  # plantdb.fsdb.fileset
         self.matcher_method = matcher_method
         self.compute_dense = compute_dense
         self.all_cli_args = all_cli_args
         self.align_pcd = align_pcd
         self.use_calibration = use_calibration
         self.bounding_box = bounding_box
-        # -- Initialize directories & log files:
+        self.file_query = kwargs.get('file_query', None)
+        # -- Initialize COLMAP directories, poses file & log file:
         # - Get / create a temporary COLMAP working directory
-        self.colmap_ws = os.environ.get("COLMAP_WS", tempfile.mkdtemp())
-        # TODO: Check the working directory exists ?!
-        # - Set 'images' directory path:
-        self.imgs_dir = os.path.join(self.colmap_ws, 'images')
-        # - Set 'sparse reconstruction' directory path:
-        self.sparse_dir = os.path.join(self.colmap_ws, 'sparse')
-        # - Set 'dense reconstruction' directory path:
-        self.dense_dir = os.path.join(self.colmap_ws, 'dense')
+        self.colmap_workdir = os.environ.get("COLMAP_WD", tempfile.mkdtemp())
+        self.imgs_dir = os.path.join(self.colmap_workdir, 'images')  # 'images' directory
+        self.sparse_dir = os.path.join(self.colmap_workdir, 'sparse')  # 'sparse reconstruction' directory
+        self.dense_dir = os.path.join(self.colmap_workdir, 'dense')  # 'dense reconstruction' directory
         # - Make sure those directories exists & create them otherwise:
         self._init_directories()
         # - Initialize the `poses.txt` file for COLMAP:
         self._init_poses()
         # - File object used for logging COLMAP outputs:
-        self.log_file = f"{self.colmap_ws}/colmap.log"
-        # - Check COLMAP executable to use:
-        self._init_exe(colmap_exe)
+        self.log_file = f"{self.colmap_workdir}/colmap.log"
+        logger.info(f"See {self.log_file} for a detailed log about COLMAP jobs...")
+        # -- Check COLMAP executable to use:
+        self._init_exe(kwargs.get('colmap_exe', COLMAP_EXE))
 
     def _init_directories(self):
         """Initialize 'images', 'sparse' & 'dense' reconstruction directory."""
@@ -447,20 +442,14 @@ class ColmapRunner(object):
         os.makedirs(self.sparse_dir, exist_ok=True)
         os.makedirs(self.dense_dir, exist_ok=True)
 
-    def _image_in_colmap_dir(self, img_f):
-        """Check the image exists in the COLMAP 'images' directory, if not create it.
-
-        Parameters
-        ----------
-        img_f : plantdb.fsdb.File
-            The image file that should exist in the COLMAP 'images' directory.
-        """
+    def _image_in_colmap_dir(self, img_f: plantdb.fsdb.File):
+        """Check the image exists in the COLMAP 'images' directory, if not create it."""
         filepath = os.path.join(self.imgs_dir, img_f.filename)
         img_md = img_f.metadata
         if not os.path.isfile(filepath) and 'channel' in img_md and img_md['channel'] == 'rgb':
-            im = io.read_image(img_f)
+            im = io.read_image(img_f)  # load the image (from local DB)
             im = im[:, :, :3]  # remove alpha channel
-            imageio.imwrite(filepath, im)
+            imageio.imwrite(filepath, im)  # save the image to COLMAP 'images' working directory
         return
 
     def _init_poses(self):
@@ -477,7 +466,7 @@ class ColmapRunner(object):
 
         """
         # - Search if "exact poses" can be found in all 'images' fileset metadata:
-        exact_poses = all([f.get_metadata('pose') is not None for f in self.fileset.get_files()])
+        exact_poses = all([f.get_metadata('pose') is not None for f in self.fileset.get_files(query=self.file_query)])
         # - Defines "where" (which metadata) to get the "camera pose" from:
         if self.use_calibration:
             pose_md = 'calibrated_pose'  # `ExtrinsicCalibration` case
@@ -487,9 +476,9 @@ class ColmapRunner(object):
             pose_md = 'approximate_pose'  # `Scan` case
 
         # - File object containing COLMAP camera poses:
-        with open(f"{self.colmap_ws}/poses.txt", mode='w') as pose_file:
+        with open(f"{self.colmap_workdir}/poses.txt", mode='w') as pose_file:
             # - Try to get the camera pose from each image file metadata to a `poses.txt` file:
-            for img_f in self.fileset.get_files():
+            for img_f in self.fileset.get_files(query=self.file_query):
                 # - Check the image exists in the COLMAP 'images' directory, if not create it:
                 self._image_in_colmap_dir(img_f)
                 # - Try to get the calibrated/exact/approximate pose accordingly, may be None:
@@ -499,7 +488,7 @@ class ColmapRunner(object):
                     s = f"{img_f.filename} {p[0]} {p[1]} {p[2]}\n"
                     pose_file.write(s)
                 else:
-                    logger.error(f"Missing '{pose_md}' metadata for '{img_f.id}' file!")
+                    logger.warning(f"Missing '{pose_md}' metadata for '{img_f.id}' file!")
 
         return
 
@@ -553,7 +542,7 @@ class ColmapRunner(object):
             raise ValueError(f"Unknown COLMAP executable '{colmap_exe}'!")
 
     def get_workdir(self):
-        return self.colmap_ws
+        return self.colmap_workdir
 
     def _colmap_cmd(self, colmap_exe, method, args, cli_args, to_log=True):
         """Create & call the COLMAP command to execute.
@@ -605,14 +594,14 @@ class ColmapRunner(object):
 
         >>> method = 'feature_extractor'
         >>> process = ['colmap', method]
-        >>> args = ['--database_path', f'{colmap.colmap_ws}/database.db', '--image_path', f'{colmap.colmap_ws}/images']
+        >>> args = ['--database_path', f'{colmap.colmap_workdir}/database.db', '--image_path', f'{colmap.colmap_workdir}/images']
         >>> process.extend(args)
         >>> for x in cli_args[method].keys(): process.extend([x, cli_args[method][x]])
 
         >>> import docker
         >>> client = docker.from_env()
         >>> varenv = {'PYOPENCL_CTX': os.environ.get('PYOPENCL_CTX', '0')}
-        >>> mount = docker.types.Mount(colmap.colmap_ws, colmap.colmap_ws, type='bind')
+        >>> mount = docker.types.Mount(colmap.colmap_workdir, colmap.colmap_workdir, type='bind')
         >>> cmd = " ".join(process)
         >>> print('Docker subprocess: ' + cmd)
         >>> # Remove stopped container:
@@ -655,7 +644,7 @@ class ColmapRunner(object):
             varenv = {}
             varenv.update({'PYOPENCL_CTX': os.environ.get('PYOPENCL_CTX', '0')})
             # Defines the mount point
-            mount = docker.types.Mount(self.colmap_ws, self.colmap_ws, type='bind')
+            mount = docker.types.Mount(self.colmap_workdir, self.colmap_workdir, type='bind')
             # Create the bash command called inside the docker container
             cmd = " ".join(process)
             logger.debug('Docker subprocess: ' + cmd)
@@ -690,8 +679,8 @@ class ColmapRunner(object):
     def feature_extractor(self):
         """Perform feature extraction for a set of images."""
         args = [
-            '--database_path', f'{self.colmap_ws}/database.db',
-            '--image_path', f'{self.colmap_ws}/images'
+            '--database_path', f'{self.colmap_workdir}/database.db',
+            '--image_path', f'{self.colmap_workdir}/images'
         ]
         cli_args = self.all_cli_args.get('feature_extractor', {})
         logger.info("Running colmap 'feature_extractor'...")
@@ -701,7 +690,7 @@ class ColmapRunner(object):
 
     def matcher(self):
         """Perform feature matching after performing feature extraction."""
-        args = ['--database_path', f'{self.colmap_ws}/database.db']
+        args = ['--database_path', f'{self.colmap_workdir}/database.db']
         if self.matcher_method == 'exhaustive':
             cli_args = self.all_cli_args.get('exhaustive_matcher', {})
             logger.info("Running colmap 'exhaustive_matcher'...")
@@ -720,9 +709,9 @@ class ColmapRunner(object):
     def mapper(self):
         """Sparse 3D reconstruction / mapping of the dataset using SfM after performing feature extraction and matching."""
         args = [
-            '--database_path', f'{self.colmap_ws}/database.db',
-            '--image_path', f'{self.colmap_ws}/images',
-            '--output_path', f'{self.colmap_ws}/sparse'
+            '--database_path', f'{self.colmap_workdir}/database.db',
+            '--image_path', f'{self.colmap_workdir}/images',
+            '--output_path', f'{self.colmap_workdir}/sparse'
         ]
         cli_args = self.all_cli_args.get('mapper', {})
         logger.info("Running colmap 'mapper'...")
@@ -733,9 +722,9 @@ class ColmapRunner(object):
     def model_aligner(self):
         """Align/geo-register model to coordinate system of given camera centers."""
         args = [
-            '--ref_images_path', f'{self.colmap_ws}/poses.txt',
-            '--input_path', f'{self.colmap_ws}/sparse/0',
-            '--output_path', f'{self.colmap_ws}/sparse/0',
+            '--ref_images_path', f'{self.colmap_workdir}/poses.txt',
+            '--input_path', f'{self.colmap_workdir}/sparse/0',
+            '--output_path', f'{self.colmap_workdir}/sparse/0',
             '--ref_is_gps', '0'  # new for COLMAP version > 3.6:
         ]
         cli_args = self.all_cli_args.get('model_aligner', {"--robust_alignment_max_error": "10"})
@@ -747,22 +736,22 @@ class ColmapRunner(object):
     def model_analyzer(self):
         """Print statistics about reconstructions."""
         args = [
-            '--path', f'{self.colmap_ws}/sparse/0'
+            '--path', f'{self.colmap_workdir}/sparse/0'
         ]
         logger.info("Running colmap 'model_analyzer'...")
         logger.debug(f"args: {args}")
         out = self._colmap_cmd(COLMAP_EXE, 'model_analyzer', args, {}, to_log=False)
         logger.info(f"Reconstruction statistics: " + out.replace('\n', ', '))
         # Save it as a log file:
-        with open(f'{self.colmap_ws}/model_analyzer.log', 'w') as f:
+        with open(f'{self.colmap_workdir}/model_analyzer.log', 'w') as f:
             f.writelines(out)
 
     def image_undistorter(self):
         """Undistort images and export them for MVS or to external dense reconstruction software."""
         args = [
-            '--input_path', f'{self.colmap_ws}/sparse/0',
-            '--image_path', f'{self.colmap_ws}/images',
-            '--output_path', f'{self.colmap_ws}/dense'
+            '--input_path', f'{self.colmap_workdir}/sparse/0',
+            '--image_path', f'{self.colmap_workdir}/images',
+            '--output_path', f'{self.colmap_workdir}/dense'
         ]
         cli_args = self.all_cli_args.get('image_undistorter', {})
         logger.info("Running colmap 'image_undistorter'...")
@@ -772,7 +761,7 @@ class ColmapRunner(object):
 
     def patch_match_stereo(self):
         """Dense 3D reconstruction / mapping using MVS after running the `image_undistorter` to initialize the workspace."""
-        args = ['--workspace_path', f'{self.colmap_ws}/dense']
+        args = ['--workspace_path', f'{self.colmap_workdir}/dense']
         cli_args = self.all_cli_args.get('patch_match_stereo', {})
         logger.info("Running colmap 'patch_match_stereo'...")
         logger.debug(f"args: {args}")
@@ -782,8 +771,8 @@ class ColmapRunner(object):
     def stereo_fusion(self):
         """Fusion of `patch_match_stereo` results into to a colored point cloud."""
         args = [
-            '--workspace_path', f'{self.colmap_ws}/dense',
-            '--output_path', f'{self.colmap_ws}/dense/fused.ply'
+            '--workspace_path', f'{self.colmap_workdir}/dense',
+            '--output_path', f'{self.colmap_workdir}/dense/fused.ply'
         ]
         cli_args = self.all_cli_args.get('stereo_fusion', {})
         logger.info("Running colmap 'stereo_fusion'...")
@@ -872,12 +861,11 @@ class ColmapRunner(object):
         points = colmap_points_to_dict(f'{self.sparse_dir}/0/points3D.bin')
         # - Raise an error if sparse point cloud is empty:
         if len(sparse_pcd.points) == 0:
-            msg = "Reconstructed sparse point cloud is EMPTY!"
-            raise Exception(msg)
+            raise Exception("Reconstructed sparse point cloud is EMPTY!")
 
         # -- Export computed COLMAP camera model to metadata for each file of the input fileset:
         img_names = {splitext(images[k]['name'])[0]: k for k in images.keys()}  # image id indexed dict
-        for fi in self.fileset.get_files():
+        for fi in self.fileset.get_files(query=self.file_query):
             try:
                 # - Try to get the key corresponding to our file id in the COLMAP 'images' dictionary
                 key = img_names[fi.id]

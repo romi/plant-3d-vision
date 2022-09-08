@@ -409,7 +409,7 @@ class ExtrinsicCalibration(RomiTask):
         images_fileset = self.input().get()
         db = images_fileset.scan.db
         calibration_scan = db.get_scan(self.intrinsic_calibration_scan_id)
-        logger.info(f"Using intrinsic camera parameters from '{calibration_scan.id}'...")
+        logger.info(f"Use intrinsic parameters from '{calibration_scan.id}'...")
         cam_dict = get_camera_model_from_intrinsic(calibration_scan, str(self.camera_model))
         cam_dict.update({"model": str(self.camera_model)})
         # - Set 'feature_extractor' parameters:
@@ -447,6 +447,7 @@ class ExtrinsicCalibration(RomiTask):
         self.set_camera_model()
         self.set_robust_alignment_max_error()
         if self.intrinsic_calibration_scan_id != "":
+            logger.info(f"Got an intrinsic calibration scan: '{self.intrinsic_calibration_scan_id}'.")
             self.set_camera_params()
 
         images_fileset = self.input().get()
@@ -474,7 +475,6 @@ class ExtrinsicCalibration(RomiTask):
         # - Save colmap camera(s) model(s) & parameters in JSON file:
         outfile = self.output_file(COLMAP_CAMERAS_ID)
         io.write_json(outfile, cameras)
-        logger.info(cameras)
 
         # - Estimate images pose with COLMAP rotation and translation matrices:
         logger.info("Estimate image poses (XYZ) with COLMAP rotation and translation matrices...")

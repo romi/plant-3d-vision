@@ -623,11 +623,11 @@ class Colmap(RomiTask):
         self.set_robust_alignment_max_error()
 
         if self.extrinsic_calibration_scan_id != "":
-            logger.info(f"Got an extrinsic calibration scan: {self.extrinsic_calibration_scan_id}.")
+            logger.info(f"Got an extrinsic calibration scan: '{self.extrinsic_calibration_scan_id}'.")
             if self.use_calibration_camera:
                 self.set_camera_params(self.extrinsic_calibration_scan_id, 'extrinsic')
         elif self.intrinsic_calibration_scan_id != "":
-            logger.info(f"Got an intrinsic calibration scan: {self.extrinsic_calibration_scan_id}.")
+            logger.info(f"Got an intrinsic calibration scan: '{self.intrinsic_calibration_scan_id}'.")
             self.set_camera_params(self.intrinsic_calibration_scan_id, 'intrinsic')
 
         # - If no manual definition of cropping bounding-box, try to use the 'workspace' metadata
@@ -713,7 +713,7 @@ class Colmap(RomiTask):
 
         from pathlib import Path
         # - Copy all log files from colmap working directory:
-        workdir = Path(colmap_runner.colmap_ws)
+        workdir = Path(colmap_runner.colmap_workdir)
         for log_path in workdir.glob('*.log'):
             outfile = self.output_file(log_path.name)
             outfile.import_file(log_path)
