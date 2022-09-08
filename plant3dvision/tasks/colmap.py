@@ -587,7 +587,7 @@ class Colmap(RomiTask):
         images_fileset = self.input().get()
         db = images_fileset.scan.db
         calibration_scan = db.get_scan(calibration_scan_id)
-        logger.info(f"Using intrinsic camera parameters from '{calibration_scan.id}'...")
+        logger.info(f"Use intrinsic parameters from {calib_type} calibration scan.")
 
         if calib_type == "intrinsic":
             cam_dict = get_camera_model_from_intrinsic(calibration_scan, str(self.camera_model))
@@ -623,36 +623,38 @@ class Colmap(RomiTask):
         self.set_robust_alignment_max_error()
 
         if self.extrinsic_calibration_scan_id != "":
+            logger.info(f"Got an extrinsic calibration scan: {self.extrinsic_calibration_scan_id}.")
             if self.use_calibration_camera:
                 self.set_camera_params(self.extrinsic_calibration_scan_id, 'extrinsic')
         elif self.intrinsic_calibration_scan_id != "":
+            logger.info(f"Got an intrinsic calibration scan: {self.extrinsic_calibration_scan_id}.")
             self.set_camera_params(self.intrinsic_calibration_scan_id, 'intrinsic')
 
         # - If no manual definition of cropping bounding-box, try to use the 'workspace' metadata
         if self.bounding_box is None:
-            logger.info("No manual definition of cropping bounding-box!")
+            logger.info("No manual definition of a cropping bounding-box...")
             bounding_box = self._workspace_as_bounding_box()
             if bounding_box is None:
-                logger.warning("Could not find the 'workspace' metadata in the 'images' fileset!")
+                logger.warning("Could not find a 'workspace' metadata in the 'images' fileset!")
             else:
-                logger.info("Found a 'workspace' definition in the 'images' fileset metadata!")
+                logger.info("Found a 'workspace' metadata in the 'images' fileset.")
         else:
             bounding_box = dict(self.bounding_box)
-            logger.info("Found manual definition of cropping bounding-box!")
+            logger.info("Found a manual definition of cropping bounding-box.")
 
         current_scan = DatabaseConfig().scan
         images_fileset = self.input().get()
         # - Defines if colmap should use an extrinsic calibration dataset:
         use_calibration = self.extrinsic_calibration_scan_id != ""
         if use_calibration:
-            logger.info(f"Checking calibration scan compatibility with current scan...")
+            logger.info(f"Check extrinsic calibration scan compatibility with current scan...")
             # Check we can use this calibration scan with this scan dataset:
             db = images_fileset.scan.db
             calibration_scan = db.get_scan(self.extrinsic_calibration_scan_id)
             current_cfg = {'single_camera': self.single_camera, 'camera_model': self.camera_model}
             check_colmap_cfg(current_cfg, current_scan, calibration_scan)
             # - Get pre-calibrated poses from extrinsic calib scan and set them as "calibrated_pose" metadata in current images fileset
-            logger.info(f"Using poses from calibration scan: {self.extrinsic_calibration_scan_id}...")
+            logger.info(f"Use poses from extrinsic calibration scan: {self.extrinsic_calibration_scan_id}...")
             images_fileset = use_precalibrated_poses(images_fileset, calibration_scan)
             # - Create the calibration figure:
             cnc_poses = get_cnc_poses(images_fileset.scan)
@@ -672,7 +674,7 @@ class Colmap(RomiTask):
                                scan_id=images_fileset.scan.id, calib_scan_id=str(self.extrinsic_calibration_scan_id),
                                header=camera_str)
         else:
-            logger.info("No calibration scan defined!")
+            logger.info("No extrinsic calibration required!")
 
         # - Instantiate a ColmapRunner with parsed configuration:
         logger.debug("Instantiate a ColmapRunner...")

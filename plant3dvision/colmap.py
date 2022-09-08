@@ -860,13 +860,15 @@ class ColmapRunner(object):
         self.model_analyzer()
 
         # -- Convert COLMAP binaries (cameras, images & points) to more accessible formats:
-        # - Read computed binary camera models and convert them to OpenCV cameras model
+        # - Read COLMAP 'cameras' binary and convert it to dictionary:
         cameras = colmap_cameras_to_dict(f'{self.sparse_dir}/0/cameras.bin')
+        # - Convert 'cameras' dictionary to OpenCV cameras dictionary:
         cameras = cameras_model_to_opencv_model(cameras)
-        # - Read computed image binary models:
+        # - Read COLMAP 'images' binary and convert it to dictionary:
         images = colmap_images_to_dict(f'{self.sparse_dir}/0/images.bin')
-        # - Read reconstructed binary sparse model, convert to point cloud and dictionary
+        # - Read COLMAP 'points3D' binary and convert to point cloud:
         sparse_pcd = colmap_points_to_pcd(f'{self.sparse_dir}/0/points3D.bin')
+        # - Read COLMAP 'points3D' binary and convert to dictionary:
         points = colmap_points_to_dict(f'{self.sparse_dir}/0/points3D.bin')
         # - Raise an error if sparse point cloud is empty:
         if len(sparse_pcd.points) == 0:
@@ -877,18 +879,19 @@ class ColmapRunner(object):
         img_names = {splitext(images[k]['name'])[0]: k for k in images.keys()}  # image id indexed dict
         for fi in self.fileset.get_files():
             try:
-                # - Try to match the file id (from input fileset) to one from COLMAP image model
+                # - Try to get the key corresponding to our file id in the COLMAP 'images' dictionary
                 key = img_names[fi.id]
             except KeyError:
                 logger.error(f"No pose & camera model defined by COLMAP for image '{fi.id}'!")
             else:
-                # - If match is found, add a 'colmap_camera' entry to the file metadata:
+                # - Add a 'colmap_camera' entry to the file metadata:
                 camera = {
                     "rotmat": images[key]["rotmat"],
                     "tvec": images[key]["tvec"],
                     "camera_model": cameras[images[key]['camera_id']]
                 }
                 fi.set_metadata("colmap_camera", camera)
+                # - Add an 'estimated_pose' entry to the file metadata:
                 estimated_pose = compute_estimated_pose(np.array(images[key]["rotmat"]), np.array(images[key]["tvec"]))
                 fi.set_metadata("estimated_pose", estimated_pose)
 
