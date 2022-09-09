@@ -1,8 +1,7 @@
-import filecmp
 import json
 from collections import Counter
 from collections import OrderedDict
-from os.path import splitext
+from itertools import combinations
 from pathlib import Path
 
 import numpy as np
@@ -10,7 +9,7 @@ import open3d as o3d
 import plantdb
 from matplotlib import cm
 from matplotlib import pyplot as plt
-from plant3dvision.metrics import SetMetrics
+from plant3dvision.metrics import CompareMaskFilesets
 from plant3dvision.metrics import chamfer_distance
 from plant3dvision.metrics import point_cloud_registration_fitness
 from plant3dvision.metrics import surface_ratio
@@ -19,7 +18,6 @@ from plant3dvision.tasks.colmap import compute_colmap_poses_from_metadata
 from plant3dvision.tasks.colmap import get_cnc_poses
 from plant3dvision.tasks.colmap import get_image_poses
 from plantdb import FSDB
-from plantdb.io import read_image
 from plantdb.io import read_json
 from plantdb.io import read_npz
 from plantdb.io import read_point_cloud
@@ -134,9 +132,9 @@ def pairwise_heatmap(pw_dict, scans_list, task_name, metrics, db, **kwargs):
             if j <= i:
                 continue  # only scan half of the pairwise matrix
             try:
-                data = pw_dict[(scan_i, scan_j)]
+                data = pw_dict[f"{scan_i} - {scan_j}"]
             except:
-                data = pw_dict[(scan_j, scan_i)]
+                data = pw_dict[f"{scan_j} - {scan_i}"]
             pw_mat[i, j] = data
             pw_mat[j, i] = data
 
@@ -194,7 +192,8 @@ def _get_task_fileset(scan_dataset, task_name):
     # - List fileset potentially related to the task (the name of the fileset should start with the task name):
     if task_name == "IntrinsicCalibration":
         # This is a special case: task `IntrinsicCalibration` generates a fileset named "camera_model"
-        task_filesets = [scan_dataset.get_fileset("camera_model")]
+        task_filesets = scan_dataset.get_fileset("camera_model")
+        task_filesets = [task_filesets] if task_filesets is not None else []
     else:
         task_filesets = [fs for fs in scan_dataset.filesets if fs.id.startswith(task_name)]
 
@@ -500,6 +499,10 @@ def compare_to_calibrated_poses(db, task_name, scans_list):
     logger.info(f"Comparing '{task_name}' outputs for {len(scans_list)} replicated scans!")
 
     calibrated_poses = get_image_poses(scans_list[0], "calibrated_pose")  # {scan_id: {img_id: [x, y, z]}}
+    calibrated_poses = {img_id: pose for img_id, pose in calibrated_poses.items() if pose is not None}
+    if len(calibrated_poses) == 0:
+        logger.error(f"Could not find calibrated poses to compare!")
+        return
     image_ids = list(calibrated_poses.keys())
 
     # - Get all poses estimated by COLMAP indexed by image id and by replicate id:
@@ -576,38 +579,25 @@ def compare_binary_mask(db, task_name, scans_list):
     precision, recall = {}, {}
     mean_precision, mean_recall = {}, {}
     median_precision, median_recall = {}, {}
-    # - Double loop to compare all unique pairs of repeats:
-    for t, ref_scan in enumerate(scans_list):
-        # Get `Fileset` with mask files:
+
+    scan_pairs = combinations(scans_list, 2)
+    # - Compare all unique pairs of repeats:
+    for ref_scan, flo_scan in scan_pairs:
+        # -- REFERENCE --
         ref_fileset = _get_task_fileset(ref_scan, task_name)
-        if t + 1 > len(scans_list):
-            break  # all unique pairs to compare are done!
-        for flo_scan in scans_list[t + 1:]:
-            # Get `Fileset` with mask files:
-            flo_fileset = _get_task_fileset(flo_scan, task_name)
-            # Compare the two mask files list to get the list of 'same files" (ie. with same name)
-            ref_dir = Path(db.basedir, ref_scan.id, ref_fileset.id)
-            flo_dir = Path(db.basedir, flo_scan.id, flo_fileset.id)
-            common_files = filecmp.dircmp(ref_dir, flo_dir).common_files
-            # Remove the extension as the `Fileset.get_file()` method does not accept it!
-            common_files = [splitext(sf)[0] for sf in common_files]
-            # Dictionary key made of the two repeat names:
-            k = f"{ref_scan.id} - {flo_scan.id}"
-            precision[k], recall[k] = {}, {}
-            # For each file with the same name compute some set metrics:
-            for sf in common_files:
-                # Read the two mask files:
-                ref_mask = read_image(ref_fileset.get_file(sf))
-                flo_mask = read_image(flo_fileset.get_file(sf))
-                # Compute set metrics for each pair of masks:
-                _, _, _, _, p, r = SetMetrics(ref_mask, flo_mask)
-                precision[k][sf] = p
-                recall[k][sf] = r
-            # Compute an average & the median for the metrics:
-            mean_precision[k] = np.mean(list(precision[k].values()))
-            mean_recall[k] = np.mean(list(recall[k].values()))
-            median_precision[k] = np.median(list(precision[k].values()))
-            median_recall[k] = np.median(list(recall[k].values()))
+        # -- TARGET --
+        flo_fileset = _get_task_fileset(flo_scan, task_name)
+        # -- METRICS --
+        k = f"{ref_scan.id} - {flo_scan.id}"
+        metrics = CompareMaskFilesets(ref_fileset, flo_fileset, ['rgb'])
+        results = metrics.results['evaluation-results']
+        precision[k] = {im_id: res['precision'] for im_id, res in results.items()}
+        recall[k] = {im_id: res['recall'] for im_id, res in results.items()}
+        # Compute an average & the median for the metrics:
+        mean_precision[k] = np.mean(list(precision[k].values()))
+        mean_recall[k] = np.mean(list(recall[k].values()))
+        median_precision[k] = np.median(list(precision[k].values()))
+        median_recall[k] = np.median(list(recall[k].values()))
 
     global_mean_precision = average_pairwise_comparison(mean_precision)
     global_mean_recall = average_pairwise_comparison(mean_recall)
@@ -616,11 +606,11 @@ def compare_binary_mask(db, task_name, scans_list):
     # Write a JSON summary file of the comparison:
     with open(Path(db.basedir) / f'{task_name}_binary_mask_comparison.json', 'w') as out_file:
         json.dump({
+            'global mean precision': global_mean_precision, 'global mean recall': global_mean_recall,
+            'global median precision': global_median_precision, 'global median recall': global_median_recall,
             'mean precision': mean_precision, 'mean recall': mean_recall,
             'median precision': median_precision, 'median recall': median_recall,
             'precision': precision, 'recall': recall,
-            'global mean precision': global_mean_precision, 'global mean recall': global_mean_recall,
-            'global median precision': global_median_precision, 'global median recall': global_median_recall
         }, out_file, indent=2)
 
     return
@@ -642,22 +632,23 @@ def compare_pointcloud(db, task_name, scans_list):
     logger.info(f"Comparing '{task_name}' outputs for {len(scans_list)} replicated scans!")
     chamfer_dist = {}
     fitness, residuals = {}, {}
-    # - Double loop to compare all unique pairs of repeats:
-    for t, ref_scan in enumerate(scans_list):
+    scan_pairs = combinations(scans_list, 2)
+    # - Compare all unique pairs of repeats:
+    for ref_scan, flo_scan in scan_pairs:
+        # -- REFERENCE --
         # - Read the `PointCloud.ply` file
         ref_pcd_file = _get_files(ref_scan, task_name, unique=True)[0]
         ref_pcd = read_point_cloud(ref_pcd_file)
-        if t + 1 > len(scans_list):
-            break  # all unique pairs to compare are done!
-        for flo_scan in scans_list[t + 1:]:
-            # - Read the `PointCloud.ply` file
-            flo_pcd_file = _get_files(flo_scan, task_name, unique=True)[0]
-            flo_pcd = read_point_cloud(flo_pcd_file)
-            k = (ref_scan.id, flo_scan.id)
-            # - Compute the Chamfer distance
-            chamfer_dist[k] = chamfer_distance(ref_pcd, flo_pcd)
-            # - Compute the registration fitness & residuals
-            fitness[k], residuals[k] = point_cloud_registration_fitness(ref_pcd, flo_pcd)
+        # -- TARGET --
+        # - Read the `PointCloud.ply` file
+        flo_pcd_file = _get_files(flo_scan, task_name, unique=True)[0]
+        flo_pcd = read_point_cloud(flo_pcd_file)
+        # -- METRICS --
+        k = f"{ref_scan.id} - {flo_scan.id}"
+        # - Compute the Chamfer distance
+        chamfer_dist[k] = chamfer_distance(ref_pcd, flo_pcd)
+        # - Compute the registration fitness & residuals
+        fitness[k], residuals[k] = point_cloud_registration_fitness(ref_pcd, flo_pcd)
 
     average_chamfer_dist = average_pairwise_comparison(chamfer_dist)
     average_fitness = average_pairwise_comparison(fitness)
@@ -665,17 +656,17 @@ def compare_pointcloud(db, task_name, scans_list):
     # Write a JSON summary file of the comparison:
     with open(Path(db.basedir) / f'{task_name}_pointcloud_comparison.json', 'w') as out_file:
         json.dump({
-            'chamfer distances': jsonify_tuple_keys(chamfer_dist),
-            'fitness': jsonify_tuple_keys(fitness),
-            'residuals': jsonify_tuple_keys(residuals),
+            'chamfer distances': chamfer_dist,
+            'registration fitness': fitness,
+            'registration residuals': residuals,
             'average chamfer distances': average_chamfer_dist,
-            'average fitness': average_fitness,
-            'average residuals': average_residuals,
-        }, out_file)
+            'average registration fitness': average_fitness,
+            'average registration residuals': average_residuals,
+        }, out_file, indent=2)
     # Creates a heatmap of the pariwise comparisons:
     pairwise_heatmap(chamfer_dist, scans_list, 'chamfer distances', task_name, db)
-    pairwise_heatmap(fitness, scans_list, 'fitness', task_name, db)
-    pairwise_heatmap(residuals, scans_list, 'residuals', task_name, db)
+    pairwise_heatmap(fitness, scans_list, 'registration fitness', task_name, db)
+    pairwise_heatmap(residuals, scans_list, 'registration residuals', task_name, db)
 
     return
 
@@ -699,22 +690,25 @@ def compare_voxels(db, task_name, scans_list):
     ref_voxel_file = _get_files(ref_scan, task_name, unique=True)[0]
     ref_voxel = read_npz(ref_voxel_file)
     labels = list(ref_voxel.keys())
+    logger.info(f"Found {len(labels)} labels in NPZ file of the first scan!")
+
     # Initialize returned dictionary with labels as keys!
     r2 = {label: {} for label in labels}
     mean_abs_dev = {label: {} for label in labels}
-    # - Double loop to compare all unique pairs of repeats:
-    for t, ref_scan in enumerate(scans_list):
+    scan_pairs = combinations(scans_list, 2)
+    # - Compare all unique pairs of repeats:
+    for ref_scan, flo_scan in scan_pairs:
+        # -- REFERENCE --
         ref_voxel_file = _get_files(ref_scan, task_name, unique=True)[0]
         ref_voxel = read_npz(ref_voxel_file)
-        if t + 1 > len(scans_list):
-            break  # all unique pairs to compare are done!
-        for flo_scan in scans_list[t + 1:]:
-            flo_voxel_file = _get_files(flo_scan, task_name, unique=True)[0]
-            flo_voxel = read_npz(flo_voxel_file)
-            k = (ref_scan.id, flo_scan.id)
-            for label in labels:
-                r2[label][k] = np.sum(np.sqrt(ref_voxel[label] - flo_voxel[label]))
-                mean_abs_dev[label][k] = np.mean(np.abs(ref_voxel[label] - flo_voxel[label]))
+        # -- TARGET --
+        flo_voxel_file = _get_files(flo_scan, task_name, unique=True)[0]
+        flo_voxel = read_npz(flo_voxel_file)
+        # -- METRICS --
+        k = f"{ref_scan.id} - {flo_scan.id}"
+        for label in labels:
+            r2[label][k] = int(np.sum(np.power(ref_voxel[label] - flo_voxel[label], 2)))
+            mean_abs_dev[label][k] = int(np.mean(np.abs(ref_voxel[label] - flo_voxel[label])))
 
     average_r2 = {}
     average_mean_abs_dev = {}
@@ -725,13 +719,11 @@ def compare_voxels(db, task_name, scans_list):
     # Write a JSON summary file of the comparison:
     with open(Path(db.basedir) / f'{task_name}_voxels_comparison.json', 'w') as out_file:
         json.dump({
-            'sum of square difference': {label: jsonify_tuple_keys(r2[label]) for label in labels},
-            'mean absolute deviation': {label: jsonify_tuple_keys(mean_abs_dev[label]) for label in labels},
-            'average pairwise sum of square difference': {label: average_r2[label] for label
-                                                          in labels},
-            'average pairwise mean absolute deviation': {label: average_mean_abs_dev[label] for label
-                                                         in labels}
-        }, out_file)
+            'sum of square difference': {label: r2[label] for label in labels},
+            'mean absolute deviation': {label: mean_abs_dev[label] for label in labels},
+            'average pairwise sum of square difference': {label: average_r2[label] for label in labels},
+            'average pairwise mean absolute deviation': {label: average_mean_abs_dev[label] for label in labels}
+        }, out_file, indent=2)
 
     # Creates a heatmap of the pairwise comparisons:
     for label in labels:
@@ -767,42 +759,43 @@ def compare_labelled_pointcloud(db, task_name, scans_list):
     precision = {ulabel: {} for ulabel in unique_labels}
     recall = {ulabel: {} for ulabel in unique_labels}
 
-    # - Double loop to compare all unique pairs of repeats:
-    for ref_idx, ref_scan in enumerate(scans_list):
+    scan_pairs = combinations(scans_list, 2)
+    # - Compare all unique pairs of repeats:
+    for ref_scan, flo_scan in scan_pairs:
+        # -- REFERENCE --
         # - Read the `PointCloud.ply` file
         ref_pcd_file = _get_files(ref_scan, task_name, unique=True)[0]
         ref_pcd = read_point_cloud(ref_pcd_file)
         ref_labels = ref_pcd_file.get_metadata('labels')
+        # -- TARGET --
+        # - Read the `PointCloud.ply` file
+        flo_pcd_file = _get_files(flo_scan, task_name, unique=True)[0]
+        flo_pcd = read_point_cloud(flo_pcd_file)
+        flo_labels = flo_pcd_file.get_metadata('labels')
+        # -- METRICS --
+        k = f"{ref_scan.id} - {flo_scan.id}"
         ref_pcd_tree = o3d.geometry.KDTreeFlann(ref_pcd)
-        if ref_idx + 1 > len(scans_list):
-            break  # all unique pairs to compare are done!
-        for flo_scan in scans_list[ref_idx + 1:]:
-            # - Read the `PointCloud.ply` file
-            flo_pcd_file = _get_files(flo_scan, task_name, unique=True)[0]
-            flo_pcd = read_point_cloud(flo_pcd_file)
-            flo_labels = flo_pcd_file.get_metadata('labels')
-            res = {ulabel: {"tp": 0, "fp": 0, "tn": 0, "fn": 0} for ulabel in unique_labels}
-            # For each point of the floating point cloud...
-            for i, pts in enumerate(flo_pcd.points):
-                # ... get its label
-                label_i = flo_labels[i]
-                # ... search for the closest point in reference neighborhood tree
-                [k, idx, _] = ref_pcd_tree.search_knn_vector_3d(pts, 1)
-                for ulabel in unique_labels:
-                    if label_i == ulabel:  # Positive cases
-                        if label_i == ref_labels[idx[0]]:
-                            res[ulabel]["tp"] += 1
-                        else:
-                            res[ulabel]["fp"] += 1
-                    else:  # Negative cases
-                        if label_i == ref_labels[idx[0]]:
-                            res[ulabel]["tn"] += 1
-                        else:
-                            res[ulabel]["fn"] += 1
-            k = (ref_scan.id, flo_scan.id)
+        res = {ulabel: {"tp": 0, "fp": 0, "tn": 0, "fn": 0} for ulabel in unique_labels}
+        # For each point of the floating point cloud...
+        for i, pts in enumerate(flo_pcd.points):
+            # ... get its label
+            label_i = flo_labels[i]
+            # ... search for the closest point in reference neighborhood tree
+            [k, idx, _] = ref_pcd_tree.search_knn_vector_3d(pts, 1)
             for ulabel in unique_labels:
-                precision[ulabel][k] = res[ulabel]["tp"] / (res[ulabel]["tp"] + res[ulabel]["fp"])
-                recall[ulabel][k] = res[ulabel]["tp"] / (res[ulabel]["tp"] + res[ulabel]["fn"])
+                if label_i == ulabel:  # Positive cases
+                    if label_i == ref_labels[idx[0]]:
+                        res[ulabel]["tp"] += 1
+                    else:
+                        res[ulabel]["fp"] += 1
+                else:  # Negative cases
+                    if label_i == ref_labels[idx[0]]:
+                        res[ulabel]["tn"] += 1
+                    else:
+                        res[ulabel]["fn"] += 1
+        for ulabel in unique_labels:
+            precision[ulabel][k] = res[ulabel]["tp"] / (res[ulabel]["tp"] + res[ulabel]["fp"])
+            recall[ulabel][k] = res[ulabel]["tp"] / (res[ulabel]["tp"] + res[ulabel]["fn"])
 
     average_precision = {}
     average_recall = {}
@@ -813,11 +806,11 @@ def compare_labelled_pointcloud(db, task_name, scans_list):
     # Write a JSON summary file of the comparison:
     with open(Path(db.basedir) / f'{task_name}_labelled_pointcloud_comparison.json', 'w') as out_file:
         json.dump({
-            'precision': {ulabel: jsonify_tuple_keys(precision[ulabel]) for ulabel in unique_labels},
-            'recall': {ulabel: jsonify_tuple_keys(recall[ulabel]) for ulabel in unique_labels},
+            'precision': {ulabel: precision[ulabel] for ulabel in unique_labels},
+            'recall': {ulabel: recall[ulabel] for ulabel in unique_labels},
             'average pairwise precision': {label: average_precision[label] for label in unique_labels},
             'average pairwise recall': {label: average_recall[label] for label in unique_labels}
-        }, out_file)
+        }, out_file, indent=2)
 
     # Creates a heatmap of the pairwise comparisons:
     for ulabel in unique_labels:
@@ -847,26 +840,26 @@ def compare_trianglemesh_points(db, task_name, scans_list):
     chamfer_dist = {}
     surf_ratio = {}
     vol_ratio = {}
-    # - Double loop to compare all unique pairs of repeats:
-    for t, ref_scan in enumerate(scans_list):
-        # - Read the `TriangleMesh.ply` file
+    scan_pairs = combinations(scans_list, 2)
+    # - Compare all unique pairs of repeats:
+    for ref_scan, flo_scan in scan_pairs:
+        # -- REFERENCE --
+        # Read the `TriangleMesh.ply` file
         ref_mesh_file = _get_files(ref_scan, task_name, unique=True)[0]
         ref_mesh = read_triangle_mesh(ref_mesh_file)
         # - Extract a PointCloud from the mesh vertices
         ref_pcd = o3d.geometry.PointCloud(ref_mesh.vertices)
-        if t + 1 > len(scans_list):
-            break  # all unique pairs to compare are done!
-        for flo_scan in scans_list[t + 1:]:
-            # - Read the `TriangleMesh.ply` file
-            flo_mesh_file = _get_files(flo_scan, task_name, unique=True)[0]
-            flo_mesh = read_triangle_mesh(flo_mesh_file)
-            # - Extract a PointCloud from the mesh vertices
-            flo_pcd = o3d.geometry.PointCloud(flo_mesh.vertices)
-            k = (ref_scan.id, flo_scan.id)
-            # - Compute the Chamfer distance
-            chamfer_dist[k] = chamfer_distance(ref_pcd, flo_pcd)
-            surf_ratio[k] = surface_ratio(ref_mesh, flo_mesh)
-            vol_ratio[k] = volume_ratio(ref_mesh, flo_mesh)
+        # -- TARGET --
+        # Read the `TriangleMesh.ply` file
+        flo_mesh_file = _get_files(flo_scan, task_name, unique=True)[0]
+        flo_mesh = read_triangle_mesh(flo_mesh_file)
+        # Extract a PointCloud from the mesh vertices
+        flo_pcd = o3d.geometry.PointCloud(flo_mesh.vertices)
+        # -- METRICS --
+        k = f"{ref_scan.id} - {flo_scan.id}"
+        chamfer_dist[k] = chamfer_distance(ref_pcd, flo_pcd)
+        surf_ratio[k] = surface_ratio(ref_mesh, flo_mesh)
+        vol_ratio[k] = volume_ratio(ref_mesh, flo_mesh)
 
     average_chamfer_dist = average_pairwise_comparison(chamfer_dist)
     average_surf_ratio = average_pairwise_comparison(surf_ratio)
@@ -874,13 +867,13 @@ def compare_trianglemesh_points(db, task_name, scans_list):
     # Write a JSON summary file of the comparison:
     with open(Path(db.basedir) / f'{task_name}_trianglemesh_points_comparison.json', 'w') as out_file:
         json.dump({
-            'chamfer distances': jsonify_tuple_keys(chamfer_dist),
-            'surface ratio': jsonify_tuple_keys(surf_ratio),
-            'volume ratio': jsonify_tuple_keys(vol_ratio),
+            'chamfer distances': chamfer_dist,
+            'surface ratio': surf_ratio,
+            'volume ratio': vol_ratio,
             'average chamfer distances': average_chamfer_dist,
             'average surface ratio': average_surf_ratio,
             'average volume ratio': average_vol_ratio
-        }, out_file)
+        }, out_file, indent=2)
 
     return
 
@@ -900,30 +893,32 @@ def compare_curveskeleton_points(db, task_name, scans_list):
     """
     logger.info(f"Comparing '{task_name}' outputs for {len(scans_list)} replicated scans!")
     chamfer_dist = {}
-    # - Double loop to compare all unique pairs of repeats:
-    for t, ref_scan in enumerate(scans_list):
+    scan_pairs = combinations(scans_list, 2)
+    # - Compare all unique pairs of repeats:
+    for ref_scan, flo_scan in scan_pairs:
+        # -- REFERENCE --
         # - Read the `CurveSkeleton.json` file
         ref_json_file = _get_files(ref_scan, task_name, unique=True)[0]
         ref_json = read_json(ref_json_file)
         # - Extract a PointCloud from the skeleton vertices
         ref_pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(ref_json["points"]))
-        if t + 1 > len(scans_list):
-            break  # all unique pairs to compare are done!
-        for flo_scan in scans_list[t + 1:]:
-            # - Read the `CurveSkeleton.json` file
-            flo_json_file = _get_files(flo_scan, task_name, unique=True)[0]
-            flo_json = read_json(flo_json_file)
-            # - Extract a PointCloud from the skeleton vertices
-            flo_pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(flo_json["points"]))
-            k = f"{ref_scan.id} - {flo_scan.id}"
-            # - Compute the Chamfer distance
-            chamfer_dist[k] = chamfer_distance(ref_pcd, flo_pcd)
+        # -- TARGET --
+        # - Read the `CurveSkeleton.json` file
+        flo_json_file = _get_files(flo_scan, task_name, unique=True)[0]
+        flo_json = read_json(flo_json_file)
+        # - Extract a PointCloud from the skeleton vertices
+        flo_pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(flo_json["points"]))
+        # -- METRICS --
+        k = f"{ref_scan.id} - {flo_scan.id}"
+        chamfer_dist[k] = chamfer_distance(ref_pcd, flo_pcd)
 
     average_chamfer_dist = average_pairwise_comparison(chamfer_dist)
     # Write a JSON summary file of the comparison:
     with open(Path(db.basedir) / f'{task_name}_curveskeleton_points_comparison.json', 'w') as out_file:
-        json.dump({'chamfer distances': chamfer_dist,
-                   'average chamfer distance': average_chamfer_dist}, out_file)
+        json.dump({
+            'chamfer distances': chamfer_dist,
+            'average chamfer distance': average_chamfer_dist
+        }, out_file, indent=2)
 
     return
 
@@ -977,4 +972,4 @@ def compare_angles_and_internodes(db, task_name, scans_list):
             'Max number of organs detected': max(nb_organs),
             'Average number of organs detected': np.mean(nb_organs),
             'number of scans with the same nb of organs': counter_nb_organs
-        }, out_file)
+        }, out_file, indent=2)
