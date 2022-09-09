@@ -572,6 +572,15 @@ def volume_ratio(ref_tmesh, flo_tmesh):
     open3d.geometry.PointCloud.get_volume
 
     """
-    ref_v = ref_tmesh.get_volume()
-    flo_v = flo_tmesh.get_volume()
+    try:
+        ref_v = ref_tmesh.get_volume()
+    except RuntimeError:
+        logger.error(f"The reference mesh is not watertight, can not compute volume!")
+        return 0
+    try:
+        flo_v = flo_tmesh.get_volume()
+    except RuntimeError:
+        logger.error(f"The target mesh is not watertight, can not compute volume!")
+        return 0
+
     return min([ref_v, flo_v]) / max([ref_v, flo_v])
