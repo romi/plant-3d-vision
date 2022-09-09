@@ -42,6 +42,7 @@ Please note that:
    2. use the `--models` argument to copy the CNN trained models
 """
 
+DATETIME_FMT = "%Y.%m.%d_%H:%M"
 
 def parsing():
     # TODO: an option to set a reference (or would that be the job of the Evaluation tasks?!)
@@ -61,21 +62,32 @@ def parsing():
                         help=f"Task to evaluate, should be in: {', '.join(valid_tasks)}")
     parser.add_argument("config_file", type=str,
                         help="Path to the pipeline TOML configuration file.")
-    parser.add_argument("-n", "--replicate_number", default=30, type=int,
+
+    # -- Evaluation options:
+    eval = parser.add_argument_group('Evaluation options')
+    eval.add_argument("-n", "--replicate_number", default=30, type=int,
                         help="Number of replicate to use for repeatability evaluation. Defaults to `30`.")
-    parser.add_argument("-s", "--suffix", default="", type=str,
-                        help="Suffix to append to the created database directory.")
-    parser.add_argument("-c", "--clean", action="store_true", default=False,
+    eval.add_argument("-c", "--clean", action="store_true", default=False,
                         help="Force Clean task on scan dataset.")
-    parser.add_argument("-f", "--full_pipe", action="store_true", default=False,
+    eval.add_argument("-f", "--full-pipe", dest='full_pipe', action="store_true", default=False,
                         help="Run the whole Reconstruction & Quantification pipeline on each replicate independently.")
-    parser.add_argument("-np", "--no_pipeline", action="store_true", default=False,
+    eval.add_argument("-np", "--no-pipeline", dest='no_pipeline', action="store_true", default=False,
                         help="Do not run the pipeline, only compare tasks outputs.")
-    parser.add_argument("-db", '--eval_database', type=str, default="",
-                        help="Evaluation database location to use. Use at your own risks!")
-    parser.add_argument("--models", default=False,
+    eval.add_argument("--models", default=False,
                         help="Models database location to use with ML pipeline.")
-    parser.add_argument('--log-level', type=str, dest='log_level', default='INFO',
+
+    # -- Evaluation database options:
+    db = parser.add_argument_group('Database options')
+    db.add_argument("--suffix", default="", type=str,
+                        help="Suffix to append to the created database directory.")
+    db.add_argument('--eval-db', dest='eval_db', type=str, default="",
+                        help="Evaluation database location to use. Use at your own risks!")
+    db.add_argument('--date-fmt', dest='date_fmt', type=str, default=DATETIME_FMT,
+                        help="Datetime format to use prefix for evaluation database name. Defaults to `DATETIME_FMT`.")
+    db.add_argument('--no-date', dest='no_date', action="store_true", default=False,
+                        help=f"Do not add the datetime as prefix.")
+
+    parser.add_argument('--log-level', dest='log_level', type=str, default='INFO',
                         choices=list(logging._nameToLevel.keys()),
                         help="Set message logging level. Defaults to `INFO`.")
 
@@ -358,7 +370,7 @@ def fill_eval_db(eval_db, ref_scan, nb, models_path=None, extra_scans=None):
     return scan_replicates
 
 
-def get_eval_db_path(root_location, task_name, suffix=""):
+def get_eval_db_path(root_location, task_name, suffix="", date_fmt=DATETIME_FMT, no_date=False, **kwargs):
     """Generate the "evaluation database" name, for example: '20200803124841_eval_TriangleMesh'.
 
     Parameters
@@ -369,19 +381,28 @@ def get_eval_db_path(root_location, task_name, suffix=""):
         Name of the task to evaluate.
     suffix : str, optional
         Suffix to append to the created database directory.
+    date_fmt : str, optional
+        Datetime format to append as evaluation database prefix. Defaults to ``DATETIME_FMT``.
+    no_date : bool, optional
+        Do not add the datetime as prefix. Defaults to ``False``.
 
     Returns
     -------
     pathlib.Path
         Path to the evaluation database.
     """
-    now = datetime.datetime.now()
-    now_str = now.strftime("%Y%m%d%H%M%S")
-    folder_name = f"{now_str}_eval_{task_name}"
+    if no_date:
+        folder_name = f"Eval_{task_name}"
+    else:
+        now = datetime.datetime.now()
+        now_str = now.strftime(date_fmt)
+        folder_name = f"{now_str}_Eval_{task_name}"
+
     if suffix != "":
         if not suffix.startswith("_"):
             suffix = f"_{suffix}"
         folder_name += suffix
+
     return Path(root_location / folder_name)
 
 
@@ -401,6 +422,10 @@ def initialize_eval_db(test_db="", **kwargs):
         Name of the task to evaluate.
     suffix : str
         Suffix to append to the created database directory.
+    date_fmt : str
+        Datetime format to append as evaluation database prefix. Defaults to ``DATETIME_FMT``.
+    no_date : bool
+        Do not add the datetime as prefix. Defaults to ``False``.
 
     Returns
     -------
@@ -419,7 +444,7 @@ def initialize_eval_db(test_db="", **kwargs):
     """
     # - Get the path to the evaluation DB to create:
     if test_db == "":
-        test_db = get_eval_db_path(kwargs.get('root_location'), kwargs.get('task_name'), kwargs.get('suffix'))
+        test_db = get_eval_db_path(**kwargs)
     else:
         test_db = Path(test_db)
     # Create the evaluation DB directory:
@@ -527,15 +552,26 @@ def main():
         prev_task = config[args.task]["prev_task"]
 
     # - Initialize the "evaluation database" and get its path:
-    eval_db_path = initialize_eval_db(args.eval_database, task_name=args.task, root_location=db_location.parent,
-                                      suffix=args.suffix)
+    eval_db_path = initialize_eval_db(args.eval_db, task_name=args.task, root_location=db_location.parent,
+                                      suffix=args.suffix, date_fmt=args.date_fmt, no_date=args.no_date)
+
+    if len(list(eval_db_path.iterdir())) > 1 and args.eval_db == "":
+        # We did not specify an eval DB but the directory is not empty:
+        from plant3dvision.utils import yes_no_choice
+        empty_dir = yes_no_choice(f"The directory '{eval_db_path}' is not EMPTY! Do you want to clean it?")
+        if empty_dir:
+            # Remove the existing eval DB:
+            shutil.rmtree(eval_db_path)
+            # Re-initialize the "evaluation database" and get its path:
+            eval_db_path = initialize_eval_db(args.eval_db, task_name=args.task, root_location=db_location.parent,
+                                              suffix=args.suffix, date_fmt=args.date_fmt, no_date=args.no_date)
 
     # - Initialize the logger
     global logger
     logger = configure_logger(filename, eval_db_path, args.log_level)
     logger.info(f"Path to the 'reference scan dataset' is: '{ref_scan_path}'")
-    if args.eval_database != "":
-        logger.info(f"Got a manually defined evaluation database location: '{args.eval_database}'.")
+    if args.eval_db != "":
+        logger.info(f"Got a manually defined evaluation database location: '{args.eval_db}'.")
 
     # - Search pipeline config for '*calibration_scan_id':
     extra_scans = check_extra_scans(db_location, args.config_file)
@@ -573,7 +609,7 @@ def main():
             # Duplicate the scan dataset as many times as requested
             scan_replicates = fill_eval_db(eval_db_path, ref_scan_path, n_replicates, models_path, extra_scans)
     else:
-        # If there is something in the root directory that mean you passed a value to `--eval_database`
+        # If there is something in the root directory that mean you passed a value to `--eval_db`
         # And we thus consider that it should already contain the replicated scans!
         logger.info(f"Found {n_replicates} replicate scans in evaluation database!")
 
