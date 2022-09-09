@@ -634,14 +634,18 @@ def compare_pointcloud(db, task_name, scans_list):
     fitness, residuals = {}, {}
     scan_pairs = combinations(scans_list, 2)
     # - Compare all unique pairs of repeats:
+    prev_ref_file = ""
     for ref_scan, flo_scan in scan_pairs:
         # -- REFERENCE --
-        # - Read the `PointCloud.ply` file
         ref_pcd_file = _get_files(ref_scan, task_name, unique=True)[0]
-        ref_pcd = read_point_cloud(ref_pcd_file)
+        # Check if reference has changed (to limit IO operations):
+        if ref_pcd_file.id != prev_ref_file:
+            # - Read the `PointCloud.ply` file
+            ref_pcd = read_point_cloud(ref_pcd_file)
+            prev_ref_file = ref_pcd_file.id
         # -- TARGET --
-        # - Read the `PointCloud.ply` file
         flo_pcd_file = _get_files(flo_scan, task_name, unique=True)[0]
+        # - Read the `PointCloud.ply` file
         flo_pcd = read_point_cloud(flo_pcd_file)
         # -- METRICS --
         k = f"{ref_scan.id} - {flo_scan.id}"
@@ -697,10 +701,14 @@ def compare_voxels(db, task_name, scans_list):
     mean_abs_dev = {label: {} for label in labels}
     scan_pairs = combinations(scans_list, 2)
     # - Compare all unique pairs of repeats:
+    prev_ref_file = ""
     for ref_scan, flo_scan in scan_pairs:
         # -- REFERENCE --
         ref_voxel_file = _get_files(ref_scan, task_name, unique=True)[0]
-        ref_voxel = read_npz(ref_voxel_file)
+        # Check if reference has changed (to limit IO operations):
+        if ref_voxel_file.id != prev_ref_file:
+            ref_voxel = read_npz(ref_voxel_file)
+            prev_ref_file = ref_voxel_file.id
         # -- TARGET --
         flo_voxel_file = _get_files(flo_scan, task_name, unique=True)[0]
         flo_voxel = read_npz(flo_voxel_file)
@@ -761,15 +769,19 @@ def compare_labelled_pointcloud(db, task_name, scans_list):
 
     scan_pairs = combinations(scans_list, 2)
     # - Compare all unique pairs of repeats:
+    prev_ref_file = ""
     for ref_scan, flo_scan in scan_pairs:
         # -- REFERENCE --
-        # - Read the `PointCloud.ply` file
         ref_pcd_file = _get_files(ref_scan, task_name, unique=True)[0]
-        ref_pcd = read_point_cloud(ref_pcd_file)
-        ref_labels = ref_pcd_file.get_metadata('labels')
+        # Check if reference has changed (to limit IO operations):
+        if ref_pcd_file.id != prev_ref_file:
+            # - Read the `PointCloud.ply` file
+            ref_pcd = read_point_cloud(ref_pcd_file)
+            ref_labels = ref_pcd_file.get_metadata('labels')
+            prev_ref_file = ref_pcd_file.id
         # -- TARGET --
-        # - Read the `PointCloud.ply` file
         flo_pcd_file = _get_files(flo_scan, task_name, unique=True)[0]
+        # - Read the `PointCloud.ply` file
         flo_pcd = read_point_cloud(flo_pcd_file)
         flo_labels = flo_pcd_file.get_metadata('labels')
         # -- METRICS --
@@ -842,16 +854,19 @@ def compare_trianglemesh_points(db, task_name, scans_list):
     vol_ratio = {}
     scan_pairs = combinations(scans_list, 2)
     # - Compare all unique pairs of repeats:
+    prev_ref_file = ""
     for ref_scan, flo_scan in scan_pairs:
         # -- REFERENCE --
-        # Read the `TriangleMesh.ply` file
         ref_mesh_file = _get_files(ref_scan, task_name, unique=True)[0]
-        ref_mesh = read_triangle_mesh(ref_mesh_file)
+        if ref_mesh_file.id != prev_ref_file:
+            # Read the `TriangleMesh.ply` file
+            ref_mesh = read_triangle_mesh(ref_mesh_file)
+            prev_ref_file = ref_mesh_file.id
         # - Extract a PointCloud from the mesh vertices
         ref_pcd = o3d.geometry.PointCloud(ref_mesh.vertices)
         # -- TARGET --
-        # Read the `TriangleMesh.ply` file
         flo_mesh_file = _get_files(flo_scan, task_name, unique=True)[0]
+        # Read the `TriangleMesh.ply` file
         flo_mesh = read_triangle_mesh(flo_mesh_file)
         # Extract a PointCloud from the mesh vertices
         flo_pcd = o3d.geometry.PointCloud(flo_mesh.vertices)
@@ -895,16 +910,20 @@ def compare_curveskeleton_points(db, task_name, scans_list):
     chamfer_dist = {}
     scan_pairs = combinations(scans_list, 2)
     # - Compare all unique pairs of repeats:
+    prev_ref_file = ""
     for ref_scan, flo_scan in scan_pairs:
         # -- REFERENCE --
-        # - Read the `CurveSkeleton.json` file
         ref_json_file = _get_files(ref_scan, task_name, unique=True)[0]
-        ref_json = read_json(ref_json_file)
+        # Check if reference has changed (to limit IO operations):
+        if ref_json_file.id != prev_ref_file:
+            # - Read the `CurveSkeleton.json` file
+            ref_json = read_json(ref_json_file)
+            prev_ref_file = ref_json_file.id
         # - Extract a PointCloud from the skeleton vertices
         ref_pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(ref_json["points"]))
         # -- TARGET --
-        # - Read the `CurveSkeleton.json` file
         flo_json_file = _get_files(flo_scan, task_name, unique=True)[0]
+        # - Read the `CurveSkeleton.json` file
         flo_json = read_json(flo_json_file)
         # - Extract a PointCloud from the skeleton vertices
         flo_pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(flo_json["points"]))
