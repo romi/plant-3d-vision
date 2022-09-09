@@ -7,18 +7,17 @@ from pathlib import Path
 
 import numpy as np
 import open3d as o3d
+import plantdb
 from matplotlib import cm
 from matplotlib import pyplot as plt
-
-import plantdb
 from plant3dvision.metrics import SetMetrics
 from plant3dvision.metrics import chamfer_distance
 from plant3dvision.metrics import point_cloud_registration_fitness
 from plant3dvision.metrics import surface_ratio
 from plant3dvision.metrics import volume_ratio
-from plant3dvision.tasks.colmap import compute_colmap_poses_from_camera_json
-from plant3dvision.tasks.colmap import get_calibrated_poses
+from plant3dvision.tasks.colmap import compute_colmap_poses_from_metadata
 from plant3dvision.tasks.colmap import get_cnc_poses
+from plant3dvision.tasks.colmap import get_image_poses
 from plantdb import FSDB
 from plantdb.io import read_image
 from plantdb.io import read_json
@@ -389,17 +388,17 @@ def compare_intrinsic_params(db, task_name, scans_list):
     return
 
 
-def compare_colmap_poses(db, task_name, scans_list):
-    """Compare the estimated poses by COLMAP.
+def compare_to_cnc_poses(db, task_name, scans_list):
+    """Compare the poses estimated/calibrated by COLMAP to the one from the CNC.
 
     Parameters
     ----------
     db : plantdb.fsdb.FSDB
-        Local ROMI database instance with the replicated scan datasets
+        Local ROMI database instance with the replicated scan datasets.
     task_name : str
-        name of the task to test
+        Name of the task to test.
     scans_list : list of plantdb.fsdb.Scan
-        List of `Scan` instance to compare.
+        List of ``Scan`` instances to compare.
 
     """
     from scipy.spatial.distance import euclidean
@@ -427,9 +426,9 @@ def compare_colmap_poses(db, task_name, scans_list):
     poses_array = []
     for scan in scans_list:
         if task_name.startswith("Colmap"):
-            colmap_poses[scan.id] = compute_colmap_poses_from_camera_json(scan)  # {img_id: [x, y, z]}
+            colmap_poses[scan.id] = compute_colmap_poses_from_metadata(scan)  # {img_id: [x, y, z]}
         elif "Calibration" in task_name:
-            colmap_poses[scan.id] = get_calibrated_poses(scan)
+            colmap_poses[scan.id] = get_image_poses(scan, "calibrated_pose")
         else:
             logger.critical(f"Nothing defined here for a task named '{task_name}'!")
         poses_array.append([p for im_id, p in colmap_poses[scan.id].items()])
@@ -468,11 +467,88 @@ def compare_colmap_poses(db, task_name, scans_list):
     global_mean_dist = np.mean([d2m for d2m in dist2mean_pose_by_image.values()])
     global_mean_dist_to_cnc = np.mean([d2cnc for d2cnc in dist2cnc_pose_by_image.values()])
 
-    with open(Path(db.basedir) / f'{task_name}_colmap_poses_comparison.json', 'w') as out_file:
+    with open(Path(db.basedir) / f'{task_name}_cnc_poses_comparison.json', 'w') as out_file:
         json.dump({
             'global mean distance to CNC pose': global_mean_dist_to_cnc,
             'replicate mean distance to CNC pose': dict_sort_by_values(mean_dist_to_cnc_rep),
             'mean distance to CNC pose': mean_dist_to_cnc,
+            'global mean distance to mean pose': global_mean_dist,
+            'replicate mean distance to mean pose': dict_sort_by_values(mean_dist_rep),
+            'mean distance to mean pose': mean_dist,
+            'std distance to mean pose': std_dist,
+            'distance to mean pose': dist2mean_pose_by_image
+        }, out_file, indent=2)
+
+    return
+
+
+def compare_to_calibrated_poses(db, task_name, scans_list):
+    """Compare the poses estimated by COLMAP to the calibrated ones (from the ``ExtrinsicCalibration``).
+
+    Parameters
+    ----------
+    db : plantdb.fsdb.FSDB
+        Local ROMI database instance with the replicated scan datasets.
+    task_name : str
+        Name of the task to test.
+    scans_list : list of plantdb.fsdb.Scan
+        List of ``Scan`` instances to compare.
+
+    """
+    from plant3dvision.calibration import calibration_figure
+    from scipy.spatial.distance import euclidean
+    logger.info(f"Comparing '{task_name}' outputs for {len(scans_list)} replicated scans!")
+
+    calibrated_poses = get_image_poses(scans_list[0], "calibrated_pose")  # {scan_id: {img_id: [x, y, z]}}
+    image_ids = list(calibrated_poses.keys())
+
+    # - Get all poses estimated by COLMAP indexed by image id and by replicate id:
+    estimated_poses = {}  # {scan_id: {img_id: [x, y, z]}}
+    for scan in scans_list:
+        estimated_poses[scan.id] = compute_colmap_poses_from_metadata(scan)  # {img_id: [x, y, z]}
+        calibration_figure(calibrated_poses, estimated_poses[scan.id], add_image_id=False, pred_scan_id=scan.id,
+                           ref_scan_id="ExtrinsicCalibration", ref_label="Calibrated", pred_label="Estimated",
+                           path=db.basedir, prefix=f"{scan.id}-")
+
+    # - Get the list of all colmap poses (XYZ) indexed by image id:
+    estimated_poses_by_image = {im: [] for im in estimated_poses[scan.id].keys()}
+    for scan_id, poses in estimated_poses.items():
+        for im_id, pose in poses.items():
+            estimated_poses_by_image[im_id].append(pose)
+
+    # - Compute the distance of estimated colmap poses from the calibrated pose for each replicate and image:
+    dist2calib_pose_by_image = {}
+    for im_id, poses in estimated_poses_by_image.items():
+        xyz_cnc = calibrated_poses[im_id][:3]
+        dist2calib_pose_by_image[im_id] = [euclidean(pose, xyz_cnc) for pose in poses]
+    # Compute the mean distance of estimated colmap poses from the calibrated pose for each image:
+    mean_dist_to_calib = {im_id: np.mean(d2calib) for im_id, d2calib in dist2calib_pose_by_image.items()}
+    mean_dist_to_calib_rep = {scan.id: np.mean([dist2calib_pose_by_image[im_id][scan_idx] for im_id in image_ids]) for
+                              scan_idx, scan in enumerate(scans_list)}
+
+    # Now compute mean pose per image:
+    mean_pose_by_image = {}
+    for im_id, pose in estimated_poses_by_image.items():
+        mean_pose_by_image[im_id] = np.mean(np.array(pose), axis=0)
+
+    # - Then compute the distance from the mean pose for each replicate:
+    dist2mean_pose_by_image = {}
+    for im_id, mean_pose in mean_pose_by_image.items():
+        dist2mean_pose_by_image[im_id] = [euclidean(estimated_poses[scan.id][im_id], mean_pose) for scan in scans_list]
+    # Compute deviation statistics per image:
+    mean_dist = {im_id: np.mean(d2m) for im_id, d2m in dist2mean_pose_by_image.items()}
+    mean_dist_rep = {scan.id: np.mean([dist2mean_pose_by_image[im_id][scan_idx] for im_id in image_ids]) for
+                     scan_idx, scan in enumerate(scans_list)}
+    std_dist = {im_id: np.std(d2m) for im_id, d2m in dist2mean_pose_by_image.items()}
+    # Compute global deviation statistics:
+    global_mean_dist = np.mean([d2m for d2m in dist2mean_pose_by_image.values()])
+    global_mean_dist_to_cnc = np.mean([d2cnc for d2cnc in dist2calib_pose_by_image.values()])
+
+    with open(Path(db.basedir) / f'{task_name}_calib_poses_comparison.json', 'w') as out_file:
+        json.dump({
+            'global mean distance to calib pose': global_mean_dist_to_cnc,
+            'replicate mean distance to calib pose': dict_sort_by_values(mean_dist_to_calib_rep),
+            'mean distance to calib pose': mean_dist_to_calib,
             'global mean distance to mean pose': global_mean_dist,
             'replicate mean distance to mean pose': dict_sort_by_values(mean_dist_rep),
             'mean distance to mean pose': mean_dist,

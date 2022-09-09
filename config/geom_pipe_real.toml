@@ -10,7 +10,8 @@ robust_alignment_max_error = 10
 [Colmap]
 upstream_task = "ImagesFilesetExists"
 matcher = "exhaustive"
-calibration_scan_id = "extrinsic_calib_1"  # use a dataset with calibrated extrinsic camera poses
+intrinsic_calibration_scan_id = ""  # use a dataset with calibrated intrinsic camera poses
+extrinsic_calibration_scan_id = ""  # use a dataset with calibrated extrinsic camera poses
 compute_dense = false
 align_pcd = true
 use_gpu = true

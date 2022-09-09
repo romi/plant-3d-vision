@@ -105,7 +105,7 @@ def file_by_file_comparison(db, task_name, scan_replicates):
     logger.info(f"Performing file-by-file comparison for the outputs of task '{task_name}'...")
     fcmp = {}
     scan_pairs = combinations(scan_replicates, 2)
-    for ref_scan, flo_scan in tqdm(scan_pairs):
+    for ref_scan, flo_scan in scan_pairs:
         # Compare the files' `os.stat()` signatures (file type, size, and modification time):
         cmp = filecmp.dircmp(ref_scan, flo_scan)
         # Compute the replicated task folders similarity percentage:

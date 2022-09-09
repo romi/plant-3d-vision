@@ -19,7 +19,7 @@ def parsing():
     parser = argparse.ArgumentParser(description=DESC)
 
     parser.add_argument("dataset",
-                        help="Path of the dataset.")
+                        help="Path to the dataset.")
 
     return parser
 
@@ -38,7 +38,7 @@ def main(args):
     # - Get the COLMAP poses:
     colmap_poses = compute_colmap_poses_from_camera_json(dataset)
     # - Generate the calibration figure:
-    calibration_figure(cnc_poses, colmap_poses, scan_id=scan_name, calib_scan_id='Colmap')
+    calibration_figure(cnc_poses, colmap_poses, pred_scan_id=scan_name, ref_scan_id='Colmap')
     db.disconnect()
 
 

@@ -74,7 +74,7 @@ def get_cnc_poses(scan_dataset):
     return cnc_poses
 
 
-def get_calibrated_poses(scan_dataset):
+def get_image_poses(scan_dataset, md="calibrated_pose"):
     """Get the calibrated camera poses, estimated by colmap, from the 'images' fileset using "calibrated_pose" metadata.
 
     Parameters
@@ -91,20 +91,20 @@ def get_calibrated_poses(scan_dataset):
     --------
     >>> import os
     >>> from plantdb.fsdb import FSDB
-    >>> from plant3dvision.tasks.colmap import get_calibrated_poses
+    >>> from plant3dvision.tasks.colmap import get_image_poses
     >>> db = FSDB(os.environ.get('DB_LOCATION', '/data/ROMI/DB'))
     >>> # Use the calibrated poses from/on a calibration scan:
     >>> db.connect()
     >>> db.list_scans()
     >>> scan_id = "sango36"
     >>> scan = db.get_scan(scan_id)
-    >>> colmap_poses = get_calibrated_poses(scan)
+    >>> colmap_poses = get_image_poses(scan)
     >>> print(colmap_poses)
     >>> db.disconnect()
 
     """
     images_fileset = scan_dataset.get_fileset('images')
-    return {im.id: im.get_metadata("calibrated_pose") for im in images_fileset.get_files()}
+    return {im.id: im.get_metadata(md) for im in images_fileset.get_files()}
 
 
 def compute_colmap_poses_from_metadata(scan_dataset):
@@ -670,8 +670,8 @@ class Colmap(RomiTask):
                 except:
                     logger.warning("Could not format the camera parameters from COLMAP camera!")
                     logger.info(f"COLMAP camera: {cameras}")
-            calibration_figure(cnc_poses, colmap_poses, path=self.output().get().path(),
-                               scan_id=images_fileset.scan.id, calib_scan_id=str(self.extrinsic_calibration_scan_id),
+            calibration_figure(cnc_poses, colmap_poses, pred_scan_id=images_fileset.scan.id,
+                               ref_scan_id=str(self.extrinsic_calibration_scan_id), path=self.output().get().path(),
                                header=camera_str)
         else:
             logger.info("No extrinsic calibration required!")

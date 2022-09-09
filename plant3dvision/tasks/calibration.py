@@ -496,9 +496,8 @@ class ExtrinsicCalibration(RomiTask):
             logger.info(f"COLMAP camera: {cameras}")
             camera_str = ""
         # - Generates a calibration figure showing CNC poses vs. COLMAP estimated poses:
-        calibration_figure(cnc_poses, colmap_poses, path=self.output().get().path(),
-                           scan_id=images_fileset.scan.id, calib_scan_id="", header=camera_str,
-                           scan_path_kwargs=scan_cfg["ScanPath"])
+        calibration_figure(cnc_poses, colmap_poses, pred_scan_id=images_fileset.scan.id, ref_scan_id="",
+                           path=self.output().get().path(), header=camera_str, scan_path_kwargs=scan_cfg["ScanPath"])
 
         # Use of try/except strategy to avoid failure of luigi pipeline (destroy all fileset!)
         try:

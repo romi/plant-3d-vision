@@ -278,31 +278,46 @@ def calibrate_simple_radial_camera(corners, ids, img_shape, aruco_kwargs):
     return reproj_error, mtx, dist, rvecs, tvecs, per_view_errors
 
 
-def calibration_figure(cnc_poses, colmap_poses, path=None, image_id=False, scan_id=None, calib_scan_id=None, **kwargs):
+def calibration_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_id=None, ref_scan_id=None, **kwargs):
     """Create a figure showing the effect of calibration procedure.
 
     Parameters
     ----------
-    cnc_poses : dict
-        Image id indexed dictionary of the "approximate poses" (CNC).
-    colmap_poses : dict
-        Image id indexed dictionary of the "calibrated poses" (Colmap).
-    path : str, optional
-        Path where to save the figure.
-    image_id : bool, optional
+    ref_poses : dict
+        Image id indexed dictionary of the poses to use as reference (CNC or ExtrinsicCalibration).
+    pred_poses : dict
+        Image id indexed dictionary of the predicted poses (Colmap).
+    add_image_id : bool, optional
         If ``True`` add the image id next to the markers.
         ``False`` by default.
-    scan_id : str, optional
-        Name of the scan to calibrate.
-    calib_scan_id : str, optional
-        Name of the calibration scan.
+    pred_scan_id : str, optional
+        Name of scan with predicted poses.
+    ref_scan_id : str, optional
+        Name of the scan with reference poses.
+
+    Other Parameters
+    ----------------
+    path : str
+        Path where to save the figure.
+    prefix : str
+        Prefix to append to the filename.
+    suffix : str
+        Suffix to append to the filename.
+    ref_label : str
+        Name to give to the reference poses.
+    pred_label : str
+        Name to give to the predicted poses.
+    xlims : (float, float)
+        A len-2 tuple of float values to use as "x-axis limits" represented as dashed blue lines
+    ylims : (float, float)
+        A len-2 tuple of float values to use as "y-axis limits" represented as dashed blue lines
 
     Examples
     --------
     >>> import os
     >>> from plantdb.fsdb import FSDB
     >>> from plant3dvision.tasks.colmap import get_cnc_poses
-    >>> from plant3dvision.tasks.colmap import compute_colmap_poses_from_camera_json
+    >>> from plant3dvision.tasks.colmap import compute_colmap_poses_from_metadata
     >>> from plant3dvision.tasks.colmap import calibration_figure
     >>> from plant3dvision.tasks.colmap import use_precalibrated_poses
     >>> db = FSDB(os.environ.get('DB_LOCATION', '/data/ROMI/DB'))
@@ -310,49 +325,49 @@ def calibration_figure(cnc_poses, colmap_poses, path=None, image_id=False, scan_
     >>> db.connect()
     >>> db.list_scans()
     >>> scan_id = calib_scan_id = "sgk_300_90_36_colmap"
-    >>> scan = db.get_scan(scan_id)
-    >>> calib_scan = db.get_scan(calib_scan_id)
+    >>> scan = db.get_scan(pred_scan_id)
+    >>> calib_scan = db.get_scan(ref_scan_id)
     >>> cnc_poses = get_cnc_poses(scan)
-    >>> len(cnc_poses)
-    >>> colmap_poses = compute_colmap_poses_from_camera_json(calib_scan)
+    >>> len(ref_poses)
+    >>> colmap_poses = compute_colmap_poses_from_metadata(calib_scan)
     >>> len(colmap_poses)
-    >>> calibration_figure(cnc_poses, colmap_poses, scan_id=scan_id, calib_scan_id=calib_scan_id)
+    >>> calibration_figure(cnc_poses,colmap_poses,pred_scan_id=scan_id,ref_scan_id=calib_scan_id)
     >>> db.disconnect()
     >>> # Example 2 - Compute & use the calibrated poses from/on a scan:
     >>> db.connect()
     >>> db.list_scans()
     >>> scan_id = calib_scan_id = "test_sgk"
-    >>> scan = db.get_scan(scan_id)
-    >>> calib_scan = db.get_scan(calib_scan_id)
+    >>> scan = db.get_scan(pred_scan_id)
+    >>> calib_scan = db.get_scan(ref_scan_id)
     >>> cnc_poses = get_cnc_poses(scan)
     >>> colmap_poses = compute_colmap_poses_from_camera_json(calib_scan)
-    >>> calibration_figure(cnc_poses, colmap_poses, scan_id=scan_id, calib_scan_id=calib_scan_id)
+    >>> calibration_figure(cnc_poses,colmap_poses,pred_scan_id=scan_id,ref_scan_id=calib_scan_id)
     >>> db.disconnect()
     >>> # Example 3 - Compute the calibrated poses with a calibration scan & use it on a scan:
     >>> db.connect()
     >>> db.list_scans()
     >>> scan_id = "sgk3"
     >>> calib_scan_id = "calibration_350_40_36"
-    >>> scan = db.get_scan(scan_id)
-    >>> calib_scan = db.get_scan(calib_scan_id)
+    >>> scan = db.get_scan(pred_scan_id)
+    >>> calib_scan = db.get_scan(ref_scan_id)
     >>> images_fileset = scan.get_fileset('images')
     >>> images_fileset = use_precalibrated_poses(images_fileset,calib_scan)
     >>> cnc_poses = {im.id: im.get_metadata("approximate_pose") for im in images_fileset.get_files()}
     >>> colmap_poses = {im.id: im.get_metadata("calibrated_pose") for im in images_fileset.get_files()}
-    >>> calibration_figure(cnc_poses, colmap_poses, scan_id=scan_id, calib_scan_id=calib_scan_id)
+    >>> calibration_figure(cnc_poses,colmap_poses,pred_scan_id=scan_id,ref_scan_id=calib_scan_id)
     >>> db.disconnect()
     >>> # Example 3 - Compute the calibrated poses with a calibration scan & use it on a scan:
     >>> db.connect()
     >>> db.list_scans()
     >>> scan_id = "Sangoku_90_300_36_1_calib"
     >>> calib_scan_id = "Sangoku_90_300_36_1_calib"
-    >>> scan = db.get_scan(scan_id)
-    >>> calib_scan = db.get_scan(calib_scan_id)
+    >>> scan = db.get_scan(pred_scan_id)
+    >>> calib_scan = db.get_scan(ref_scan_id)
     >>> images_fileset = scan.get_fileset('images')
     >>> images_fileset = use_precalibrated_poses(images_fileset,calib_scan)
     >>> cnc_poses = {im.id: im.get_metadata("approximate_pose") for im in images_fileset.get_files()}
     >>> colmap_poses = {im.id: im.get_metadata("calibrated_pose") for im in images_fileset.get_files()}
-    >>> calibration_figure(cnc_poses, colmap_poses, scan_id=scan_id, calib_scan_id=calib_scan_id)
+    >>> calibration_figure(cnc_poses,colmap_poses,pred_scan_id=scan_id,ref_scan_id=calib_scan_id)
     >>> db.disconnect()
 
     """
@@ -360,41 +375,46 @@ def calibration_figure(cnc_poses, colmap_poses, path=None, image_id=False, scan_
     # TODO: add `center_x` & `center_y` from `ScanPath.kwargs`
     import matplotlib.pyplot as plt
     from scipy.spatial import distance
+    ref_label = kwargs.get("ref_label", "CNC")
+    pred_label = kwargs.get("pred_label", "COLMAP")
 
     gs_kw = dict(height_ratios=[12, 1])
     fig, axd = plt.subplots(nrows=2, ncols=1, figsize=(10, 13), constrained_layout=True, gridspec_kw=gs_kw)
     ax, bxp = axd
 
-    title = f"Colmap calibration - {scan_id}"
-    if calib_scan_id != "":
-        title += f"/{calib_scan_id}"
+    title = f"Colmap calibration - {pred_scan_id}"
+    if ref_scan_id != "":
+        title += f"/{ref_scan_id}"
     plt.suptitle(title, fontweight="bold")
 
-    # - Plot CNC poses coordinates as a red 'x' marker:
+    # - Plot REFERENCE poses coordinates as a red 'x' marker:
     # Get X & Y coordinates:
-    x, y, _, _, _ = np.array([v for _, v in cnc_poses.items() if v is not None]).T
-    # Add a red 'x' marker to every non-null CNC coordinates:
+    try:
+        x, y, _, _, _ = np.array([v for _, v in ref_poses.items() if v is not None]).T
+    except:
+        x, y, _ = np.array([v for _, v in ref_poses.items() if v is not None]).T
+    # Add a red 'x' marker to every non-null coordinates:
     cnc_scatter = ax.scatter(x, y, marker="x", c="red")
-    cnc_scatter.set_label("CNC poses")
+    cnc_scatter.set_label(ref_label)
 
-    # - Plot COLMAP poses coordinates as a blue '+' marker:
+    # - Plot PREDICTED poses coordinates as a blue '+' marker:
     # Get X & Y coordinates:
-    X, Y, _ = np.array([v for _, v in colmap_poses.items() if v is not None]).T
-    # Add a blue '+' marker to every non-null Colmap coordinates:
+    X, Y, _ = np.array([v for _, v in pred_poses.items() if v is not None]).T
+    # Add a blue '+' marker to every non-null coordinates:
     colmap_scatter = ax.scatter(X, Y, marker="+", c="blue")
-    colmap_scatter.set_label("COLMAP poses")
+    colmap_scatter.set_label(pred_label)
 
-    # - Plot the CNC/COLMAP "mapping" as arrows:
-    XX, YY = [], []  # use CNC poses as 'origin' point for arrow
+    # - Plot the REFERENCE/PREDICTED "mapping" as arrows:
+    XX, YY = [], []  # use REFERENCE poses as 'origin' point for arrow
     U, V = [], []  # arrow components
-    err = []  # euclidian distance between CNC & COLMAP => positioning error
-    for im_id in colmap_poses.keys():
-        if cnc_poses[im_id] is not None and colmap_poses[im_id] is not None:
-            XX.append(cnc_poses[im_id][0])
-            YY.append(cnc_poses[im_id][1])
-            U.append(colmap_poses[im_id][0] - cnc_poses[im_id][0])
-            V.append(colmap_poses[im_id][1] - cnc_poses[im_id][1])
-            err.append(distance.euclidean(cnc_poses[im_id][0:3], colmap_poses[im_id][0:3]))
+    err = []  # euclidian distance between REFERENCE & PREDICTED => positioning error
+    for im_id in pred_poses.keys():
+        if ref_poses[im_id] is not None and pred_poses[im_id] is not None:
+            XX.append(ref_poses[im_id][0])
+            YY.append(ref_poses[im_id][1])
+            U.append(pred_poses[im_id][0] - ref_poses[im_id][0])
+            V.append(pred_poses[im_id][1] - ref_poses[im_id][1])
+            err.append(distance.euclidean(ref_poses[im_id][0:3], pred_poses[im_id][0:3]))
     # Show the mapping:
     q = ax.quiver(XX, YY, U, V, scale_units='xy', scale=1., width=0.003)
 
@@ -420,10 +440,10 @@ def calibration_figure(cnc_poses, colmap_poses, path=None, image_id=False, scan_
         title += "\n" + header
     ax.set_title(title, fontdict={'family': 'monospace', 'size': 'medium'})
 
-    # - Plot the image indexes as text next to CNC points:
+    # - Plot the image indexes as text next to REFERENCE points:
     # Get images index:
-    im_ids = [im_id for im_id, v in cnc_poses.items() if v is not None]
-    if not image_id:
+    im_ids = [im_id for im_id, v in ref_poses.items() if v is not None]
+    if not add_image_id:
         im_ids = list(range(len(im_ids)))
     # Add image or point ids as text:
     for i, im_id in enumerate(im_ids):
@@ -456,15 +476,18 @@ def calibration_figure(cnc_poses, colmap_poses, path=None, image_id=False, scan_
         yticks = ["All poses"]
 
     bxp.boxplot(data, vert=False)
-    bxp.set_title("CNC vs. COLMAP poses", fontdict={'family': 'monospace', 'size': 'medium'})
+    bxp.set_title(f"{ref_label} vs. {pred_label} poses", fontdict={'family': 'monospace', 'size': 'medium'})
     bxp.set_xlabel('Euclidean distance (in mm)')
     bxp.set_yticklabels(yticks)
-    plt.tight_layout()
     bxp.grid(True, which='major', axis='x', linestyle='dotted')
 
+    path = kwargs.get("path", None)
     if path is not None:
         from os.path import join
-        plt.savefig(join(path, "calibration.png"))
+        prefix = kwargs.get('prefix', "")
+        suffix = kwargs.get('suffix', "")
+        plt.savefig(join(path, f"{prefix}{ref_label.lower()}_vs_{pred_label.lower()}_poses{suffix}.png"))
     else:
         plt.show()
+    plt.close()
     return None

@@ -11,12 +11,12 @@
 
     "ExtrinsicCalibration": {
         "prev_task" : "",
-        "comp_func" : ["compare_colmap_poses", "compare_intrinsic_params"]
+        "comp_func" : ["compare_to_cnc_poses", "compare_intrinsic_params"]
     },
 
     "Colmap": {
         "prev_task" : "",
-        "comp_func" : ["compare_colmap_poses", "compare_intrinsic_params"]
+        "comp_func" : ["compare_to_cnc_poses", "compare_to_calibrated_poses", "compare_intrinsic_params"]
     },
 
     "Undistorted": {
