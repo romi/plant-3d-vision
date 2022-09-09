@@ -21,7 +21,7 @@
 
     "Undistorted": {
         "prev_task" : "Colmap",
-        "comp_func" : "compare_undistorted"
+        "comp_func" : ""
     },
 
     "Masks": {
@@ -56,12 +56,12 @@
 
     "TreeGraph": {
         "prev_task" : "CurveSkeleton",
-        "comp_func" : "compare_treeGraph"
+        "comp_func" : ""
     },
 
     "AnglesAndInternodes": {
         "prev_task" : "TreeGraph",
-        "comp_func" : "angles_and_internodes_comparison"
+        "comp_func" : "compare_angles_and_internodes"
     },
 
     "Segmentation2d": {
