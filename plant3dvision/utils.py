@@ -3,6 +3,7 @@
 
 """This module regroups miscellaneous utilities."""
 
+
 def recursively_unfreeze(value):
     """
     Recursively walks ``Mapping``s convert them to ``Dict``.
@@ -41,7 +42,9 @@ def jsonify(data: dict) -> dict:
                 json_data[k] = v
     return json_data
 
+
 import math
+
 
 def auto_format_bytes(size_bytes, unit='octets'):
     """Auto format bytes size.
@@ -75,3 +78,31 @@ def auto_format_bytes(size_bytes, unit='octets'):
     p = math.pow(1024, i)
     s = round(size_bytes / p, 2)
     return f"{s} {size_name[i]}"
+
+
+def yes_no_choice(question: str, default=True) -> bool:
+    """Raise a yes/no question with a default reply and wait for a valid reply from user.
+
+    Examples
+    --------
+    >>> from plant3dvision.utils import yes_no_choice
+    >>> yes_no_choice("Is ROMI an awesome project?")
+    Is ROMI an awesome project? [YES/no]>?
+    Out[3]: True
+    >>> yes_no_choice("Luke, I am your father!", default=False)
+    Luke, I am your father! [yes/NO]>?
+    Out[5]: False
+
+    """
+    opt = {"": default, "yes": True, "y": True, "ye": True, "no": False, "n": False}
+    default_choice = " [YES/no]" if default else " [yes/NO]"
+    choice = None
+    while choice is None:
+        kbd = input(question + default_choice).lower()
+        try:
+            opt[kbd]
+        except KeyError:
+            choice = None
+        else:
+            choice = opt[kbd]
+    return choice
