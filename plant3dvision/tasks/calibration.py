@@ -280,7 +280,8 @@ class IntrinsicCalibration(RomiTask):
         reproj_error, mtx, dist, rvecs, tvecs, per_view_errors = calibrate_opencv_camera(corners, ids,
                                                                                          img_shape,
                                                                                          self.aruco_kwargs)
-        opencv_model = {"OPENCV": get_opencv_params_from_arrays(mtx, dist[0]) | {'RMS_error': reproj_error}}
+        opencv_model = get_opencv_params_from_arrays(mtx, dist[0])
+        opencv_model.update({'RMS_error': reproj_error})
         _export_rms_errors("OPENCV", per_view_errors)
 
         # RADIAL model:
@@ -288,7 +289,8 @@ class IntrinsicCalibration(RomiTask):
         reproj_error, mtx, dist, rvecs, tvecs, per_view_errors = calibrate_radial_camera(corners, ids,
                                                                                          img_shape,
                                                                                          self.aruco_kwargs)
-        radial_model = {"RADIAL": get_radial_params_from_arrays(mtx, dist[0]) | {'RMS_error': reproj_error}}
+        radial_model = get_radial_params_from_arrays(mtx, dist[0])
+        radial_model.update({'RMS_error': reproj_error})
         _export_rms_errors("RADIAL", per_view_errors)
 
         # SIMPLE_RADIAL model:
@@ -296,13 +298,17 @@ class IntrinsicCalibration(RomiTask):
         reproj_error, mtx, dist, rvecs, tvecs, per_view_errors = calibrate_simple_radial_camera(corners, ids,
                                                                                                 img_shape,
                                                                                                 self.aruco_kwargs)
-        simple_radial_model = {
-            "SIMPLE_RADIAL": get_simple_radial_params_from_arrays(mtx, dist[0]) | {'RMS_error': reproj_error}}
+        simple_radial_model = get_simple_radial_params_from_arrays(mtx, dist[0])
+        opencv_model.update({'RMS_error': reproj_error})
         _export_rms_errors("SIMPLE_RADIAL", per_view_errors)
 
         # Save the estimated camera parameters as JSON:
         output_file = self.output_file("camera_model")
-        camera_model = opencv_model | radial_model | simple_radial_model
+        camera_model_names = ("OPENCV", "RADIAL", "SIMPLE_RADIAL")
+        camera_models = (opencv_model, radial_model, simple_radial_model)
+        camera_model = {}
+        for model, model_dict in zip(camera_model_names, camera_models):
+            camera_model.update({model: model_dict})
         io.write_json(output_file, camera_model)
 
         return
