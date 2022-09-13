@@ -628,7 +628,7 @@ class ColmapRunner(object):
                 cli_args["--robust_alignment_max_error"] = "10"
         # - Extend with COLMAP method command-line arguments dict:
         for x in cli_args.keys():
-            process.extend([x, cli_args[x]])
+            process.extend([x, str(cli_args[x])])
 
         out = None
         if colmap_exe.split(":")[0] in ['geki/colmap', 'roboticsmicrofarms/colmap']:
