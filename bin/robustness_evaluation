@@ -42,7 +42,7 @@ Please note that:
    2. use the `--models` argument to copy the CNN trained models
 """
 
-DATETIME_FMT = "%Y.%m.%d_%H:%M"
+DATETIME_FMT = "%Y.%m.%d_%H.%M"
 
 def parsing():
     # TODO: an option to set a reference (or would that be the job of the Evaluation tasks?!)
