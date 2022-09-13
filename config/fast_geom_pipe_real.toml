@@ -1,0 +1,61 @@
+[Undistorted]
+upstream_task = "ImagesFilesetExists"
+camera_model_src = "IntrinsicCalibration"
+scan_id = "extrinsic_calib_1_opencv"  # use a dataset with calibrated intrinsic camera params
+
+[Masks]
+upstream_task = "Undistorted"
+query = "{\"channel\":\"rgb\"}"
+type = "linear"
+parameters = "[0, 1, 0]"
+dilation = 5 # default to 0
+binarize = true
+threshold = 0.2
+
+[Voxels]
+upstream_task = "ImagesFilesetExists"
+upstream_mask = "Masks"
+voxel_size = 0.5
+type = "carving"
+
+[PointCloud]
+upstream_task = "Voxels"
+level_set_value = 0.0
+
+[TriangleMesh]
+upstream_task = "PointCloud"
+library = "open3d" # or "cgal"
+filtering = "most connected triangles"  # ["", "most connected triangles", "largest connected triangles", "dbscan point-cloud"]
+
+[CurveSkeleton]
+upstream_task = "TriangleMesh"
+
+[TreeGraph]
+upstream_task = "CurveSkeleton"
+z_axis = 2
+stem_axis_inverted = false
+
+[AnglesAndInternodes]
+upstream_task = "TreeGraph"
+characteristic_length = 1.0
+stem_axis_inverted = false
+
+[AnglesAndInternodesEvaluation]
+upstream_task = "AnglesAndInternodes"
+ground_truth = "ImagesFilesetExists"  # "ImagesFilesetExists" with manual measures / "VirtualPlantObj" with computer generated plants
+free_ends = 0.4
+free_ends_eps = 1e-2
+
+[Visualization]
+upstream_point_cloud = "PointCloud"
+upstream_mesh = "TriangleMesh"
+upstream_colmap = "Colmap"
+upstream_angles = "AnglesAndInternodes"
+upstream_skeleton = "CurveSkeleton"
+upstream_images = "ImagesFilesetExists"
+max_image_size = 1500
+max_point_cloud_size = 10000000
+thumbnail_size = 150
+
+[Clean]
+no_confirm = true
