@@ -248,18 +248,18 @@ def fill_tmp_db(ref_scan, models_path=None, extra_scans=None, clean=False):
     Parameters
     ----------
     ref_scan : pathlib.Path or str
-        Path to the scan dataset to use for evaluation.
+        Path to the 'reference scan dataset' to use for evaluation.
     models_path : pathlib.Path
         Name of models directory to copy in evaluation DB, to use with task ``Segmentation2D``.
     extra_scans : list of pathlib.Path
         Name of other scan dataset directories to copy in evaluation DB.
     clean : bool, optional
-        Force cleanning the
+        Force cleaning the 'reference scan dataset' to use for evaluation.
 
     Returns
     -------
     Path
-        The path to the temporary DB.
+        The path to the temporary 'reference scan dataset'.
 
     Notes
     -----
@@ -271,33 +271,30 @@ def fill_tmp_db(ref_scan, models_path=None, extra_scans=None, clean=False):
 
     """
     # Initialize a temporary directory use to store scan dataset before cleaning and running previous tasks to task to analyse:
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        # - Get the path of the temporary ROMI database
-        tmp_path = Path(tmp_dir)
-        logger.info(f"Create a temporary directory '{tmp_path}'.")
-        # - Create the `MARKER_FILE_NAME` marker for an active `plantdb.fsdb.FSDB`
-        with open(tmp_path / MARKER_FILE_NAME, 'w'):
-            logger.info(f"Create the `{MARKER_FILE_NAME}` marker for an active `plantdb.fsdb.FSDB`.")
+    tmp_dir = tempfile.mkdtemp()
+    # - Get the path of the temporary ROMI database
+    tmp_path = Path(tmp_dir)
+    logger.info(f"Create a temporary directory '{tmp_path}'.")
+    # - Create the `MARKER_FILE_NAME` marker for an active `plantdb.fsdb.FSDB`
+    with open(tmp_path / MARKER_FILE_NAME, 'w'):
+        logger.info(f"Create the `{MARKER_FILE_NAME}` marker for an active `plantdb.fsdb.FSDB`.")
 
-        # - If ML models are needed, copy them...
-        if models_path is not None:
-            logger.info("Copy the ML models datasets...")
-            # ...to temporary DB directory
-            _copy_tree(models_path, tmp_path / "models")
+    # - If ML models are needed, copy them to evaluation DB directory:
+    if models_path is not None:
+        logger.info("Copy the required ML models dataset...")
+        _copy_tree(models_path, tmp_path / "models")
+    # - If extra scans are needed, copy them to evaluation DB directory:
+    if extra_scans is not None:
+        for x_scan in extra_scans:
+            logger.info(f"Copy the required calibration dataset '{x_scan.name}'...")
+            _copy_tree(x_scan, tmp_path / x_scan.name)
 
-        logger.info("Copy the extra scan dataset...")
-        # - If extra scans are needed, copy them...
-        if extra_scans is not None:
-            for x_scan in extra_scans:
-                # ...to temporary DB directory
-                _copy_tree(x_scan, tmp_path / x_scan.name)
+    # Copy the 'reference scan dataset' to the temporary directory
+    logger.info("Copy the 'reference scan dataset' to the temporary directory...")
+    tmp_scan_dir = tmp_path / f"{ref_scan.name}"
+    _copy_tree(ref_scan, tmp_scan_dir)
 
-        # Copy the reference scan dataset to the temporary directory
-        logger.info("Copy the 'reference scan dataset' to the temporary directory...")
-        tmp_scan_dir = tmp_path / f"tmp_{ref_scan.name}"
-        _copy_tree(ref_scan, tmp_scan_dir)
-
-        _check_clean(tmp_scan_dir, clean)
+    _check_clean(tmp_scan_dir, clean)
 
     return tmp_scan_dir
 
@@ -587,31 +584,32 @@ def main():
         # If there is a previous task to run:
         if prev_task != "":
             # Create & populate the temporary DB:
-            tmp_scan_dir = fill_tmp_db(ref_scan_path, models_path, extra_scans, clean=args.clean)
+            ref_scan_path = fill_tmp_db(ref_scan_path, models_path, extra_scans, clean=args.clean)
             # Run the previous task on the temporary DB, if any:
-            logger.info(f"Call to '{prev_task}' task on the temporary scan dataset...")
-            romi_run_task(tmp_scan_dir, prev_task, config)
+            logger.info(f"Call to '{prev_task}' task on the 'temporary scan dataset'...")
+            romi_run_task(ref_scan_path, prev_task, config)
             # Duplicate the results of the previous task to the evaluation database:
-            logger.info(f"Duplicate temporary copy of the 'reference scan dataset' {n_replicates} times...")
-            for i in range(n_replicates):
-                copied_scan_name = Path(eval_db_path / f"{ref_scan_path.name}_{i}")
-                shutil.copytree(str(tmp_scan_dir), str(copied_scan_name))
-                scan_replicates.append(copied_scan_name.expanduser())
+            logger.info(f"Duplicate the 'temporary scan dataset' {n_replicates} times...")
         else:
-            # Check for previous analysis (with backup pipeline.toml):
             bak_cfg_file = ref_scan_path / "pipeline.toml"
+            # If a previous analysis is found (directory has a `pipeline.toml`) or a clean was requested:
             if bak_cfg_file.is_file() or args.clean:
                 # Copy to a temporary DB, clean it, replace reference scan path by clean one
                 ref_scan_path = fill_tmp_db(ref_scan_path, clean=args.clean)
-                logger.info(f"Duplicate temporary copy of the 'reference scan dataset' {n_replicates} times...")
+                logger.info(f"Duplicate the 'temporary scan dataset' {n_replicates} times...")
             else:
                 logger.info(f"Duplicate the 'reference scan dataset' {n_replicates} times...")
-            # Duplicate the scan dataset as many times as requested
-            scan_replicates = fill_eval_db(eval_db_path, ref_scan_path, n_replicates, models_path, extra_scans)
+        # Duplicate the scan dataset as many times as requested
+        scan_replicates = fill_eval_db(eval_db_path, ref_scan_path, n_replicates, models_path, extra_scans)
     else:
         # If there is something in the root directory that mean you passed a value to `--eval_db`
         # And we thus consider that it should already contain the replicated scans!
         logger.info(f"Found {n_replicates} replicate scans in evaluation database!")
+
+    # Clean the temporary DB:
+    tmp_db = ref_scan_path.parent
+    if tmp_db.is_dir():
+        os.rmdir(ref_scan_path.parent)
 
     # - Instantiate `FSDB` local "evaluation database":
     _check_markers(eval_db_path)
