@@ -1,31 +1,41 @@
 [Undistorted]
 upstream_task = "ImagesFilesetExists"
-camera_model_src = "IntrinsicCalibration"
-scan_id = "extrinsic_calib_1_opencv"  # use a dataset with calibrated intrinsic camera params
+camera_model_src = "ExtrinsicCalibration"
+camera_model = ""
+intrinsic_calib_scan_id = ""
+extrinsic_calib_scan_id = "extrinsic_calib_1"  # use a dataset with calibrated intrinsic camera params
 
 [Masks]
 upstream_task = "Undistorted"
 query = "{\"channel\":\"rgb\"}"
 type = "linear"
 parameters = "[0, 1, 0]"
-dilation = 5 # default to 0
+dilation = 3 # default to 0
 binarize = true
 threshold = 0.2
 
 [Voxels]
-upstream_task = "ImagesFilesetExists"
 upstream_mask = "Masks"
+upstream_colmap = "ImagesFilesetExists"
+camera_metadata = "colmap_camera"
 voxel_size = 0.5
-type = "carving"
+type = "averaging"  # {"averaging", "carving"}
+[Voxels.bounding_box]
+x = [ 260, 440,]
+y = [ 260, 440,]
+z = [ -250, 70,]
 
 [PointCloud]
 upstream_task = "Voxels"
 level_set_value = 0.0
+background_prior = 1.0  # only used if labels were defined in `Mask` (multiclass)
+min_contrast = 10.0  # only used if labels were defined in `Mask` (multiclass)
+min_score = 0.2  # only used if labels were defined in `Mask` (multiclass)
 
 [TriangleMesh]
 upstream_task = "PointCloud"
 library = "open3d" # or "cgal"
-filtering = "most connected triangles"  # ["", "most connected triangles", "largest connected triangles", "dbscan point-cloud"]
+filtering = "most connected triangles"  # {"", "most connected triangles", "largest connected triangles", "dbscan point-cloud"}
 
 [CurveSkeleton]
 upstream_task = "TriangleMesh"
