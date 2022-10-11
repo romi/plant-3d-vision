@@ -3,20 +3,23 @@
 
 import argparse
 import datetime
+import json
 import logging
 import os
 import shutil
 import subprocess
 import tempfile
+from pathlib import Path
 
 import toml
+from tqdm import tqdm
+
 from plant3dvision.compare import *
 from plant3dvision.compare import _get_task_fileset
 from plantdb import FSDB
 from plantdb.fsdb import LOCK_FILE_NAME
 from plantdb.fsdb import MARKER_FILE_NAME
 from romitask.log import configure_logger
-from tqdm import tqdm
 
 dirname, filename = os.path.split(os.path.abspath(__file__))
 
@@ -44,12 +47,13 @@ Please note that:
 
 DATETIME_FMT = "%Y.%m.%d_%H.%M"
 
+
 def parsing():
     # TODO: an option to set a reference (or would that be the job of the Evaluation tasks?!)
     # TODO: use the `pipeline.toml` to defines the previous tasks ?
     # - Load the JSON config file of the script:
     config = json.load(open(CONF_FILE))
-    valid_tasks = sorted(set(config.keys()) - set(['Clean']))
+    valid_tasks = sorted(set(config.keys()) - {'Clean'})
 
     parser = argparse.ArgumentParser(description=DESC,
                                      formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -66,26 +70,26 @@ def parsing():
     # -- Evaluation options:
     eval = parser.add_argument_group('Evaluation options')
     eval.add_argument("-n", "--replicate_number", default=30, type=int,
-                        help="Number of replicate to use for repeatability evaluation. Defaults to `30`.")
+                      help="Number of replicate to use for repeatability evaluation. Defaults to `30`.")
     eval.add_argument("-c", "--clean", action="store_true", default=False,
-                        help="Force Clean task on scan dataset.")
+                      help="Force Clean task on scan dataset.")
     eval.add_argument("-f", "--full-pipe", dest='full_pipe', action="store_true", default=False,
-                        help="Run the whole Reconstruction & Quantification pipeline on each replicate independently.")
+                      help="Run the whole Reconstruction & Quantification pipeline on each replicate independently.")
     eval.add_argument("-np", "--no-pipeline", dest='no_pipeline', action="store_true", default=False,
-                        help="Do not run the pipeline, only compare tasks outputs.")
+                      help="Do not run the pipeline, only compare tasks outputs.")
     eval.add_argument("--models", default=False,
-                        help="Models database location to use with ML pipeline.")
+                      help="Models database location to use with ML pipeline.")
 
     # -- Evaluation database options:
     db = parser.add_argument_group('Database options')
     db.add_argument("--suffix", default="", type=str,
-                        help="Suffix to append to the created database directory.")
+                    help="Suffix to append to the created database directory.")
     db.add_argument('--eval-db', dest='eval_db', type=str, default="",
-                        help="Evaluation database location to use. Use at your own risks!")
+                    help="Evaluation database location to use. Use at your own risks!")
     db.add_argument('--date-fmt', dest='date_fmt', type=str, default=DATETIME_FMT,
-                        help="Datetime format to use prefix for evaluation database name. Defaults to `DATETIME_FMT`.")
+                    help="Datetime format to use prefix for evaluation database name. Defaults to `DATETIME_FMT`.")
     db.add_argument('--no-date', dest='no_date', action="store_true", default=False,
-                        help=f"Do not add the datetime as prefix.")
+                    help=f"Do not add the datetime as prefix.")
 
     parser.add_argument('--log-level', dest='log_level', type=str, default='INFO',
                         choices=list(logging._nameToLevel.keys()),
@@ -441,9 +445,9 @@ def initialize_eval_db(test_db="", **kwargs):
     """
     # - Get the path to the evaluation DB to create:
     if test_db == "":
-        test_db = get_eval_db_path(**kwargs)
+        test_db = get_eval_db_path(**kwargs).absolute()
     else:
-        test_db = Path(test_db)
+        test_db = Path(test_db).absolute()
     # Create the evaluation DB directory:
     test_db.mkdir(exist_ok=True)
     # - Creates the marker file to be able to get a `plantdb.fsdb.FSDB` instance:
@@ -569,6 +573,8 @@ def main():
     logger.info(f"Path to the 'reference scan dataset' is: '{ref_scan_path}'")
     if args.eval_db != "":
         logger.info(f"Got a manually defined evaluation database location: '{args.eval_db}'.")
+    else:
+        logger.info(f"Created an evaluation database at location: '{eval_db_path}'.")
 
     # - Search pipeline config for '*calibration_scan_id':
     extra_scans = check_extra_scans(db_location, args.config_file)
@@ -578,6 +584,7 @@ def main():
     # - Scan evaluation DB to check if it's already populated with replicates:
     scan_replicates = get_replicates_list(eval_db_path, ref_scan_path)
     n_replicates = len(scan_replicates)
+    has_tmp_db = False
     # Case without/with scan datasets in the evaluation database root directory
     if n_replicates == 0:
         n_replicates = int(args.replicate_number)
@@ -585,6 +592,7 @@ def main():
         if prev_task != "":
             # Create & populate the temporary DB:
             ref_scan_path = fill_tmp_db(ref_scan_path, models_path, extra_scans, clean=args.clean)
+            has_tmp_db = True
             # Run the previous task on the temporary DB, if any:
             logger.info(f"Call to '{prev_task}' task on the 'temporary scan dataset'...")
             romi_run_task(ref_scan_path, prev_task, config)
@@ -596,19 +604,22 @@ def main():
             if bak_cfg_file.is_file() or args.clean:
                 # Copy to a temporary DB, clean it, replace reference scan path by clean one
                 ref_scan_path = fill_tmp_db(ref_scan_path, clean=args.clean)
+                has_tmp_db = True
                 logger.info(f"Duplicate the 'temporary scan dataset' {n_replicates} times...")
             else:
                 logger.info(f"Duplicate the 'reference scan dataset' {n_replicates} times...")
         # Duplicate the scan dataset as many times as requested
         scan_replicates = fill_eval_db(eval_db_path, ref_scan_path, n_replicates, models_path, extra_scans)
     else:
-        # If there is something in the root directory that mean you passed a value to `--eval_db`
+        # If there is something in the root directory that mean you gave a value to `--eval_db`
         # And we thus consider that it should already contain the replicated scans!
         logger.info(f"Found {n_replicates} replicate scans in evaluation database!")
+        if n_replicates != int(args.replicate_number):
+            logger.warning(f"Not the same number of replicates found ({n_replicates}) and requested ({int(args.replicate_number)})!")
 
     # Clean the temporary DB:
     tmp_db = ref_scan_path.parent
-    if tmp_db.is_dir():
+    if has_tmp_db and tmp_db.is_dir():
         os.rmdir(ref_scan_path.parent)
 
     # - Instantiate `FSDB` local "evaluation database":
