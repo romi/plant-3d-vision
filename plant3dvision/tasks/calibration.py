@@ -352,11 +352,11 @@ class ExtrinsicCalibration(RomiTask):
     **Exhaustive Matching**: If the number of images in your dataset is relatively low (up to several hundreds), this matching mode should be fast enough and leads to the best reconstruction results.
     Here, every image is matched against every other image, while the block size determines how many images are loaded from disk into memory at the same time.
 
-    **Sequential Matching**: This mode is useful if the images are acquired in sequential order, e.g., by a video camera.
+    **Sequential Matching**: This mode is useful if the images are acquired in sequential order, _e.g._ by a video camera.
     In this case, consecutive frames have visual overlap and there is no need to match all image pairs exhaustively.
     Instead, consecutively captured images are matched against each other.
     This matching mode has built-in loop detection based on a vocabulary tree, where every N-th image (loop_detection_period) is matched against its visually most similar images (loop_detection_num_images).
-    Note that image file names must be ordered sequentially (e.g., image0001.jpg, image0002.jpg, etc.).
+    Note that image file names must be ordered sequentially (_e.g._ ``image0001.jpg``, ``image0002.jpg``, etc.).
     The order in the database is not relevant, since the images are explicitly ordered according to their file names.
     Note that loop detection requires a pre-trained vocabulary tree, that can be downloaded from https://demuc.de/colmap/.
 
