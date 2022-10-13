@@ -718,3 +718,10 @@ class Colmap(RomiTask):
         for log_path in workdir.glob('*.log'):
             outfile = self.output_file(log_path.name)
             outfile.import_file(log_path)
+
+        # - Get estimated camera poses from 'images' fileset metadata:
+        colmap_poses = {im.id: im.get_metadata("estimated_pose") for im in images_fileset.get_files()}
+        camera_str = format_camera_params(cameras)
+        calibration_figure(cnc_poses, colmap_poses, pred_scan_id=images_fileset.scan.id,
+                           ref_scan_id="Colmap", path=self.output().get().path(),
+                           header=camera_str, suffix="_estimated")
