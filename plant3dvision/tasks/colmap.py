@@ -6,7 +6,10 @@ from os.path import splitext
 
 import luigi
 import numpy as np
+
 from plant3dvision.calibration import calibration_figure
+from plant3dvision.camera import format_camera_params
+from plant3dvision.camera import get_colmap_cameras_from_calib_scan
 from plant3dvision.colmap import ColmapRunner
 from plant3dvision.colmap import compute_estimated_pose
 from plant3dvision.filenames import COLMAP_CAMERAS_ID
@@ -503,8 +506,8 @@ class Colmap(RomiTask):
     align_pcd = luigi.BoolParameter(default=True)
     intrinsic_calibration_scan_id = luigi.Parameter(default="")
     extrinsic_calibration_scan_id = luigi.Parameter(default="")
-    use_calibration_camera = luigi.BoolParameter(default=True)
-    camera_model = luigi.Parameter(default="OPENCV")
+    use_calibration_camera = luigi.BoolParameter(default=True)  # has no effect if no *_calib_scan_id
+    camera_model = luigi.Parameter(default="SIMPLE_RADIAL")
     use_gpu = luigi.BoolParameter(default=True)
     single_camera = luigi.BoolParameter(default=True)
     robust_alignment_max_error = luigi.IntParameter(default=10)
@@ -644,6 +647,7 @@ class Colmap(RomiTask):
 
         current_scan = DatabaseConfig().scan
         images_fileset = self.input().get()
+        cnc_poses = get_cnc_poses(images_fileset.scan)
         # - Defines if colmap should use an extrinsic calibration dataset:
         use_calibration = self.extrinsic_calibration_scan_id != ""
         if use_calibration:
@@ -657,12 +661,9 @@ class Colmap(RomiTask):
             logger.info(f"Use poses from extrinsic calibration scan: {self.extrinsic_calibration_scan_id}...")
             images_fileset = use_precalibrated_poses(images_fileset, calibration_scan)
             # - Create the calibration figure:
-            cnc_poses = get_cnc_poses(images_fileset.scan)
             colmap_poses = {im.id: im.get_metadata("calibrated_pose") for im in images_fileset.get_files()}
             camera_str = ""
             if self.use_calibration_camera:
-                from plant3dvision.camera import format_camera_params
-                from plant3dvision.camera import get_colmap_cameras_from_calib_scan
                 cameras = get_colmap_cameras_from_calib_scan(calibration_scan)
                 # Use of try/except strategy to avoid failure of luigi pipeline (destroy all fileset!)
                 try:

@@ -47,7 +47,7 @@ class Undistorted(FileByFileTask):
     """
     upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)
     camera_model_src = luigi.Parameter("Colmap")  # ['Colmap', 'IntrinsicCalibration', 'ExtrinsicCalibration']
-    camera_model = luigi.Parameter(default="OPENCV")  # set it if `camera_model_src = 'IntrinsicCalibration'`
+    camera_model = luigi.Parameter(default="SIMPLE_RADIAL")  # set it if `camera_model_src = 'IntrinsicCalibration'`
     intrinsic_calib_scan_id = luigi.Parameter(default="")  # set this to a scan with an `IntrinsicCalibration` task
     extrinsic_calib_scan_id = luigi.Parameter(default="")  # set this to a scan with an `ExtrinsicCalibration` task
 
