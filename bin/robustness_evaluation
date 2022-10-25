@@ -499,6 +499,7 @@ def romi_run_task(scan_path, task_name, cfg_file):
     logger.info(f"Executing task '{task_name}' on scan dataset '{str(scan_path)}'.")
     # TODO: use luigi.build() instead of subprocess.run call ?
     cmd = ["romi_run_task", task_name, str(scan_path), "--config", cfg_file, "--local-scheduler"]
+    logger.info(cmd)
     subprocess.run(cmd, check=True)
     return
 
@@ -595,7 +596,7 @@ def main():
             has_tmp_db = True
             # Run the previous task on the temporary DB, if any:
             logger.info(f"Call to '{prev_task}' task on the 'temporary scan dataset'...")
-            romi_run_task(ref_scan_path, prev_task, config)
+            romi_run_task(ref_scan_path, prev_task, args.config_file)
             # Duplicate the results of the previous task to the evaluation database:
             logger.info(f"Duplicate the 'temporary scan dataset' {n_replicates} times...")
         else:
