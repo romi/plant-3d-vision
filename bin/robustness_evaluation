@@ -621,7 +621,7 @@ def main():
     # Clean the temporary DB:
     tmp_db = ref_scan_path.parent
     if has_tmp_db and tmp_db.is_dir():
-        os.rmdir(ref_scan_path.parent)
+        shutil.rmtree(ref_scan_path.parent)
 
     # - Instantiate `FSDB` local "evaluation database":
     _check_markers(eval_db_path)
@@ -629,6 +629,10 @@ def main():
 
     # - Execute the task to evaluate for all replicated datasets:
     if not args.no_pipeline:
+        # -- Set the `PYOPENCL_CTX` environment variable:
+        if os.getenv('PYOPENCL_CTX') == None:
+            os.environ["PYOPENCL_CTX"] = '0'
+
         if prev_task == "":
             logger.info(f"Independent calls to task '{args.task}' on {n_replicates} replicate scans...")
         else:
