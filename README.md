@@ -21,6 +21,34 @@ A more comprehensive documentation about the "Plant Imager" project can be found
 - [Troubleshooting](#troubleshooting)
 
 
+## Pre-requisites
+You will need to install the Docker Engine, the required NVIDIA driver and NVIDIA Container Toolkit to benefit from GPU accelerated algorithms.
+
+### Getting Started
+Let's first install some useful tools like `git`, `curl` & `nano`:
+```shell
+sudo apt update && sudo apt install -y git curl nano
+```
+
+### Docker Engine
+You can follow the official [instructions](https://docs.docker.com/engine/install/ubuntu/) or use the convenience script:
+```shell
+curl https://get.docker.com | sh \
+  && sudo systemctl --now enable docker
+```
+
+You also have to follow the [Post-installation steps for Linux](https://docs.docker.com/engine/install/linux-postinstall/). 
+
+### NVIDIA drivers
+On Ubuntu, you can install the latest compatible NVIDIA drivers with:
+```shell
+sudo ubuntu-drivers autoinstall
+```
+
+### NVIDIA Container Toolkit
+We strongly recommend to follow the [Installation Guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) from NVIDIA.
+
+
 ## Building and running with Docker (recommended)
 
 ### Building the image
@@ -29,12 +57,10 @@ To build the Docker image of `plant-3d-vision`, you have to clone the git reposi
 ```bash
 git clone https://github.com/romi/plant-3d-vision.git
 cd plant-3d-vision/
-git submodule init  # initialize the git submodules
-git submodule update  # clone the git submodules
 ./docker/build.sh
 ```
 This will create a docker image named `roboticsmicrofarms/plant-3d-vision:latest`.
-If you want to tag your image with a specific one, just pass the tag argument as follows
+If you want to tag your image with a specific one, here named `mytag`, just pass the tag argument as follows
 `./docker/build.sh -t mytag`
 
 To show more options (built-in user...), just type `./docker/build.sh -h`.
@@ -49,25 +75,34 @@ This can be done as follows:
     -v /home/${USER}/my_database:/home/${USER}/database/ \
     -v /home/${USER}/my_configs/:/home/${USER}/config/
 ```
-Don't forget to change the paths with yours!
+Do NOT forget to change the paths with yours!
 
-If you want to run a docker image with another tag, you can pass the tag name as an argument:
-`./docker/run.sh -t my_tage`.
+If you want to run a docker image with another tag than `latest`, you can pass the tag name as an argument:
+`./docker/run.sh -t mytag`.
 
-To see more running options (specif tag, command...), type `./docker/run.sh -h`
-
+To see more running options, type `./docker/run.sh -h`
 
 This docker image has been tested successfully on:
 `docker --version=19.03.6 | nvidia driver version=450.102.04 | CUDA version=11.0`
-
 
 
 ## Install from sources
 
 ### Install requirements
 
-#### Colmap
-`Colmap` is required to run the reconstruction tasks.
+#### Conda
+In the following instructions, we use `conda`, have a look at the official installation instructions [here](https://docs.conda.io/en/latest/miniconda.html) or use this convenience script:
+```shell
+curl https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+bash Miniconda3-latest-Linux-x86_64.sh
+```
+Follow the instructions and proceed to remove the convenience script:
+```shell
+rm Miniconda3-latest-Linux-x86_64.sh
+```
+
+#### COLMAP
+`COLMAP` is required to run the reconstruction tasks.
 
 You have two options:
 
@@ -80,72 +115,32 @@ This library use `pyopencl` and thus require the following system libraries:
 - `ocl-icd-libopencl1`
 - `opencl-headers`
 
-In addition, you will need:
-
-- `git`
-- `python3-pip`
-- `python3-wheel`
-
 On Debian and Ubuntu, you can install all these dependencies with:
 ```bash
-sudo apt-get update && sudo apt-get install -y \
-    ocl-icd-libopencl1 opencl-headers \
-    git python3-wheel python3-pip
+sudo apt-get update && sudo apt-get install -y ocl-icd-libopencl1 opencl-headers
 ```
-
-If you have an NVIDIA GPU:
-```bash
-mkdir -p /etc/OpenCL/vendors
-echo "libnvidia-opencl.so.1" > /etc/OpenCL/vendors/nvidia.icd
-```
-
-To avoid troubles during `pyopencl` install, check `/usr/lib/libOpenCL.so` exists, if not add it with:
-```bash
-ln -s /usr/lib/x86_64-linux-gnu/libOpenCL.so.1 /usr/lib/libOpenCL.so
-```
-
-#### CGAL5.0
-
-As you will be using the `romicgal` library, which is a minimal wrapper for `CGAL5.0` using `pybind11` you will also need:
-- `wget`
-- `eigen3`
-- `gmp`
-- `mprf`
-- `pkg-config`
-
-On Debian and Ubuntu, you can install all these dependencies with:
-```bash
-sudo apt-get update && sudo apt-get install -y \
-    wget \
-    gcc pkg-config \
-    libeigen3-dev libgmp3-dev libmpfr-dev
-```
-
 
 ### Install sources
-
-In this install instructions, we use `conda`, have a look at the official installation instructions [here](https://docs.conda.io/en/latest/miniconda.html).
 
 1. Clone the `plant-3d-vision` sources:
     ```bash
     git clone https://github.com/romi/plant-3d-vision.git
+    git submodule init
+    git submodule update
     ```
 2. Create a conda environment named `plant3dvision` with Python3.8 for example:
     ```bash
-    conda create --name plant3dvision "python=3.8"
+    conda create --name plant3dvision "python=3.9"
     ```
-3. Install the submodules (`plantdb`, `romitask`, `romiseg`, `romicgal` & `dtw`) and `plant3dvision` in activated environment:
+3. Install the submodules (`plantdb`, `romitask`, `romiseg` & `dtw`) and `plant3dvision` in activated environment:
     ```bash
     conda activate plant3dvision
     cd plant-3d-vision/
-    git submodule init
-    git submodule update
     python3 -m pip install -r ./plantdb/requirements.txt
     python3 -m pip install -e ./plantdb/.
     python3 -m pip install -r ./romitask/requirements.txt
     python3 -m pip install -e ./romitask/.
     python3 -m pip install -e ./romiseg/.
-    python3 -m pip install -e ./romicgal/.
     python3 -m pip install -r ./dtw/requirements.txt
     python3 -m pip install -e ./dtw/.
     python3 -m pip install -r requirements.txt
@@ -191,10 +186,32 @@ romi_run_task --config config/geom_pipe_real.toml AnglesAndInternodes /tmp/testd
 ```
 
 
+### Monitoring
+
+#### CPU
+To monitor the CPU resource usage, you can use the `htop` tool.
+
+To install it from Ubuntu PPA repositories:
+```shell
+sudo apt install htop
+```
+
+To install it from the snap store:
+```shell
+snap install htop
+```
+
+#### GPU
+To monitor the GPU resource usage, you can use the following command:
+```shell
+watch -n1 nvidia-smi
+```
+where the `-n` option is the time interval in seconds.
+
+
 ## Troubleshooting
 
 ### Docker
-You must install nvidia gpu drivers, `nvidia-docker` (v2.0) and `nvidia-container-toolkit`. 
 To test if everything is okay:
 ```bash
 ./docker/run.sh --gpu_test
@@ -210,3 +227,15 @@ To test if everything is okay:
     ```bash
     apt-get install libsm6 libxext6 libxrender-dev
     ```
+
+
+If you have an NVIDIA GPU, you may solve some issues with:
+```bash
+mkdir -p /etc/OpenCL/vendors
+echo "libnvidia-opencl.so.1" > /etc/OpenCL/vendors/nvidia.icd
+```
+
+To avoid troubles during `pyopencl` install, check `/usr/lib/libOpenCL.so` exists, if not add it with:
+```bash
+ln -s /usr/lib/x86_64-linux-gnu/libOpenCL.so.1 /usr/lib/libOpenCL.so
+```
