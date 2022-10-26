@@ -9,15 +9,20 @@ A more comprehensive documentation about the "Plant Imager" project can be found
 **WARNING**: this is an ongoing development and changes will arise unannounced!
 
 **Table of Contents**
+- [Pre-requisites](#pre-requisites)
+  - [Getting Started](#getting-started)
+  - [Docker Engine](#docker-engine)
+  - [NVIDIA drivers](#nvidia-drivers)
+  - [NVIDIA Container Toolkit](#nvidia-container-toolkit)
 - [Building and running with Docker (recommended)](#building-and-running-with-docker-recommended)
-    * [Building the image](#building-the-image)
-    * [Running the container](#running-the-container)
+  - [Building the image](#building-the-image)
+  - [Running the container](#running-the-container)
 - [Install from sources](#install-from-sources)
-    * [Install requirements](#install-requirements)
-    * [Install sources](#install-sources)
+  - [Install requirements](#requirements)
+  - [Install sources](#install-sources)
 - [Usage](#usage)
-    * [Docker container](#docker-container)
-    * [Conda environment](#conda-environment)
+  - [Docker container](#docker-container)
+  - [Conda environment](#conda-environment)
 - [Troubleshooting](#troubleshooting)
 
 
@@ -88,7 +93,7 @@ This docker image has been tested successfully on:
 
 ## Install from sources
 
-### Install requirements
+### Requirements
 
 #### Conda
 In the following instructions, we use `conda`, have a look at the official installation instructions [here](https://docs.conda.io/en/latest/miniconda.html) or use this convenience script:

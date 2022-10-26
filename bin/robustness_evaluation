@@ -616,7 +616,8 @@ def main():
         # And we thus consider that it should already contain the replicated scans!
         logger.info(f"Found {n_replicates} replicate scans in evaluation database!")
         if n_replicates != int(args.replicate_number):
-            logger.warning(f"Not the same number of replicates found ({n_replicates}) and requested ({int(args.replicate_number)})!")
+            logger.warning(
+                f"Not the same number of replicates found ({n_replicates}) and requested ({int(args.replicate_number)})!")
 
     # Clean the temporary DB:
     tmp_db = ref_scan_path.parent
