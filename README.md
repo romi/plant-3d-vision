@@ -125,6 +125,16 @@ On Debian and Ubuntu, you can install all these dependencies with:
 sudo apt-get update && sudo apt-get install -y ocl-icd-libopencl1 opencl-headers
 ```
 
+Then we add the `PYOPENCL_CTX` environment variable to the end of our `.bashrc` file:
+```shell
+cat << EOF >> /home/$USER/.bashrc
+
+# ROMI plant-3d-vision - Select the first available device for PyOpenCL:
+export PYOPENCL_CTX='0'
+EOF
+```
+
+
 ### Install sources
 
 1. Clone the `plant-3d-vision` sources:
