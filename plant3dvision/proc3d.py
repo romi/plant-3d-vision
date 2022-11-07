@@ -8,11 +8,6 @@ plant3dvision.proc3d
 This module contains all functions for processing of 3D data.
 
 """
-import bisect
-import os
-
-import cv2
-import imageio
 import networkx as nx
 import numpy as np
 import open3d as o3d
@@ -32,7 +27,7 @@ except:
 
 
 def index2point(indexes, origin, voxel_size):
-    """Converts discrete nd indexes to a 3d points
+    """Converts discrete nd indexes to a 3d points.
 
     Parameters
     ----------
@@ -52,7 +47,7 @@ def index2point(indexes, origin, voxel_size):
 
 
 def point2index(points, origin, voxel_size):
-    """Converts discrete nd indexes to a 3d points
+    """Converts discrete nd indexes to a 3d points.
 
     Parameters
     ----------
@@ -72,8 +67,7 @@ def point2index(points, origin, voxel_size):
 
 
 def pcd2mesh(pcd):
-    """Use CGAL to create a Delaunay triangulation of a point cloud
-    with normals.
+    """Use CGAL to create a Delaunay triangulation of a point cloud with normals.
 
     Parameters
     ----------
@@ -96,9 +90,7 @@ def pcd2mesh(pcd):
 
 
 def pcd2vol(pcd, voxel_size, zero_padding=0):
-    """
-    Voxelize a point cloud. Every voxel value is equal to the number
-    of points in the corresponding cube.
+    """Voxelize a point cloud. Every voxel value is equal to the number of points in the corresponding cube.
 
     Parameters
     ----------
@@ -129,8 +121,7 @@ def pcd2vol(pcd, voxel_size, zero_padding=0):
 
 
 def skeletonize(mesh):
-    """Use CGAL to create a Delaunay triangulation of a point cloud
-    with normals.
+    """Use CGAL to create a Delaunay triangulation of a point cloud with normals.
 
     Parameters
     ----------
@@ -272,8 +263,8 @@ def distance_to_root_clusters(g, root_index, pcd, bin_size):
     dict
         corresponding cluster for each node in the original graph
     """
-    predecessors, distances_to_root = nx.dijkstra_predecessor_and_distance(
-        g, root_index)
+    import bisect
+    predecessors, distances_to_root = nx.dijkstra_predecessor_and_distance(g, root_index)
 
     max_dist = max(distances_to_root.values())
     n_bins = int(np.ceil(max_dist / bin_size))
@@ -398,6 +389,7 @@ def skeleton_from_distance_to_root_clusters(pcd, root_index, binsize, k,
 
 def old_vol2pcd(volume, origin, voxel_size, level_set_value=0):
     """Converts a binary volume into a point cloud with normals.
+
     Parameters
     ----------
     volume : np.ndarray
@@ -406,6 +398,7 @@ def old_vol2pcd(volume, origin, voxel_size, level_set_value=0):
         voxel size
     level_set_value: float
         distance of the level set on which the points are sampled
+
     Returns
     -------
     open3d.geometry.PointCloud
@@ -472,6 +465,9 @@ def vol2pcd(volume, origin, voxel_size, level_set_value=0):
         Point-cloud with normal vectors.
 
     """
+    from joblib import Parallel
+    from joblib import delayed
+
     logger.info("Volume binarization...")
     volume = 1.0 * (volume > 0.5)  # variable level ?
 
@@ -512,8 +508,6 @@ def vol2pcd(volume, origin, voxel_size, level_set_value=0):
                                   grad_normalized[2]])
         return p_i, normal_i
 
-    from joblib import Parallel
-    from joblib import delayed
     all_norms = Parallel(n_jobs=-1)(
         delayed(_compute_normal)(i) for i in tqdm(range(len(x)), desc="Computing point normals"))
 
@@ -661,6 +655,10 @@ def project_camera_plane(K, rot, tvec, X0, n):
 
 
 def test_cam_planes(pcd, cameras, images, imgdir, X0=None, n=None, scaling=100):
+    import os
+    import cv2
+    import imageio
+
     w = cameras['1']['width']
     h = cameras['1']['height']
 
