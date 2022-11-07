@@ -7,8 +7,6 @@ from pathlib import Path
 import numpy as np
 import open3d as o3d
 import plantdb
-from matplotlib import cm
-from matplotlib import pyplot as plt
 from plant3dvision.metrics import CompareMaskFilesets
 from plant3dvision.metrics import chamfer_distance
 from plant3dvision.metrics import point_cloud_registration_fitness
@@ -66,6 +64,9 @@ def save_data_repartition(data, data_type, db):
         Directory to use to save the graphs.
 
     """
+    from matplotlib import cm
+    from matplotlib import pyplot as plt
+
     fig, ax = plt.subplots()
     fig.suptitle(f'{data_type} distribution for same scan same pipe', fontsize=16)
     fig.set_size_inches(10, 6)
@@ -124,6 +125,9 @@ def pairwise_heatmap(pw_dict, scans_list, task_name, metrics, db, **kwargs):
     >>> pairwise_heatmap(pw_dict, scans_list, 'PointCloud', metrics, db)
 
     """
+    from matplotlib import cm
+    from matplotlib import pyplot as plt
+
     scans_list = sorted([scan.id for scan in scans_list])
     n_scans = len(scans_list)
     pw_mat = np.zeros((n_scans, n_scans))
