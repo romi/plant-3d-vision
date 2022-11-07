@@ -68,9 +68,12 @@ COPY --chown=${USER_NAME} ./ plant-3d-vision/
 RUN cd plant-3d-vision/ && \
     python3 -m pip install -r plantdb/requirements.txt && \
     python3 -m pip install plantdb/ && \
+    python3 -m pip install -r romitask/requirements.txt && \
     python3 -m pip install romitask/ && \
     python3 -m pip install romiseg/ && \
+    python3 -m pip install pybind11 && \
     python3 -m pip install romicgal/ && \
+    python3 -m pip install -r dtw/requirements.txt && \
     python3 -m pip install dtw/ && \
     python3 -m pip install -r requirements.txt && \
     python3 -m pip install . && \
