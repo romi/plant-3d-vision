@@ -1,0 +1,54 @@
+[CalibrationScan]
+n_points_line = 11
+
+[ScanPath]
+class_name = "Circle"
+
+[ScanPath.kwargs]
+center_x = 375
+center_y = 375
+z = 90
+tilt = 0
+radius = 300
+n_points = 36
+
+[Scan.scanner.camera]
+module = "plantimager.sony"
+
+[Scan.scanner.gimbal]
+module = "plantimager.blgimbal"
+
+[Scan.scanner.cnc]
+module = "plantimager.grbl"
+
+[Scan.metadata.hardware]
+frame = "30profile v1"
+X_motor = "X-Carve NEMA23"
+Y_motor = "X-Carve NEMA23"
+Z_motor = "X-Carve NEMA23"
+pan_motor = "iPower Motor GM4108H-120T Brushless Gimbal Motor"
+tilt_motor = "None"
+sensor = "Sony RX0"
+
+[Scan.metadata.workspace]
+x = [ 100, 500,]
+y = [ 100, 500,]
+z = [ -300, 100,]
+
+[Scan.scanner.camera.kwargs]
+device_ip = "192.168.122.1"
+api_port = "10000"
+postview = true
+use_flashair = false
+rotation = 270
+
+[Scan.scanner.gimbal.kwargs]
+port = "/dev/ttyACM1"
+has_tilt = false
+zero_pan = 0
+invert_rotation = true
+
+[Scan.scanner.cnc.kwargs]
+port = "/dev/ttyACM0"
+baud_rate = 115200
+homing = true
