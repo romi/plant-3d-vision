@@ -14,9 +14,9 @@ A more comprehensive documentation about the "Plant Imager" project can be found
   - [Docker Engine](#docker-engine)
   - [NVIDIA drivers](#nvidia-drivers)
   - [NVIDIA Container Toolkit](#nvidia-container-toolkit)
-- [Building and running with Docker (recommended)](#building-and-running-with-docker-recommended)
-  - [Building the image](#building-the-image)
-  - [Running the container](#running-the-container)
+- [Building a Docker image (recommended)](#build-a-docker-image-recommended)
+  - [Build the image](#build-the-image)
+  - [Test the image](#test-the-image)
 - [Install from sources](#install-from-sources)
   - [Install requirements](#requirements)
   - [Install sources](#install-sources)
@@ -27,7 +27,11 @@ A more comprehensive documentation about the "Plant Imager" project can be found
 
 
 ## Pre-requisites
-You will need to install the Docker Engine, the required NVIDIA driver and NVIDIA Container Toolkit to benefit from GPU accelerated algorithms.
+You will need to install:
+
+ * the **Docker Engine** (except if you plan to install COLMAP from sources, good luck with that!)
+ * the appropriate **NVIDIA driver**
+ * and the **NVIDIA Container Toolkit** to benefit from GPU accelerated algorithms inside the docker container.
 
 ### Getting Started
 Let's first install some useful tools like `git`, `curl` & `nano`:
@@ -36,7 +40,7 @@ sudo apt update && sudo apt install -y git curl nano
 ```
 
 ### Docker Engine
-You can follow the official [instructions](https://docs.docker.com/engine/install/ubuntu/) or use the convenience script:
+To install the **Docker Engine**, you can follow the official [instructions](https://docs.docker.com/engine/install/ubuntu/) or use the convenience script:
 ```shell
 curl https://get.docker.com | sh \
   && sudo systemctl --now enable docker
@@ -45,50 +49,71 @@ curl https://get.docker.com | sh \
 You also have to follow the [Post-installation steps for Linux](https://docs.docker.com/engine/install/linux-postinstall/). 
 
 ### NVIDIA drivers
-On Ubuntu, you can install the latest compatible NVIDIA drivers with:
+On Ubuntu, you can install the latest compatible **NVIDIA drivers** with:
 ```shell
 sudo ubuntu-drivers autoinstall
 ```
 
 ### NVIDIA Container Toolkit
-We strongly recommend to follow the [Installation Guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) from NVIDIA.
+To install the **NVIDIA Container Toolkit**, follow the official [Installation Guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) from NVIDIA.
 
 
-## Building and running with Docker (recommended)
+## Build a docker image (recommended)
+To avoid making a big mess while installing source code, it may be easier to build a Docker image and use it to performs reconstruction and analysis tasks.
 
-### Building the image
-To build the Docker image of `plant-3d-vision`, you have to clone the git repository and run the script `docker/build.sh`.
+This strategy has been successfully tested on:
+`docker --version=19.03.6 | nvidia driver version=450.102.04 | CUDA version=11.0`
 
+### Build the image
+To build a Docker image you have to:
+
+1. clone the `plant-3d-vision` git repository
+2. initialize & clone the submodules (`plantdb`, `romitask`, `romiseg`, `romicgal` & `dtw`)
+3. use the convenience build script `docker/build.sh`
+
+This can be done as follows:
 ```bash
 git clone https://github.com/romi/plant-3d-vision.git
 cd plant-3d-vision/
+git submodule init
+git submodule update
 ./docker/build.sh
 ```
-This will create a docker image named `roboticsmicrofarms/plant-3d-vision:latest`.
-If you want to tag your image with a specific one, here named `mytag`, just pass the tag argument as follows
-`./docker/build.sh -t mytag`
+This will create a Docker image named `roboticsmicrofarms/plant-3d-vision:latest`.
 
-To show more options (built-in user...), just type `./docker/build.sh -h`.
-Note that you must run the `build.sh` script from the root of the `plant-3d-vision` folder.
-
-### Running the container
-In the docker folder, you will find also a run script `docker/run.sh`.
-You may want to mount your database folder and another folder (let's say your configs).
-This can be done as follows:
+If you want to tag your image with a specific one, here named `mytag`, just pass the tag argument as follows:
 ```bash
-./docker/run.sh \
-    -v /home/${USER}/my_database:/home/${USER}/database/ \
-    -v /home/${USER}/my_configs/:/home/${USER}/config/
+./docker/build.sh -t mytag
 ```
-Do NOT forget to change the paths with yours!
+To show more options, just type `./docker/build.sh -h`.
 
-If you want to run a docker image with another tag than `latest`, you can pass the tag name as an argument:
-`./docker/run.sh -t mytag`.
+Note that you must run the `build.sh` script from the root of the `plant-3d-vision` repository as it will copy the files to the filesystem of the container.
 
-To see more running options, type `./docker/run.sh -h`
+### Test the image
+In the `docker` folder, you will find a convenience script named `run.sh`.
+You may want to test the built image by running a container and performing some tests.
 
-This docker image has been tested successfully on:
-`docker --version=19.03.6 | nvidia driver version=450.102.04 | CUDA version=11.0`
+Every test assumes you are in the `plant-3d-vision` root directory of the repository.
+
+Do NOT forget to specify your tag with the `-t` option if you changed it (_i.e._ not `latest`)
+
+#### Test GPU access
+To test if you have access to your GPU(s) can easily be done as follows:
+```shell
+./docker/run.sh --gpu_test
+```
+
+#### Test the geometric pipeline
+To test if you can run the _geometric pipeline_:
+```shell
+./docker/run.sh --geom_pipeline_test
+```
+
+#### Test the machine learning pipeline
+To test if you can run the _machine learning pipeline_:
+```shell
+./docker/run.sh --ml_pipeline_test
+```
 
 
 ## Install from sources
@@ -140,6 +165,7 @@ EOF
 1. Clone the `plant-3d-vision` sources:
     ```bash
     git clone https://github.com/romi/plant-3d-vision.git
+    cd plant-3d-vision
     git submodule init
     git submodule update
     ```
@@ -147,15 +173,15 @@ EOF
     ```bash
     conda create --name plant3dvision "python=3.9"
     ```
-3. Install the submodules (`plantdb`, `romitask`, `romiseg` & `dtw`) and `plant3dvision` in activated environment:
+3. Install the submodules (`plantdb`, `romitask`, `romiseg`, `romicgal` & `dtw`) and `plant3dvision` in activated environment:
     ```bash
     conda activate plant3dvision
-    cd plant-3d-vision/
     python3 -m pip install -r ./plantdb/requirements.txt
     python3 -m pip install -e ./plantdb/.
     python3 -m pip install -r ./romitask/requirements.txt
     python3 -m pip install -e ./romitask/.
     python3 -m pip install -e ./romiseg/.
+    python3 -m pip install -e ./romicgal/.
     python3 -m pip install -r ./dtw/requirements.txt
     python3 -m pip install -e ./dtw/.
     python3 -m pip install -r requirements.txt
@@ -175,30 +201,96 @@ EOF
 
 
 ## Usage
+This package is built around `luigi` and adopt a similar **pipeline oriented** philosophy with `Tasks` and `Parameters`.
+
+To reconstruct and analyse the RGB images acquired with the _Plant Imager_ you will have to define a pipeline as a series of task and set their parameters.
+To make things simpler, we provide two TOML configuration files defining the two main type of pipeline we use:
+
+* the _geometric pipeline_ in `plant-3d-vision/config/geom_pipe_real.toml`
+* the _machine learning pipeline_ in `plant-3d-vision/config/ml_pipe_real.toml.toml`
+
+This configuration files should be used on "real plant" dataset, _i.e._ on RGB images acquired with the _Plant Imager_.
+
+To start a task defined in this configuration files, use the `romi_run_task` CLI.
+You will have to specify which task you want to perform, on which dataset and pass the path to the configuration file using the `--config` option.
+You will find examples of this using either the Docker container or the sources installed in a conda environment.
+
+For more details about the task and their parameters, have a look at the "Plant Imager" documentation [here](https://docs.romi-project.eu/plant_imager/specifications/tasks/reconstruction_tasks/).
+
 
 ### Docker container
-Inside the docker image there is a `romi_run_task` command which performs a task on a database according to a config file.
+There is now two options to use the previously built Docker image:
 
-In the following example, we will use the test database and config file shipped in this repository:
- - Start a docker container using `roboticsmicrofarms/plant-3d-vision:latest`
- - Mount the database (`plant-3d-vision/tests/testdata/`) and configs folder (`plant-3d-vision/config/`) inside the docker container
- - Perform the task `AnglesAndInternodes` on the database with `geom_pipe_real.toml` config file
+1. you have experience with the Docker CLI and are willing to use it
+2. you prefer to use a convenience script with fewer but safer options
 
+#### Docker CLI
+You can use the Docker CLI to start a container using the previously built `roboticsmicrofarms/plant-3d-vision` image.
+
+In the following example, we will use the `real_plant` dataset from the **test database** and the **geometric pipeline** configuration file shipped in this repository.
+Assuming you are in the `plant-3d-vision` root directory of the repository:
 ```bash
-./docker/run.sh -v /path/to/plant-3d-vision/tests/testdata/:/home/$USER/database/ -v /path/to/plant-3d-vision/config/:/home/$USER/config
-romi_run_task --config ~/config/geom_pipe_real.toml AnglesAndInternodes ~/database/real_plant/
+CWD=$(pwd)  # get the absolute path to the `plant-3d-vision` directory
+docker run -it --rm --gpus all \
+  -v $CWD/tests/testdata/:/myapp/db \
+  -v $CWD/config/:/myapp/config \
+  roboticsmicrofarms/plant-3d-vision:latest \
+  bash -c "romi_run_task AnglesAndInternodes /myapp/db/real_plant/ --config /myapp/config/geom_pipe_real.toml"
 ```
 
-Don't forget to replace the paths `path/to/plant-3d-vision` by the correct ones.
+In details, the previous command:
+
+* get the current working directory and assign it to `CWD` variable as docker needs **absolute path** when performing bind mount
+* starts a pseudo-TTY interactive shell with `-it`
+* will automatically remove the container when it exits with `--rm`
+* add all available GPUs to the container
+* bind mount `$CWD/tests/testdata/` from the host to `/myapp/db` in the container (created if non-existent) with the `-v` option
+* bind mount `$CWD/config/` from the host to `/myapp/config` in the container (created if non-existent) with the `-v` option
+* use the `roboticsmicrofarms/plant-3d-vision` image with the tag `latest` to create the container
+* call a `bash` command with `bash -c "..."`
+* performs the `AnglesAndInternodes` task (reconstruction and analysis) of the `real_plant` test dataset using the `geom_pipe_real.toml` configuration
+
+
+#### Convenience bash script
+There is a convenience bash script, named `run.sh` in the `docker/` directory, that start a docker container using the `roboticsmicrofarms/plant-3d-vision` image.
+It aims at making thing a bit simpler than with the Docker CLI.
+
+In the following example, we will use the `real_plant` dataset from the **test database** and the **geometric pipeline** configuration file shipped in this repository.
+Assuming you are in the `plant-3d-vision` root directory of the repository:
+```bash
+CWD=$(pwd)  # get the absolute path to the `plant-3d-vision` directory
+./docker/run.sh \
+  -db $CWD/tests/testdata/ \
+  -v $CWD/config/:/myapp/config \
+  -c "romi_run_task AnglesAndInternodes /myapp/db/real_plant/ --config /myapp/config/geom_pipe_real.toml"
+```
+
+In details, the previous command does (the same thing as the CLI example):
+
+* get the current working directory and assign it to `CWD` variable as docker needs **absolute path** when performing bind mount
+* bind mount `$CWD/tests/testdata/` from the host to `/myapp/db` in the container (created if non-existent) with the `-db` option
+* bind mount `$CWD/config/` from the host to `/myapp/config` in the container (created if non-existent) with the `-v` option
+* call a `bash` command with `-c "..."`
+* performs the `AnglesAndInternodes` task (reconstruction and analysis) of the `real_plant` test dataset using the `geom_pipe_real.toml` configuration
+
+Note that:
+
+* with the `-db` option you do not have to specify the destination in the container
+* you do not have to specify the `bash` before the `-c` option
 
 
 ### Conda environment
-To execute a pre-defined task and its upstream tasks, like `AnglesAndInternodes`, on the provided test scan dataset `real_plant` using the appropriate example pipeline configuration file `geom_pipe_real.toml` (from the repository root directory):
+In the `plant3dvision` conda environment, things are a bit simpler to starts as there is no Docker options to specify.
+
+To execute the same series of tasks on the `real_plant` dataset from the **test database** and the **geometric pipeline** configuration file shipped in this repository we only have to call the `romi_run_task` CLI.
+Assuming you are in the `plant-3d-vision` root directory of the repository:
 ```shell
 cp -R tests/testdata /tmp/.  # copy the test DB to the temporary directory
 conda activate plant3dvision  # activate the conda environment
-romi_run_task --config config/geom_pipe_real.toml AnglesAndInternodes /tmp/testdata/real_plant/
+romi_run_task AnglesAndInternodes /tmp/testdata/real_plant/ --config config/geom_pipe_real.toml
 ```
+
+This will performs the `AnglesAndInternodes` task (reconstruction and analysis) of the `real_plant` test dataset using the `geom_pipe_real.toml` configuration.
 
 
 ### Monitoring
@@ -225,13 +317,6 @@ where the `-n` option is the time interval in seconds.
 
 
 ## Troubleshooting
-
-### Docker
-To test if everything is okay:
-```bash
-./docker/run.sh --gpu_test
-```
-
 
 ### OpenCL
 - `ImportError: libGL.so.1: cannot open shared object file: No such file or directory` can be fixed with:
