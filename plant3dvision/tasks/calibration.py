@@ -334,7 +334,7 @@ class ExtrinsicCalibration(RomiTask):
         Defines the type of camera model COLMAP should use for intrinsic camera parameters estimation.
         Setting an `intrinsic_calibration_scan_id` will override this value to "OPENCV" and no estimation will be carried out.
         Instead, the estimated intrinsic camera parameters for the corresponding model will be fixed.
-        Defaults to "OPENCV".
+        Defaults to "SIMPLE_RADIAL".
     use_gpu : luigi.BoolParameter
         Defines if the GPU should be used to extract features (feature_extractor) and performs their matching (*_matcher).
         Defaults to ``True``.
@@ -368,7 +368,7 @@ class ExtrinsicCalibration(RomiTask):
     upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)
     matcher = luigi.Parameter(default="exhaustive")
     intrinsic_calibration_scan_id = luigi.Parameter(default="")
-    camera_model = luigi.Parameter(default="OPENCV")
+    camera_model = luigi.Parameter(default="SIMPLE_RADIAL")
     use_gpu = luigi.BoolParameter(default=True)
     single_camera = luigi.BoolParameter(default=True)
     robust_alignment_max_error = luigi.IntParameter(default=10)
