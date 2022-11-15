@@ -34,10 +34,21 @@ You will need to install:
  * and the **NVIDIA Container Toolkit** to benefit from GPU accelerated algorithms inside the docker container.
 
 ### Getting Started
-Let's first install some useful tools like `git`, `curl` & `nano`:
+Let's first install some useful tools like `git`, `curl`, `wget` & `nano`:
 ```shell
-sudo apt update && sudo apt install -y git curl nano
+sudo apt update && sudo apt install -y git curl wget nano
 ```
+
+For `matplotlib` in `romiseg` you will need:
+```shell
+sudo apt update && sudo apt install -y g++ gcc pkg-config libfreetype-dev libpng-dev
+```
+
+For `romicgal` you will need:
+```shell
+sudo apt update && sudo apt install -y libeigen3-dev libgmp-dev libmpfr-dev libboost-dev
+```
+
 
 ### Docker Engine
 To install the **Docker Engine**, you can follow the official [instructions](https://docs.docker.com/engine/install/ubuntu/) or use the convenience script:
@@ -123,7 +134,7 @@ To test if you can run the _machine learning pipeline_:
 #### Conda
 In the following instructions, we use `conda`, have a look at the official installation instructions [here](https://docs.conda.io/en/latest/miniconda.html) or use this convenience script:
 ```shell
-curl https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
 bash Miniconda3-latest-Linux-x86_64.sh
 ```
 Follow the instructions and proceed to remove the convenience script:
