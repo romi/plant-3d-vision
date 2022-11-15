@@ -409,7 +409,7 @@ class ExtrinsicCalibration(RomiTask):
         self.cli_args["model_aligner"]["--robust_alignment_max_error"] = str(self.robust_alignment_max_error)
 
     def set_camera_params(self):
-        """Configure COLMAP CLI parameters to defines estimated camera parameters from intrinsic calibration scan."""
+        """Configure COLMAP CLI parameters to use estimated camera parameters from intrinsic calibration scan."""
         from plant3dvision.camera import get_camera_model_from_intrinsic
         from plant3dvision.camera import colmap_str_params
         images_fileset = self.input().get()
@@ -468,7 +468,7 @@ class ExtrinsicCalibration(RomiTask):
         logger.debug("Instantiate a ColmapRunner...")
         colmap_runner = ColmapRunner(
             images_fileset,
-            matcher_method=self.matcher,
+            matcher_method=str(self.matcher),
             compute_dense=False,
             all_cli_args=self.cli_args,
             align_pcd=True,
@@ -482,17 +482,37 @@ class ExtrinsicCalibration(RomiTask):
         outfile = self.output_file(COLMAP_CAMERAS_ID)
         io.write_json(outfile, cameras)
 
+        def _set_calibrated_pose(file):
+            """Compute the 'calibrated_pose' and set it in the image file metadata.
+
+            Parameters
+            ----------
+            file: plantdb.fsdb.File
+                The image file to use to compute and set "calibrated_pose" to metadata.
+
+            Returns
+            -------
+            list
+                Calibrated pose, that is the estimated XYZ coordinate of the camera by COLMAP.
+            """
+            # Get the rotation and translation matrices defined in metadata by `colmap_runner.run()`:
+            rotmat = np.array(file.get_metadata("colmap_camera")['rotmat'])
+            tvec = np.array(file.get_metadata("colmap_camera")['tvec'])
+            # Compute the XYZ pose:
+            colmap_pose = compute_estimated_pose(rotmat, tvec)
+            # Export the estimated pose to the image metadata:
+            file.set_metadata("calibrated_pose", colmap_pose)
+            return colmap_pose
+
         # - Estimate images pose with COLMAP rotation and translation matrices:
         logger.info("Estimate image poses (XYZ) with COLMAP rotation and translation matrices...")
         colmap_poses = {}
         for fi in images_fileset.get_files():
-            # Get the rotation and translation matrices defined in metadata by `colmap_runner.run()`:
-            rotmat = np.array(fi.get_metadata("colmap_camera")['rotmat'])
-            tvec = np.array(fi.get_metadata("colmap_camera")['tvec'])
-            # Compute the XYZ pose:
-            colmap_poses[fi.id] = compute_estimated_pose(rotmat, tvec)
-            # Export the estimated pose to the image metadata:
-            fi.set_metadata("calibrated_pose", colmap_poses[fi.id])
+            try:
+                colmap_poses[fi.id] = _set_calibrated_pose(fi)
+            except:
+                logger.warning(f"Could not compute the 'calibrated_pose' for image {fi.id}!")
+                colmap_poses[fi.id] = None
 
         # Use of try/except strategy to avoid failure of luigi pipeline (destroy all fileset!)
         try:
