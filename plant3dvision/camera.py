@@ -175,7 +175,42 @@ def get_camera_model_from_intrinsic(dataset, model="OPENCV"):
 
 
 def colmap_str_params(model, **kwargs):
-    """Convert a camera model dictionary into a COLMAP string of parameters."""
+    """Convert a camera model dictionary into a COLMAP string of parameters.
+
+    Parameters
+    ----------
+    model : {'SIMPLE_RADIAL', 'RADIAL', 'OPENCV'}
+        The name of the camera model.
+
+    Other Parameters
+    ----------------
+    f : float
+        The focal length, used with 'radial' & 'simple_radial' models.
+    fx, fy : float
+        The focal length in x and y, used with 'opencv' model.
+    cx, cy : float
+        The optical center in x and y, used with all models.
+    k : float
+        The radial distortion coefficients, used with 'simple_radial' models.
+    k1, k2 : float
+        The two radial distortion coefficients, used with 'opencv' & 'radial' models.
+    p1, p2 : float
+        The tangential distortion coefficients, used with 'opencv' model.
+
+    Examples
+    --------
+    >>> from plant3dvision.camera import colmap_str_params
+    >>> params = {'fx': 1200, 'fy': 1300, 'cx': 720, 'cy': 540, 'k1': 0.1, 'k2': 0.11, 'p1': 0.001, 'p2': 0.0011}
+    >>> colmap_str_params('opencv', **params)
+    '1200,1300,720,540,0.1,0.11,0.001,0.0011'
+    >>> params = {'f': 1200, 'cx': 720, 'cy': 540, 'k1': 0.1, 'k2': 0.11}
+    >>> colmap_str_params('radial', **params)
+    '1200,1200,720,540,0.1,0.11,0.,0.'
+    >>> params = {'f': 1200, 'cx': 720, 'cy': 540, 'k': 0.1}
+    >>> colmap_str_params('simple_radial', **params)
+    '1200,1200,720,540,0.1,0.,0.,0.'
+
+    """
     if model.lower() == 'opencv':
         return f"{kwargs['fx']},{kwargs['fy']},{kwargs['cx']},{kwargs['cy']},{kwargs['k1']},{kwargs['k2']},{kwargs['p1']},{kwargs['p2']}"
     if model.lower() == 'radial':
@@ -185,7 +220,37 @@ def colmap_str_params(model, **kwargs):
 
 
 def get_camera_kwargs_from_params_list(model, params):
-    """Get the kwargs from the list of parameters."""
+    """Get the kwargs from the list of parameters.
+
+    Parameters
+    ----------
+    model : {'SIMPLE_RADIAL', 'RADIAL', 'OPENCV'}
+        The name of the camera model.
+    params : list
+        The list of camera model parameters. The lenght and ordering depends on the `camera_model`.
+
+    Returns
+    -------
+    dict
+        A camera model dictionary with its parameter names as keys.
+
+    Examples
+    --------
+    >>> from plant3dvision.camera import get_camera_kwargs_from_params_list
+    >>> get_camera_kwargs_from_params_list('simple_radial', [1200, 720, 540, 0.1])  # params: f, cx, cy, k
+    {'model': 'SIMPLE_RADIAL', 'f': 1200, 'cx': 720, 'cy': 540, 'k': 0.1}
+    >>> get_camera_kwargs_from_params_list('radial', [1200, 720, 540, 0.1, 0.11])  # params: f, cx, cy, k1, k2
+    {'model': 'RADIAL', 'f': 1200, 'cx': 720, 'cy': 540, 'k1': 0.1, 'k2': 0.11}
+    >>> get_camera_kwargs_from_params_list('opencv', [1200, 1300, 720, 540, 0.1, 0.11, 0.001, 0.0011])  # params: fx, fy, cx, cy, k1, k2, p1, p2
+    {'model': 'OPENCV', 'fx': 1200, 'fy': 1300, 'cx': 720, 'cy': 540, 'k1': 0.1, 'k2': 0.11, 'p1': 0.001, 'p2': 0.0011}
+    >>> # As 'fx==fy' & 'p1==p2==0.', the returned model is "RADIAL":
+    >>> get_camera_kwargs_from_params_list('opencv', [1200, 1200, 720, 540, 0.1, 0.11, 0.000, 0.0000])  # params: fx, fy, cx, cy, k1, k2, p1, p2
+    {'model': 'RADIAL', 'f': 1200, 'cx': 720, 'cy': 540, 'k1': 0.1, 'k2': 0.11}
+    >>> # As 'fx==fy' & 'p1==p2==0.' & 'k1==k2', the returned model is "SIMPLE_RADIAL":
+    >>> get_camera_kwargs_from_params_list('opencv', [1200, 1200, 720, 540, 0.1, 0.10, 0.000, 0.0000])  # params: fx, fy, cx, cy, k1, k2, p1, p2
+    {'model': 'SIMPLE_RADIAL', 'f': 1200, 'cx': 720, 'cy': 540, 'k': 0.1}
+
+    """
     def _simple_radial(camera_params):
         """Parameter list is expected in the following order: f, cx, cy, k."""
         cam_dict = {'model': "SIMPLE_RADIAL"}
@@ -212,22 +277,55 @@ def get_camera_kwargs_from_params_list(model, params):
     elif model.upper() == 'OPENCV':
         camera_kwargs = _opencv(params)
         # Check if this is a RADIAL model:
-        if camera_kwargs['fx'] == camera_kwargs['fy'] and camera_kwargs['p1'] == camera_kwargs['p1'] == 0.:
-            camera_kwargs["model"] = "RADIAL"
-            camera_kwargs['f'] = camera_kwargs.pop('fx')
-            camera_kwargs.pop('fy')
-            camera_kwargs.pop('p1')
-            camera_kwargs.pop('p2')
-            # The next lines are a bit silly but useful to get correct key ordering...
-            camera_kwargs['cx'] = camera_kwargs.pop('cx')
-            camera_kwargs['cy'] = camera_kwargs.pop('cy')
-            camera_kwargs['k1'] = camera_kwargs.pop('k1')
-            camera_kwargs['k2'] = camera_kwargs.pop('k2')
+        if camera_kwargs['fx'] == camera_kwargs['fy'] and camera_kwargs['p1'] == camera_kwargs['p2'] == 0.:
+            if camera_kwargs['k1'] == camera_kwargs['k2']:
+                camera_kwargs["model"] = "SIMPLE_RADIAL"
+                camera_kwargs['f'] = camera_kwargs.pop('fx')
+                camera_kwargs.pop('fy')
+                camera_kwargs.pop('k2')
+                camera_kwargs.pop('p1')
+                camera_kwargs.pop('p2')
+                # The next two lines are a bit silly but useful to get correct key ordering...
+                camera_kwargs['cx'] = camera_kwargs.pop('cx')
+                camera_kwargs['cy'] = camera_kwargs.pop('cy')
+                camera_kwargs['k'] = camera_kwargs.pop('k1')
+            else:
+                camera_kwargs["model"] = "RADIAL"
+                camera_kwargs['f'] = camera_kwargs.pop('fx')
+                camera_kwargs.pop('fy')
+                camera_kwargs.pop('p1')
+                camera_kwargs.pop('p2')
+                # The next four lines are a bit silly but useful to get correct key ordering...
+                camera_kwargs['cx'] = camera_kwargs.pop('cx')
+                camera_kwargs['cy'] = camera_kwargs.pop('cy')
+                camera_kwargs['k1'] = camera_kwargs.pop('k1')
+                camera_kwargs['k2'] = camera_kwargs.pop('k2')
 
     return camera_kwargs
 
 
 def get_camera_kwargs_from_images_metadata(img_f):
+    """Get the dictionary of camera model parameters from an image file metadata.
+
+    Parameters
+    ----------
+    img_f : plantdb.fsdb.File
+        An image `File` instance with a defined 'colmap_camera' metadata.
+
+    Returns
+    -------
+    dict
+        A camera model dictionary with its parameter names as keys.
+
+    See Also
+    --------
+    plant3dvision.camera.get_camera_kwargs_from_params_list
+
+    Notes
+    -----
+    The 'colmap_camera' metadata is a JSON style dictionary of camera parameters in OPENCV format.
+
+    """
     camera_model = img_f.get_metadata('colmap_camera')
     if camera_model is None:
         return None
@@ -237,11 +335,31 @@ def get_camera_kwargs_from_images_metadata(img_f):
 
 
 def get_camera_kwargs_from_colmap_json(colmap_cameras):
-    """Get a dictionary of named camera parameter depending on camera model."""
+    """Get a dictionary of named camera parameter depending on camera model.
+
+    Parameters
+    ----------
+    colmap_cameras : dict
+        A ???
+
+    Returns
+    -------
+    dict
+        A camera model dictionary with its parameter names as keys.
+
+    See Also
+    --------
+    plant3dvision.camera.get_camera_kwargs_from_params_list
+
+    Notes
+    -----
+    The `colmap_cameras` is a (JSON style) dictionary of camera parameters in OPENCV format.
+
+    """
     # FIXME: will not work with more than one camera model!
-    # If loaded from JSON, camera id(s) may be str instead of int:
     new_colmap_cameras = {}
     for key, value in colmap_cameras.items():
+        # If loaded from JSON, camera id(s) may be str instead of int:
         if isinstance(key, str):
             new_colmap_cameras[int(key)] = value
         else:
