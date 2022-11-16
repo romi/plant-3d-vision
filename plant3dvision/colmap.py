@@ -14,17 +14,17 @@ Using docker image requires the docker engine to be available on your system and
 
 import os
 import subprocess
+import sys
 import tempfile
 from os.path import splitext
 
 import imageio
 import numpy as np
 import open3d as o3d
+from plantdb import io
 
-import plantdb
 from plant3dvision import proc3d
 from plant3dvision.thirdparty import read_model
-from plantdb import io
 from romitask.log import configure_logger
 
 logger = configure_logger(__name__)
@@ -423,17 +423,19 @@ class ColmapRunner(object):
         # -- Initialize COLMAP directories, poses file & log file:
         # - Get / create a temporary COLMAP working directory
         self.colmap_workdir = os.environ.get("COLMAP_WD", tempfile.mkdtemp())
-        self.imgs_dir = os.path.join(self.colmap_workdir, 'images')  # 'images' directory
-        self.sparse_dir = os.path.join(self.colmap_workdir, 'sparse')  # 'sparse reconstruction' directory
-        self.dense_dir = os.path.join(self.colmap_workdir, 'dense')  # 'dense reconstruction' directory
+        self.imgs_dir = os.path.join(self.colmap_workdir, 'images')  # COLMAP's 'images' directory
+        self.sparse_dir = os.path.join(self.colmap_workdir, 'sparse')  # COLMAP's 'sparse reconstruction' directory
+        self.dense_dir = os.path.join(self.colmap_workdir, 'dense')  # COLMAP's 'dense reconstruction' directory
         # - Make sure those directories exists & create them otherwise:
         self._init_directories()
-        # - Initialize the `poses.txt` file for COLMAP:
+        # - Fill COLMAP's 'images' directory with files from the 'images' Fileset (self.fileset)
+        self._init_images_directory()
+        # - Initialize the `poses.txt` file required by COLMAP:
         self._init_poses()
-        # - File object used for logging COLMAP outputs:
+        # - Initialize a log file to gather COLMAP outputs:
         self.log_file = f"{self.colmap_workdir}/colmap.log"
         logger.info(f"See {self.log_file} for a detailed log about COLMAP jobs...")
-        # -- Check COLMAP executable to use:
+        # - Check the COLMAP executable to use:
         self._init_exe(kwargs.get('colmap_exe', COLMAP_EXE))
 
     def _init_directories(self):
@@ -441,59 +443,90 @@ class ColmapRunner(object):
         os.makedirs(self.imgs_dir, exist_ok=True)
         os.makedirs(self.sparse_dir, exist_ok=True)
         os.makedirs(self.dense_dir, exist_ok=True)
+        return
 
-    def _image_in_colmap_dir(self, img_f: plantdb.fsdb.File):
-        """Check the image exists in the COLMAP 'images' directory, if not create it."""
-        filepath = os.path.join(self.imgs_dir, img_f.filename)
-        img_md = img_f.metadata
-        if not os.path.isfile(filepath) and 'channel' in img_md and img_md['channel'] == 'rgb':
-            im = io.read_image(img_f)  # load the image (from local DB)
-            im = im[:, :, :3]  # remove alpha channel
-            imageio.imwrite(filepath, im)  # save the image to COLMAP 'images' working directory
+    def _init_images_directory(self):
+        """Initialize COLMAP's 'images' directory.
+
+        It is required by COLMAP to perform its magic!
+        """
+        n_rgb_im = 0  # Count the number of RGB images
+        n_cp_im = 0  # Count the number of copied RGB images
+        for img_f in self.fileset.get_files(query=self.file_query):
+            # - Check the image file exists in COLMAP's 'images' directory, if not create it:
+            filepath = os.path.join(self.imgs_dir, img_f.filename)
+            img_md = img_f.metadata
+            image_exists = os.path.isfile(filepath)
+            is_rgb_image = 'channel' in img_md and img_md['channel'] == 'rgb'
+            if is_rgb_image:
+                n_rgb_im += 1
+            if not image_exists and is_rgb_image:
+                im = io.read_image(img_f)  # load the image (from DB)
+                im = im[:, :, :3]  # remove alpha channel, if any
+                imageio.imwrite(filepath, im)  # write the image to COLMAP's 'images' directory
+                n_cp_im += 1
+        logger.info(f"Copied {n_cp_im} images out of {n_rgb_im} RGB images found in the '{self.fileset.id}' Fileset!")
+
+        # - Check that COLMAP's 'images' directory is not EMPTY!
+        n_img_workdir = [os.path.isfile(f) for f in os.listdir(self.imgs_dir)]
+        if n_img_workdir == 0:
+            logger.critical("No image could be found in COLMAP's 'images' directory after initialization!")
+            sys.exit("Check you have a set of images with an 'rgb' value for metadata 'channel'!")
+
         return
 
     def _init_poses(self):
-        """Initialize the `poses.txt` file for COLMAP.
+        """Initialize the ``poses.txt`` file for COLMAP.
 
-        If the use of calibration is required, this will initialize a file of "calibrated poses".
-        Else, if 'pose' is found in one of the files from the 'images' fileset, initialize a file of "exact poses".
-        Else (try) to initialize a file of "approximate poses".
+        If the use of an "extrinsic calibration" is requested, this will try to get the "calibrated_poses" from the 'images' fileset metadata.
+        This obviously requires to perform such "extrinsic calibration" (``ExtrinsicCalibration``) task prior to reconstructing this set of images.
+        Else, if the "pose" metadata is found in all files from the 'images' fileset, we are in the case of images obtained from a ``VirtualScan`` task.
+        Else (try) to use "approximate poses".
 
         Notes
         -----
         This ``poses.txt`` file is used by the ``model_aligner`` method.
-        Some files may be missing from the `poses.txt` file if they don't have the required metadata!
+        Some image files may be missing from the returned ``poses.txt`` file if they don't have the required metadata!
+
+        In the case of images obtained from a ``VirtualScan`` task, poses should be exact and thus there is no need to perform this task.
+        You may use the ``Voxels`` task directly.
 
         """
         # - Search if "exact poses" can be found in all 'images' fileset metadata:
         exact_poses = all([f.get_metadata('pose') is not None for f in self.fileset.get_files(query=self.file_query)])
+
         # - Defines "where" (which metadata) to get the "camera pose" from:
         if self.use_calibration:
-            pose_md = 'calibrated_pose'  # `ExtrinsicCalibration` case
+            pose_md = 'calibrated_pose'  # usage of a previous ``ExtrinsicCalibration``
         elif exact_poses:
-            pose_md = 'pose'  # `VirtualScan` case
+            pose_md = 'pose'  # ``VirtualScan`` case
+            logger.info(f"You are using a set of images with 'exact poses'!")
+            logger.info(f"There is no need to perform the 'Colmap' task, use the 'Voxel' task directly!")
         else:
-            pose_md = 'approximate_pose'  # `Scan` case
+            pose_md = 'approximate_pose'  # ``CalibrationScan`` & ``Scan`` cases
 
-        # - File object containing COLMAP camera poses:
+        # - Create the ``poses.txt`` file required by COLMAP's ``model_aligner`` to estimate camera poses:
         with open(f"{self.colmap_workdir}/poses.txt", mode='w') as pose_file:
-            # - Try to get the camera pose from each image file metadata to a `poses.txt` file:
+            # - Try to get the camera pose from each image File metadata:
+            missing_pose = []
             for img_f in self.fileset.get_files(query=self.file_query):
-                # - Check the image exists in the COLMAP 'images' directory, if not create it:
-                self._image_in_colmap_dir(img_f)
-                # - Try to get the calibrated/exact/approximate pose accordingly, may be None:
+                # - Try to get the pose metadata, may be `None`:
                 p = img_f.get_metadata(pose_md)
-                # - If a 'pose' (calibrated/exact/approximate) was found for the file, add it to the COLMAP poses file:
+                # - If a pose metadata was found for the file, add it to COLMAP's 'poses.txt' file:
                 if p is not None:
                     s = f"{img_f.filename} {p[0]} {p[1]} {p[2]}\n"
                     pose_file.write(s)
                 else:
-                    logger.warning(f"Missing '{pose_md}' metadata for '{img_f.id}' file!")
+                    missing_pose.append(img_f.id)
+
+        if missing_pose != []:
+            logger.warning(f"Missing '{pose_md}' metadata for {len(missing_pose)} image files!")
+            logger.warning(f"List of images with missing '{pose_md}' metadata: {[', '.join(missing_pose)]}")
 
         return
 
     def _init_exe(self, colmap_exe):
-        """Perform some tests prior to using COLMAP to make sure we have what we need.
+        """Test if given COLMAP executable exists prior to try to use it.
 
         Parameters
         ----------
@@ -503,6 +536,11 @@ class ColmapRunner(object):
             The others use pre-built docker images, available from docker hub.
             'geki/colmap' is colmap 3.6 with Ubuntu 18.04 and CUDA 10.1, see [geki_colmap]_
             'roboticsmicrofarms/colmap' is colmap 3.7 with Ubuntu 18.04 and CUDA 10.2, see [roboticsmicrofarms_colmap]_
+
+        Raises
+        ------
+        ValueError
+            If `colmap_exe` is not in the list of valid executable sources.
 
         References
         ----------
@@ -540,15 +578,10 @@ class ColmapRunner(object):
                 client.images.pull(colmap_exe, tag=tag)
         else:
             raise ValueError(f"Unknown COLMAP executable '{colmap_exe}'!")
-
-    def get_workdir(self):
-        return self.colmap_workdir
+        return
 
     def _colmap_cmd(self, colmap_exe, method, args, cli_args, to_log=True):
         """Create & call the COLMAP command to execute.
-
-        Adapt the COLMAP command to local COLMAP install or use of docker container.
-        Deactivate calls to use GPU if not available (test `nvidia-smi`).
 
         Parameters
         ----------
@@ -569,10 +602,15 @@ class ColmapRunner(object):
         ValueError
             If `colmap_exe` is not in ``ALL_COLMAP_EXE``.
 
+        Notes
+        -----
+        Adapt the COLMAP command to local COLMAP install or use of docker container.
+        Deactivate use of GPU if not available.
+
         See Also
         --------
-        ALL_COLMAP_EXE
-        _has_nvidia_gpu
+        plant3dvision.colmap.ALL_COLMAP_EXE
+        plant3dvision.colmap._has_nvidia_gpu
 
         Examples
         --------
@@ -595,14 +633,14 @@ class ColmapRunner(object):
         >>> method = 'feature_extractor'
         >>> process = ['colmap', method]
         >>> args = ['--database_path', f'{colmap.colmap_workdir}/database.db', '--image_path', f'{colmap.colmap_workdir}/images']
-        >>> process.extend(args)
-        >>> for x in cli_args[method].keys(): process.extend([x, cli_args[method][x]])
+        >>> cmd.extend(args)
+        >>> for x in cli_args[method].keys(): cmd.extend([x, cli_args[method][x]])
 
         >>> import docker
         >>> client = docker.from_env()
         >>> varenv = {'PYOPENCL_CTX': os.environ.get('PYOPENCL_CTX', '0')}
         >>> mount = docker.types.Mount(colmap.colmap_workdir, colmap.colmap_workdir, type='bind')
-        >>> cmd = " ".join(process)
+        >>> cmd = " ".join(cmd)
         >>> print('Docker subprocess: ' + cmd)
         >>> # Remove stopped container:
         >>> client.containers.prune()
@@ -610,70 +648,121 @@ class ColmapRunner(object):
         >>> out = client.containers.run('geki/colmap', cmd, environment=varenv, mounts=[mount], device_requests=[gpu_device])
 
         """
-        # - COLMAP method to execute:
-        process = ['colmap', method]
-        # - Extend with COLMAP method arguments list:
-        process.extend(args)
+        # - Initialize the COLMAP command to execute with the name of the method to call for:
+        cmd = ['colmap', method]
+        # - Then extend the COLMAP command to execute with the method's arguments list:
+        cmd.extend(args)
+
+        # -- Check the method's command-line arguments dict:
         if not isinstance(cli_args, dict):
             cli_args = cli_args.get_wrapped()  # Convert luigi FrozenOrderedDict to a Dict instance
-        # - Deactivate GPU if not available:
+        # - Check if GPU is available and deactivate it otherwise:
         if method == 'feature_extractor' and not _has_nvidia_gpu():
+            if cli_args["--SiftExtraction.use_gpu"] == '1':
+                logger.warning('No NVIDIA GPU detected, using CPU for feature extraction!')
             cli_args["--SiftExtraction.use_gpu"] = '0'
-            logger.warning('No NVIDIA GPU detected, using CPU for feature extraction!')
+        # - Check if GPU is available and deactivate it otherwise:
         if method in ["exhaustive_matcher", "sequential_matcher"] and not _has_nvidia_gpu():
+            if cli_args["--SiftMatching.use_gpu"] == '1':
+                logger.warning('No NVIDIA GPU detected, using CPU for feature matching!')
             cli_args["--SiftMatching.use_gpu"] = '0'
-            logger.warning('No NVIDIA GPU detected, using CPU for feature matching!')
+        # - Set the maximum error allowed during 'robust alignment' step to 10 if unspecified:
         if method in ["model_aligner"]:
             if "--robust_alignment_max_error" not in cli_args:
                 cli_args["--robust_alignment_max_error"] = "10"
-        # - Extend with COLMAP method command-line arguments dict:
-        for x in cli_args.keys():
-            process.extend([x, str(cli_args[x])])
 
-        out = None
+        # - Finally extend the COLMAP command to execute with the method's command-line arguments dict:
+        for x in cli_args.keys():
+            cmd.extend([x, str(cli_args[x])])
+
+        # - Call this command in docker or subprocess:
         if colmap_exe.split(":")[0] in ['geki/colmap', 'roboticsmicrofarms/colmap']:
-            import docker
-            # Try to get the tag of the docker image or set it to 'latest' by default:
-            try:
-                colmap_exe, tag = colmap_exe.split(":")
-            except ValueError:
-                tag = 'latest'
-            # Initialize docker client manager:
-            client = docker.from_env()
-            # Defines environment variables:
-            varenv = {}
-            varenv.update({'PYOPENCL_CTX': os.environ.get('PYOPENCL_CTX', '0')})
-            # Defines the mount point
-            mount = docker.types.Mount(self.colmap_workdir, self.colmap_workdir, type='bind')
-            # Create the bash command called inside the docker container
-            cmd = " ".join(process)
-            logger.debug('Docker subprocess: ' + cmd)
-            # Remove stopped container:
-            client.containers.prune()
-            # Run the command & catch the output:
-            if _has_nvidia_gpu():
-                gpu_device = docker.types.DeviceRequest(count=-1, capabilities=[['gpu']])
-                out = client.containers.run(colmap_exe + f":{tag}", cmd, environment=varenv, mounts=[mount],
-                                            device_requests=[gpu_device])
-            else:
-                out = client.containers.run(colmap_exe + f":{tag}", cmd, environment=varenv, mounts=[mount])
-            if to_log:
-                # Append the output of the COLMAP process to the log file:
-                with open(self.log_file, mode="a") as f:
-                    f.writelines(out.decode('utf8'))
-            else:
-                # Return the container logs decoded:
-                out = out.decode('utf8')
+            out = self._colmap_docker(colmap_exe, cmd, to_log)
         else:
-            logger.debug('Running subprocess: ' + ' '.join(process))
-            if to_log:
-                # Append the output of the COLMAP process to the log file:
-                with open(self.log_file, mode="a") as f:
-                    subprocess.run(process, check=True, stdout=f)
-            else:
-                # Run the subprocess and catch its output to return it decoded
-                out = subprocess.run(process, capture_output=True)
-                out = out.stdout.decode('utf8')
+            out = self._colmap_sources(cmd, to_log)
+        return out
+
+    def _colmap_docker(self, colmap_image, process, to_log):
+        """Call COLMAP using docker image.
+
+        Parameters
+        ----------
+        colmap_image : str
+            Name of the docker image to use, should obviously contain COLMAP executable.
+        process : list
+            COLMAP process to start.
+        to_log : bool
+            If ``True`` write the outputs of the COLMAP process to the log file.
+            Else, return it.
+
+        Returns
+        -------
+        str
+            The outputs of the COLMAP process, may be empty if ``to_log=True``.
+
+        """
+        import docker
+        # Try to get the tag of the docker image or set it to 'latest' by default:
+        try:
+            colmap_image, tag = colmap_image.split(":")
+        except ValueError:
+            tag = 'latest'
+        # Initialize docker client manager:
+        client = docker.from_env()
+        # Defines environment variables:
+        varenv = {}
+        varenv.update({'PYOPENCL_CTX': os.environ.get('PYOPENCL_CTX', '0')})
+        # Defines the mount point
+        mount = docker.types.Mount(self.colmap_workdir, self.colmap_workdir, type='bind')
+        # Create the bash command called inside the docker container
+        cmd = " ".join(process)
+        logger.debug('Docker subprocess: ' + cmd)
+        # Remove stopped container:
+        client.containers.prune()
+        # Run the command & catch the output:
+        if _has_nvidia_gpu():
+            gpu_device = docker.types.DeviceRequest(count=-1, capabilities=[['gpu']])
+            out = client.containers.run(colmap_image + f":{tag}", cmd, environment=varenv, mounts=[mount],
+                                        device_requests=[gpu_device])
+        else:
+            out = client.containers.run(colmap_image + f":{tag}", cmd, environment=varenv, mounts=[mount])
+        if to_log:
+            # Append the outputs of the COLMAP process to the log file:
+            with open(self.log_file, mode="a") as f:
+                f.writelines(out.decode('utf8'))
+            out = ''
+        else:
+            # Return the container logs decoded:
+            out = out.decode('utf8')
+        return out
+
+    def _colmap_sources(self, process, to_log):
+        """Call COLMAP installed from sources.
+
+        Parameters
+        ----------
+        process : list
+            COLMAP process to start.
+        to_log : bool
+            If ``True`` write the outputs of the COLMAP process to the log file.
+            Else, return it.
+
+        Returns
+        -------
+        str
+            The outputs of the COLMAP process, may be empty if ``to_log=True``.
+
+        """
+        logger.debug('Running subprocess: ' + ' '.join(process))
+        if to_log:
+            out = ''
+            # Append the output of the COLMAP process to the log file:
+            with open(self.log_file, mode="a") as f:
+                subprocess.run(process, check=True, stdout=f)
+        else:
+            # Run the subprocess and catch its output to return it decoded
+            out = subprocess.run(process, capture_output=True)
+            out = out.stdout.decode('utf8')
         return out
 
     def feature_extractor(self):
@@ -687,6 +776,7 @@ class ColmapRunner(object):
         logger.debug(f"args: {args}")
         logger.debug(f"cli_args: {cli_args}")
         _ = self._colmap_cmd(COLMAP_EXE, 'feature_extractor', args, cli_args)
+        return
 
     def matcher(self):
         """Perform feature matching after performing feature extraction."""
@@ -705,6 +795,7 @@ class ColmapRunner(object):
             _ = self._colmap_cmd(COLMAP_EXE, 'sequential_matcher', args, cli_args)
         else:
             raise ValueError(f"Unknown matcher '{self.matcher_method}!")
+        return
 
     def mapper(self):
         """Sparse 3D reconstruction / mapping of the dataset using SfM after performing feature extraction and matching."""
@@ -718,6 +809,7 @@ class ColmapRunner(object):
         logger.debug(f"args: {args}")
         logger.debug(f"cli_args: {cli_args}")
         _ = self._colmap_cmd(COLMAP_EXE, 'mapper', args, cli_args)
+        return
 
     def model_aligner(self):
         """Align/geo-register model to coordinate system of given camera centers."""
@@ -732,6 +824,7 @@ class ColmapRunner(object):
         logger.debug(f"args: {args}")
         logger.debug(f"cli_args: {cli_args}")
         _ = self._colmap_cmd(COLMAP_EXE, 'model_aligner', args, cli_args)
+        return
 
     def model_analyzer(self):
         """Print statistics about reconstructions."""
@@ -745,6 +838,7 @@ class ColmapRunner(object):
         # Save it as a log file:
         with open(f'{self.colmap_workdir}/model_analyzer.log', 'w') as f:
             f.writelines(out)
+        return
 
     def image_undistorter(self):
         """Undistort images and export them for MVS or to external dense reconstruction software."""
@@ -758,6 +852,7 @@ class ColmapRunner(object):
         logger.debug(f"args: {args}")
         logger.debug(f"cli_args: {cli_args}")
         _ = self._colmap_cmd(COLMAP_EXE, 'image_undistorter', args, cli_args)
+        return
 
     def patch_match_stereo(self):
         """Dense 3D reconstruction / mapping using MVS after running the `image_undistorter` to initialize the workspace."""
@@ -767,6 +862,7 @@ class ColmapRunner(object):
         logger.debug(f"args: {args}")
         logger.debug(f"cli_args: {cli_args}")
         _ = self._colmap_cmd(COLMAP_EXE, 'patch_match_stereo', args, cli_args)
+        return
 
     def stereo_fusion(self):
         """Fusion of `patch_match_stereo` results into to a colored point cloud."""
@@ -779,14 +875,16 @@ class ColmapRunner(object):
         logger.debug(f"args: {args}")
         logger.debug(f"cli_args: {cli_args}")
         _ = self._colmap_cmd(COLMAP_EXE, 'stereo_fusion', args, cli_args)
+        return
 
     def run(self):
-        """Run a COLMAP SfM reconstruction.
+        """Run a COLMAP SfM (& MVS) reconstruction.
 
         Notes
         -----
         If a bounding-box was specified at object instantiation, and it leads to an empty sparse point cloud, we return
-         the non-cropped version. Same goes for dense (colored) point cloud.
+         the non-cropped version.
+        Same goes for dense (colored) point cloud.
 
         Returns
         -------
@@ -833,19 +931,23 @@ class ColmapRunner(object):
             Dictionary of min/max point positions in 'x', 'y' & 'z' directions.
             Defines a bounding box of object position in space.
 
+        Raises
+        ------
+        Exception
+            If the reconstructed sparse point-cloud is empty.
+
         """
         # -- Sparse point cloud reconstruction by COLMAP:
         # - Performs image features extraction:
         self.feature_extractor()
         # - Performs image features matching:
         self.matcher()
-
         # - Performs sparse point cloud reconstruction:
         self.mapper()
         # - If required, align sparse point cloud to coordinate system of given camera centers:
         if self.align_pcd:
             self.model_aligner()
-        # Print statistics about reconstruction.
+        # - Print statistics about reconstruction.
         self.model_analyzer()
 
         # -- Convert COLMAP binaries (cameras, images & points) to more accessible formats:
@@ -863,8 +965,9 @@ class ColmapRunner(object):
         if len(sparse_pcd.points) == 0:
             raise Exception("Reconstructed sparse point cloud is EMPTY!")
 
-        # -- Export computed COLMAP camera model to metadata for each file of the input fileset:
-        img_names = {splitext(images[k]['name'])[0]: k for k in images.keys()}  # image id indexed dict
+        # -- Map image file name to COLMAP image id:
+        img_names = {splitext(images[k]['name'])[0]: k for k in images.keys()}
+        # -- Export computed intrinsics ('camera_model') & extrinsic ('rotmat', 'tvec' & 'estimated_pose') to metadata:
         for fi in self.fileset.get_files(query=self.file_query):
             try:
                 # - Try to get the key corresponding to our file id in the COLMAP 'images' dictionary
@@ -872,12 +975,12 @@ class ColmapRunner(object):
             except KeyError:
                 logger.error(f"No pose & camera model defined by COLMAP for image '{fi.id}'!")
             else:
-                # - Add a 'colmap_camera' entry to the file metadata:
                 camera = {
                     "rotmat": images[key]["rotmat"],
                     "tvec": images[key]["tvec"],
                     "camera_model": cameras[images[key]['camera_id']]
                 }
+                # - Add a 'colmap_camera' entry to the file metadata:
                 fi.set_metadata("colmap_camera", camera)
                 # - Add an 'estimated_pose' entry to the file metadata:
                 estimated_pose = compute_estimated_pose(np.array(images[key]["rotmat"]), np.array(images[key]["tvec"]))
