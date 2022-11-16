@@ -459,12 +459,13 @@ def calibration_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_id=N
         plt.hlines([ymin, ymax], xmin, xmax, colors="gray", linestyles="dashed")
 
     # Add axes labels:
-    ax.set_xlabel('X')
-    ax.set_ylabel('Y')
+    ax.set_xlabel('X-axis')
+    ax.set_ylabel('Y-axis')
     # Add a grid
     ax.grid(True, which='major', axis='both', linestyle='dotted')
     # Add the legend
     ax.legend()
+    # Set aspect ratio
     ax.set_aspect('equal')
 
     # - Add a boxplot visu of the euclidean distances (errors)
