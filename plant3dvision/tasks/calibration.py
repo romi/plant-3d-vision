@@ -3,6 +3,7 @@
 
 import luigi
 import numpy as np
+from plantdb import io
 from tqdm import tqdm
 
 from plant3dvision.calibration import calibrate_opencv_camera
@@ -10,7 +11,6 @@ from plant3dvision.calibration import calibrate_radial_camera
 from plant3dvision.calibration import calibrate_simple_radial_camera
 from plant3dvision.colmap import ColmapRunner
 from plant3dvision.colmap import compute_estimated_pose
-from plantdb import io
 from romitask import DatabaseConfig
 from romitask import FilesetTarget
 from romitask import RomiTask
@@ -514,17 +514,19 @@ class ExtrinsicCalibration(RomiTask):
                 logger.warning(f"Could not compute the 'calibrated_pose' for image {fi.id}!")
                 colmap_poses[fi.id] = None
 
+        # - Create a string describing the camera intrinsic parameters (later used as header in calibration figure):
         # Use of try/except strategy to avoid failure of luigi pipeline (destroy all fileset!)
         try:
             camera_str = format_camera_params(cameras)
         except:
-            logger.warning("Could not format the camera parameters to a string!")
+            logger.warning("Could not format the camera intrinsic parameters to a string!")
             logger.info(f"COLMAP camera: {cameras}")
             camera_str = ""
         # - Generates a calibration figure showing CNC poses vs. COLMAP estimated poses:
         calibration_figure(cnc_poses, colmap_poses, pred_scan_id=images_fileset.scan.id, ref_scan_id="",
                            path=self.output().get().path(), header=camera_str, scan_path_kwargs=scan_cfg["ScanPath"])
 
+        # - Create a 'camera.txt' file describing the camera intrinsic parameters:
         # Use of try/except strategy to avoid failure of luigi pipeline (destroy all fileset!)
         try:
             camera_kwargs = get_camera_kwargs_from_colmap_json(cameras)
@@ -534,6 +536,72 @@ class ExtrinsicCalibration(RomiTask):
         else:
             with open(join(self.output().get().path(), "camera.txt"), 'w') as f:
                 f.writelines("\n".join([f"{k}: {v}" for k, v in camera_kwargs.items()]))
+
+        if scan_cfg["ScanPath"]['class_name'].lower() == "circle":
+            from plant3dvision.utils import fit_circle
+            from scipy.spatial import distance
+            n_pts = scan_cfg["ScanPath"]['kwargs']['n_points']
+            true_radius = scan_cfg["ScanPath"]['kwargs']['radius']
+            true_center_x = scan_cfg["ScanPath"]['kwargs']['center_x']
+            true_center_y = scan_cfg["ScanPath"]['kwargs']['center_y']
+            circle_img_ids = [str(i).zfill(5) + '_rgb' for i in range(0, n_pts)]
+            cnc_poses = np.array([cnc_poses[im_id][:2] for im_id in circle_img_ids]).T
+            estimated_poses = np.array([colmap_poses[im_id][:2] for im_id in circle_img_ids]).T
+            estimated_center_x, estimated_center_y, estimated_radius, residuals = fit_circle(*estimated_poses)
+            import matplotlib.pyplot as plt
+            fig, ax = plt.subplots(figsize=(9, 9))
+            # - Add CNC poses as 2D scatter
+            cnc_sc = ax.scatter(*cnc_poses, marker='+', color='g')
+            cnc_sc.set_label("CNC poses")
+            _ = ax.scatter([true_center_x], [true_center_y], marker='+', color='g')
+            # - Add CNC circular path
+            cnc_circle = plt.Circle((true_center_x, true_center_y), radius=true_radius, fill=False, edgecolor='g')
+            cnc_circle.set_label('CNC path')
+            ax.add_artist(cnc_circle)
+            # - Add Colmap estimated poses as 2D scatter
+            pred_sc = ax.scatter(*estimated_poses, marker='x', color='r')
+            pred_sc.set_label("Colmap poses")
+            _ = ax.scatter([estimated_center_x], [estimated_center_y], marker='x', color='r')
+            # - Add Colmap estimated circular path
+            pred_circle = plt.Circle((estimated_center_x, estimated_center_y), radius=estimated_radius, fill=False,
+                                     edgecolor='r')
+            pred_circle.set_label('Predicted path')
+            ax.add_artist(pred_circle)
+            # - Plot the REFERENCE/PREDICTED "mapping" as arrows:
+            XX, YY = [], []  # use REFERENCE poses as 'origin' point for arrow
+            U, V = [], []  # arrow components
+            err = []  # euclidian distance between REFERENCE & PREDICTED => positioning error
+            for idx in range(n_pts):
+                XX.append(cnc_poses[0, idx])
+                YY.append(cnc_poses[1, idx])
+                U.append(estimated_poses[0, idx] - cnc_poses[0, idx])
+                V.append(estimated_poses[1, idx] - cnc_poses[1, idx])
+                err.append(distance.euclidean(cnc_poses[:, idx], estimated_poses[:, idx]))
+            # Show the mapping:
+            q = ax.quiver(XX, YY, U, V, scale_units='xy', scale=1., width=0.003)
+            # Add a title:
+            plt.suptitle(f"Colmap calibration - {images_fileset.scan.id}", fontweight="bold")
+            dist2c = distance.euclidean([true_center_x, true_center_y], [estimated_center_x, estimated_center_y])
+            title = f"Distance to centers: {round(dist2c, 2)}mm\n"
+            title += f"True radius={true_radius}mm\n"
+            title += f"Predicted radius={round(estimated_radius, 2)}mm"
+            ax.set_title(title)
+            # Add axes labels:
+            ax.set_xlabel('X-axis')
+            ax.set_ylabel('Y-axis')
+            # Add a grid
+            ax.grid(True, which='major', axis='both', linestyle='dotted')
+            # Set aspect ratio
+            ax.set_aspect('equal')
+            # Add a legend
+            ax.legend()
+            # Save the figure:
+            plt.savefig(join(self.output().get().path(), "colmap_circle.png"))
+            # Save residuals
+            with open(join(self.output().get().path(), "circle_residuals.txt"), 'w') as f:
+                f.writelines("\n".join([str(res) for res in residuals]))
+
+        return
 
 
 class IntrinsicCalibrationExists(DatasetExists):
