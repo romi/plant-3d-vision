@@ -1,16 +1,24 @@
 #!/bin/bash
 
+# - Default variables
 vtag="latest"
 host_db=$DB_LOCATION
 cmd=''
 mount_option=""
-# Test commands:
+
+# - Test commands:
 unittest_cmd="python -m unittest discover -s plant-3d-vision/tests/unit/"
 integration_test_cmd="python -m unittest discover -s plant-3d-vision/tests/integration/"
 pipeline_cmd="cd plant-3d-vision/tests/ && ./check_pipe.sh"
 geom_pipeline_cmd="cd plant-3d-vision/ && ./check_geom_pipe.sh"
 ml_pipeline_cmd="cd plant-3d-vision/ && ./check_ml_pipe.sh"
 gpu_cmd="nvidia-smi"
+
+# - Check definition of varenv '$DB_LOCATION':
+if [ "$DB_LOCATION" == "" ]; then
+  host_db='UNDEFINED'
+fi
+
 
 usage() {
   echo "USAGE:"
@@ -34,9 +42,9 @@ usage() {
     Defines the command to run at container startup.
     By default, return the usage message and exit."
   echo "  --unittest
-    Runs unit tests defined in plant-3d-vision/tests/unit."
+    Runs unit tests defined in 'plant-3d-vision/tests/unit'."
   echo "  --integration_test
-    Runs integration tests defined in plant-3d-vision/tests/integration."
+    Runs integration tests defined in 'plant-3d-vision/tests/integration'."
   echo "  --pipeline_test
     Test pipelines (geometric & ML based) in docker container with CI test & test dataset."
   echo "  --geom_pipeline_test
@@ -104,6 +112,18 @@ done
 # Use 'host database path' $host_db' to create a bind mount to '/myapp/db':
 if [ "$host_db" != "" ]; then
   mount_option="$mount_option -v $host_db:/myapp/db"
+  echo "Automatic bind mount of '$host_db' (host) to '/myapp/db' (container)!"
+fi
+
+# If a 'host database path' is provided, get the name of the group and its id to, later used with the `--user` option
+if [ "$host_db" != "" ]; then
+  group_name=$(stat -c "%G" $host_db)  # get the name of the group for the 'host database path'
+  gid=$(getent group $group_name | cut --delimiter ':' --fields 3)  # get the 'gid' of this group
+#  echo "Automatic group name definition to '$group_name'!"
+#  echo "Automatic group id definition to '$gid'!"
+else
+  group_name='myuser'
+  gid=1000
 fi
 
 # Check if we have a TTY or not
@@ -116,12 +136,14 @@ fi
 if [ "$cmd" = "" ]; then
   # Start in interactive mode:
   docker run --rm --gpus all $mount_option \
+    --user myuser:$gid \
     --env PYOPENCL_CTX='0' \
     $USE_TTY roboticsmicrofarms/plant-3d-vision:$vtag \
     bash
 else
   # Start in non-interactive mode (run the command):
   docker run --rm --gpus all $mount_option \
+    --user myuser:$gid \
     --env PYOPENCL_CTX='0' \
     $USE_TTY roboticsmicrofarms/plant-3d-vision:$vtag \
     bash -c "$cmd"
