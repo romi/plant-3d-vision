@@ -1,84 +1,107 @@
 [Colmap]
-upstream_task = "ImagesFilesetExists"
-matcher = "exhaustive"
-compute_dense = false
-align_pcd = true
-calibration_scan_id = ""
-
-  [Colmap.cli_args.feature_extractor]
-  "--ImageReader.single_camera" = "1" # in colmap default to 0
-  "--SiftExtraction.use_gpu" = "1"
-
-  [Colmap.cli_args.exhaustive_matcher]
-  "--SiftMatching.use_gpu" = "1"
-
-  [Colmap.cli_args.model_aligner]
-  "--robust_alignment_max_error" = "10"
-
-  # [Colmap.bounding_box] # default to None
-  # x = [150, 650]
-  # y = [150, 650]
-  # z = [-90, 300]
+upstream_task = "ImagesFilesetExists"  # where to get the images from, here requires the 'images' fileset to exists
+matcher = "exhaustive"  # type of matcher to use cith COLMAP, in {'exhaustive', 'sequential'}
+compute_dense = false  # wether a dense point cloud should be computed by COLMAP
+align_pcd = true  # align and scale spare (& dense) point cloud(s) using CNC coordinates
+use_gpu = true  # use GPU when possible, either use CPU
+single_camera = true  # wether a single camera was used for acquisition
+robust_alignment_max_error = 10  # the maximum alignment error allowed during ``model_aligner``
+intrinsic_calibration_scan_id = ""  # use a dataset with calibrated intrinsic camera poses
+extrinsic_calibration_scan_id = ""  # use a dataset with calibrated extrinsic camera poses
+#[Colmap.cli_args.feature_extractor]
+#"--ImageReader.single_camera" = "1"  # equivalent to `single_camera = true`
+#"--SiftExtraction.use_gpu" = "1"  # equivalent to `use_gpu = true`
+#[Colmap.cli_args.exhaustive_matcher]
+#"--SiftMatching.use_gpu" = "1"  # equivalent to `use_gpu = true`
+#[Colmap.cli_args.model_aligner]
+#"--robust_alignment_max_error" = "10"  # equivalent to `robust_alignment_max_error = 10`
+#[Colmap.bounding_box] # default to None
+#x = [150, 650]
+#y = [150, 650]
+#z = [-90, 300]
 
 [Undistorted]
-upstream_task = "ImagesFilesetExists"
+upstream_task = "ImagesFilesetExists"  # where to get the images from, here requires the 'images' fileset to exists
+camera_model_src = "Colmap"  # source of the camera model to use to undistort images, in {'Colmap', 'IntrinsicCalibration', 'ExtrinsicCalibration'}
+camera_model = "SIMPLE_RADIAL"  # name of the camera model to get if `camera_model_src='IntrinsicCalibration'`.
+intrinsic_calib_scan_id = ""  # use a dataset with calibrated intrinsic camera poses
+extrinsic_calib_scan_id = ""  # use a dataset with calibrated extrinsic camera poses
 
 [Masks]
-upstream_task = "Undistorted" # other option "ImagesFilesetExists"
-query = "{\"channel\":\"rgb\"}"
-type = "linear"
-parameters = "[0,1,0]"
-dilation = 1 # default to 0
-binarize = true
-threshold = 0.2
+upstream_task = "Undistorted"  # other option "ImagesFilesetExists"
+type = "linear"  # type of filter to use, in {'linear', 'excess_green'}
+query = "{\"channel\":\"rgb\"}"  # query applied on metadata to select images from `upstream_task`
+parameters = "[0,1,0]"  # select the RGB channel to apply "linear" filter
+threshold = 0.2  # threshold for "linear" filter
+binarize = true  # binarize after threshold
+dilation = 1  # amount of dilation to apply to binarized image
 
 [Voxels]
-upstream_mask = "Masks"
-upstream_colmap = "Colmap"
-use_colmap_poses = true
-voxel_size = 1.0
-type = "carving"
-log = false # default to true
-invert = false
-labels = "[]"
+upstream_mask = "Masks"  # task to get the masked images from
+upstream_colmap = "Colmap"  # task to get the camera poses from
+camera_metadata = 'colmap_camera'  # metadata entry to use to access camera poses
+voxel_size = 1.0  # size of the voxel to reconstruct, defines the total size of the array with `bounding_box`
+type = "carving"  # type of backprojection algorithm to use, in {"carving", "averaging"}
+log = false  # convert the mask images to logarithmic values for 'averaging' `type` prior to back-projection
+invert = false  # use it to invert the mask
+labels = "[]"  # list of labels to use, requires a labelled mask dataset
+
+#[Voxels.bounding_box] # default to None
+#x = [150, 650]
+#y = [150, 650]
+#z = [-90, 300]
 
 [PointCloud]
-upstream_task = "Voxels"
-level_set_value = 1.0
-log = false
-background_prior= -200 # default 1.0
-min_contrast = 10.0
-min_score = 0.2
+upstream_task = "Voxels"  # task to get the voxel array from
+level_set_value = 1.0  # distance of the level set on which the points are sampled
+background_prior = 1.0  # only used if labels were defined (multiclass)
+min_contrast = 10.0  # only used if labels were defined (multiclass)
+min_score = 0.2  # only used if labels were defined (multiclass)
 
 [TriangleMesh]
-upstream_task = "PointCloud"
-library = "open3d" # or "cgal"
-filtering = "most connected triangles"  # ["", "most connected triangles", "largest connected triangles", "dbscan point-cloud"]
-depth = 9 # used by open3d library
+upstream_task = "PointCloud"  # task to get the point cloud from
+library = "open3d"  # the library to mesh the point cloud, in {'open3d', 'cgal'}
+filtering = "most connected triangles"  # filtering method to apply to obtained triangle mesh, in {"", "most connected triangles", "largest connected triangles", "dbscan point-cloud"}
+# Parameters for `library = "open3d"`
+depth = 9  # depth parameter used by Open3D to mesh the point cloud
 
 [CurveSkeleton]
-upstream_task = "TriangleMesh"
+upstream_task = "TriangleMesh"  # task to get the triangle mesh from
 
 [TreeGraph]
-upstream_task = "CurveSkeleton"
-z_axis = 2
-stem_axis_inverted = false
+upstream_task = "CurveSkeleton"  # task to get the skeleton from
+z_axis = 2  # axis to use for stem orientation to get the root node
+stem_axis_inverted = false  # direction of the stem along the specified axis
 
 [AnglesAndInternodes]
-upstream_task = "TreeGraph"
-characteristic_length = 1.0
-stem_axis_inverted = false
+upstream_task = "TreeGraph"  # task to get the skeleton from, in {'TreeGraph', 'ClusteredMesh', 'OrganSegmentation'}
+# Parameters for 'ClusteredMesh' or 'OrganSegmentation':
+organ_type = "fruit"  # select the type of organs to use
+characteristic_length = 1.0  # distance between 2 elements for the "stem skeletonization"
+stem_axis = 2  # projection of the stem on the x (0), y (1) or z (2) axis
+stem_axis_inverted = false  # whether the stem is inverted
+min_elongation_ratio = 2.0  # minimum elongation ratio for the organ to be considered
+min_fruit_size = 6  # minimum fruit size
 
 [Visualization]
-upstream_point_cloud = "PointCloud"
-upstream_mesh = "TriangleMesh"
-upstream_colmap = "Colmap"
-upstream_angles = "AnglesAndInternodes"
-upstream_skeleton = "CurveSkeleton"
-upstream_images = "ImagesFilesetExists"
-max_image_size = 1500
-max_point_cloud_size = 10000000
-thumbnail_size = 150
+upstream_images = "ImagesFilesetExists"  # name of the task that contains the images
+upstream_colmap = "Colmap"  # name of the task that generated the poses
+upstream_point_cloud = "PointCloud"  # name of the task that generated the point cloud
+upstream_mesh = "TriangleMesh"  # name of the task that generated the mesh
+upstream_skeleton = "CurveSkeleton"  # name of the task that generated the skeleton
+upstream_angles = "AnglesAndInternodes"  # name of the task that generated the angles and internode values
+# Ground truth tasks:
+upstream_pcd_ground_truth = "PointCloudGroundTruth"  # name of the task that contains the point cloud ground truth, if any
+# Evaluation tasks:
+upstream_pcd_evaluation = "PointCloudEvaluation"  # name of the task that evaluate the "PointCloud" task (with `upstream_pcd_ground_truth`)
+upstream_segmentedpcd_evaluation = "SegmentedPointCloudEvaluation"  # name of the task that evaluate the "SegmentedPointCloud" task
+upstream_segmentation2d_evaluation = "Segmentation2DEvaluation"  # name of the task that evaluate the "Segmentation2D" task
+# Parameters:
+query = "{}"  # query applied on 'images' fileset metadata
+use_colmap_poses = true  # whether the colmap poses should be used to place images
+max_image_size = 1500  # maximum image size to load in viewer
+max_point_cloud_size = 10000000  # maximum number of points in point cloud to load in viewer
+thumbnail_size = 150  # maximum thumbnail size (carousel) to load in viewer
 
 [Clean]
-no_confirm = true
+no_confirm = true  # whether NOT to ask for confirmation prior to dataset cleaning
