@@ -1,15 +1,19 @@
 #!/bin/bash
 
-# Default configuration file used for GEOMETRIC based pipeline is:
-cfg='config/geom_pipe_real.toml'
-# Default database location:
+# - Default database location:
 db='tests/testdata'
-# Default test dataset for GEOMETRIC based pipeline is the "real_plant":
-dataset="$db/real_plant/"
-# Virtual test dataset:
+# - Defaults for 'real_plant' dataset
+r_dataset="$db/real_plant/"
+r_cfg='tests/testcfg/geom_pipe_real.toml'
+# - Defaults for 'virtual_plant' dataset
 v_dataset="$db/virtual_plant/"
+v_cfg='tests/testcfg/geom_pipe_virtual.toml'
+
 # Default tested ROMI task for GEOMETRIC based pipeline is "AnglesAndInternodes":
 task='AnglesAndInternodes'
+# Default test is 'real_plant' dataset & config:
+dataset=$r_dataset
+cfg=$r_cfg
 
 usage() {
   echo "USAGE:"
@@ -65,7 +69,7 @@ while [ "$1" != "" ]; do
     ;;
   --virtual)
     dataset=$v_dataset
-    cfg='config/geom_pipe_virtual.toml'
+    cfg=$v_cfg
     ;;
   --tmp)
     tmp=1
@@ -118,10 +122,12 @@ fi
 romi_run_task Clean $dataset --config $cfg
 
 # 2. run pipeline
+start_time=$(date +%s)  # get the starting time
 echo "romi_run_task $task $dataset --config $cfg"
 romi_run_task $task $dataset --config $cfg
+echo "Reconstruction took $(expr $(date +%s) - $start_time) seconds!"  # print the reconstruction time
 
-# 3. print information about tested task
+# 3. print information about tested task(s)
 if [ "$task" = "AnglesAndInternodes" ]; then
   # Also inform about Colmap and PointCloud tasks if tested task is "AnglesAndInternodes"
   echo ""
