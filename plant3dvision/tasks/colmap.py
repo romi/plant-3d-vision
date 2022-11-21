@@ -451,9 +451,10 @@ class Colmap(RomiTask):
         Defaults to NO intrinsic calibration scan.
     camera_model : luigi.Parameter, optional
         If no intrinsic or extrinsic calibration scan is defined, this select the camera model to estimate by COLMAP.
+        Valid models are in {'SIMPLE_RADIAL', 'RADIAL', 'OPENCV'}.
         If an ``intrinsic_calibration_scan_id`` is specified, this select the intrinsic parameters to set in COLMAP.
         If an ``extrinsic_calibration_scan_id`` is specified and `use_calibration_camera` is ``True``, this does nothing!
-        Defaults to "OPENCV" camera model.
+        Defaults to "SIMPLE_RADIAL" camera model.
     extrinsic_calibration_scan_id : luigi.Parameter, optional
         If set, get the extrinsic camera parameters from this scan dataset.
         These extrinsic parameter will be set in COLMAP ``poses.txt`` file using the estimated "calibrated_poses" metadata.
