@@ -1,0 +1,46 @@
+[Masks]
+upstream_task = "ImagesFilesetExists"
+query = "{\"channel\":\"rgb\"}"
+type = "linear"
+parameters = "[0, 1, 0]"
+dilation = 1
+binarize = true
+threshold = 0.3
+
+[Voxels]
+upstream_mask = "Masks"
+upstream_colmap = "Masks"
+camera_metadata = "camera"
+voxel_size = 0.1
+type = "carving"
+
+[PointCloud]
+upstream_task = "Voxels"
+level_set_value = 0.0
+
+[TriangleMesh]
+upstream_task = "PointCloud"
+library = "open3d"
+filtering = "most connected triangles"
+
+[CurveSkeleton]
+upstream_task = "TriangleMesh"
+
+[TreeGraph]
+upstream_task = "CurveSkeleton"
+z_axis = 2
+stem_axis_inverted = false
+
+[AnglesAndInternodes]
+upstream_task = "TreeGraph"
+characteristic_length = 1.0
+stem_axis_inverted = false
+
+[AnglesAndInternodesEvaluation]
+upstream_task = "AnglesAndInternodes"
+ground_truth = "ImagesFilesetExists"
+free_ends = 0.4
+free_ends_eps = 1e-2
+
+[Clean]
+no_confirm = true

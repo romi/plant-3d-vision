@@ -1,0 +1,65 @@
+[Colmap]
+upstream_task = "ImagesFilesetExists"
+matcher = "exhaustive"
+camera_model = "SIMPLE_RADIAL"
+compute_dense = false
+align_pcd = true
+use_gpu = true
+single_camera = true
+robust_alignment_max_error = 10
+intrinsic_calibration_scan_id = ""  # use a dataset with calibrated intrinsic camera poses
+extrinsic_calibration_scan_id = ""  # use a dataset with calibrated extrinsic camera poses
+
+[Undistorted]
+upstream_task = "ImagesFilesetExists"
+
+[Masks]
+upstream_task = "Undistorted"
+query = "{\"channel\":\"rgb\"}"
+type = "linear"
+parameters = "[0, 1, 0]"
+dilation = 1
+binarize = true
+threshold = 0.2
+
+[Voxels]
+upstream_mask = "Masks"
+upstream_colmap = "Colmap"
+camera_metadata = "colmap_camera"
+voxel_size = 0.5
+type = "carving"
+[Voxels.bounding_box]
+x = [300, 450]
+y = [300, 450]
+z = [-175, 105]
+
+[PointCloud]
+upstream_task = "Voxels"
+level_set_value = 1.0
+
+[TriangleMesh]
+upstream_task = "PointCloud"
+library = "open3d"
+filtering = "most connected triangles"
+
+[CurveSkeleton]
+upstream_task = "TriangleMesh"
+
+[TreeGraph]
+upstream_task = "CurveSkeleton"
+z_axis = 2
+stem_axis_inverted = false
+
+[AnglesAndInternodes]
+upstream_task = "TreeGraph"
+characteristic_length = 1.0
+stem_axis_inverted = false
+
+[AnglesAndInternodesEvaluation]
+upstream_task = "AnglesAndInternodes"
+ground_truth = "ImagesFilesetExists"
+free_ends = 0.4
+free_ends_eps = 1e-2
+
+[Clean]
+no_confirm = true
