@@ -31,19 +31,24 @@ class Voxels(RomiTask):
         Use it to get the camera intrinsics (fx, fy, cx, cy) & poses ('rotmat', 'tvec').
         Defaults to ``colmap_camera``.
     voxel_size : luigi.FloatParameter
-        Size of a (square) voxel, to compare with the `bounding_box` to reconstruct.
+        Size of a (cubic) voxel, to compare with the `bounding_box` to reconstruct.
         That is if ``voxel_size=1.``, then the final shape of the _volume_ is the same as the ``bounding_box``.
         defaults to ``1.``.
     type : luigi.Parameter in {"carving", "averaging"}
         Type of back-projection to performs.
+    log : luigi.BoolParameter, optional
+        If ``True``, convert the mask images to logarithmic values for 'averaging' `type` prior to back-projection.
+        Defaults to ``True``.
     invert : luigi.BoolParameter, optional
         If ``True``, invert the values of the mask.
         Defaults to ``False``.
     labels : luigi.ListParameter
         List of labels to use from a labelled mask dataset.
-    log : luigi.BoolParameter, optional
-        If ``True``, convert the mask images to logarithmic values for 'averaging' `type` prior to back-projection.
-        Defaults to ``False``.
+    bounding_box : luigi.DictParameter, optional
+        Volume dictionary used to define the space to reconstruct.
+        By default, it uses the scanner workspace defined in the 'images' fileset.
+        Defined as `{'x': [int, int], 'y': [int, int], 'z': [int, int]}`.
+        Defaults to NO bounding-box.
 
     See Also
     --------

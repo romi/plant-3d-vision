@@ -15,6 +15,18 @@ logger = configure_logger(__name__)
 class TreeGraph(RomiTask):
     """ Creates a tree graph of the plant
 
+    Attributes
+    ----------
+    upstream_task : luigi.TaskParameter
+        Upstream task that generate the skeleton.
+        Defaults to ``CurveSkeleton``.
+    z_axis : luigi.IntParameter
+        Axis to use for stem orientation to get the root node.
+        Defaults to ``2``.
+    stem_axis_inverted : luigi.BoolParameter
+        Direction of the stem along the specified axis, inverted or not.
+        Defaults to ``False``.
+
     Module: plant3dvision.tasks.arabidopsis
     Default upstream tasks: CurveSkeleton
     Upstream task format: json
@@ -22,7 +34,6 @@ class TreeGraph(RomiTask):
 
     """
     upstream_task = luigi.TaskParameter(default=CurveSkeleton)
-
     z_axis = luigi.IntParameter(default=2)
     stem_axis_inverted = luigi.BoolParameter(default=False)
 
@@ -49,8 +60,8 @@ class AnglesAndInternodes(RomiTask):
     """
     upstream_task = luigi.TaskParameter(default=TreeGraph)
 
-    characteristic_length = luigi.FloatParameter(default=1.0)
     organ_type = luigi.Parameter(default="fruit")
+    characteristic_length = luigi.FloatParameter(default=1.0)
 
     stem_axis = luigi.IntParameter(default=2)
     stem_axis_inverted = luigi.BoolParameter(default=False)

@@ -18,6 +18,7 @@ from romitask.log import configure_logger
 
 logger = configure_logger(__name__)
 
+
 def get_main_stem_and_nodes(G, root_node):
     """
     Get main stem and branching nodes from graph.
@@ -220,7 +221,7 @@ def compute_tree_graph(points, lines, stem_axis, stem_axis_inverted):
     stem_axis: int
         axis to use for stem orientation to get the root node
     stem_axis_inverted: bool
-        direction of the stem along the specified axis inverted or not
+        direction of the stem along the specified axis, inverted or not
 
     Returns
     -------
@@ -337,10 +338,10 @@ def get_organ_features(organ_bb, stem_skeleton):
     return organ_features
 
 
-def angles_and_internodes_from_point_cloud(stem_pcd, organ_pcd_list, characteristic_length, stem_axis
-                                           , stem_axis_inverted, min_elongation_ratio, min_fruit_size):
-    """
-    Get angles and internodes from point cloud
+def angles_and_internodes_from_point_cloud(stem_pcd, organ_pcd_list, characteristic_length, stem_axis,
+                                           stem_axis_inverted, min_elongation_ratio, min_fruit_size):
+    """Get angles and internodes from point cloud.
+
     Parameters
     ----------
     stem_pcd : o3d.geometry.PointCloud
@@ -352,7 +353,7 @@ def angles_and_internodes_from_point_cloud(stem_pcd, organ_pcd_list, characteris
     stem_axis : int
         [0,1,2] for the projection of the stem on the x, y or z axis
     stem_axis_inverted : bool
-        whether or not the stem is inverted
+        whether the stem is inverted
     min_elongation_ratio : float
         minimum elongation ratio for the organ to be considered for the angles and internodes calculation
     min_fruit_size : float
@@ -360,7 +361,7 @@ def angles_and_internodes_from_point_cloud(stem_pcd, organ_pcd_list, characteris
 
     Returns
     -------
-    {dict}
+    dict
         list of angles, internodes and fruit points
     """
     import open3d

@@ -80,13 +80,12 @@ class Visualization(RomiTask):
     """
     upstream_task = None
 
+    upstream_images = luigi.TaskParameter(default=ImagesFilesetExists)
+    upstream_colmap = luigi.TaskParameter(default=Colmap)
     upstream_point_cloud = luigi.TaskParameter(default=PointCloud)
     upstream_mesh = luigi.TaskParameter(default=TriangleMesh)
-    upstream_colmap = luigi.TaskParameter(default=Colmap)
-    upstream_angles = luigi.TaskParameter(default=AnglesAndInternodes)
     upstream_skeleton = luigi.TaskParameter(default=CurveSkeleton)
-    upstream_images = luigi.TaskParameter(default=ImagesFilesetExists)
-    query = luigi.DictParameter(default={})
+    upstream_angles = luigi.TaskParameter(default=AnglesAndInternodes)
     upstream_virtualplantobj = luigi.TaskParameter(default=VirtualPlantObj)
 
     # ground truths
@@ -97,6 +96,7 @@ class Visualization(RomiTask):
     upstream_segmentedpcd_evaluation = luigi.TaskParameter(default=SegmentedPointCloudEvaluation)
     upstream_segmentation2d_evaluation = luigi.TaskParameter(default=Segmentation2DEvaluation)
 
+    query = luigi.DictParameter(default={})
     use_colmap_poses = luigi.BoolParameter(default=True)
     max_image_size = luigi.IntParameter(default=1500)
     max_point_cloud_size = luigi.IntParameter(default=10000000)
