@@ -38,17 +38,17 @@ RUN echo "Fix CUDA GPG key..." && \
     apt-get update && \
     # Install the required dependencies
     apt-get install -yq --no-install-recommends \
-    emacs-nox \
+    nano \
     ocl-icd-libopencl1 opencl-headers clinfo \
     libjpeg-dev libffi-dev && \
     # Clean-up apt cache
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
-    # Create a non-root user and give it rights over a "homr" folder:
+    # Create a non-root user and give it rights over a "home" folder:
     adduser --disabled-password --gecos '' --uid ${USER_ID} ${USER_NAME} && \
     chown -R ${USER_NAME}: /home/${USER_NAME} && \
     # Create the folder used to mount the database:
-    mkdir -m 777 -p ${DB_LOCATION} && \
+    mkdir -p ${DB_LOCATION} && \
     # Ugly fix for OpenCL:
     ln -s /usr/lib/x86_64-linux-gnu/libOpenCL.so.1 /usr/lib/libOpenCL.so && \
     mkdir -p /etc/OpenCL/vendors && \
@@ -66,17 +66,17 @@ COPY --chown=${USER_NAME} ./ plant-3d-vision/
 
 # Install the required dependencies, sub-modules and plant-3d-vision:
 RUN cd plant-3d-vision/ && \
-    python3 -m pip install -r plantdb/requirements.txt && \
-    python3 -m pip install plantdb/ && \
-    python3 -m pip install -r romitask/requirements.txt && \
-    python3 -m pip install romitask/ && \
-    python3 -m pip install romiseg/ && \
-    python3 -m pip install pybind11 && \
-    python3 -m pip install romicgal/ && \
-    python3 -m pip install -r dtw/requirements.txt && \
-    python3 -m pip install dtw/ && \
-    python3 -m pip install -r requirements.txt && \
-    python3 -m pip install . && \
+    python3 -m pip install --user -r plantdb/requirements.txt && \
+    python3 -m pip install --user plantdb/ && \
+    python3 -m pip install --user -r romitask/requirements.txt && \
+    python3 -m pip install --user romitask/ && \
+    python3 -m pip install --user romiseg/ && \
+    python3 -m pip install --user pybind11 && \
+    python3 -m pip install --user romicgal/ && \
+    python3 -m pip install --user -r dtw/requirements.txt && \
+    python3 -m pip install --user dtw/ && \
+    python3 -m pip install --user -r requirements.txt && \
+    python3 -m pip install --user . && \
     rm -rf .cache/pip && \
     ./get_model.sh
 
