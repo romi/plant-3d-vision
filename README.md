@@ -126,6 +126,67 @@ To test if you can run the _machine learning pipeline_:
 ./docker/run.sh --ml_pipeline_test
 ```
 
+### Enable write access to local database with bind mount
+To avoid running the container app as `root` user, we created a non-root user named `myuser` with an uid of `1000`.
+In turn, when you mount a local `plantdb` database, if the directory does not have an uid of `1000` you will not be able to write.
+
+In the `./docker/run.sh` convenience script, we added a few lines to automatically get the group id of the host database directory.
+To be a bit cleaner and go further in sharing the database with other users, we suggest to:
+
+
+1. create a group named `romi`,
+2. add all potential users of the docker image to this group
+3. change the group of the local `plantdb` database to the `romi` group
+4. start the docker container with the `-u myuser:$romi_gid` option, where `$romi_gid` is the group id (gid) of the `romi` group
+
+This will also allow all users from the `romi` group to access the files within the database, effectively making this a shared database.
+
+#### Initialise and register a local `plantdb` database
+Assuming you want to put your local `plantdb` database under `/Data/ROMI/DB`.
+
+Let's start by setting an environment variable named `$DB_LOCATION` to the end of our `.bashrc` file:
+```shell
+cat << EOF >> /home/$USER/.bashrc
+# ROMI plant-3d-vision - Set the local plantdb database location:
+export DB_LOCATION='/Data/ROMI/DB'
+EOF
+```
+
+Then create the directories and the required `romidb` marker file with:
+```shell
+source ~/.bashrc  # to 'activate' the $DB_LOCATION environment variable
+mkdir -p $DB_LOCATION
+touch $DB_LOCATION/romidb
+```
+
+In any case, please avoid doing horrendous things like `chmod -R 777 $DB_LOCATION`!
+
+#### Create a `romi` group and give it rights over the local `plantdb` database
+
+1. Create the `romi` group
+   ```shell
+   sudo addgroup romi
+   ```
+2. Add the current user to the `romi` group
+   ```shell
+   sudo usermod -a -G romi $USER
+   ```
+3. Change the group of the local DB
+   ```shell
+   sudo chown -R :romi $DB_LOCATION
+   ```
+4. Check the rights with:
+   ```shell
+   ls -al $DB_LOCATION
+   ```
+   This should yield something like:
+   ```
+   drwxrwxr-x  2 myuser romi     4096 nov.  21 12:00 .
+   drwxrwxrwx 31 myuser myuser   4096 nov.  21 12:00 ..
+   -rw-rw-r--  1 myuser romi        0 nov.  21 12:00 romidb
+   ```
+   Where `myuser` is your username.
+
 
 ## Install from sources
 
@@ -301,7 +362,7 @@ conda activate plant3dvision  # activate the conda environment
 romi_run_task AnglesAndInternodes /tmp/testdata/real_plant/ --config config/geom_pipe_real.toml
 ```
 
-This will performs the `AnglesAndInternodes` task (reconstruction and analysis) of the `real_plant` test dataset using the `geom_pipe_real.toml` configuration.
+This will perform the `AnglesAndInternodes` task (reconstruction and analysis) of the `real_plant` test dataset using the `geom_pipe_real.toml` configuration.
 
 
 ### Monitoring
