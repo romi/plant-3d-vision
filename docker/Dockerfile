@@ -52,14 +52,14 @@ RUN echo "Fix CUDA GPG key..." && \
     # Ugly fix for OpenCL:
     ln -s /usr/lib/x86_64-linux-gnu/libOpenCL.so.1 /usr/lib/libOpenCL.so && \
     mkdir -p /etc/OpenCL/vendors && \
-    echo "libnvidia-opencl.so.1" > /etc/OpenCL/vendors/nvidia.icd
+    echo "libnvidia-opencl.so.1" > /etc/OpenCL/vendors/nvidia.icd && \
+    # Upgrade pip
+    python3 -m pip install --upgrade pip
+
 # Change to non-root user:
 USER ${USER_NAME}
 # Change working directory:
 WORKDIR /home/${USER_NAME}
-
-# Upgrade pip
-RUN python3 -m pip install --upgrade pip
 
 # Copy the source files (repository):
 COPY --chown=${USER_NAME} ./ plant-3d-vision/
