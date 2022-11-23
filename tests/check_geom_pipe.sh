@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# - Default database location:
+# - Default test database location:
 db='tests/testdata'
-# - Defaults for 'real_plant' dataset
+# - Defaults for 'real_plant' dataset & config:
 r_dataset="$db/real_plant/"
 r_cfg='tests/testcfg/geom_pipe_real.toml'
-# - Defaults for 'virtual_plant' dataset
+# - Defaults for 'virtual_plant' dataset & config:
 v_dataset="$db/virtual_plant/"
 v_cfg='tests/testcfg/geom_pipe_virtual.toml'
 
@@ -14,6 +14,10 @@ task='AnglesAndInternodes'
 # Default test is 'real_plant' dataset & config:
 dataset=$r_dataset
 cfg=$r_cfg
+# Default logging level is "INFO":
+log_level="INFO"
+# Default is NOT to copy to '/tmp' directory
+tmp=0
 
 usage() {
   echo "USAGE:"
@@ -38,6 +42,8 @@ usage() {
   echo "  --tmp
     Clone the dataset to the temporary folder '/tmp' first.
     Use this to avoid messing up your repository 'testdata' directory as the Clean task is not reliable."
+  echo "  --debug
+    Use the debugging log-level."
   echo "  -h, --help
     Output a usage message and exit.
   "
@@ -52,7 +58,7 @@ usage() {
   $ ./check_geom_pipe.sh --config config/geom_pipe_real.toml --dataset /data/ROMI/DB/arabido_test2/ --tmp
   "
 }
-tmp=0
+
 while [ "$1" != "" ]; do
   case $1 in
   -c | --config)
@@ -73,6 +79,9 @@ while [ "$1" != "" ]; do
     ;;
   --tmp)
     tmp=1
+    ;;
+  --debug)
+    log_level="DEBUG"
     ;;
   -h | --help)
     usage
@@ -123,8 +132,8 @@ romi_run_task Clean $dataset --config $cfg
 
 # 2. run pipeline
 start_time=$(date +%s)  # get the starting time
-echo "romi_run_task $task $dataset --config $cfg"
-romi_run_task $task $dataset --config $cfg
+echo "romi_run_task $task $dataset --config $cfg --log-level $log_level"
+romi_run_task $task $dataset --config $cfg --log-level $log_level
 echo "Reconstruction took $(expr $(date +%s) - $start_time) seconds!"  # print the reconstruction time
 
 # 3. print information about tested task(s)
