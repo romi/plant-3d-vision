@@ -29,6 +29,8 @@ class Voxels(RomiTask):
     camera_metadata : luigi.Parameter, optional
         Name of the entry to get from the images metadata dictionary.
         Use it to get the camera intrinsics (fx, fy, cx, cy) & poses ('rotmat', 'tvec').
+        Use "colmap_camera" to use estimations by COLMAP.
+        Use "camera" to use information from the VirtualPlantImager.
         Defaults to ``colmap_camera``.
     voxel_size : luigi.FloatParameter
         Size of a (cubic) voxel, to compare with the `bounding_box` to reconstruct.

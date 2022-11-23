@@ -261,7 +261,7 @@ class Backprojection(object):
             # Get camera dictionary from mask metadata
             cam = fi.get_metadata(camera_metadata)
             if cam is None:
-                logger.warning("Could not get camera pose for view, skipping...")
+                logger.warning(f"Could not get camera pose for {fi.id}, skipping...")
                 continue
             # Load camera intrinsic parameters:
             intrinsics = cam["camera_model"]['params'][0:4]
