@@ -9,7 +9,7 @@ threshold = 0.3
 
 [Voxels]
 upstream_mask = "Masks"
-upstream_colmap = "Masks"
+upstream_colmap = "Masks"  # not really but a task name is required here!
 camera_metadata = "camera"
 voxel_size = 0.1
 type = "carving"
