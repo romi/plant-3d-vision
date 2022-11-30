@@ -11,13 +11,15 @@ ENV LANG=C.UTF-8
 ENV PYTHONUNBUFFERED=1
 ENV USER_NAME=myuser
 ENV USER_ID=1000
+# Required by `pip`:
 ENV PATH=$PATH:"/home/${USER_NAME}/.local/bin"
+# Required by `romi_run_task`:
 ENV DB_LOCATION="/myapp/db"
 ENV COLMAP_EXE='colmap'
-# nvidia-container-runtime
+ENV PYOPENCL_CTX='0'
+# Required by `nvidia-container-runtime`
 ENV NVIDIA_VISIBLE_DEVICES all
 ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
-ENV PYOPENCL_CTX='0'
 
 # Change Shell to 'bash', default is 'sh'
 SHELL [ "/bin/bash", "-c" ]
@@ -44,7 +46,7 @@ RUN echo "Fix CUDA GPG key..." && \
     # Clean-up apt cache
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
-    # Create a non-root user and give it rights over a "home" folder:
+    # Create a non-root user and give it rights over its "home" folder:
     adduser --disabled-password --gecos '' --uid ${USER_ID} ${USER_NAME} && \
     chown -R ${USER_NAME}: /home/${USER_NAME} && \
     # Create the folder used to mount the database:
