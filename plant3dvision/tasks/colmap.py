@@ -479,6 +479,8 @@ class Colmap(RomiTask):
     robust_alignment_max_error : luigi.IntParameter
         Maximum alignment error allowed during ``model_aligner`` COLMAP step.
         Defaults to ``10``.
+    query : luigi.DictParameter
+        A filtering dictionary on metadata. Key(s) and value(s) must be found in metadata to select the `File`.
 
     Notes
     -----
@@ -514,6 +516,7 @@ class Colmap(RomiTask):
     robust_alignment_max_error = luigi.IntParameter(default=10)
     bounding_box = luigi.DictParameter(default=None)
     cli_args = luigi.DictParameter(default={})
+    query = luigi.DictParameter(default={})
 
     def _workspace_as_bounding_box(self):
         """Use the scanner workspace as bounding-box.
@@ -647,14 +650,14 @@ class Colmap(RomiTask):
             logger.info("Found a manual definition of cropping bounding-box.")
 
         current_scan = DatabaseConfig().scan
-        images_fileset = self.input().get()
-        cnc_poses = get_cnc_poses(images_fileset.scan)
+        images_fileset = self.input().get().get_files(query=self.query)
+        cnc_poses = get_cnc_poses(current_scan)
         # - Defines if colmap should use an extrinsic calibration dataset:
         use_calibration = self.extrinsic_calibration_scan_id != ""
         if use_calibration:
             logger.info(f"Check extrinsic calibration scan compatibility with current scan...")
             # Check we can use this calibration scan with this scan dataset:
-            db = images_fileset.scan.db
+            db = current_scan.db
             calibration_scan = db.get_scan(self.extrinsic_calibration_scan_id)
             current_cfg = {'single_camera': self.single_camera, 'camera_model': self.camera_model}
             check_colmap_cfg(current_cfg, current_scan, calibration_scan)
@@ -672,7 +675,7 @@ class Colmap(RomiTask):
                 except:
                     logger.warning("Could not format the camera parameters from COLMAP camera!")
                     logger.info(f"COLMAP camera: {cameras}")
-            calibration_figure(cnc_poses, colmap_poses, pred_scan_id=images_fileset.scan.id,
+            calibration_figure(cnc_poses, colmap_poses, pred_scan_id=current_scan.id,
                                ref_scan_id=str(self.extrinsic_calibration_scan_id), path=self.output().get().path(),
                                header=camera_str)
         else:
@@ -721,8 +724,10 @@ class Colmap(RomiTask):
             outfile.import_file(log_path)
 
         # - Get estimated camera poses from 'images' fileset metadata:
-        colmap_poses = {im.id: im.get_metadata("estimated_pose") for im in images_fileset.get_files()}
+        colmap_poses = {im.id: im.get_metadata("estimated_pose") for im in images_fileset}
         camera_str = format_camera_params(cameras)
-        calibration_figure(cnc_poses, colmap_poses, pred_scan_id=images_fileset.scan.id,
+        calibration_figure(cnc_poses, colmap_poses, pred_scan_id=current_scan.id,
                            ref_scan_id="Colmap", path=self.output().get().path(),
                            header=camera_str, suffix="_estimated")
+
+        return

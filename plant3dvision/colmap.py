@@ -299,7 +299,7 @@ class ColmapRunner(object):
         """
         Parameters
         ----------
-        fileset : plantdb.db.Fileset
+        fileset : list of plantdb.db.File
             The `Fileset` containing source images to use for reconstruction.
         matcher_method : {'exhaustive', 'sequential'}, optional
             Method to use to perform feature matching operation, default is 'exhaustive'.
@@ -324,10 +324,6 @@ class ColmapRunner(object):
             The others use pre-built docker images, available from docker hub.
             'geki/colmap' is colmap 3.6 with Ubuntu 18.04 and CUDA 10.1, see [geki_colmap]_
             'roboticsmicrofarms/colmap' is colmap 3.7 with Ubuntu 18.04 and CUDA 10.2, see [roboticsmicrofarms_colmap]_
-        file_query : dictionary
-            A query on metadata to filter the selected files from the given `fileset`.
-            For example ``{'channel': 'rgb'}`` will keep only the files with a 'channel' metadata equal to 'rgb'.
-            Defaults to ``None``.
 
         References
         ----------
@@ -412,14 +408,13 @@ class ColmapRunner(object):
 
         """
         # -- Initialize attributes:
-        self.fileset = fileset  # plantdb.fsdb.fileset
+        self.fileset = fileset  # list of plantdb.fsdb.File
         self.matcher_method = matcher_method
         self.compute_dense = compute_dense
         self.all_cli_args = all_cli_args
         self.align_pcd = align_pcd
         self.use_calibration = use_calibration
         self.bounding_box = bounding_box
-        self.file_query = kwargs.get('file_query', None)
         # -- Initialize COLMAP directories, poses file & log file:
         # - Get / create a temporary COLMAP working directory
         self.colmap_workdir = os.environ.get("COLMAP_WD", tempfile.mkdtemp())
@@ -452,7 +447,7 @@ class ColmapRunner(object):
         """
         n_rgb_im = 0  # Count the number of RGB images
         n_cp_im = 0  # Count the number of copied RGB images
-        for img_f in self.fileset.get_files(query=self.file_query):
+        for img_f in self.fileset:
             # - Check the image file exists in COLMAP's 'images' directory, if not create it:
             filepath = os.path.join(self.imgs_dir, img_f.filename)
             img_md = img_f.metadata
@@ -465,7 +460,7 @@ class ColmapRunner(object):
                 im = im[:, :, :3]  # remove alpha channel, if any
                 imageio.imwrite(filepath, im)  # write the image to COLMAP's 'images' directory
                 n_cp_im += 1
-        logger.info(f"Copied {n_cp_im} images out of {n_rgb_im} RGB images found in the '{self.fileset.id}' Fileset!")
+        logger.info(f"Copied {n_cp_im} images out of {n_rgb_im} RGB images found in the 'images' Fileset!")
 
         # - Check that COLMAP's 'images' directory is not EMPTY!
         n_img_workdir = [os.path.isfile(f) for f in os.listdir(self.imgs_dir)]
@@ -493,7 +488,7 @@ class ColmapRunner(object):
 
         """
         # - Search if "exact poses" can be found in all 'images' fileset metadata:
-        exact_poses = all([f.get_metadata('pose') is not None for f in self.fileset.get_files(query=self.file_query)])
+        exact_poses = all([f.get_metadata('pose') is not None for f in self.fileset])
 
         # - Defines "where" (which metadata) to get the "camera pose" from:
         if self.use_calibration:
@@ -509,7 +504,7 @@ class ColmapRunner(object):
         with open(f"{self.colmap_workdir}/poses.txt", mode='w') as pose_file:
             # - Try to get the camera pose from each image File metadata:
             missing_pose = []
-            for img_f in self.fileset.get_files(query=self.file_query):
+            for img_f in self.fileset:
                 # - Try to get the pose metadata, may be `None`:
                 p = img_f.get_metadata(pose_md)
                 # - If a pose metadata was found for the file, add it to COLMAP's 'poses.txt' file:
@@ -968,7 +963,7 @@ class ColmapRunner(object):
         # -- Map image file name to COLMAP image id:
         img_names = {splitext(images[k]['name'])[0]: k for k in images.keys()}
         # -- Export computed intrinsics ('camera_model') & extrinsic ('rotmat', 'tvec' & 'estimated_pose') to metadata:
-        for fi in self.fileset.get_files(query=self.file_query):
+        for fi in self.fileset:
             try:
                 # - Try to get the key corresponding to our file id in the COLMAP 'images' dictionary
                 key = img_names[fi.id]
