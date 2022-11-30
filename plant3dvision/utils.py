@@ -15,7 +15,7 @@ def recursively_unfreeze(value):
 
 
 def jsonify(data: dict) -> dict:
-    """JSONify a dictionray."""
+    """JSONify a dictionary."""
     import numpy as np
     from collections.abc import Iterable
     json_data = {}
