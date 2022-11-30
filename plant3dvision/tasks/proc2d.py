@@ -19,13 +19,13 @@ logger = configure_logger(__name__)
 
 
 class Undistorted(FileByFileTask):
-    """Fix images distortion using computed intrinsic camera parameters by Colmap.
+    """Fix images distortion using intrinsic camera parameters.
 
     Attributes
     ----------
     upstream_task : luigi.TaskParameter, optional
         The task to use upstream to the `Undistorted` tasks. It should be a tasks that generates a ``Fileset`` of RGB images.
-        It can thus be ``'ImagesFilesetExists'`` or ``'Colmap'``. Defaults to ``'ImagesFilesetExists'``.
+        Defaults to ``'ImagesFilesetExists'``.
     camera_model_src : luigi.Parameter, optional
         Source of the camera model, can be in ['Colmap', 'IntrinsicCalibration', 'ExtrinsicCalibration']
     camera_model : luigi.Parameter, optional
@@ -34,14 +34,17 @@ class Undistorted(FileByFileTask):
         Name of the intrinsic calibration scan (dataset) to use. Used only if  `camera_model_src='IntrinsicCalibration'`.
     extrinsic_calib_scan_id : luigi.Parameter, optional
         Name of the extrinsic calibration scan (dataset) to use. Used only if  `camera_model_src='ExtrinsicCalibration'`.
+    query : luigi.DictParameter
+        A filtering dictionary on metadata, inherited from `romitask.task.FileByFileTask`.
+        Key(s) and value(s) must be found in metadata to select the `File`s from the upstream task.
 
     See Also
     --------
     plant3dvision.proc2d.undistort
+    romitask.task.FileByFileTask
 
     Notes
     -----
-    This task requires the ``'Colmap'`` task.
     The output of this task is an image fileset.
 
     """
@@ -141,11 +144,15 @@ class Masks(FileByFileTask):
         Dilation factor for the binary mask images. Defaults to `0`.
     threshold : luigi.FloatParameter, optional
         Binarization threshold applied after transforming the image. Defaults to ``0.3``.
+    query : luigi.DictParameter
+        A filtering dictionary on metadata, inherited from `romitask.task.FileByFileTask`.
+        Key(s) and value(s) must be found in metadata to select the `File`s from the upstream task.
 
     See Also
     --------
     plant3dvision.proc2d.linear
     plant3dvision.proc2d.excess_green
+    romitask.task.FileByFileTask
 
     References
     ----------

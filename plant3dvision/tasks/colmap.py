@@ -480,7 +480,8 @@ class Colmap(RomiTask):
         Maximum alignment error allowed during ``model_aligner`` COLMAP step.
         Defaults to ``10``.
     query : luigi.DictParameter
-        A filtering dictionary on metadata. Key(s) and value(s) must be found in metadata to select the `File`.
+        A filtering dictionary on metadata, similar to `romitask.task.FileByFileTask`.
+        Key(s) and value(s) must be found in metadata to select the `File`s from the upstream task.
 
     Notes
     -----
@@ -497,6 +498,11 @@ class Colmap(RomiTask):
     Note that image file names must be ordered sequentially (e.g., image0001.jpg, image0002.jpg, etc.).
     The order in the database is not relevant, since the images are explicitly ordered according to their file names.
     Note that loop detection requires a pre-trained vocabulary tree, that can be downloaded from https://demuc.de/colmap/.
+
+    See Also
+    --------
+    plant3dvision.colmap.ColmapRunner
+    romitask.task.RomiTask
 
     References
     ----------
