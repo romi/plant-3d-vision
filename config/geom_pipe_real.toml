@@ -1,12 +1,3 @@
-[ExtrinsicCalibration]
-upstream_task = "ImagesFilesetExists"
-matcher = "exhaustive"
-intrinsic_calibration_scan_id = "intrinsic_calib_1"  # use a dataset with calibrated intrinsic camera params
-camera_model = "OPENCV"  # get this model if 'intrinsic_calibration_scan_id' is set
-use_gpu = true
-single_camera = true
-robust_alignment_max_error = 10
-
 [Colmap]
 upstream_task = "ImagesFilesetExists"
 matcher = "exhaustive"
@@ -17,7 +8,7 @@ align_pcd = true
 use_gpu = true
 single_camera = true
 robust_alignment_max_error = 10
-
+distance_threshold = 5  # a maximum 3D disntace of 5mm from CNC pose is allowed
 # [Colmap.bounding_box]  # default to None
 # x = [150, 650]
 # y = [150, 650]
@@ -25,10 +16,10 @@ robust_alignment_max_error = 10
 
 [Undistorted]
 upstream_task = "ImagesFilesetExists"
+query = "{\"channel\":\"rgb\", \"pose_estimation\":\"correct\"}"  # filter RGB images only with a valid COLMAP pose
 
 [Masks]
 upstream_task = "Undistorted"
-query = "{\"channel\":\"rgb\"}"
 type = "linear"
 parameters = "[0, 1, 0]"
 dilation = 5 # default to 0
@@ -40,6 +31,10 @@ upstream_mask = "Masks"
 upstream_colmap = "Colmap"
 voxel_size = 0.5
 type = "carving"
+[Voxels.bounding_box]  # default to None
+x = [300, 450]
+y = [300, 450]
+z = [-350, 100]
 
 [PointCloud]
 upstream_task = "Voxels"

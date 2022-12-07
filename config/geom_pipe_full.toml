@@ -8,6 +8,7 @@ single_camera = true  # wether a single camera was used for acquisition
 robust_alignment_max_error = 10  # the maximum alignment error allowed during ``model_aligner``
 intrinsic_calibration_scan_id = ""  # use a dataset with calibrated intrinsic camera poses
 extrinsic_calibration_scan_id = ""  # use a dataset with calibrated extrinsic camera poses
+distance_threshold = 0  # the maximum 3D Euclidean distance to CNC pose to validate COLMAP pose estimation
 #[Colmap.cli_args.feature_extractor]
 #"--ImageReader.single_camera" = "1"  # equivalent to `single_camera = true`
 #"--SiftExtraction.use_gpu" = "1"  # equivalent to `use_gpu = true`
