@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import json
 import sys
 from os.path import join
 from os.path import splitext
 
 import luigi
 import numpy as np
+from plantdb import io
+from scipy.spatial.distance import euclidean
 
 from plant3dvision.calibration import calibration_figure
 from plant3dvision.camera import format_camera_params
@@ -17,7 +20,6 @@ from plant3dvision.filenames import COLMAP_DENSE_ID
 from plant3dvision.filenames import COLMAP_IMAGES_ID
 from plant3dvision.filenames import COLMAP_POINTS_ID
 from plant3dvision.filenames import COLMAP_SPARSE_ID
-from plantdb import io
 from romitask import DatabaseConfig
 from romitask.log import configure_logger
 from romitask.task import ImagesFilesetExists
@@ -482,6 +484,10 @@ class Colmap(RomiTask):
     query : luigi.DictParameter
         A filtering dictionary on metadata, similar to `romitask.task.FileByFileTask`.
         Key(s) and value(s) must be found in metadata to select the `File`s from the upstream task.
+    distance_threshold : luigi.FloatParamater
+        A maximum distance (3D) from the CNC poses to consider the COLMAP estimated pose as correct.
+        If non-null, a "pose_estimation" metadata stating "correct" or "incorrect" is added to each image according to this threshold.
+        This can later be used to filter the images with a `query`.
 
     Notes
     -----
@@ -523,6 +529,7 @@ class Colmap(RomiTask):
     bounding_box = luigi.DictParameter(default=None)
     cli_args = luigi.DictParameter(default={})
     query = luigi.DictParameter(default={})
+    distance_threshold = luigi.FloatParameter(default=0)
 
     def _workspace_as_bounding_box(self):
         """Use the scanner workspace as bounding-box.
@@ -726,14 +733,34 @@ class Colmap(RomiTask):
         # - Copy all log files from colmap working directory:
         workdir = Path(colmap_runner.colmap_workdir)
         for log_path in workdir.glob('*.log'):
-            outfile = self.output_file(log_path.name)
+            outfile = self.output_file(log_path.stem)
             outfile.import_file(log_path)
 
         # - Get estimated camera poses from 'images' fileset metadata:
         colmap_poses = {im.id: im.get_metadata("estimated_pose") for im in images_fileset}
         camera_str = format_camera_params(cameras)
         calibration_figure(cnc_poses, colmap_poses, pred_scan_id=current_scan.id,
-                           ref_scan_id="Colmap", path=self.output().get().path(),
+                           ref_scan_id="", path=self.output().get().path(),
                            header=camera_str, suffix="_estimated")
+
+        # - Compute the euclidean distances between CNC & COLMAP poses & export it to a file:
+        euclidean_distances = {}
+        for im in images_fileset:
+            euclidean_distances[im.id] = euclidean(cnc_poses[im.id][:3], colmap_poses[im.id][:3])
+        with open(join(self.output().get().path(), "euclidean_distances.json"), 'w') as f:
+            f.writelines(json.dumps({
+                "mean_euclidean_distance": np.nanmean(list(euclidean_distances.values())),
+                "std_euclidean_distance": np.nanstd(list(euclidean_distances.values())),
+                "euclidean_distances": euclidean_distances,
+            }, indent=4))
+
+        # - If a distance threshold is given, add a "pose_estimation" metadata:
+        if self.distance_threshold > 0.:
+            for im in images_fileset:
+                if euclidean_distances[im.id] >= self.distance_threshold:
+                    im.set_metadata("pose_estimation", "incorrect")
+                    logger.warning(f"Image {im.id} pose has been incorrectly estimated by COLMAP!")
+                else:
+                    im.set_metadata("pose_estimation", "correct")
 
         return
