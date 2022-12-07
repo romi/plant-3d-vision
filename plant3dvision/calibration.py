@@ -6,6 +6,7 @@ import cv2.aruco as aruco  # requires `opencv-contrib-python`, to get it: `pytho
 import numpy as np
 
 from romitask.log import configure_logger
+
 logger = configure_logger(__name__)
 
 IMAGES_FORMAT = 'jpg'
@@ -382,7 +383,7 @@ def calibration_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_id=N
     fig, axd = plt.subplots(nrows=2, ncols=1, figsize=(10, 13), constrained_layout=True, gridspec_kw=gs_kw)
     ax, bxp = axd
 
-    title = f"Colmap calibration - {pred_scan_id}"
+    title = f"Colmap pose estimation - {pred_scan_id}"
     if ref_scan_id != "":
         title += f"/{ref_scan_id}"
     plt.suptitle(title, fontweight="bold")
@@ -407,7 +408,7 @@ def calibration_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_id=N
     # - Plot the REFERENCE/PREDICTED "mapping" as arrows:
     XX, YY = [], []  # use REFERENCE poses as 'origin' point for arrow
     U, V = [], []  # arrow components
-    err = []  # euclidian distance between REFERENCE & PREDICTED => positioning error
+    err = []  # euclidian distance between REFERENCE & PREDICTED => positioning error in 3D
     for im_id in pred_poses.keys():
         if ref_poses[im_id] is not None and pred_poses[im_id] is not None:
             XX.append(ref_poses[im_id][0])
@@ -419,9 +420,9 @@ def calibration_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_id=N
     q = ax.quiver(XX, YY, U, V, scale_units='xy', scale=1., width=0.003)
 
     # - Add info about estimation error as title:
-    logger.info(f"Average euclidean distance: {round(np.nanmean(err), 3)}mm.")
-    logger.info(f"Median euclidean distance: {round(np.nanmedian(err), 3)}mm.")
-    title = f"Average euclidean distance:"
+    logger.info(f"Average 3D Euclidean distance: {round(np.nanmean(err), 3)}mm.")
+    logger.info(f"Median 3D Euclidean distance: {round(np.nanmedian(err), 3)}mm.")
+    title = f"Average 3D Euclidean distance:"
     scan_path_kwargs = kwargs.get("scan_path_kwargs", {})
     if scan_path_kwargs != {}:
         n_points = scan_path_kwargs['kwargs']['n_points']
@@ -430,8 +431,10 @@ def calibration_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_id=N
         title += f"All poses = {round(np.nanmean(err), 3)}mm"
         title += "\n"
         title += f"{scan_path} path ({n_points} poses): {round(np.nanmean(err[:n_points]), 3)}mm"
-        logger.info(f"Average euclidean distance {scan_path} path {n_points} poses: {round(np.nanmean(err[:n_points]), 3)}mm")
-        logger.info(f"Median euclidean distance {scan_path} path {n_points} poses: {round(np.nanmedian(err[:n_points]), 3)}mm")
+        logger.info(
+            f"Average 3D Euclidean distance {scan_path} path {n_points} poses: {round(np.nanmean(err[:n_points]), 3)}mm")
+        logger.info(
+            f"Median 3D Euclidean distance {scan_path} path {n_points} poses: {round(np.nanmedian(err[:n_points]), 3)}mm")
     else:
         title += f" {round(np.nanmean(err), 3)}mm"
 
@@ -473,14 +476,34 @@ def calibration_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_id=N
         data = [err, err[:n_points]]
         yticks = ["All poses", f"{scan_path} path"]
     else:
-        data = [err]
+        data = err
         yticks = ["All poses"]
 
-    bxp.boxplot(data, vert=False)
+    _ = bxp.boxplot(data, vert=False, flierprops={"marker": '+', 'markeredgecolor': 'red'})
     bxp.set_title(f"{ref_label} vs. {pred_label} poses", fontdict={'family': 'monospace', 'size': 'medium'})
-    bxp.set_xlabel('Euclidean distance (in mm)')
+    bxp.set_xlabel('3D Euclidean distance (in mm)')
     bxp.set_yticklabels(yticks)
     bxp.grid(True, which='major', axis='x', linestyle='dotted')
+
+    def _get_upper_fliers(arr) -> list:
+        """Determines upper fliers from a list of data according to `Q3+1.5*IQR`."""
+        q1 = np.quantile(arr, 0.25)
+        q3 = np.quantile(arr, 0.75)
+        iqr = q3 - q1
+        return [d > q3 + 1.5 * iqr for d in arr]
+
+    def _plot_flier_ids(ax, data, ids, y_coord):
+        """Add fliers ids to matplotlib.Axe (boxplot)."""
+        fliers = _get_upper_fliers(data)
+        if any(fliers):
+            for idx, flier in enumerate(fliers):
+                if flier:
+                    ax.text(data[idx], y_coord-0.1, f"{ids[idx]}", ha='center', va='top', fontfamily='monospace')
+
+    if scan_path_kwargs != {}:
+        [_plot_flier_ids(bxp, dist, im_ids, y+1) for y, dist in enumerate(data)]
+    else:
+        _plot_flier_ids(bxp, data, im_ids, 1)
 
     path = kwargs.get("path", None)
     if path is not None:
