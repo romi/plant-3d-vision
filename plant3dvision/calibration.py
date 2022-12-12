@@ -279,8 +279,8 @@ def calibrate_simple_radial_camera(corners, ids, img_shape, aruco_kwargs):
     return reproj_error, mtx, dist, rvecs, tvecs, per_view_errors
 
 
-def calibration_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_id=None, ref_scan_id=None, **kwargs):
-    """Create a figure showing the effect of calibration procedure.
+def pose_estimation_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_id="", ref_scan_id="", **kwargs):
+    """Create a figure showing the pose estimation procedure.
 
     Parameters
     ----------
@@ -319,20 +319,20 @@ def calibration_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_id=N
     >>> from plantdb.fsdb import FSDB
     >>> from plant3dvision.tasks.colmap import get_cnc_poses
     >>> from plant3dvision.tasks.colmap import compute_colmap_poses_from_metadata
-    >>> from plant3dvision.tasks.colmap import calibration_figure
+    >>> from plant3dvision.tasks.colmap import pose_estimation_figure
     >>> from plant3dvision.tasks.colmap import use_precalibrated_poses
-    >>> db = FSDB(os.environ.get('DB_LOCATION', '/data/ROMI/DB'))
-    >>> # Example 1 - Compute & use the calibrated poses from/on a calibration scan:
+    >>> db = FSDB(os.environ.get('DB_LOCATION', '/Data/ROMI/DB'))
+    >>> # Example 1 - Get the CNC & COLMAP poses and compare them:
     >>> db.connect()
     >>> db.list_scans()
-    >>> scan_id = calib_scan_id = "sgk_300_90_36_colmap"
-    >>> scan = db.get_scan(pred_scan_id)
-    >>> calib_scan = db.get_scan(ref_scan_id)
+    >>> scan_id = "voronoi_texture_72"
+    >>> scan = db.get_scan(scan_id)
+    >>> images_fileset = scan.get_fileset('images')
     >>> cnc_poses = get_cnc_poses(scan)
-    >>> len(ref_poses)
-    >>> colmap_poses = compute_colmap_poses_from_metadata(calib_scan)
+    >>> len(cnc_poses)
+    >>> colmap_poses = {im.id: im.get_metadata("estimated_pose") for im in images_fileset.get_files()}
     >>> len(colmap_poses)
-    >>> calibration_figure(cnc_poses,colmap_poses,pred_scan_id=scan_id,ref_scan_id=calib_scan_id)
+    >>> pose_estimation_figure(cnc_poses,colmap_poses,pred_scan_id=scan_id)
     >>> db.disconnect()
     >>> # Example 2 - Compute & use the calibrated poses from/on a scan:
     >>> db.connect()
@@ -342,7 +342,7 @@ def calibration_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_id=N
     >>> calib_scan = db.get_scan(ref_scan_id)
     >>> cnc_poses = get_cnc_poses(scan)
     >>> colmap_poses = compute_colmap_poses_from_camera_json(calib_scan)
-    >>> calibration_figure(cnc_poses,colmap_poses,pred_scan_id=scan_id,ref_scan_id=calib_scan_id)
+    >>> pose_estimation_figure(cnc_poses,colmap_poses,pred_scan_id=scan_id,ref_scan_id=calib_scan_id)
     >>> db.disconnect()
     >>> # Example 3 - Compute the calibrated poses with a calibration scan & use it on a scan:
     >>> db.connect()
@@ -355,7 +355,7 @@ def calibration_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_id=N
     >>> images_fileset = use_precalibrated_poses(images_fileset,calib_scan)
     >>> cnc_poses = {im.id: im.get_metadata("approximate_pose") for im in images_fileset.get_files()}
     >>> colmap_poses = {im.id: im.get_metadata("calibrated_pose") for im in images_fileset.get_files()}
-    >>> calibration_figure(cnc_poses,colmap_poses,pred_scan_id=scan_id,ref_scan_id=calib_scan_id)
+    >>> pose_estimation_figure(cnc_poses,colmap_poses,pred_scan_id=scan_id,ref_scan_id=calib_scan_id)
     >>> db.disconnect()
     >>> # Example 3 - Compute the calibrated poses with a calibration scan & use it on a scan:
     >>> db.connect()
@@ -368,7 +368,7 @@ def calibration_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_id=N
     >>> images_fileset = use_precalibrated_poses(images_fileset,calib_scan)
     >>> cnc_poses = {im.id: im.get_metadata("approximate_pose") for im in images_fileset.get_files()}
     >>> colmap_poses = {im.id: im.get_metadata("calibrated_pose") for im in images_fileset.get_files()}
-    >>> calibration_figure(cnc_poses,colmap_poses,pred_scan_id=scan_id,ref_scan_id=calib_scan_id)
+    >>> pose_estimation_figure(cnc_poses,colmap_poses,pred_scan_id=scan_id,ref_scan_id=calib_scan_id)
     >>> db.disconnect()
 
     """
@@ -379,69 +379,55 @@ def calibration_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_id=N
     ref_label = kwargs.get("ref_label", "CNC")
     pred_label = kwargs.get("pred_label", "COLMAP")
 
-    gs_kw = dict(height_ratios=[12, 1])
-    fig, axd = plt.subplots(nrows=2, ncols=1, figsize=(10, 13), constrained_layout=True, gridspec_kw=gs_kw)
-    ax, bxp = axd
+    gs_kw = dict(height_ratios=[9, 3], width_ratios=[9, 3])
+    fig, axd = plt.subplots(nrows=2, ncols=2, figsize=(12, 12), constrained_layout=True, gridspec_kw=gs_kw)
+    xyax, bxp, zax, vignette = axd[0, 0], axd[0, 1], axd[1, 0], axd[1, 1],
 
+    # Add a suptitle to the figure:
     title = f"Colmap pose estimation - {pred_scan_id}"
     if ref_scan_id != "":
         title += f"/{ref_scan_id}"
     plt.suptitle(title, fontweight="bold")
 
-    # - Plot REFERENCE poses coordinates as a red 'x' marker:
+    # -------------------------------------------------------------------------
+    #  XY poses scatter plot
+    # -------------------------------------------------------------------------
+    # - Plot REFERENCE XY poses coordinates as a red 'x' marker:
     # Get X & Y coordinates:
     try:
-        x, y, _, _, _ = np.array([v for _, v in ref_poses.items() if v is not None]).T
+        x, y, z, _, _ = np.array([pose if pose is not None else [np.nan] * 5 for im_id, pose in ref_poses.items()]).T
     except:
-        x, y, _ = np.array([v for _, v in ref_poses.items() if v is not None]).T
+        x, y, z = np.array([pose if pose is not None else [np.nan] * 3 for im_id, pose in ref_poses.items()]).T
     # Add a red 'x' marker to every non-null coordinates:
-    cnc_scatter = ax.scatter(x, y, marker="x", c="red")
+    cnc_scatter = xyax.scatter(x, y, marker="x", c="red")
     cnc_scatter.set_label(ref_label)
 
-    # - Plot PREDICTED poses coordinates as a blue '+' marker:
+    # - Plot PREDICTED XY poses coordinates as a blue '+' marker:
     # Get X & Y coordinates:
-    X, Y, _ = np.array([v for _, v in pred_poses.items() if v is not None]).T
+    X, Y, Z = np.array([pose if pose is not None else [np.nan] * 3 for im_id, pose in pred_poses.items()]).T
     # Add a blue '+' marker to every non-null coordinates:
-    colmap_scatter = ax.scatter(X, Y, marker="+", c="blue")
+    colmap_scatter = xyax.scatter(X, Y, marker="+", c="blue")
     colmap_scatter.set_label(pred_label)
 
     # - Plot the REFERENCE/PREDICTED "mapping" as arrows:
     XX, YY = [], []  # use REFERENCE poses as 'origin' point for arrow
     U, V = [], []  # arrow components
-    err = []  # euclidian distance between REFERENCE & PREDICTED => positioning error in 3D
-    for im_id in pred_poses.keys():
+    err_3d = []  # euclidian distance between REFERENCE & PREDICTED => positioning error in 3D
+    err_XY = []  # euclidian distance between REFERENCE & PREDICTED in XY
+    err_Z = []  # euclidian distance between REFERENCE & PREDICTED in XY
+    common_im_ids = sorted(set(ref_poses.keys()) & set(pred_poses.keys()))
+    for im_id in common_im_ids:
         if ref_poses[im_id] is not None and pred_poses[im_id] is not None:
             XX.append(ref_poses[im_id][0])
             YY.append(ref_poses[im_id][1])
             U.append(pred_poses[im_id][0] - ref_poses[im_id][0])
             V.append(pred_poses[im_id][1] - ref_poses[im_id][1])
-            err.append(distance.euclidean(ref_poses[im_id][0:3], pred_poses[im_id][0:3]))
-    # Show the mapping:
-    q = ax.quiver(XX, YY, U, V, scale_units='xy', scale=1., width=0.003)
+            err_3d.append(distance.euclidean(ref_poses[im_id][0:3], pred_poses[im_id][0:3]))
+            err_XY.append(distance.euclidean(ref_poses[im_id][0:2], pred_poses[im_id][0:2]))
+            err_Z.append(abs(ref_poses[im_id][2] - pred_poses[im_id][2]))
 
-    # - Add info about estimation error as title:
-    logger.info(f"Average 3D Euclidean distance: {round(np.nanmean(err), 3)}mm.")
-    logger.info(f"Median 3D Euclidean distance: {round(np.nanmedian(err), 3)}mm.")
-    title = f"Average 3D Euclidean distance:"
-    scan_path_kwargs = kwargs.get("scan_path_kwargs", {})
-    if scan_path_kwargs != {}:
-        n_points = scan_path_kwargs['kwargs']['n_points']
-        scan_path = scan_path_kwargs['class_name']
-        title += "\n"
-        title += f"All poses = {round(np.nanmean(err), 3)}mm"
-        title += "\n"
-        title += f"{scan_path} path ({n_points} poses): {round(np.nanmean(err[:n_points]), 3)}mm"
-        logger.info(
-            f"Average 3D Euclidean distance {scan_path} path {n_points} poses: {round(np.nanmean(err[:n_points]), 3)}mm")
-        logger.info(
-            f"Median 3D Euclidean distance {scan_path} path {n_points} poses: {round(np.nanmedian(err[:n_points]), 3)}mm")
-    else:
-        title += f" {round(np.nanmean(err), 3)}mm"
-
-    header = kwargs.pop('header', "")
-    if header != "":
-        title += "\n" + header
-    ax.set_title(title, fontdict={'family': 'monospace', 'size': 'medium'})
+    # Show the mapping with arrows:
+    q = xyax.quiver(XX, YY, U, V, scale_units='xy', scale=1., width=0.003)
 
     # - Plot the image indexes as text next to REFERENCE points:
     # Get images index:
@@ -450,7 +436,7 @@ def calibration_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_id=N
         im_ids = list(range(len(im_ids)))
     # Add image or point ids as text:
     for i, im_id in enumerate(im_ids):
-        ax.text(x[i], y[i], f" {im_id}", ha='left', va='center', fontfamily='monospace')
+        xyax.text(x[i], y[i], f" {im_id}", ha='left', va='center', fontfamily='monospace')
 
     # - Add hardware CNC limits as dashed blue lines:
     xlims = kwargs.get('xlims', None)
@@ -461,29 +447,70 @@ def calibration_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_id=N
         plt.vlines([xmin, xmax], ymin, ymax, colors="gray", linestyles="dashed")
         plt.hlines([ymin, ymax], xmin, xmax, colors="gray", linestyles="dashed")
 
-    # Add axes labels:
-    ax.set_xlabel('X-axis')
-    ax.set_ylabel('Y-axis')
-    # Add a grid
-    ax.grid(True, which='major', axis='both', linestyle='dotted')
-    # Add the legend
-    ax.legend()
-    # Set aspect ratio
-    ax.set_aspect('equal')
+    # - Add info about estimation error as title:
+    logger.info(f"Average 3D Euclidean distance: {round(np.nanmean(err_3d), 3)}mm.")
+    logger.info(f"Median 3D Euclidean distance: {round(np.nanmedian(err_3d), 3)}mm.")
+    title = f"Average 3D Euclidean distance:"
+    scan_path_kwargs = kwargs.get("scan_path_kwargs", {})
+    if scan_path_kwargs != {}:
+        n_points = scan_path_kwargs['kwargs']['n_points']
+        scan_path = scan_path_kwargs['class_name']
+        title += "\n"
+        title += f"All poses = {round(np.nanmean(err_3d), 3)}mm"
+        title += "\n"
+        title += f"{scan_path} path ({n_points} poses): {round(np.nanmean(err_3d[:n_points]), 3)}mm"
+        logger.info(
+            f"Average 3D Euclidean distance {scan_path} path {n_points} poses: {round(np.nanmean(err_3d[:n_points]), 3)}mm")
+        logger.info(
+            f"Median 3D Euclidean distance {scan_path} path {n_points} poses: {round(np.nanmedian(err_3d[:n_points]), 3)}mm")
+    else:
+        title += f" {round(np.nanmean(err_3d), 3)}mm"
 
+    header = kwargs.pop('header', "")
+    if header != "":
+        title += "\n" + header
+    xyax.set_title(title, fontdict={'family': 'monospace', 'size': 'medium'})
+
+    # Add axes labels:
+    xyax.set_xlabel('X-axis (mm)')
+    xyax.set_ylabel('Y-axis (mm)')
+    # Add a grid
+    xyax.grid(True, which='major', axis='both', linestyle='dotted')
+    # Add the legend
+    xyax.legend()
+    # Set aspect ratio
+    xyax.set_aspect('equal')
+    # -------------------------------------------------------------------------
+
+    # -------------------------------------------------------------------------
+    # Z coordinates plot
+    # -------------------------------------------------------------------------
+    # - Plot REFERENCE Z poses coordinates as a red 'x' marker:
+    _ = zax.plot(z, marker='x', c="red", label=ref_label)
+    # - Plot PREDICTED Z poses coordinates as a blue '+' marker:
+    _ = zax.plot(Z, marker="+", c="blue", label=pred_label)
+    zax.set_xlabel('Image index')
+    zax.set_ylabel('Z-axis (mm)')
+    zax.grid(True, which='major', axis='both', linestyle='dotted')
+    zax.legend()
+    # -------------------------------------------------------------------------
+
+    # -------------------------------------------------------------------------
+    # Euclidean distance boxplot
+    # -------------------------------------------------------------------------
     # - Add a boxplot visu of the euclidean distances (errors)
     if scan_path_kwargs != {}:
-        data = [err, err[:n_points]]
-        yticks = ["All poses", f"{scan_path} path"]
+        data = [err_3d, err_XY, err_Z, err_3d[:n_points]]
+        xticks = ["3D", "XY", "Z", f"{scan_path} path"]
     else:
-        data = err
-        yticks = ["All poses"]
+        data = [err_3d, err_XY, err_Z]
+        xticks = ["3D", "XY", "Z"]
 
-    _ = bxp.boxplot(data, vert=False, flierprops={"marker": '+', 'markeredgecolor': 'red'})
-    bxp.set_title(f"{ref_label} vs. {pred_label} poses", fontdict={'family': 'monospace', 'size': 'medium'})
-    bxp.set_xlabel('3D Euclidean distance (in mm)')
-    bxp.set_yticklabels(yticks)
-    bxp.grid(True, which='major', axis='x', linestyle='dotted')
+    _ = bxp.boxplot(data, flierprops={"marker": '+', 'markeredgecolor': 'red'})
+    bxp.set_title("Deviation from CNC", fontdict={'family': 'monospace', 'size': 'medium'})
+    bxp.set_ylabel("Euclidean distance (in mm)")
+    bxp.set_xticklabels(xticks)
+    bxp.grid(True, which='major', axis='y', linestyle='dotted')
 
     def _get_upper_fliers(arr) -> list:
         """Determines upper fliers from a list of data according to `Q3+1.5*IQR`."""
@@ -492,18 +519,28 @@ def calibration_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_id=N
         iqr = q3 - q1
         return [d > q3 + 1.5 * iqr for d in arr]
 
-    def _plot_flier_ids(ax, data, ids, y_coord):
+    def _plot_flier_ids(ax, data, ids, bidx):
         """Add fliers ids to matplotlib.Axe (boxplot)."""
         fliers = _get_upper_fliers(data)
         if any(fliers):
             for idx, flier in enumerate(fliers):
                 if flier:
-                    ax.text(data[idx], y_coord-0.1, f"{ids[idx]}", ha='center', va='top', fontfamily='monospace')
+                    ax.text(bidx - 0.1, data[idx], f"{ids[idx]}", ha='right', va='center', fontfamily='monospace')
 
-    if scan_path_kwargs != {}:
-        [_plot_flier_ids(bxp, dist, im_ids, y+1) for y, dist in enumerate(data)]
-    else:
-        _plot_flier_ids(bxp, data, im_ids, 1)
+    [_plot_flier_ids(bxp, dist, im_ids, y + 1) for y, dist in enumerate(data)]
+    # -------------------------------------------------------------------------
+
+    # -------------------------------------------------------------------------
+    # Vignette with camera model info
+    # -------------------------------------------------------------------------
+    # Clear the vignette figure (lower left) of axes and ticks:
+    vignette.tick_params(left=False, bottom=False, labelbottom=False, labelleft=False)
+    vignette.spines[:].set_visible(False)
+    # Add the text to the vignette, if provided:
+    vignette_str = kwargs.pop('vignette', "")
+    if vignette_str != "":
+        vignette.text(0.5, 0.5, vignette_str, ha='center', va='center', fontdict={'family': 'monospace', 'size': 'medium'})
+    # -------------------------------------------------------------------------
 
     path = kwargs.get("path", None)
     if path is not None:
@@ -511,7 +548,7 @@ def calibration_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_id=N
         prefix = kwargs.get('prefix', "")
         suffix = kwargs.get('suffix', "")
         plt.savefig(join(path, f"{prefix}{ref_label.lower()}_vs_{pred_label.lower()}_poses{suffix}.png"))
+        plt.close()
     else:
         plt.show()
-    plt.close()
     return None

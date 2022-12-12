@@ -440,7 +440,7 @@ class ExtrinsicCalibration(RomiTask):
         from os.path import abspath
         from os.path import join
         from plant3dvision.filenames import COLMAP_CAMERAS_ID
-        from plant3dvision.calibration import calibration_figure
+        from plant3dvision.calibration import pose_estimation_figure
         from plant3dvision.camera import format_camera_params
         from plant3dvision.camera import get_camera_kwargs_from_colmap_json
         from plant3dvision.tasks.colmap import get_cnc_poses
@@ -523,8 +523,9 @@ class ExtrinsicCalibration(RomiTask):
             logger.info(f"COLMAP camera: {cameras}")
             camera_str = ""
         # - Generates a calibration figure showing CNC poses vs. COLMAP estimated poses:
-        calibration_figure(cnc_poses, colmap_poses, pred_scan_id=images_fileset.scan.id, ref_scan_id="",
-                           path=self.output().get().path(), header=camera_str, scan_path_kwargs=scan_cfg["ScanPath"])
+        pose_estimation_figure(cnc_poses, colmap_poses, pred_scan_id=images_fileset.scan.id, ref_scan_id="",
+                               path=self.output().get().path(), header=camera_str,
+                               scan_path_kwargs=scan_cfg["ScanPath"])
 
         # - Create a 'camera.txt' file describing the camera intrinsic parameters:
         # Use of try/except strategy to avoid failure of luigi pipeline (destroy all fileset!)

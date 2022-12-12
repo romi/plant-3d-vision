@@ -498,7 +498,7 @@ def compare_to_calibrated_poses(db, task_name, scans_list):
         List of ``Scan`` instances to compare.
 
     """
-    from plant3dvision.calibration import calibration_figure
+    from plant3dvision.calibration import pose_estimation_figure
     from scipy.spatial.distance import euclidean
     logger.info(f"Comparing '{task_name}' outputs for {len(scans_list)} replicated scans!")
 
@@ -513,9 +513,9 @@ def compare_to_calibrated_poses(db, task_name, scans_list):
     estimated_poses = {}  # {scan_id: {img_id: [x, y, z]}}
     for scan in scans_list:
         estimated_poses[scan.id] = compute_colmap_poses_from_metadata(scan)  # {img_id: [x, y, z]}
-        calibration_figure(calibrated_poses, estimated_poses[scan.id], add_image_id=False, pred_scan_id=scan.id,
-                           ref_scan_id="ExtrinsicCalibration", ref_label="Calibrated", pred_label="Estimated",
-                           path=db.basedir, prefix=f"{scan.id}-")
+        pose_estimation_figure(calibrated_poses, estimated_poses[scan.id], add_image_id=False, pred_scan_id=scan.id,
+                               ref_scan_id="ExtrinsicCalibration", ref_label="Calibrated", pred_label="Estimated",
+                               path=db.basedir, prefix=f"{scan.id}-")
 
     # - Get the list of all colmap poses (XYZ) indexed by image id:
     estimated_poses_by_image = {im: [] for im in estimated_poses[scan.id].keys()}

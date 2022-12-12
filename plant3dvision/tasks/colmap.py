@@ -7,10 +7,12 @@ from os.path import splitext
 
 import luigi
 import numpy as np
+import toml
 from plantdb import io
+from romitask import SCAN_TOML
 from scipy.spatial.distance import euclidean
 
-from plant3dvision.calibration import calibration_figure
+from plant3dvision.calibration import pose_estimation_figure
 from plant3dvision.camera import format_camera_params
 from plant3dvision.camera import get_colmap_cameras_from_calib_scan
 from plant3dvision.colmap import ColmapRunner
@@ -688,9 +690,9 @@ class Colmap(RomiTask):
                 except:
                     logger.warning("Could not format the camera parameters from COLMAP camera!")
                     logger.info(f"COLMAP camera: {cameras}")
-            calibration_figure(cnc_poses, colmap_poses, pred_scan_id=current_scan.id,
-                               ref_scan_id=str(self.extrinsic_calibration_scan_id), path=self.output().get().path(),
-                               header=camera_str)
+            pose_estimation_figure(cnc_poses, colmap_poses, pred_scan_id=current_scan.id,
+                                   ref_scan_id=str(self.extrinsic_calibration_scan_id), path=self.output().get().path(),
+                                   header=camera_str)
         else:
             logger.info("No extrinsic calibration required!")
 
@@ -739,9 +741,18 @@ class Colmap(RomiTask):
         # - Get estimated camera poses from 'images' fileset metadata:
         colmap_poses = {im.id: im.get_metadata("estimated_pose") for im in images_fileset}
         camera_str = format_camera_params(cameras)
-        calibration_figure(cnc_poses, colmap_poses, pred_scan_id=current_scan.id,
-                           ref_scan_id="", path=self.output().get().path(),
-                           header=camera_str, suffix="_estimated")
+        if self.intrinsic_calibration_scan_id != "":
+            camera_str = f"Intrinsic calibration scan:\n{self.intrinsic_calibration_scan_id}\n" + camera_str
+        else:
+            camera_str = "Colmap estimated intrinsics\n" + camera_str
+        # - Get some hardware metadata:
+        scan_cfg = toml.load(join(current_scan.path(), SCAN_TOML))
+        hardware = scan_cfg['Scan']['metadata']['hardware']
+        hardware_str = f"sensor: {hardware.get('sensor', None)}\n"
+        # - Generate the pose estimation figure with CNC & COLMAP poses:
+        pose_estimation_figure(cnc_poses, colmap_poses, pred_scan_id=current_scan.id, ref_scan_id="",
+                               path=self.output().get().path(), vignette=hardware_str + "\n" + camera_str,
+                               suffix="_estimated")
 
         # - Compute the euclidean distances between CNC & COLMAP poses & export it to a file:
         euclidean_distances = {}
