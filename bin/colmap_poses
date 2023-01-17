@@ -6,39 +6,77 @@ Visualize the camera positions estimated by Colmap tasks.
 """
 
 import argparse
+import json
+import sys
+from os.path import join
 from pathlib import Path
 
-from plant3dvision.tasks.colmap import pose_estimation_figure
-from plant3dvision.tasks.colmap import get_cnc_poses
+import toml
+
+from plant3dvision.camera import format_camera_params
 from plant3dvision.tasks.colmap import compute_colmap_poses_from_camera_json
+from plant3dvision.tasks.colmap import get_cnc_poses
+from plant3dvision.tasks.colmap import pose_estimation_figure
 from plantdb.fsdb import FSDB
+from romitask import SCAN_TOML
+from romitask.log import configure_logger
+
+logger = configure_logger(__name__)
 
 
 def parsing():
     DESC = """Visualize the camera positions estimated by Colmap tasks."""
     parser = argparse.ArgumentParser(description=DESC)
 
-    parser.add_argument("dataset",
+    parser.add_argument("dataset", nargs='+',
                         help="Path to the dataset.")
 
     return parser
 
 
-def main(args):
-    dataset_path = Path(args.dataset)  # `/path/to/romi_db/scan_id`
+def main(dataset_path):
+    dataset_path = Path(dataset_path)  # `/path/to/romi_db/scan_id`
     db_location = dataset_path.parent  # `/path/to/romi_db`
-    scan_name = dataset_path.name      # `scan_id`
+    scan_name = dataset_path.name  # `scan_id`
     # - Connect to database:
     db = FSDB(db_location)
     db.connect()
     # - Get the dataset corresponding to the selected scan:
-    dataset = db.get_scan(scan_name)
+    current_scan = db.get_scan(scan_name)
     # - Get the CNC poses:
-    cnc_poses = get_cnc_poses(dataset)
+    cnc_poses = get_cnc_poses(current_scan)
     # - Get the COLMAP poses:
-    colmap_poses = compute_colmap_poses_from_camera_json(dataset)
+    colmap_poses = compute_colmap_poses_from_camera_json(current_scan)
+
+    fs = current_scan.get_filesets()
+    fs_names = [f.id for f in fs]
+    # Check we have at least one dataset related to the 'Colmap' task:
+    try:
+        assert any([fs_id.startswith("Colmap") for fs_id in fs_names])
+    except AssertionError:
+        logger.error(f"Could not find a Colmap related dataset in '{scan_name}'!")
+        sys.exit("No 'Colmap*' dataset!")
+    # Check we do not have more than one dataset related to the 'Colmap' task:
+    try:
+        assert sum([fs_id.startswith("Colmap") for fs_id in fs_names]) == 1
+    except AssertionError:
+        logger.error(f"Found more than one Colmap related dataset in '{scan_name}'!")
+        sys.exit("More than one 'Colmap*' dataset!")
+
+    colmap_fs = [f for f in fs if f.id.startswith("Colmap")][0]
+    with open(colmap_fs.path() + '/cameras.json') as camera_json:
+        cameras = json.load(camera_json)
+
+    # - Get some hardware metadata:
+    scan_cfg = toml.load(join(current_scan.path(), SCAN_TOML))
+    hardware = scan_cfg['Scan']['metadata']['hardware']
+    hardware_str = f"sensor: {hardware.get('sensor', None)}\n"
+
+    camera_str = format_camera_params(cameras)
     # - Generate the calibration figure:
-    pose_estimation_figure(cnc_poses, colmap_poses, pred_scan_id=scan_name, ref_scan_id='Colmap')
+    pose_estimation_figure(cnc_poses, colmap_poses, pred_scan_id=current_scan.id, ref_scan_id="",
+                           path=current_scan.path(), vignette=hardware_str + "\n" + camera_str,
+                           suffix="_estimated")
     db.disconnect()
 
 
@@ -46,7 +84,12 @@ def run():
     # - Parse the input arguments to variables:
     parser = parsing()
     args = parser.parse_args()
-    main(args)
+    if isinstance(args.dataset, (list, tuple)):
+        for dataset_path in args.dataset:
+            logger.info(f"{dataset_path}")
+            main(dataset_path)
+    else:
+        main(args.dataset)
 
 
 if __name__ == '__main__':

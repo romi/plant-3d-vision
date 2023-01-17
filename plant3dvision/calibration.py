@@ -535,7 +535,10 @@ def pose_estimation_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_
     # -------------------------------------------------------------------------
     # Clear the vignette figure (lower left) of axes and ticks:
     vignette.tick_params(left=False, bottom=False, labelbottom=False, labelleft=False)
-    vignette.spines[:].set_visible(False)
+    try:
+        vignette.spines[:].set_visible(False)
+    except:
+        pass
     # Add the text to the vignette, if provided:
     vignette_str = kwargs.pop('vignette', "")
     if vignette_str != "":
