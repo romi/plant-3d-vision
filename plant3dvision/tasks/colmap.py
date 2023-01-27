@@ -746,9 +746,14 @@ class Colmap(RomiTask):
         else:
             camera_str = "Colmap estimated intrinsics\n" + camera_str
         # - Get some hardware metadata:
-        scan_cfg = toml.load(join(current_scan.path(), SCAN_TOML))
-        hardware = scan_cfg['Scan']['metadata']['hardware']
-        hardware_str = f"sensor: {hardware.get('sensor', None)}\n"
+        try:
+            scan_cfg = toml.load(join(current_scan.path(), SCAN_TOML))
+            hardware = scan_cfg['Scan']['metadata']['hardware']
+            hardware_str = f"sensor: {hardware.get('sensor', None)}\n"
+        except FileNotFoundError:
+            logger.warning("Could not find the `scan.toml` file!")
+            logger.info("No hardware information will be available in COLMAP's poses estimation figure!")
+            hardware_str = ""
         # - Generate the pose estimation figure with CNC & COLMAP poses:
         pose_estimation_figure(cnc_poses, colmap_poses, pred_scan_id=current_scan.id, ref_scan_id="",
                                path=self.output().get().path(), vignette=hardware_str + "\n" + camera_str,
