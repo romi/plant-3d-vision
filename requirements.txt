@@ -6,10 +6,11 @@ trimesh
 appdirs
 colorlog
 docker
-imageio
+imageio>= 2.16.2
+imagecodecs
 pandas  # there is a mismatch version with cython inside networkx setup
 networkx
-open3d>= 0.9.0.0  # open3d== 0.9.0.0
+open3d>= 0.9.0.0
 opencv-contrib-python
 pybind11
 pyopencl
