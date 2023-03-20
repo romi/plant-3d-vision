@@ -3,6 +3,7 @@
 
 import luigi
 import numpy as np
+from tqdm import tqdm
 
 from plant3dvision.filenames import COLMAP_CAMERAS_ID
 from plant3dvision.filenames import COLMAP_IMAGES_ID
@@ -78,7 +79,7 @@ class Visualization(RomiTask):
         Maximum allowed thumbnail size in carousel.
         Defaults to ``150``.
     """
-    upstream_task = None
+    upstream_task = luigi.TaskParameter(default=Colmap)
 
     upstream_images = luigi.TaskParameter(default=ImagesFilesetExists)
     upstream_colmap = luigi.TaskParameter(default=Colmap)
@@ -106,8 +107,8 @@ class Visualization(RomiTask):
         super().__init__()
         self.task_id = "Visualization"
 
-    def requires(self):
-        return []
+    # def requires(self):
+        # return []
 
     def run(self):
         import tempfile
@@ -116,6 +117,7 @@ class Visualization(RomiTask):
         from skimage.transform import resize
 
         def resize_to_max(img, max_size):
+            rtype = img.dtype.name
             i = np.argmax(img.shape[0:2])
             if img.shape[i] <= max_size:
                 return img
@@ -123,7 +125,7 @@ class Visualization(RomiTask):
                 new_shape = (max_size, int(max_size * img.shape[1] / img.shape[0]))
             else:
                 new_shape = (int(max_size * img.shape[0] / img.shape[1]), max_size)
-            return resize(img, new_shape)
+            return np.array(resize(img, new_shape, preserve_range=True), dtype=rtype)
 
         output_fileset = self.output().get()
         files_metadata = {
@@ -195,6 +197,7 @@ class Visualization(RomiTask):
 
         # ANGLES
         if self.upstream_angles().complete():
+            logger.info("Preparing angle and internode sequences...")
             angles_file = self.upstream_angles().output_file()
             f = output_fileset.create_file(angles_file.id)
             io.write_json(f, io.read_json(angles_file))
@@ -202,6 +205,7 @@ class Visualization(RomiTask):
 
         # SKELETON
         if self.upstream_skeleton().complete():
+            logger.info("Preparing skeleton...")
             skeleton_file = self.upstream_skeleton().output_file()
             f = output_fileset.create_file(skeleton_file.id)
             io.write_json(f, io.read_json(skeleton_file))
@@ -209,6 +213,7 @@ class Visualization(RomiTask):
 
         # MESH
         if self.upstream_mesh().complete():
+            logger.info("Preparing mesh...")
             mesh_file = self.upstream_mesh().output_file()
             f = output_fileset.create_file(mesh_file.id)
             io.write_triangle_mesh(f, io.read_triangle_mesh(mesh_file))
@@ -216,6 +221,7 @@ class Visualization(RomiTask):
 
         # PCD
         if self.upstream_point_cloud().complete():
+            logger.info("Preparing point-cloud...")
             point_cloud_file = self.upstream_point_cloud().output_file()
             point_cloud = io.read_point_cloud(point_cloud_file)
             f = output_fileset.create_file(point_cloud_file.id)
@@ -231,7 +237,8 @@ class Visualization(RomiTask):
         files_metadata["images"] = []
         files_metadata["thumbnails"] = []
 
-        for img in image_files:
+        logger.info("Preparing images and thumbnails...")
+        for img in tqdm(image_files, unit='image'):
             data = io.read_image(img)
             # remove alpha channel
             if data.shape[2] == 4:

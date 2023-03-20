@@ -185,13 +185,14 @@ def nx_to_tx(T, attributes, root_id):
 
 
 def label_fruit(G, branching_fruit_id, fruit_id):
-    """
-    Labels fruits in a treex tree object.
+    """Labels fruits in a treex tree object.
 
     Parameters
     ----------
-    T: treex.tree.Tree
-        input tree which root is the branching node
+    G : treex.tree.Tree
+        Input tree which root is the branching node.
+    branching_fruit_id
+    fruit_id
     """
     Q = collections.deque()
     Q.append(branching_fruit_id)
@@ -207,25 +208,25 @@ def label_fruit(G, branching_fruit_id, fruit_id):
 
 
 def compute_tree_graph(points, lines, stem_axis, stem_axis_inverted):
-    """
-    Returns a networkx tree object from the curve skeleton.
-    Labels include segmentation of main stem and organs,as well as position in space
-    of the points.
+    """Returns a networkx tree object from the curve skeleton.
+
+    Labels include segmentation of main stem and organs, as well as position in space of the points.
 
     Parameters
     ----------
-    points: np.ndarray
-        Nx3 position of points
-    lines: np.ndarray
-        Nx2 lines between points (dtype=int)
-    stem_axis: int
-        axis to use for stem orientation to get the root node
-    stem_axis_inverted: bool
-        direction of the stem along the specified axis, inverted or not
+    points : numpy.ndarray
+        Nx3 position of points.
+    lines : numpy.ndarray
+        Nx2 lines between points (dtype=int).
+    stem_axis : int
+        Axis to use for stem orientation to get the root node.
+    stem_axis_inverted : bool
+        Direction of the stem along the specified axis, inverted or not.
 
     Returns
     -------
-    nx.Graph
+    networkx.Graph
+        The tree object obtained from the curve skeleton.
     """
     points, lines = np.asarray(points), np.asarray(lines)
     G = build_graph(points, lines)
@@ -266,18 +267,23 @@ def compute_tree_graph(points, lines, stem_axis, stem_axis_inverted):
 
 
 def get_nodes_by_label(G, label):
-    """
-    Get all nodes in a graph which have the given label. The key "labels"
-    must exist in the data of each node.
+    """Get all nodes in a graph which have the given label.
 
     Parameters
     ----------
-    G : nx.Graph
-    label: str
+    G : networkx.Graph
+        A tree graph with nodes that posses a "labels" attribute.
+    label : str
+        The name used to filter the returned nodes from the tree graph.
 
     Returns
     -------
     list
+        The list of selected node ids.
+
+    Notes
+    -----
+    The key "labels" must exist in the data of each node.
     """
     return [i for i in G.nodes if label in G.nodes[i]["labels"]]
 
@@ -288,14 +294,13 @@ def get_fruit(G, i):
 
 
 def get_organ_features(organ_bb, stem_skeleton):
-    """
-    Compute organ features as its main direction and its node
+    """Compute organ features as its main direction and its node
 
     Parameters
     ----------
     organ_bb : open3d.geometry.OrientedBoundingBox
         bounding box around the organ
-    stem_skeleton: np.array
+    stem_skeleton: numpy.ndarray
         Nx3 array
 
     Returns
@@ -469,23 +474,39 @@ def angles_and_internodes_from_point_cloud(stem_pcd, organ_pcd_list, characteris
 
 
 def compute_angles_and_internodes(T, n_nodes_fruit=5, n_nodes_stem=5):
-    """
-    Get angle and internodes from graph
+    """Get angles and internode lengths between successive organs from a tree graph.
 
     Parameters
     ----------
-    T : nx.Graph
-        input tree as a networkx graph
-    n_nodes_fruit : int
-        number of nodes to consider as neighbours for a branching point
-    n_nodes_stem : int
-        number of nodes to consider as neighbours in the stem
+    T : networkx.Graph
+        Input tree as a networkx graph.
+    n_nodes_fruit : int, optional
+        Number of nodes to consider as neighbours for a branching point.
+        Defaults to ``5``.
+    n_nodes_stem : int, optional
+        Number of nodes to consider as neighbours in the stem.
+        Defaults to ``5``.
 
     Returns
     -------
     dict
-    """
+        A dictionary with the computed angles, internodes lengths and used fruit points.
 
+    Example
+    -------
+    >>> import os
+    >>> import networkx as nx
+    >>> from plantdb.io import read_graph
+    >>> from plantdb.fsdb import FSDB
+    >>> db = FSDB(os.environ['DB_LOCATION'])  # requires definition of this environment variable!
+    >>> db.connect()
+    >>> scan = db.get_scan("sgk_45")
+    >>> fs = scan.get_fileset("TreeGraph__False_CurveSkeleton_c304a2cc71")
+    >>> f = fs.get_file('TreeGraph')
+    >>> T = read_graph(f)
+    >>>
+
+    """
     unordered_main_stem = get_nodes_by_label(T, "stem")
     unordered_branching_points = get_nodes_by_label(T, "node")
     angles = []
@@ -493,7 +514,7 @@ def compute_angles_and_internodes(T, n_nodes_fruit=5, n_nodes_stem=5):
     all_fruit_points = []
     node_info_list = []
 
-    # seems like the branching order is lost in the treegraoh computation task
+    # seems like the branching order is lost in the tree graph computation task
     # re order nodes
     nodes_dict = {}
     for ubp in unordered_branching_points:

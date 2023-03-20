@@ -11,12 +11,11 @@ This module contains all functions for processing of 3D data.
 import networkx as nx
 import numpy as np
 import open3d as o3d
+from romitask.log import configure_logger
 from scipy.ndimage.filters import gaussian_filter
 from scipy.ndimage.morphology import distance_transform_edt
 from skimage.exposure import rescale_intensity
 from tqdm import tqdm
-
-from romitask.log import configure_logger
 
 logger = configure_logger(__name__)
 
@@ -31,16 +30,16 @@ def index2point(indexes, origin, voxel_size):
 
     Parameters
     ----------
-    indexes : np.ndarray
+    indexes : numpy.ndarray
         Nxd array of indices
-    origin : np.ndarray
+    origin : numpy.ndarray
         1d array of length d
     voxel_size : float
         size of voxels
 
     Returns
     -------
-    np.ndarray
+    numpy.ndarray
         Nxd array of points
     """
     return voxel_size * indexes + origin[np.newaxis, :]
@@ -51,16 +50,16 @@ def point2index(points, origin, voxel_size):
 
     Parameters
     ----------
-    points : np.ndarray
+    points : numpy.ndarray
         Nxd array of points
-    origin : np.ndarray
+    origin : numpy.ndarray
         1d array of length d
     voxel_size : float
         size of voxels
 
     Returns
     -------
-    np.ndarray (dtype=int)
+    numpy.ndarray (dtype=int)
         Nxd array of indices
     """
     return np.array(np.round((points - origin[np.newaxis, :]) / voxel_size), dtype=int)
@@ -71,12 +70,13 @@ def pcd2mesh(pcd):
 
     Parameters
     ----------
-    pcd: open3d.geometry.PointCloud
-        input point cloud (must have normals)
+    pcd : open3d.geometry.PointCloud
+        The Input point cloud (must have normals)
 
     Returns
     -------
     open3d.geometry.TriangleMesh
+        The obtained triangular mesh.
     """
     assert (pcd.has_normals)
     points, triangles = cgal.poisson_mesh(np.asarray(pcd.points),
@@ -90,21 +90,25 @@ def pcd2mesh(pcd):
 
 
 def pcd2vol(pcd, voxel_size, zero_padding=0):
-    """Voxelize a point cloud. Every voxel value is equal to the number of points in the corresponding cube.
+    """Voxelize a point cloud.
 
     Parameters
     ----------
     pcd : open3d.geometry.PointCloud
-        input point cloud
+        Input point cloud.
     voxel_size : float
-        target voxel size
-    zero_padding : int
-        number of zero padded values on every side of the volume (default = 0)
+        Target voxel size.
+    zero_padding : int, optional
+        Number of zero padded values on every side of the volume.
+        Defaults to ``0``.
 
     Returns
     -------
-    vol : np.ndarray
-    origin : list
+    numpy.ndarray
+        The minimal array containing the voxelized point cloud.
+        Every voxel value is equal to the number of points in the corresponding cube.
+    list
+        The origin of the array.
     """
     pcd_points = np.asarray(pcd.points)
     origin = np.min(pcd_points, axis=0) - zero_padding * voxel_size
@@ -121,41 +125,85 @@ def pcd2vol(pcd, voxel_size, zero_padding=0):
 
 
 def skeletonize(mesh):
-    """Use CGAL to create a Delaunay triangulation of a point cloud with normals.
+    """Use CGAL to create a skeleton from a triangular mesh.
 
     Parameters
     ----------
     mesh: open3d.geometry.TriangleMesh
-        input mesh
+        A triangular mesh to skeletonize.
 
     Returns
     -------
-    json
+    dict
+        A dictionary of points and lines defining the skeleton of the input mesh.
+
+    Example
+    -------
+    >>> import os
+    >>> from plant3dvision.proc3d import skeletonize
+    >>> from plantdb.io import read_triangle_mesh
+    >>> from plantdb.fsdb import FSDB
+    >>> db = FSDB(os.environ['DB_LOCATION'])  # requires definition of this environment variable!
+    >>> db.connect()
+    >>> scan = db.get_scan("sgk_45")
+    >>> fs = scan.get_fileset("TriangleMesh_9_most_connected_t_open3d_00e095c359")
+    >>> f = fs.get_file('TriangleMesh')
+    >>> tmesh = read_triangle_mesh(f)
+    >>> skel = skeletonize(tmesh)
+    >>> draw_skeleton(skel)
+
     """
-    points, lines = cgal.skeletonize_mesh(
-        np.asarray(mesh.vertices), np.asarray(mesh.triangles))
-    return {'points': points.tolist(),
-            'lines': lines.tolist()}
+    points, lines = cgal.skeletonize_mesh(np.asarray(mesh.vertices), np.asarray(mesh.triangles))
+    return {'points': points.tolist(), 'lines': lines.tolist()}
+
+
+def draw_skeleton(skeleton):
+    """
+
+    Parameters
+    ----------
+    skeleton
+
+    Returns
+    -------
+
+    """
+    import matplotlib.pyplot as plt
+
+    ax = plt.figure().add_subplot(projection='3d')
+
+    points = skeleton["points"]
+    lines = skeleton["lines"]
+    for line in lines:
+        start, stop = line
+        xt, yt, zt = points[start]
+        xp, yp, zp = points[stop]
+        print(xt+xp)
+        print(yt+yp)
+        print(zt+zp)
+        ax.plot(xt+xp, yt+yp, zt+zp, label='Curved skeleton')
+
+    ax.legend()
 
 
 def knn_graph(pcd, k):
-    """Computes weighted graph connecting points to their k nearest neighbours.
+    """Computes weighted graph connecting points to their k-nearest neighbours.
 
     Parameters
     ----------
     pcd : open3d.geometry.PointCloud
-        input point cloud
-
-    k : number of neighbours to keep
+        The input point cloud to connect.
+    k : int
+        The number of neighbours to keep.
 
     Returns
     -------
-    nx.Graph
-        undirected graph
+    networkx.Graph
+        The weighted undirected graph with connected points.
     """
     pcd_tree = o3d.geometry.KDTreeFlann(pcd)
     g = nx.Graph()
-    for i in tqdm(range(len(pcd.points))):
+    for i in tqdm(range(len(pcd.points)), unit='point'):
         [k_, idx, _] = pcd_tree.search_knn_vector_3d(pcd.points[i], k)
         g.add_node(i, center=pcd.points[i])
         for j in range(k_):
@@ -170,15 +218,14 @@ def radius_graph(pcd, r):
     Parameters
     ----------
     pcd : open3d.geometry.PointCloud
-        input point cloud
-
+        The input point cloud to connect.
     r : float
-        radius
+        The radius to use to find neighbour points.
 
     Returns
     -------
-    nx.Graph
-        undirected graph
+    networkx.Graph
+        The weighted undirected graph with connected points.
     """
     pcd_tree = o3d.geometry.KDTreeFlann(pcd)
     g = nx.Graph()
@@ -192,18 +239,20 @@ def radius_graph(pcd, r):
 
 
 def connect_graph(g, pcd, root_index):
-    """
-    Connects the knn graph of the point cloud. It iteratively connects the closest non connected point
-    to the connected component.
+    """Connects the knn graph of the point cloud.
 
     Parameters
     ----------
-    g : nx.Graph
+    g : networkx.Graph
         knn graph
     pcd : open3d.geometry.PointCloud
         input point cloud
     root_index : int
         index of root node
+
+    Notes
+    -----
+    It iteratively connects the closest non-connected point to the connected component.
     """
     while True:
         cc = list(nx.connected_components(g))
@@ -249,7 +298,7 @@ def distance_to_root_clusters(g, root_index, pcd, bin_size):
 
     Parameters
     ----------
-    g : nx.Graph
+    g : networkx.Graph
         graph of point cloud
     pcd : open3d.geometry.PointCloud
         point cloud
@@ -258,7 +307,7 @@ def distance_to_root_clusters(g, root_index, pcd, bin_size):
 
     Returns
     -------
-    nx.Grah
+    networkx.Grah
         cluster graph
     dict
         corresponding cluster for each node in the original graph
@@ -310,12 +359,11 @@ def distance_to_root_clusters(g, root_index, pcd, bin_size):
 
 
 def draw_pcd_graph(g):
-    """
-    Draw graph in 3D
+    """Draw graph in 3D.
 
     Parameters
     ----------
-    g: nx.Graph
+    g : networkx.Graph
         graph with "center" attribute as a 3 element array
     """
     line_set = o3d.geometry.LineSet()
@@ -334,8 +382,7 @@ def draw_pcd_graph(g):
 
 
 def draw_distance_to_root_clusters(cluster_graph, cluster_values, pcd):
-    """
-    Draw point cloud with clusters as well as skeleton graph.
+    """Draw point cloud with clusters as well as skeleton graph.
 
     Parameters
     ----------
@@ -343,7 +390,7 @@ def draw_distance_to_root_clusters(cluster_graph, cluster_values, pcd):
         Skeleton graphj
     cluster_valuies: dict
         Correspondance between point cloud points and cluster indices
-    pcd: open3d.geometry.PointCloud
+    pcd : open3d.geometry.PointCloud
         point cloud
     """
     colors = np.zeros((len(pcd.points), 3))
@@ -371,10 +418,31 @@ def draw_distance_to_root_clusters(cluster_graph, cluster_values, pcd):
     o3d.visualization.draw_geometries([pcd, line_set])
 
 
-def skeleton_from_distance_to_root_clusters(pcd, root_index, binsize, k,
-                                            connect_all_points=True):
-    """
-    The infamous XU method.
+def skeleton_from_distance_to_root_clusters(pcd, root_index, binsize, k, connect_all_points=True):
+    """The infamous XU method.
+
+    Parameters
+    ----------
+    pcd : open3d.geometry.PointCloud
+        The point cloud.
+    root_index : int
+        index of root node
+    bin_size : float
+        size of clusters (in terms of distance to root)
+    k : int
+        The number of neighbours to keep when connecting points to their k-nearest neighbours.
+    connect_all_points : bool, optional
+        If ``True``, connect all points of the point cloud to the k-nearest neighbours graph.
+
+    Returns
+    -------
+    networkx.Graph
+        The minimum spanning tree for the point-cloud.
+    dict
+        Node indexed dictionary of cluster ids.
+
+    References
+    ----------
     Xu, Hui et al. "Knowledge and heuristic-based modeling of laser-scanned trees" 
     """
     g = knn_graph(pcd, k)
@@ -392,16 +460,19 @@ def old_vol2pcd(volume, origin, voxel_size, level_set_value=0):
 
     Parameters
     ----------
-    volume : np.ndarray
+    volume : numpy.ndarray
         NxMxP 3D binary numpy array
+    origin : numpy.ndarray
+        origin of the volume
     voxel_size: float
         voxel size
-    level_set_value: float
+    level_set_value: float, optional
         distance of the level set on which the points are sampled
 
     Returns
     -------
     open3d.geometry.PointCloud
+        The point cloud.
     """
     volume = 1.0 * (volume > 0.5)  # variable level ?
     dist = distance_transform_edt(volume)
@@ -446,18 +517,19 @@ def old_vol2pcd(volume, origin, voxel_size, level_set_value=0):
 
 
 def vol2pcd(volume, origin, voxel_size, level_set_value=0):
-    """Converts a volume into a point cloud with normals.
+    """Converts a volume into a point-cloud with normals.
 
     Parameters
     ----------
     volume : numpy.ndarray
-        NxMxP 3D numpy array
+        ``NxMxP`` 3D numpy array
     origin : numpy.ndarray
-        origin of the volume
-    voxel_size: float
-        voxel size
-    level_set_value: float
+        Origin of the volume
+    voxel_size : float
+        Voxel size to use to create the point-cloud from the array.
+    level_set_value : float, optional
         distance of the level set on which the points are sampled
+        Defaults to ``0``.
 
     Returns
     -------

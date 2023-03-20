@@ -13,7 +13,7 @@ logger = configure_logger(__name__)
 
 
 class TreeGraph(RomiTask):
-    """ Creates a tree graph of the plant
+    """ Creates a tree graph of the plant from a skeleton.
 
     Attributes
     ----------
@@ -47,14 +47,38 @@ class TreeGraph(RomiTask):
 class AnglesAndInternodes(RomiTask):
     """ Computes organs successive angles and internodes.
 
+    Attributes
+    ----------
+    upstream_task : luigi.TaskParameter
+        Upstream task that generate the tree graph, organ segmented mesh or organ segmented point-cloud.
+        Defaults to ``TreeGraph``.
+    organ_type : luigi.Parameter
+        Name of the organ to consider when using organ segmented mesh or organ segmented point-cloud.
+        Defaults to ``"fruit"``.
+    characteristic_length : luigi.FloatParameter
+        ???. Used with organ segmented mesh or organ segmented point-cloud.
+        Defaults to ``1.``.
+    stem_axis : luigi.IntParameter
+        ???. Used with organ segmented mesh or organ segmented point-cloud.
+        Defaults to ``2``.
+    stem_axis_inverted : luigi.BoolParameter
+        ???. Used with organ segmented mesh or organ segmented point-cloud.
+        Defaults to ``False``.
+    min_elongation_ratio : luigi.FloatParameter
+        ???. Used with organ segmented mesh or organ segmented point-cloud.
+        Defaults to ``2.0``.
+    min_fruit_size : luigi.FloatParameter
+        ???. Used with organ segmented mesh or organ segmented point-cloud.
+        Defaults to ``6``.
+
+    Notes
+    -----
     Depending on the upstream task this task will use a different algorithm:
       - `TreeGraph`: based on a skeleton
       - `ClusteredMesh`: based on an organ segmented mesh
       - `OrganSegmentation`: based on an organ segmented point cloud
 
     Module: plant3dvision.tasks.arabidopsis
-    Default upstream tasks: TreeGraph
-    Upstream task format: json
     Output task format: json (TODO: precise)
 
     """
