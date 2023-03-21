@@ -754,6 +754,10 @@ class Colmap(RomiTask):
             logger.warning("Could not find the `scan.toml` file!")
             logger.info("No hardware information will be available in COLMAP's poses estimation figure!")
             hardware_str = ""
+        except KeyError:
+            logger.warning("Missing some metadata in the `scan.toml` file!")
+            logger.info("No hardware information will be available in COLMAP's poses estimation figure!")
+            hardware_str = ""
         # - Generate the pose estimation figure with CNC & COLMAP poses:
         pose_estimation_figure(cnc_poses, colmap_poses, pred_scan_id=current_scan.id, ref_scan_id="",
                                path=self.output().get().path(), vignette=hardware_str + "\n" + camera_str,
