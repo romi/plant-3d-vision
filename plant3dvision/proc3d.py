@@ -371,7 +371,7 @@ def draw_pcd_graph(g):
     lines = np.zeros((len(g.edges), 2), dtype=int)
 
     for i in range(len(g.nodes)):
-        pts[i, :] = g.nodes[i]['center']
+        pts[i, :] = g.nodes[i]['position']
 
     for j in range(len(g.edges)):
         lines[j, :] = list(g.edges)[j]
