@@ -34,7 +34,7 @@ type = "carving"
 [Voxels.bounding_box]  # default to None
 x = [300, 450]
 y = [300, 450]
-z = [-350, 100]
+z = [-175, 100]
 
 [PointCloud]
 upstream_task = "Voxels"
