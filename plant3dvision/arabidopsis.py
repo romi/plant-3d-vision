@@ -527,7 +527,7 @@ def fruit_stem_vector(T, bp_id, fruit_node_ids, main_stem_nodes, n_nodes_fruit=5
     # Set v1 as the fruit direction and v2 as the stem direction
     v1, v2 = new_v1, v2 - v2.dot(new_v1) * new_v1
 
-    return {"node_point": bp_coord, "fruit_direction": v1, "stem_direction": v2}
+    return {"node_point": np.array(bp_coord), "fruit_direction": v1, "stem_direction": v2}
 
 
 def compute_angles_and_internodes(T, n_nodes_fruit=5, n_nodes_stem=5):
@@ -610,7 +610,7 @@ def compute_angles_and_internodes(T, n_nodes_fruit=5, n_nodes_stem=5):
             if stem_dir.dot(node_next_point - node_point) < 0:
                 vec_dict["stem_direction"] = -vec_dict["stem_direction"]
             node_info_list.append(vec_dict)
-            fruit_points = [np.array(T.nodes[n]["position"]) for n in fruit_node_ids]
+            fruit_points = [T.nodes[n]["position"] for n in fruit_node_ids]
             all_fruit_points.append(fruit_points)
 
         # node_fruit_points = [np.array(T.nodes[n]["position"]) for n in get_fruit(T, i)]
