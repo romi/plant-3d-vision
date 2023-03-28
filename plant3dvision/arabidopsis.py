@@ -672,3 +672,69 @@ def compute_angles_and_internodes(T, n_nodes_fruit=5, n_nodes_stem=5):
         "internodes": internodes,
         "fruit_points": all_fruit_points
     }
+
+
+def get_proj_matrix(pts, dim=2):
+    """Returns the projection matrix for the given points.
+
+    Parameters
+    ----------
+    pts : numpy.array
+        The array of points to use to create the projection matrix.
+    dim : int, optional
+        The dimension to project the point.
+
+    Returns
+    -------
+    numpy.array
+        The projection matrix.
+    """
+    c_pts = pts - pts.mean(axis=0)
+    U, D, V = np.linalg.svd(c_pts)
+    V = V.T
+    # -- Projection matrix:
+    proj_mat = np.dot(V[:, 0:dim], V[:, 0:dim].T)
+    return proj_mat
+
+
+def project_points(pts, proj_mat, origin=None):
+    """Project an array of points using a projection matrix.
+
+    Parameters
+    ----------
+    pts : numpy.array
+        The array of 3D points to project.
+    proj_mat : numpy.array
+        The 3x3 projection matrix.
+    origin : numpy.array, optional
+        The origin of the points as 1-D array, if `None` (default) computed to their mean.
+
+    Returns
+    -------
+    numpy.array
+        The array of projected points.
+    """
+    if origin is None:
+        origin = pts.mean(axis=0)
+    return np.dot(pts - origin, proj_mat) + origin
+
+
+def vector_from_points(pts, origin=None):
+    """Get the main vector for a given array of points.
+
+    Parameters
+    ----------
+    pts : numpy.array
+        The array of 3D points to project.
+    origin : numpy.array, optional
+        The origin of the points as 1-D array, if `None` (default) computed to their mean.
+
+    Returns
+    -------
+    numpy.array
+        The main vector for given points.
+    """
+    if origin is None:
+        origin = pts.mean(axis=0)
+    u, d, v = np.linalg.svd(pts - origin)
+    return v[0]

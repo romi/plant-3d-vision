@@ -4,6 +4,29 @@
 """This module regroups miscellaneous utilities."""
 
 
+def flatten(l):
+    """Flatten iterables to a non-nested list.
+
+    Examples
+    --------
+    >>> from plant3dvision.utils import flatten
+    >>> list(flatten([1,2,3,4]))
+    [1, 2, 3, 4]
+    >>> list(flatten([[1,2],[3,4]]))
+    [1, 2, 3, 4]
+    >>> list(flatten([[1,[2,3]],4]))
+    [1, 2, 3, 4]
+
+    """
+    import collections
+    for el in l:
+        if isinstance(el, collections.Iterable) and not isinstance(el, str):
+            for sub in flatten(el):
+                yield sub
+        else:
+            yield el
+
+
 def recursively_unfreeze(value):
     """
     Recursively walks ``Mapping``s convert them to ``Dict``.
@@ -158,6 +181,7 @@ def fit_circle(x, y):
     R_2b = Ri_2b.mean()
     residuals = Ri_2b - R_2b
     return xc_2b, yc_2b, R_2b, residuals
+
 
 def plot_points_circle(x, y, cx, cy, r, figname=None):
     """Plot a series of 2D points and a circle.
