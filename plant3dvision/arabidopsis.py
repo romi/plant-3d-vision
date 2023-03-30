@@ -308,6 +308,20 @@ def get_nodes_by_label(G, label):
 
 
 def get_fruit(G, i):
+    """List nodes of a tree graph that belong to selected fruit `i`.
+
+    Parameters
+    ----------
+    G :  networkx.Graph
+        A tree graph with nodes that posses a "labels" attribute.
+    i : int
+        The fruit id to search for.
+
+    Returns
+    -------
+    list of int
+        The list of node ids that belong to the selected fruit.
+    """
     x = get_nodes_by_label(G, "fruit")
     return [j for j in x if G.nodes[j]["fruit_id"] == i]
 
