@@ -746,3 +746,146 @@ def vector_from_points(pts, origin=None):
         origin = pts.mean(axis=0)
     u, d, v = np.linalg.svd(pts - origin)
     return v[0]
+
+
+def compute_stem_and_fruit_directions(tree, max_node_dist=10., branching_points=None, min_fruit_length=10.):
+    """Compute the stem and fruit directions.
+
+    Parameters
+    ----------
+    tree : networkx.Graph
+        Input tree as a networkx graph.
+    max_node_dist : float, optional
+        The maximum distance to the branching point to use to select stem and fruit nodes.
+        If `None` all fruits node are returned.
+        Else compute the path Euclidean distance.
+    branching_points : list of int, optional
+        The list of branching points to consider.
+        If `None` (default), the list of all branching node is computed and used.
+
+    Returns
+    -------
+    list of numpy.array
+        The list of fruit directions as 1-D arrays.
+    list of numpy.array
+        The list of stem directions as 1-D arrays.
+    list of numpy.array
+        The list of branching point coordinates as 1-D arrays.
+    list of numpy.array
+        The list of fruit coordinates for sampled fruit nodes.
+
+    Notes
+    -----
+    The returned array are ordered the same way as the given branching points.
+
+    We use the following rules to estimate the fruits and stem directions:
+      * *stem points* are sampled around the *branching point* within a given path Euclidean distance from it
+      * *fruits points* are sample from the *branching point* to a maximum path Euclidean distance from it
+      * if **multiple fruits** are attached to the same *branching point*, they are treated individually
+      * the *branching point* is projected on the stem line
+
+    See Also
+    --------
+    plant3dvision.tree.select_fruit_nodes
+    plant3dvision.tree.select_stem_nodes_by_euclidean_distance
+    plant3dvision.tree.get_ordered_branching_point_nodes
+
+    """
+    from plant3dvision.tree import nodes_coordinates
+    from plant3dvision.tree import select_fruit_nodes
+    from plant3dvision.tree import select_stem_nodes_by_euclidean_distance
+
+    if branching_points is None or len(branching_points) == 0:
+        from plant3dvision.tree import get_ordered_branching_point_nodes
+        branching_points = get_ordered_branching_point_nodes(tree)
+
+    fruit_dirs = []
+    stem_dirs = []
+    bp_coords = []
+    fruit_pts = []
+
+    for bp_node_id in branching_points:
+        bp_coord = nodes_coordinates(tree, [bp_node_id])[0]  # get the branching point coordinates
+        # Get the lists of fruit and stem nodes:
+        fruit_nodes_list = select_fruit_nodes(tree, bp_node_id, max_node_dist, min_fruit_length)
+        stem_nodes = select_stem_nodes_by_euclidean_distance(tree, bp_node_id, max_node_dist)
+        # Get the coordinates of selected fruit and stem points:
+        stem_points = nodes_coordinates(tree, stem_nodes)
+        # Compute stem line projection matrix:
+        stem_line_proj_mat = get_proj_matrix(stem_points, dim=1)
+        # Project stem points on stem line:
+        proj_stem_points = project_points(stem_points, stem_line_proj_mat)
+        # Project branching point on stem line:
+        proj_stem_mean = proj_stem_points.mean(axis=0)
+        proj_bp_coord = project_points(bp_coord, stem_line_proj_mat, proj_stem_mean)
+        # Compute stem direction:
+        stem_dir = vector_from_points(proj_stem_points, origin=proj_bp_coord)
+        if stem_dir.dot(proj_stem_points[-1, :] - proj_bp_coord):
+            stem_dir = -stem_dir
+
+        for fruit_nodes in fruit_nodes_list:
+            # Get the coordinates of selected fruit nodes:
+            fruit_points = nodes_coordinates(tree, fruit_nodes)
+            # Compute fruit direction:
+            fruit_dir = vector_from_points(fruit_points, origin=proj_bp_coord)
+            if fruit_dir.dot(fruit_points[-1, :] - proj_bp_coord):
+                fruit_dir = -fruit_dir
+            fruit_dirs.append(fruit_dir)
+            stem_dirs.append(stem_dir)
+            bp_coords.append(proj_bp_coord)
+            fruit_pts.append(list(fruit_points))
+
+    return fruit_dirs, stem_dirs, bp_coords, fruit_pts
+
+
+def compute_angles_and_internodes_from_directions(fruit_dirs, stem_dirs, bp_coords):
+    """Compute the angles and internodes between succesive organs using estimated directions.
+
+    Parameters
+    ----------
+    fruit_dirs : list of numpy.array
+        The list of fruit directions as 1-D arrays.
+    stem_dirs : list of numpy.array
+        The list of stem directions as 1-D arrays.
+    bp_coords : list of numpy.array
+        The list of branching point coordinates as 1-D arrays.
+
+    Returns
+    -------
+    dict
+        A dictionary with the computed angles, internodes lengths and fruit points.
+
+    """
+    node_info_list = {nid: {
+        "fruit_direction": fruit_dirs[nid],
+        "stem_direction": stem_dirs[nid],
+        "node_point": bp_coords[nid]
+    } for nid in range(len(fruit_dirs))}
+
+    angles = []
+    internodes = []
+    for i in range(1, len(node_info_list)):
+        n1 = np.cross(node_info_list[i - 1]["fruit_direction"], node_info_list[i - 1]["stem_direction"])
+        n2 = np.cross(node_info_list[i]["fruit_direction"], node_info_list[i]["stem_direction"])
+        p1 = node_info_list[i - 1]["node_point"]
+        p2 = node_info_list[i]["node_point"]
+        v1 = node_info_list[i - 1]["fruit_direction"]
+        v2 = node_info_list[i]["fruit_direction"]
+        v3 = node_info_list[i]["node_point"] - node_info_list[i - 1]["node_point"]
+
+        # Angle between the planes, between 0 and PI
+        angle = np.arccos(np.dot(n1, n2))
+
+        # IF basis is direct, then angle is positive (depends on stem axis inversion ?)
+        if np.linalg.det([v1, v2, v3]) < 0:
+            angle = 2 * np.pi - angle
+
+        angles.append(angle)
+        internodes.append(np.linalg.norm(p2 - p1))
+
+    # complement angles if needed
+    if np.median(angles) > np.pi:
+        angles = 2 * np.pi - np.array(angles)
+        angles = angles.tolist()
+
+    return {"angles": angles, "internodes": internodes}
