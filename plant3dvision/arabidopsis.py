@@ -142,14 +142,22 @@ def build_graph(vertices, edges):
     return G
 
 
-def fit_plane(points):
+def fit_plane(points, origin=None):
+    """Fit a plane to a set of points.
+
+    Parameters
+    ----------
+    points : numpy.array
+        The array of 3D points to project.
+    origin : numpy.array, optional
+        The origin of the points as 1-D array, if `None` (default) computed to their mean.
+
     """
-    Fit a plane to a set of points. Points is Nx3
-    """
-    m = points.mean(axis=0)
-    points = points - m[np.newaxis, :]
+    if origin is None:
+        origin = points.mean(axis=0)
+    points = points - origin[np.newaxis, :]
     u, s, v = np.linalg.svd(points)
-    return m, v[0, :], v[1, :]
+    return origin, v[0, :], v[1, :]
 
 
 def nx_to_tx(T, attributes, root_id):
