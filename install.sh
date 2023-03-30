@@ -9,12 +9,10 @@ notebook=0
 
 usage() {
   echo "USAGE:"
-  echo "  ./install.sh [OPTIONS]
-    "
+  echo -e "  ./install.sh [OPTIONS]\n"
 
   echo "DESCRIPTION:"
-  echo "  Install the sources for the 'plant-3d-vision' ROMI library in a conda environment.
-  "
+  echo -e "  Install the sources for the 'plant-3d-vision' ROMI library in a conda environment.\n"
 
   echo "OPTIONS:"
   echo "  -n, --name
@@ -39,15 +37,12 @@ while [ "$1" != "" ]; do
     name=$1
     ;;
   --dev)
-    shift
     pip_opt="$pip_opt -e"
     ;;
   --doc)
-    shift
     doc=1
     ;;
   --notebook)
-    shift
     notebook=1
     ;;
   --python)
@@ -71,132 +66,114 @@ NC='\033[0m' # No Color
 
 source ~/miniconda3/bin/activate
 
-echo -e "
-
-${RED}Creating '$name' conda environment...${NC}"
+echo -e "${RED}# - Creating '$name' conda environment...${NC}"
 start_time=$(date +%s)
 conda create -n $name python=$py_version
+echo -e "${RED}Conda environment creation done in $(expr $(date +%s) - $start_time) s.${NC}"
 conda activate $name
-echo -e "${RED}Done in $(expr $(date +%s) - $start_time) s.${NC}"
 
 # Install `plantdb` sources:
-echo -e "
-
-${RED}Installing 'plantdb' sources...${NC}"
+echo -e "\n\n${RED}# - Installing 'plantdb' sources...${NC}"
 start_time=$(date +%s)
 python3 -m pip install -r plantdb/requirements.txt
 python3 -m pip install $pip_opt plantdb/
 build_status=$?
 if [ $build_status == 0 ]; then
-  echo -e "${RED}Done in $(expr $(date +%s) - $start_time) s.${NC}"
+  echo -e "${RED}'plantdb' sources installed in $(expr $(date +%s) - $start_time) s.${NC}"
 else
-  echo "${RED}Source install failed with $build_status code!${NC}"
+  echo -e "${RED}'plantdb' sources install failed with code '${build_status}'!${NC}"
   exit $build_status
 fi
 
 # Install `romitask` sources:
-echo -e "
-
-${RED}Installing 'romitask' sources...${NC}"
+echo -e "\n\n${RED}# - Installing 'romitask' sources...${NC}"
 start_time=$(date +%s)
 python3 -m pip install -r romitask/requirements.txt
 python3 -m pip install $pip_opt romitask/
 build_status=$?
 if [ $build_status == 0 ]; then
-  echo -e "${RED}Done in $(expr $(date +%s) - $start_time) s.${NC}"
+  echo -e "${RED}'romitask' sources installed in $(expr $(date +%s) - $start_time) s.${NC}"
 else
-  echo "${RED}Source install failed with $build_status code!${NC}"
+  echo -e "${RED}'romitask' sources install failed with code '${build_status}'!${NC}"
   exit $build_status
 fi
 
 # Install `romiseg` sources:
-echo -e "
-
-${RED}Installing 'romiseg' sources...${NC}"
+echo -e "\n\n${RED}# - Installing 'romiseg' sources...${NC}"
 start_time=$(date +%s)
 python3 -m pip install torch==1.12.1+cu102 torchvision==0.13.1+cu102 --extra-index-url https://download.pytorch.org/whl/cu102
 python3 -m pip install $pip_opt romiseg/
 build_status=$?
 if [ $build_status == 0 ]; then
-  echo -e "${RED}Done in $(expr $(date +%s) - $start_time) s.${NC}"
+  echo -e "${RED}'romiseg' sources installed in $(expr $(date +%s) - $start_time) s.${NC}"
 else
-  echo "${RED}Source install failed with $build_status code!${NC}"
+  echo -e "${RED}'romiseg' sources install failed with code '${build_status}'!${NC}"
   exit $build_status
 fi
 
 # Install `romicgal` sources:
-echo -e "
-
-${RED}Installing 'romicgal' sources...${NC}"
+echo -e "\n\n${RED}# - Installing 'romicgal' sources...${NC}"
 start_time=$(date +%s)
 python3 -m pip install pybind11
 python3 -m pip install $pip_opt romicgal/
 build_status=$?
 if [ $build_status == 0 ]; then
-  echo -e "${RED}Done in $(expr $(date +%s) - $start_time) s.${NC}"
+  echo -e "${RED}'romicgal' sources installed in $(expr $(date +%s) - $start_time) s.${NC}"
 else
-  echo "${RED}Source install failed with $build_status code!${NC}"
+  echo -e "${RED}'romicgal' sources install failed with code '${build_status}'!${NC}"
   exit $build_status
 fi
 
 # Install `dtw` sources:
-echo -e "
-
-${RED}Installing 'dtw' sources...${NC}"
+echo -e "\n\n${RED}# - Installing 'dtw' sources...${NC}"
 start_time=$(date +%s)
 python3 -m pip install -r dtw/requirements.txt
 python3 -m pip install $pip_opt dtw/
 build_status=$?
 if [ $build_status == 0 ]; then
-  echo -e "${RED}Done in $(expr $(date +%s) - $start_time) s.${NC}"
+  echo -e "${RED}'dtw' sources installed in $(expr $(date +%s) - $start_time) s.${NC}"
 else
-  echo "${RED}Source install failed with $build_status code!${NC}"
+  echo -e "${RED}'dtw' sources install failed with code '${build_status}'!${NC}"
   exit $build_status
 fi
 
 # Install `plant-3d-vision` sources:
-echo -e "
-
-${RED}Installing 'plant-3d-vision' sources...${NC}"
+echo -e "\n\n${RED}# - Installing 'plant-3d-vision' sources...${NC}"
 start_time=$(date +%s)
 python3 -m pip install -r requirements.txt
 python3 -m pip install $pip_opt .
 build_status=$?
 if [ $build_status == 0 ]; then
-  echo -e "${RED}Done in $(expr $(date +%s) - $start_time) s.${NC}"
+  echo -e "${RED}'plant-3d-vision' sources installed in $(expr $(date +%s) - $start_time) s.${NC}"
 else
-  echo "${RED}Source install failed with $build_status code!${NC}"
+  echo -e "${RED}'plant-3d-vision' sources install failed with code '${build_status}'!${NC}"
   exit $build_status
 fi
 
 if [ $doc != 0 ]; then
-  echo -e "
-
-${RED}Installing documentation requirements...${NC}"
+  echo -e "\n\n${RED}# - Installing documentation requirements...${NC}"
   start_time=$(date +%s)
   python3 -m pip install -U "Sphinx>5" sphinx-material sphinx-argparse sphinx-copybutton sphinx-panels sphinx-prompt myst-nb myst-parser
 
   build_status=$?
   if [ $build_status == 0 ]; then
-    echo -e "${RED}Done in $(expr $(date +%s) - $start_time) s.${NC}"
+    echo -e "${RED}Documentation requirements installed in $(expr $(date +%s) - $start_time) s.${NC}"
   else
-    echo "${RED}Requirements install failed with $build_status code!${NC}"
+    echo -e "${RED}Documentation requirements install failed with code '${build_status}'!${NC}"
     exit $build_status
   fi
 fi
 
 if [ $notebook != 0 ]; then
-  echo -e "
-
-${RED}Installing notebooks requirements...${NC}"
+  echo -e "\n\n${RED}# - Installing notebook requirements...${NC}"
   start_time=$(date +%s)
-  python3 -m pip install -U notebook ipywidgets plotly
+  python3 -m pip install -U jupyter notebook ipywidgets plotly
 
   build_status=$?
   if [ $build_status == 0 ]; then
-    echo -e "${RED}Done in $(expr $(date +%s) - $start_time) s.${NC}"
+    echo -e "${RED}Notebook requirements installed in $(expr $(date +%s) - $start_time) s.${NC}"
   else
-    echo "${RED}Requirements install failed with $build_status code!${NC}"
+    echo -e "${RED}Notebook requirements install failed with code '${build_status}'!${NC}"
     exit $build_status
   fi
 fi
