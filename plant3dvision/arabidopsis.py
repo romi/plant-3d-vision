@@ -571,10 +571,10 @@ def compute_angles_and_internodes(T, n_nodes_fruit=5, n_nodes_stem=5):
     T : networkx.Graph
         Input tree as a networkx graph.
     n_nodes_fruit : int, optional
-        Number of "fruit nodes" to use to estimate the fruit direction (vector).
+        Number of *fruit nodes* to use to estimate the fruit direction (vector).
         Defaults to ``5``.
     n_nodes_stem : int, optional
-        Number of "stem nodes" to use to estimate the stem direction (vector).
+        Number of *stem nodes* to use to estimate the stem direction (vector).
         Defaults to ``5``.
 
     Returns
