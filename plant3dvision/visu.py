@@ -64,6 +64,51 @@ def plotly_pointcloud(pcd, n_pts=9000, height=900, width=900, title="Point cloud
     return fig
 
 
+def plotly_mesh(mesh, height=900, width=900, title="Triangular mesh", mesh_kwargs=None):
+    """A Plotly representation of the triangular mesh.
+
+    Parameters
+    ----------
+    mesh : open3d.geometry.TriangleMesh
+        The mesh to render.
+    height : int, optional
+        The height of the figure layout, default to `900`.
+    width : int, optional
+        The width of the figure layout, default to `900`.
+    title : str, optional
+        Title to add to the figure, default to `"Triangular mesh"`.
+    mesh_kwargs : dict, optional
+        Mesh styling dictionary, default to `{"color": 'lightgreen', "opacity": 0.8}`.
+
+    Returns
+    -------
+    plotly.graph_objects.Figure
+        The plotly figure to display.
+
+    See Also
+    --------
+    plotly.graph_objects.Mesh3d
+    plotly.graph_objects.Figure
+
+    References
+    ----------
+    Plotly documentation for `Mesh3d`: https://plotly.com/python/reference/mesh3d/
+
+    """
+    mesh_style = {"color": 'lightgreen', "opacity": 0.8}
+    if isinstance(mesh_kwargs, dict):
+        mesh_style.update(mesh_kwargs)
+
+    x, y, z = np.array(mesh.vertices).T
+    i, j, k = np.array(mesh.triangles).T
+    go_mesh = go.Mesh3d(x=x, y=y, z=z, i=i, j=j, k=k, **mesh_style)
+    fig = go.Figure(data=[go_mesh])
+    fig.update_layout(height=height, width=width, title=title, showlegend=False)
+    fig.update_scenes(aspectmode='data')
+
+    return fig
+
+
 def plotly_skeleton(skeleton, height=900, width=900, title="Skeleton", line_kwargs=None):
     """A Plotly representation of the skeleton.
 
@@ -196,7 +241,7 @@ def plotly_treegraph(tree, height=900, width=900, title="Tree graph", mode="line
     for bp_id in bp_ids:
         fruit_nodes = select_fruit_nodes(tree, bp_id, max_node_dist=None)
         if len(fruit_nodes) == 0:
-            continue
+            continue  # skip if no fruit nodes have been found
         elif len(fruit_nodes) > 1:
             # If more than one fruit, iterate & add a suffix to fruit id:
             for n, fnodes in enumerate(fruit_nodes):
