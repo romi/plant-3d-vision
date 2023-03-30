@@ -2,11 +2,11 @@
 # -*- coding: utf-8 -*-
 
 """
-This module contains all function related to the segmentation of arabidopsis from its curve skeleton.
+This module contains all functions related to the segmentation of arabidopsis from its curve skeleton.
 
 The two main functionalities are:
- * Computing a tree  from the curve skeleton
- * Estimating the angle between successive fruits from the tree.
+ * Computing a tree from the curve skeleton
+ * Estimating the angles and internodes distance between successive fruits from the tree.
 """
 import collections
 import operator
