@@ -20,23 +20,24 @@ logger = configure_logger(__name__)
 
 
 def get_main_stem_and_nodes(G, root_node):
-    """
-    Get main stem and branching nodes from graph.
+    """Get main stem and branching nodes from a tree graph.
 
     Parameters
     ----------
     G : networkx.graph
-        input graph
+        The tree graph to analyze.
     root_node : int
-        index of the root node
+        The index of the root node.
 
     Returns
     -------
-    nodes
+    numpy.array
+        The ordered list of node ids defining the main stem.
+    numpy.array
+        The ordered list of node ids defining the branching points.
     """
     # Get main stem as shortest path to point furthest from root
-    predecessors, distances_to_root = nx.dijkstra_predecessor_and_distance(
-        G, root_node)
+    predecessors, distances_to_root = nx.dijkstra_predecessor_and_distance(G, root_node)
     i = max(distances_to_root.items(), key=operator.itemgetter(1))[0]
     main_stem = [i]
     current_node = i
@@ -45,12 +46,11 @@ def get_main_stem_and_nodes(G, root_node):
         main_stem.append(current_node)
     main_stem = np.array(main_stem, dtype=int)
 
-    # Get nodes, sorted from closest to furthest to the root
+    # Get branching points, sorted from closest to furthest from the root
     n_neighbors = np.array([len(list(nx.neighbors(G, g)))
                             for g in main_stem], dtype=int)
-    nodes = main_stem[n_neighbors > 2]
-    nodes = nodes
-    return main_stem, nodes
+    branching_nodes = main_stem[n_neighbors > 2]
+    return main_stem, branching_nodes
 
 
 def compute_mst(G, main_stem, nodes):
