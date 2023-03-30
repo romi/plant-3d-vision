@@ -10,6 +10,7 @@ The two main functionalities are:
 """
 import collections
 import operator
+import sys
 
 import networkx as nx
 import numpy as np
@@ -152,9 +153,7 @@ def fit_plane(points):
 
 
 def nx_to_tx(T, attributes, root_id):
-    """
-    Converts a networkx graph object which is a tree into
-    a treex tree.
+    """Converts a networkx tree graph object which is a tree into a treex tree.
 
     Parameters
     ----------
@@ -165,7 +164,19 @@ def nx_to_tx(T, attributes, root_id):
         in the graph.
     root_id: int
         id of the root node
+
+    Returns
+    -------
+    treex.tree.Tree
+        The created treex tree.
     """
+    try:
+        from treex import tree
+    except ImportError:
+        logger.critical("Could not find package `treex`!")
+        logger.info(f"Install it with `conda install treex -c mosaic`.")
+        sys.exit("Missing `treex` package!")
+
     successors = nx.dfs_successors(T, source=root_id)
     TT = tree.Tree()
     for k in attributes[root_id].keys():
