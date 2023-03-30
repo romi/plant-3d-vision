@@ -119,19 +119,19 @@ def compute_mst(G, main_stem, nodes):
 
 
 def build_graph(vertices, edges):
-    """
-    Buils a networkx graph from a list of vertices and edges.
+    """Builds a networkx graph from a list of vertices and edges.
 
     Parameters
     ----------
-    vertices : np.ndarray
+    vertices : numpy.ndarray
         Input Nx3 array of points
-    edges : np.ndarray
+    edges : numpy.ndarray
         Input Mx2 array of lines between points (dtype = int)
 
     Returns
     -------
-    nx.Graph
+    networkx.Graph
+        The graph obtained from the list of vertices and edges.
     """
     G = nx.Graph()
     G.add_nodes_from(range(0, vertices.shape[0]))
