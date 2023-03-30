@@ -4,6 +4,10 @@ import networkx as nx
 import numpy as np
 from scipy.spatial.distance import euclidean
 
+from romitask.log import configure_logger
+
+logger = configure_logger(__name__)
+
 
 def get_root_node_id(tree):
     """Returns the node id of the `tree` root.
