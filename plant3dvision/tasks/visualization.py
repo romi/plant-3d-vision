@@ -78,6 +78,9 @@ class Visualization(RomiTask):
     thumbnail_size : luigi.IntParameter, optional
         Maximum allowed thumbnail size in carousel.
         Defaults to ``150``.
+    align_sequences : luigi.BoolParameter, optional
+        If ``True`` (default), use ``DTW`` library to align sequences of angles and internode on manual measures.
+        If no manual measure exists, this will do nothing.
     """
     upstream_task = luigi.TaskParameter(default=Colmap)
 
@@ -102,6 +105,7 @@ class Visualization(RomiTask):
     max_image_size = luigi.IntParameter(default=1500)
     max_point_cloud_size = luigi.IntParameter(default=10000000)
     thumbnail_size = luigi.IntParameter(default=150)
+    align_sequences = luigi.BoolParameter(default=True)
 
     def __init__(self):
         super().__init__()
@@ -195,12 +199,41 @@ class Visualization(RomiTask):
             f.import_file(os.path.join(tmpdir, 'scan.zip'))
         files_metadata["zip"] = 'scan'
 
+        # MEASURES
+        try:
+            self.upstream_virtualplantobj().complete()
+        except:
+            measures = scan.get_measures()
+        else:
+            measures = {}
+            angles = self.upstream_virtualplantobj().output_file().get_metadata("angles")
+            internodes = self.upstream_virtualplantobj().output_file().get_metadata("internodes")
+            measures["angles"] = angles
+            measures["internodes"] = internodes
+
+        f_measures = output_fileset.create_file("measures")
+        io.write_json(f_measures, measures)
+        files_metadata["measures"] = "measures"
+
         # ANGLES
         if self.upstream_angles().complete():
             logger.info("Preparing angle and internode sequences...")
             angles_file = self.upstream_angles().output_file()
+            sequences = io.read_json(angles_file)
+            if self.align_sequences:
+                # Automatic alignment of sequences with DTW:
+                from dtw.tasks.compare_sequences import sequence_comparison
+                max_inter = np.max(list(sequences['internodes']) + list(measures["internodes"]))
+                dtwcomputer = sequence_comparison(np.array([sequences['angles'], sequences['internodes']]).T,
+                                                  np.array([measures["angles"], measures["internodes"]]).T,
+                                                  names=["Angles", "Internodes"],
+                                                  dist_type="mixed", mixed_type=[True, False],
+                                                  mixed_spread=[1, max_inter])
+                angles, internodes = dtwcomputer.get_aligned_test_sequence().T
+                sequences['angles'], sequences['internodes'] = list(angles), list(internodes)
+
             f = output_fileset.create_file(angles_file.id)
-            io.write_json(f, io.read_json(angles_file))
+            io.write_json(f, sequences)
             files_metadata["angles"] = angles_file.id
 
         # SKELETON
@@ -259,20 +292,6 @@ class Visualization(RomiTask):
 
             files_metadata["images"].append(image_id)
             files_metadata["thumbnails"].append(thumbnail_id)
-
-        # MEASURES
-        if self.use_colmap_poses:
-            measures = scan.get_measures()
-        else:
-            measures = {}
-            angles = self.upstream_virtualplantobj().output_file().get_metadata("angles")
-            internodes = self.upstream_virtualplantobj().output_file().get_metadata("internodes")
-            measures["angles"] = angles
-            measures["internodes"] = internodes
-
-        f_measures = output_fileset.create_file("measures")
-        io.write_json(f_measures, measures)
-        files_metadata["measures"] = "measures"
 
         # POINT CLOUD GROUND TRUTH
         if self.upstream_pcd_ground_truth().complete():
