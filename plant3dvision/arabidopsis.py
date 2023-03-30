@@ -617,64 +617,39 @@ def compute_angles_and_internodes(T, n_nodes_fruit=5, n_nodes_stem=5):
         stem_dict[umn] = T.nodes[umn]["main_stem_id"]
     main_stem = [k for k, v in sorted(stem_dict.items(), key=lambda item: item[1])]
 
-    # Detecting branching points with more than three edges:
-    weird_bp = [bp for bp in branching_points if T.degree(bp) > 3]
-    if len(weird_bp) >= 1:
-        logger.warning(f"Found {len(weird_bp)} weird branching points...")
-
     for i in range(len(branching_points) - 1):
         node_point = np.array(T.nodes[branching_points[i]]["position"])
         node_next_point = np.array(T.nodes[branching_points[i + 1]]["position"])
 
-        # Check hom many fruits we have at this branching point:
-        fruit_nodes = get_fruit(T, i)
-        subT = nx.subgraph(T, fruit_nodes)  # get the subgraph made of "fruits nodes"
-        node_fruits = list(nx.connected_components(subT))  # get the connected "fruits nodes" as a list of list of nodes
-        # TODO: Should we use a min fruit size limit greater than 1... like `n_nodes_fruit` ?!
-        node_fruits = [nodes for nodes in node_fruits if len(nodes) > 1]  # filter to get fruits with more than one node
-        n_fruits = len(node_fruits)
-        if n_fruits > 1:
-            logger.info(f"Found {n_fruits} fruits at branching point id {branching_points[i]} (node id: {i})!")
+        node_fruit_points = [np.array(T.nodes[n]["position"]) for n in get_fruit(T, i)]
 
-        bp_id = branching_points[i]
-        for fruit_node_ids in node_fruits:
-            vec_dict = fruit_stem_vector(T, bp_id, fruit_node_ids, main_stem, n_nodes_fruit, n_nodes_stem)
-            stem_dir = vec_dict["stem_direction"]
-            if stem_dir.dot(node_next_point - node_point) < 0:
-                vec_dict["stem_direction"] = -vec_dict["stem_direction"]
-            node_info_list.append(vec_dict)
-            fruit_points = [T.nodes[n]["position"] for n in fruit_node_ids]
-            all_fruit_points.append(fruit_points)
+        if len(node_fruit_points) > 1:
+            vertices_fruit_plane_est = node_fruit_points[0:n_nodes_fruit]
+            idx = main_stem.index(branching_points[i])
+            stem_neighbors_id = main_stem[idx - n_nodes_stem // 2:idx + n_nodes_stem // 2]
+            vertices_node_plane_est = [T.nodes[stem_id]["position"] for stem_id in stem_neighbors_id]
 
-        # node_fruit_points = [np.array(T.nodes[n]["position"]) for n in get_fruit(T, i)]
-        #
-        # if len(node_fruit_points) > 1:
-        #     vertices_fruit_plane_est = node_fruit_points[0:n_nodes_fruit]
-        #     idx = main_stem.index(branching_points[i])
-        #     stem_neighbors_id = main_stem[idx - n_nodes_stem // 2:idx + n_nodes_stem // 2]
-        #     vertices_node_plane_est = [T.nodes[stem_id]["position"] for stem_id in stem_neighbors_id]
-        #
-        #     points = np.vstack([vertices_fruit_plane_est, vertices_node_plane_est])
-        #     _, v1, v2 = fit_plane(points)
-        #
-        #     fruit_points = np.vstack(node_fruit_points)
-        #     fruit_mean = fruit_points.mean(axis=0)
-        #     all_fruit_points.append(fruit_points.tolist())
-        #
-        #     new_v1 = fruit_mean - node_point
-        #     new_v1 = new_v1.dot(v1) * v1 + new_v1.dot(v2) * v2
-        #     new_v1 /= np.linalg.norm(new_v1)
-        #
-        #     # Set v1 as the fruit direction and v2 as the stem direction
-        #     v1, v2 = new_v1, v2 - v2.dot(new_v1) * new_v1
-        #     if v2.dot(node_next_point - node_point) < 0:
-        #         v2 = - v2
-        #
-        #     node_info_list.append({
-        #         "node_point": node_point,
-        #         "fruit_direction": v1,
-        #         "stem_direction": v2
-        #     })
+            points = np.vstack([vertices_fruit_plane_est, vertices_node_plane_est])
+            _, v1, v2 = fit_plane(points)
+
+            fruit_points = np.vstack(node_fruit_points)
+            fruit_mean = fruit_points.mean(axis=0)
+            all_fruit_points.append(fruit_points.tolist())
+
+            new_v1 = fruit_mean - node_point
+            new_v1 = new_v1.dot(v1) * v1 + new_v1.dot(v2) * v2
+            new_v1 /= np.linalg.norm(new_v1)
+
+            # Set v1 as the fruit direction and v2 as the stem direction
+            v1, v2 = new_v1, v2 - v2.dot(new_v1) * new_v1
+            if v2.dot(node_next_point - node_point) < 0:
+                v2 = - v2
+
+            node_info_list.append({
+                "node_point": node_point,
+                "fruit_direction": v1,
+                "stem_direction": v2
+            })
 
     for i in range(1, len(node_info_list)):
         n1 = np.cross(node_info_list[i - 1]["fruit_direction"], node_info_list[i - 1]["stem_direction"])
