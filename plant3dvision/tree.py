@@ -145,7 +145,7 @@ def select_by_path_distance(tree, nodes, max_node_dist):
     return sel_nodes
 
 
-def select_fruit_nodes(tree, bp_node_id, max_node_dist=10.):
+def select_fruit_nodes(tree, bp_node_id, max_node_dist=10., min_fruit_length=0.):
     """Select the fruit nodes attached to a given branching point from a tree graph.
 
     Parameters
@@ -158,6 +158,10 @@ def select_fruit_nodes(tree, bp_node_id, max_node_dist=10.):
         The maximum distance to the branching point to use to select fruit nodes.
         If `None` all fruits node are returned.
         Else compute the path Euclidean distance.
+    min_fruit_length : float, optional
+        The minimum size of a fruit to consider it as a valid fruit.
+        It is expressed in the same unit as the coordinates, usually millimeters.
+        Defaults to `10.`
 
     Returns
     -------
@@ -188,6 +192,18 @@ def select_fruit_nodes(tree, bp_node_id, max_node_dist=10.):
         fruit_tree = tree.subgraph([bp_node_id] + list(fruit_node))
         topo_dist = topological_distance(fruit_tree, bp_node_id)
         fruit_nodes[n] = [k for k, v in sorted(topo_dist.items(), key=lambda item: item[1])]
+
+    too_small_fruits = []  # index of small fruits
+    for n, fruit_node in enumerate(fruit_nodes):
+        fruit_length = path_distance(tree, [bp_node_id] + list(fruit_node))
+        if fruit_length < min_fruit_length:
+            fruit_length = round(fruit_length, 3)
+            logger.warning(f"A small fruit, of size {fruit_length}, has been found at branching point {bp_node_id}.")
+            too_small_fruits.append(n)
+
+    if len(too_small_fruits) != 0:
+        for idx in too_small_fruits[::-1]:
+            fruit_nodes.pop(idx)
 
     if max_node_dist is not None:
         # Restrict to those within a given path Euclidean distance to branching point:
