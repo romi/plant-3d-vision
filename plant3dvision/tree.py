@@ -115,6 +115,33 @@ def nodes_coordinates(tree, nodes):
     return np.array([tree.nodes[n]["position"] for n in nodes])
 
 
+def path_distance(tree, nodes):
+    """Compute the path distance for a given list of nodes.
+
+    Parameters
+    ----------
+    tree : networkx.Graph
+        The tree graph containing the nodes coordinates.
+    nodes : list of int
+        The ordered list of nodes to use.
+
+    Returns
+    -------
+    float
+        The path distance for the selected nodes.
+
+    Notes
+    -----
+    We do not check the nodes are actually connected in the graph, we trust you not to mess up!
+    """
+    overall_dist = 0  # distance to first node
+    for prev, next in zip(nodes[:-1], nodes[1:]):
+        # Compute distance for a pair of nodes:
+        overall_dist += euclidean(tree.nodes[prev]["position"], tree.nodes[next]["position"])
+
+    return overall_dist
+
+
 def select_by_path_distance(tree, nodes, max_node_dist):
     """Select nodes based on the path distance to the first node of the list.
 
