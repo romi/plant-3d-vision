@@ -21,10 +21,10 @@ class TreeGraph(RomiTask):
         Upstream task that generate the skeleton.
         Defaults to ``CurveSkeleton``.
     z_axis : luigi.IntParameter
-        Axis to use for stem orientation to get the root node.
+        Axis to use to get the *root node* as the node with minimal coordinates for that axis.
         Defaults to ``2``.
     stem_axis_inverted : luigi.BoolParameter
-        Direction of the stem along the specified axis, inverted or not.
+        Direction of the stem along the specified `stem_axis`, inverted or not.
         Defaults to ``False``.
 
     Module: plant3dvision.tasks.arabidopsis
@@ -42,7 +42,7 @@ class TreeGraph(RomiTask):
         f = io.read_json(self.input_file())
         t = arabidopsis.compute_tree_graph(f["points"], f["lines"], self.z_axis, self.stem_axis_inverted)
         io.write_graph(self.output_file(), t)
-
+        return
 
 class AnglesAndInternodes(RomiTask):
     """ Computes organs successive angles and internodes.
@@ -55,21 +55,27 @@ class AnglesAndInternodes(RomiTask):
     organ_type : luigi.Parameter
         Name of the organ to consider when using organ segmented mesh or organ segmented point-cloud.
         Defaults to ``"fruit"``.
+    node_sampling_dist : luigi.FloatParameter
+        The path distance to use to sample tree nodes around the branching point for organ direction estimation.
+        Used with the tree graph.
+        Defaults to ``10.``.
     characteristic_length : luigi.FloatParameter
         ???. Used with organ segmented mesh or organ segmented point-cloud.
         Defaults to ``1.``.
     stem_axis : luigi.IntParameter
-        ???. Used with organ segmented mesh or organ segmented point-cloud.
+        Axis to use to get the *root node* as the node with minimal coordinates for that axis.
+        Used with organ segmented mesh or organ segmented point-cloud.
         Defaults to ``2``.
     stem_axis_inverted : luigi.BoolParameter
-        ???. Used with organ segmented mesh or organ segmented point-cloud.
+        Direction of the stem along the specified `stem_axis`, inverted or not.
+        Used with organ segmented mesh or organ segmented point-cloud.
         Defaults to ``False``.
     min_elongation_ratio : luigi.FloatParameter
         ???. Used with organ segmented mesh or organ segmented point-cloud.
         Defaults to ``2.0``.
     min_fruit_size : luigi.FloatParameter
-        ???. Used with organ segmented mesh or organ segmented point-cloud.
-        Defaults to ``6``.
+        Minimum size of a fruit, in same units as coordinates, so should be millimeters.
+        Defaults to ``6.``.
 
     Notes
     -----
@@ -85,21 +91,31 @@ class AnglesAndInternodes(RomiTask):
     upstream_task = luigi.TaskParameter(default=TreeGraph)
 
     organ_type = luigi.Parameter(default="fruit")
+    node_sampling_dist = luigi.FloatParameter(default=10.0)
     characteristic_length = luigi.FloatParameter(default=1.0)
 
     stem_axis = luigi.IntParameter(default=2)
     stem_axis_inverted = luigi.BoolParameter(default=False)
 
     min_elongation_ratio = luigi.FloatParameter(default=2.0)
-    min_fruit_size = luigi.FloatParameter(default=6)
+    min_fruit_size = luigi.FloatParameter(default=6.)
 
     def run(self):
         task_name = str(self.upstream_task.task_family)
-        from plant3dvision import arabidopsis
 
-        if task_name == "TreeGraph":  # angles and internodes from graph
+        if task_name == "TreeGraph":
+            from plant3dvision.arabidopsis import compute_stem_and_fruit_directions
+            from plant3dvision.arabidopsis import compute_angles_and_internodes_from_directions
             t = io.read_graph(self.input_file())
-            measures = arabidopsis.compute_angles_and_internodes(t)
+            # Compute angles and internodes from tree graph:
+            # measures = arabidopsis.compute_angles_and_internodes(t)
+            fruit_dirs, stem_dirs, bp_coords, fruit_pts = compute_stem_and_fruit_directions(t,
+                                                                                           max_node_dist=float(
+                                                                                               self.node_sampling_dist),
+                                                                                           min_fruit_length=float(
+                                                                                               self.min_fruit_size))
+            measures = compute_angles_and_internodes_from_directions(fruit_dirs, stem_dirs, bp_coords)
+            measures["fruit_points"] = [list(map(list, fpts)) for fpts in fruit_pts]  # array are not JSON serializable
 
         # angles and internodes from point cloud
         else:
@@ -128,10 +144,11 @@ class AnglesAndInternodes(RomiTask):
                 raise ValueError("upstream task not implemented, choose among : TreeGraph, ClusteredMesh "
                                  "or OrganSegmentation")
 
-            measures = arabidopsis.angles_and_internodes_from_point_cloud(stem_pcd, organ_pcd_list,
+            from plant3dvision.arabidopsis import angles_and_internodes_from_point_cloud
+            measures = angles_and_internodes_from_point_cloud(stem_pcd, organ_pcd_list,
                                                                           self.characteristic_length,
                                                                           self.stem_axis, self.stem_axis_inverted,
                                                                           self.min_elongation_ratio,
                                                                           self.min_fruit_size)
-
         io.write_json(self.output_file(), measures)
+        return
