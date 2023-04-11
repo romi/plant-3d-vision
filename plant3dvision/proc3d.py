@@ -157,35 +157,6 @@ def skeletonize(mesh):
     return {'points': points.tolist(), 'lines': lines.tolist()}
 
 
-def draw_skeleton(skeleton):
-    """
-
-    Parameters
-    ----------
-    skeleton
-
-    Returns
-    -------
-
-    """
-    import matplotlib.pyplot as plt
-
-    ax = plt.figure().add_subplot(projection='3d')
-
-    points = skeleton["points"]
-    lines = skeleton["lines"]
-    for line in lines:
-        start, stop = line
-        xt, yt, zt = points[start]
-        xp, yp, zp = points[stop]
-        print(xt+xp)
-        print(yt+yp)
-        print(zt+zp)
-        ax.plot(xt+xp, yt+yp, zt+zp, label='Curved skeleton')
-
-    ax.legend()
-
-
 def knn_graph(pcd, k):
     """Computes weighted graph connecting points to their k-nearest neighbours.
 
