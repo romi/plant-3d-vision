@@ -11,7 +11,8 @@ import numpy as np
 import plotly.graph_objects as go
 
 
-def plotly_pointcloud(pcd, n_pts=9000, height=900, width=900, title="Point cloud", marker_kwargs=None):
+def plotly_pointcloud(pcd, n_pts=9000, height=900, width=900, title="Point cloud",
+                      marker_kwargs=None, layout_kwargs=None):
     """A Plotly representation of the point cloud.
 
     Parameters
@@ -28,6 +29,8 @@ def plotly_pointcloud(pcd, n_pts=9000, height=900, width=900, title="Point cloud
         Title to add to the figure, default to `"Point cloud"`.
     marker_kwargs : dict, optional
         Marker styling dictionary, default to `{"size": 1, "color": 'green', "opacity": 0.8}`.
+    layout_kwargs : dict, optional
+        Layout styling dictionary, may override `height`, `width` & `title`.
 
     Returns
     -------
@@ -42,6 +45,7 @@ def plotly_pointcloud(pcd, n_pts=9000, height=900, width=900, title="Point cloud
     References
     ----------
     Plotly documentation for `Scatter3d`: https://plotly.com/python/reference/scatter3d/
+    Plotly documentation for `Layout`: https://plotly.com/python/reference/layout/
 
     """
     if len(pcd.points) > n_pts:
@@ -57,14 +61,19 @@ def plotly_pointcloud(pcd, n_pts=9000, height=900, width=900, title="Point cloud
     x, y, z = pcd_arr.T
     sc = go.Scatter3d(x=x, y=y, z=z, mode="markers", marker=marker_style)
 
+    layout_style = dict(height=height, width=width, title=title, showlegend=False)
+    if isinstance(layout_kwargs, dict):
+        layout_style.update(layout_kwargs)
+
     fig = go.Figure(data=sc)
-    fig.update_layout(height=height, width=width, title=title, showlegend=False)
+    fig.update_layout(**layout_style)
     fig.update_scenes(aspectmode='data')
 
     return fig
 
 
-def plotly_mesh(mesh, height=900, width=900, title="Triangular mesh", mesh_kwargs=None):
+def plotly_mesh(mesh, height=900, width=900, title="Triangular mesh",
+                mesh_kwargs=None, layout_kwargs=None):
     """A Plotly representation of the triangular mesh.
 
     Parameters
@@ -79,6 +88,8 @@ def plotly_mesh(mesh, height=900, width=900, title="Triangular mesh", mesh_kwarg
         Title to add to the figure, default to `"Triangular mesh"`.
     mesh_kwargs : dict, optional
         Mesh styling dictionary, default to `{"color": 'lightgreen', "opacity": 0.8}`.
+    layout_kwargs : dict, optional
+        Layout styling dictionary, may override `height`, `width` & `title`.
 
     Returns
     -------
@@ -93,6 +104,7 @@ def plotly_mesh(mesh, height=900, width=900, title="Triangular mesh", mesh_kwarg
     References
     ----------
     Plotly documentation for `Mesh3d`: https://plotly.com/python/reference/mesh3d/
+    Plotly documentation for `Layout`: https://plotly.com/python/reference/layout/
 
     """
     mesh_style = {"color": 'lightgreen', "opacity": 0.8}
@@ -102,20 +114,26 @@ def plotly_mesh(mesh, height=900, width=900, title="Triangular mesh", mesh_kwarg
     x, y, z = np.array(mesh.vertices).T
     i, j, k = np.array(mesh.triangles).T
     go_mesh = go.Mesh3d(x=x, y=y, z=z, i=i, j=j, k=k, **mesh_style)
+
+    layout_style = dict(height=height, width=width, title=title, showlegend=False)
+    if isinstance(layout_kwargs, dict):
+        layout_style.update(layout_kwargs)
+
     fig = go.Figure(data=[go_mesh])
-    fig.update_layout(height=height, width=width, title=title, showlegend=False)
+    fig.update_layout(**layout_style)
     fig.update_scenes(aspectmode='data')
 
     return fig
 
 
-def plotly_skeleton(skeleton, height=900, width=900, title="Skeleton", line_kwargs=None):
+def plotly_skeleton(skeleton, height=900, width=900, title="Skeleton",
+                    line_kwargs=None, layout_kwargs=None):
     """A Plotly representation of the skeleton.
 
     Parameters
     ----------
-    skeleton : networkx.Graph
-        The skeleton to render.
+    skeleton : dict
+        The skeleton to render, a dictionary with "points" and "lines".
     height : int, optional
         The height of the figure layout, default to `900`.
     width : int, optional
@@ -124,6 +142,8 @@ def plotly_skeleton(skeleton, height=900, width=900, title="Skeleton", line_kwar
         Title to add to the figure, default to `"Skeleton"`.
     line_kwargs : dict, optional
         Line styling dictionary, default to `{"size": 1, "color": 'green', "opacity": 0.8}`.
+    layout_kwargs : dict, optional
+        Layout styling dictionary, may override `height`, `width` & `title`.
 
     Returns
     -------
@@ -132,16 +152,18 @@ def plotly_skeleton(skeleton, height=900, width=900, title="Skeleton", line_kwar
 
     See Also
     --------
+    plant3dvision.proc3d.skeletonize
     plotly.graph_objects.Scatter3d
     plotly.graph_objects.Figure
 
     References
     ----------
     Plotly documentation for `Scatter3d`: https://plotly.com/python/reference/scatter3d/
+    Plotly documentation for `Layout`: https://plotly.com/python/reference/layout/
 
     """
-    points = {n: skeleton.nodes[n]['position'] for n in skeleton.nodes}
-    lines = [list(skeleton.edges)[j] for j in range(len(skeleton.edges))]
+    points = skeleton["points"]
+    lines = skeleton["lines"]
 
     line_style = {"width": 4}
     if isinstance(line_kwargs, dict):
@@ -155,14 +177,20 @@ def plotly_skeleton(skeleton, height=900, width=900, title="Skeleton", line_kwar
         sc = go.Scatter3d(x=[xt, xp], y=[yt, yp], z=[zt, zp], mode='lines', line=line_style)
         lines_3d.append(sc)
 
+    layout_style = dict(height=height, width=width, title=title, showlegend=False)
+    if isinstance(layout_kwargs, dict):
+        layout_style.update(layout_kwargs)
+
+
     fig = go.Figure(data=lines_3d)
-    fig.update_layout(height=height, width=width, title=title, showlegend=False)
+    fig.update_layout(**layout_style)
     fig.update_scenes(aspectmode='data')
 
     return fig
 
 
-def plotly_treegraph(tree, height=900, width=900, title="Tree graph", mode="lines", line_kwargs=None, marker_kwargs=None):
+def plotly_treegraph(tree, height=900, width=900, title="Tree graph", mode="lines",
+                     line_kwargs=None, marker_kwargs=None, layout_kwargs=None):
     """A Plotly representation of the tree graph.
 
     Parameters
@@ -182,6 +210,8 @@ def plotly_treegraph(tree, height=900, width=900, title="Tree graph", mode="line
         Line styling dictionary, default to `{"size": 4}`, blue for main stem and cycling colors for fruits.
     marker_kwargs : dict, optional
         Marker styling dictionary, default to `None`.
+    layout_kwargs : dict, optional
+        Layout styling dictionary, may override `height`, `width` & `title`.
 
     Returns
     -------
@@ -255,8 +285,12 @@ def plotly_treegraph(tree, height=900, width=900, title="Tree graph", mode="line
                                      marker_kwargs=marker_kwargs,
                                      suffix=""))
 
+    layout_style = dict(height=height, width=width, title=title, showlegend=True)
+    if isinstance(layout_kwargs, dict):
+        layout_style.update(layout_kwargs)
+
     fig = go.Figure(data=go_data)
-    fig.update_layout(height=height, width=width, title=title, showlegend=True)
+    fig.update_layout(**layout_style)
     fig.update_scenes(aspectmode='data')
 
     return fig
