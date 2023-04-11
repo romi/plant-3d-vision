@@ -762,6 +762,10 @@ def compute_stem_and_fruit_directions(tree, max_node_dist=10., branching_points=
     branching_points : list of int, optional
         The list of branching points to consider.
         If `None` (default), the list of all branching node is computed and used.
+    min_fruit_length : float, optional
+        The minimum size of a fruit to consider it as a valid fruit.
+        It is expressed in the same unit as the coordinates, usually millimeters.
+        Defaults to `10.`
 
     Returns
     -------
@@ -783,6 +787,7 @@ def compute_stem_and_fruit_directions(tree, max_node_dist=10., branching_points=
       * *fruits points* are sample from the *branching point* to a maximum path Euclidean distance from it
       * if **multiple fruits** are attached to the same *branching point*, they are treated individually
       * the *branching point* is projected on the stem line
+      * small fruits can be excluded
 
     See Also
     --------
