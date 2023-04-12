@@ -68,6 +68,7 @@ class Voxels(RomiTask):
     upstream_mask = luigi.TaskParameter(default=Masks)
     upstream_colmap = luigi.TaskParameter(default=Colmap)
 
+    query = luigi.DictParameter(default={})
     camera_metadata = luigi.Parameter(default='colmap_camera')  # camera definition (intrinsic & poses) in metadata
     voxel_size = luigi.FloatParameter(default=1.0)
     type = luigi.Parameter(default="carving")
@@ -86,6 +87,8 @@ class Voxels(RomiTask):
     def run(self):
         from plant3dvision.cl import Backprojection
         masks_fileset = self.input()['masks'].get()
+        masks_files = masks_fileset.get_files(query=self.query)
+        logger.info(f"Processing a list of {len(masks_files)} mask files...")
 
         # - Define bounding-box to use to define the shape of the voxel array:
         # Get it from the `Scan` metadata:
@@ -147,9 +150,11 @@ class Voxels(RomiTask):
         sc = Backprojection(shape=[nx, ny, nz], origin=[x_min, y_min, z_min], voxel_size=float(self.voxel_size),
                             type=str(self.type), labels=labels, log=bool(self.log))
         logger.debug("Processing the mask fileset...")
-        vol = sc.process_fileset(masks_fileset, str(self.camera_metadata), bool(self.invert))
+        vol = sc.process_fileset(masks_files, str(self.camera_metadata), bool(self.invert))
         logger.debug(f"Voxel volume shape: {vol.shape}")
         logger.debug(f"Voxel volume size: {vol.size}")
+        if len(np.unique(vol)) == 1:
+            logger.warning("There is something WRONG with the volume!")
 
         # If conversion to log was requested, convert back applying `np.exp`
         if self.log and self.type == "averaging":

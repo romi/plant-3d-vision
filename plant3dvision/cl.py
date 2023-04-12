@@ -20,6 +20,7 @@ import pyopencl as cl
 
 from plant3dvision.proc3d import point2index
 from plantdb import io
+from plantdb.db import Fileset
 from romitask.log import configure_logger
 
 logger = configure_logger(__name__)
@@ -218,8 +219,8 @@ class Backprojection(object):
 
         Parameters
         ----------
-        fs : plantdb.DB.Fileset
-            The images Fileset to process.
+        fs : plantdb.DB.Fileset or list of plantdb.DB.File
+            The images `Fileset` or list of images `File` to process.
         camera_metadata : str
             Name of the metadata to use to get the camera intrinsics (fx, fy, cx, cy) & poses.
         invert : bool, optional
@@ -241,19 +242,23 @@ class Backprojection(object):
 
         Parameters
         ----------
-        fs : plantdb.DB.Fileset
-            The images Fileset to process.
+        fs : plantdb.DB.Fileset or list of plantdb.DB.File
+            The images `Fileset` or list of images `File` to process.
         camera_metadata : str
             Name of the metadata to use to get the camera intrinsics (fx, fy, cx, cy) & poses ('rotmat', 'tvec').
-        label: str, optional
+        label : str, optional
             Name of the label to process, can be `None`.
-        invert: bool, optional
+        invert : bool, optional
             If ``True``, invert the values of the mask file to process.
             Defaults to ``False``.
 
         """
         self.clear()  # clear
-        for fi in fs.get_files():
+
+        if isinstance(fs, Fileset):
+            fs = fs.get_files()
+
+        for fi in fs:
             # Skip file if not of the right label (when defined)
             if label is not None and fi.get_metadata("channel") != label:
                 continue

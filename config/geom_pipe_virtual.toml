@@ -1,17 +1,12 @@
-[Masks]
-upstream_task = "ImagesFilesetExists"
-query = "{\"channel\":\"rgb\"}"
-type = "linear"
-parameters = "[0, 1, 0]"
-dilation = 2 # default to 0
-binarize = true
-threshold = 0.3
-
 [Voxels]
-upstream_mask = "Masks"
-use_colmap_poses = false
-voxel_size = 0.1
+upstream_mask = "ImagesFilesetExists"
+upstream_colmap = "DummyTask"
+query = "{\"channel\":\"background\"}"
+camera_metadata = "camera"
+voxel_size = 0.05
 type = "carving"
+log = false
+invert = true
 
 [PointCloud]
 upstream_task = "Voxels"
