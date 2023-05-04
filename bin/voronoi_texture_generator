@@ -1,3 +1,10 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+Generate a texture image using a voronoi partitioning of a random 2D space sampling.
+"""
+
 import argparse
 import logging
 
@@ -14,14 +21,15 @@ from os.path import splitext
 from numpy.random import default_rng
 from scipy.spatial import Voronoi
 
-DESCRIPTION = """Generate texture images."""
+DESCRIPTION = """Generate a texture image using a voronoi partitioning of a random 2D space sampling."""
 DEFAULT_WIDTH = 21
 DEFAULT_HEIGHT = 29.7
 OUT_PATH = getcwd()
 
 
 def parsing():
-    parser = argparse.ArgumentParser(description=DESCRIPTION)
+    parser = argparse.ArgumentParser(description=DESCRIPTION,
+                                     epilog="Default image format is A4 paper.")
 
     parser.add_argument('filename', type=str,
                         help="the name of the output image.")
@@ -128,7 +136,7 @@ def main():
         if ext == "":
             ext = '.png'
         for idx in tqdm(range(args.n_images), unit='images'):
-            args.filename = f"{fname}_{idx+1}{ext}"
+            args.filename = f"{fname}_{idx + 1}{ext}"
             generates_texture(args)
 
     return

@@ -13,6 +13,7 @@ opts = dict(
         'bin/create_charuco_board',
         'bin/npz_volume_viewer',
         'bin/robustness_evaluation',
+        'bin/voronoi_texture_generator',
     ],
     author='Timothée Wintz',
     author_email='timothee@timwin.fr',
