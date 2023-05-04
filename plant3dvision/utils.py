@@ -112,8 +112,8 @@ def yes_no_choice(question: str, default=True) -> bool:
     >>> yes_no_choice("Is ROMI an awesome project?")
     Is ROMI an awesome project? [YES/no]>?
     Out[3]: True
-    >>> yes_no_choice("Luke, I am your father!", default=False)
-    Luke, I am your father! [yes/NO]>?
+    >>> yes_no_choice("I am your father!", default=False)
+    I am your father! [yes/NO]>?
     Out[5]: False
 
     """
