@@ -8,6 +8,7 @@ opts = dict(
     packages=find_packages(),
     version='0.12.99',
     scripts=[
+        'bin/check_measures',
         'bin/colmap_poses',
         'bin/create_charuco_board',
         'bin/npz_volume_viewer',

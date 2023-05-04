@@ -1,0 +1,174 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+Check manual measurement files `measures.json`.
+"""
+
+import argparse
+import glob
+import sys
+from pathlib import Path
+
+from plantdb.fsdb import FSDB
+from romitask.log import configure_logger
+
+
+def parsing():
+    """Parse input arguments.
+
+    Returns
+    -------
+    parser.parse_args
+        Parsed input arguments.
+    """
+    DESC = """Check manual measurement files `measures.json`."""
+    parser = argparse.ArgumentParser(description=DESC)
+
+    parser.add_argument("dataset_path", nargs='+',
+                        help="Path to the dataset(s).")
+
+    parser.add_argument("-r", "--remove", action='store_true',
+                        help="Use this to remove any invalid 'measure.json' file without further question.")
+    parser.add_argument("-d", "--default", type=bool, default=False,
+                        help="Default suggestion when facing invalid 'measure.json' file, keep it by default.")
+
+    return parser
+
+
+def check_measures(args):
+    """Check the validity of the `measure.json` file.
+
+    Parameters
+    ----------
+    args : parser.parse_args
+        Parsed input arguments.
+    """
+    dataset_path = Path(args.dataset_path)  # `/path/to/romi_db/scan_id`
+    db_location = dataset_path.parent  # `/path/to/romi_db`
+    scan_name = dataset_path.name  # `scan_id`
+    # - Connect to database:
+    db = FSDB(db_location)
+    db.connect()
+
+    # - Get the dataset corresponding to the selected scan:
+    scan = db.get_scan(scan_name)
+    # - Get the measures:
+    measures = scan.get_measures()
+
+    db.disconnect()
+
+    if measures == {}:
+        logger.error(f"Could not find a 'measure.json' file!")
+    elif "angles" in measures and "internodes" in measures:
+        # - Compare the number of angles and internodes values:
+        n_angles = len(measures["angles"])
+        n_internodes = len(measures["internodes"])
+        if n_angles == 0 and n_internodes == 0:
+            logger.critical("Found a 'measure.json' file with NO values for angles and internodes!")
+            erase_measure(scan, args)
+            return
+        try:
+            assert n_angles == n_internodes
+        except AssertionError:
+            logger.critical(f"Not the same number of angles ({n_angles}) and internodes ({n_internodes}) values.")
+            erase_measure(scan, args)
+            return
+        else:
+            logger.info(f"Found the same number of angles and internodes ({n_internodes}) values.")
+    else:
+        if "angles" not in measures:
+            logger.warning(f"Could not find 'angles' key in measures dictionary!")
+        if "internodes" not in measures:
+            logger.warning(f"Could not find 'internodes' key in measures dictionary!")
+    return
+
+def erase_measure(scan, args):
+    """Handle invalid `measure.json` file.
+
+    Parameters
+    ----------
+    scan : plantdb.fsdb.Scan
+        The scan containing the invalid `measure.json` file.
+    args : parser.parse_args
+        Parsed input arguments.
+    """
+    from os import remove
+    from plantdb.fsdb import _scan_measures_path
+    json_path = Path(_scan_measures_path(scan))
+    if args.remove:
+        remove(json_path)
+    else:
+        if erase_measure_kbi(scan, args.default):
+            remove(json_path)
+    return
+
+
+def erase_measure_kbi(scan, default):
+    """Prompt a question to remove the invalid `measure.json` file.
+
+    Parameters
+    ----------
+    scan : plantdb.fsdb.Scan
+        The scan containing the invalid `measure.json` file.
+    default : bool
+        The default action to suggest.
+
+    Returns
+    -------
+    bool
+        The chosen action, ``True`` to remove, else kep it.
+    """
+    from plant3dvision.utils import yes_no_choice
+    question = f"Do you want to remove invalid `measure.json` file for scan id '{scan.id}'?"
+    return yes_no_choice(question, default)
+
+
+def main():
+    # - Parse the input arguments to variables:
+    parser = parsing()
+    args = parser.parse_args()
+
+    global logger
+    logger = configure_logger("check_measures")
+
+    print(args.dataset_path)
+    # - If only one path in the list, get the first one:
+    if len(args.dataset_path) == 1:
+        args.dataset_path = args.dataset_path[0]
+
+    if isinstance(args.dataset_path, str):
+        # Process the input string `args.dataset_path` with ``glob``:
+        #   - check existence of path:
+        #   - may contain UNIX matching symbols (like '*' or '?'):
+        folders = sorted(glob.glob(args.dataset_path))
+        # Check that globed paths are directory (and exist, implied):
+        folders = sorted([path for path in folders if Path(path).is_dir()])
+    elif isinstance(args.dataset_path, list):
+        # Check that listed paths are directory (and exist, implied):
+        folders = sorted([path for path in args.dataset_path if Path(path).is_dir()])
+    else:
+        logger.critical(f"Can not understand input dataset path: {args.dataset_path}")
+        sys.exit(f"Error with input dataset path!")
+
+    if len(folders) == 0:
+        # Stop here if the list of folder to process is empty:
+        logger.critical("The parsed dataset_path is empty!")
+        sys.exit(f"Error with input dataset path!")
+    elif len(folders) > 1:
+        fnames = [Path(folder).name for folder in folders]
+        logger.info(f"Got a list of {len(folders)} scan dataset to analyze: {', '.join(fnames)}")
+        for folder in folders:
+            args.dataset_path = folder
+            print("")  # to facilitate the search in the console by separating the datasets
+            logger.info(f"Processing dataset '{Path(args.dataset_path).name}'.")
+            try:
+                check_measures(args)
+            except Exception as e:
+                print(e)
+    else:
+        check_measures(args)
+
+
+if __name__ == '__main__':
+    main()
