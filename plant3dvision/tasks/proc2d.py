@@ -88,9 +88,10 @@ class Undistorted(FileByFileTask):
             from plant3dvision.camera import get_camera_arrays_from_params
             colmap_camera, poses = self.input()['camera']
 
-        images_fileset = self.input()["images"].get().get_files(query=self.query)
+        images_fileset = self.input()["images"].get()
+        images_files = images_fileset.get_files(query=self.query)
         output_fileset = self.output().get()
-        for fi in tqdm(images_fileset, unit="file"):
+        for fi in tqdm(images_files, unit="file"):
             # Add 'calibrated_pose' to image metadata
             if poses is not None:
                 fi.set_metadata({'calibrated_pose': poses[fi.id]})
@@ -296,7 +297,8 @@ class Segmentation2D(Masks):
         from plant3dvision import proc2d
 
         # Get the 'image' `Fileset` to segment and filter by `query`:
-        images_fileset = self.input()["images"].get().get_files(query=self.query)
+        images_fileset = self.input()["images"].get()
+        images_files = images_fileset.get_files(query=self.query)
         # Get the trained model using given `model_id`:
         model_file = self.input()["model"].get().get_file(self.model_id)
         # A trained model is required, abort if none found!
@@ -312,8 +314,8 @@ class Segmentation2D(Masks):
             # else use all trained labels
             label_range = range(len(labels))
 
-        # Apply trained segmentation model on 'image' `Fileset`
-        images_segmented, id_im = segmentation(self.Sx, self.Sy, images_fileset, model_file)
+        # Apply trained segmentation model on list of image `File`:
+        images_segmented, id_im = segmentation(self.Sx, self.Sy, images_files, model_file)
 
         # Save class prediction as images, one by one, class per class
         logger.debug("Saving the `.astype(np.uint8)` segmented images, takes around 15 s")
