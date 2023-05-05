@@ -8,7 +8,7 @@ align_pcd = true
 use_gpu = true
 single_camera = true
 robust_alignment_max_error = 10
-distance_threshold = 5  # a maximum 3D disntace of 5mm from CNC pose is allowed
+distance_threshold = 5  # maximum allowed Euclidean distance from CNC pose
 # [Colmap.bounding_box]  # default to None
 # x = [150, 650]
 # y = [150, 650]
@@ -16,15 +16,15 @@ distance_threshold = 5  # a maximum 3D disntace of 5mm from CNC pose is allowed
 
 [Undistorted]
 upstream_task = "ImagesFilesetExists"
-query = "{\"channel\":\"rgb\", \"pose_estimation\":\"correct\"}"  # filter RGB images only with a valid COLMAP pose
+query = "{\"channel\":\"rgb\", \"pose_estimation\":\"correct\"}"  # RGB images with a valid COLMAP pose
 
 [Masks]
 upstream_task = "Undistorted"
 type = "linear"
 parameters = "[0, 1, 0]"
-dilation = 5 # default to 0
+dilation = 3 # default to 0
 binarize = true
-threshold = 0.2
+threshold = 0.15
 
 [Voxels]
 upstream_mask = "Masks"
@@ -44,6 +44,7 @@ level_set_value = 0.0
 upstream_task = "PointCloud"
 library = "open3d" # or "cgal"
 filtering = "most connected triangles"  # ["", "most connected triangles", "largest connected triangles", "dbscan point-cloud"]
+depth = 9  # depth parameter used by Open3D to mesh the point cloud
 
 [CurveSkeleton]
 upstream_task = "TriangleMesh"
@@ -57,23 +58,28 @@ stem_axis_inverted = false
 upstream_task = "TreeGraph"
 characteristic_length = 1.0
 stem_axis_inverted = false
+organ_type = "fruit"
+node_sampling_dist = 10  # path distance from branching point in millimeters
+min_fruit_size = 8  # path distance from branching point in millimeters
 
+[Visualization]
+upstream_images = "ImagesFilesetExists"
+upstream_colmap = "Colmap"
+upstream_point_cloud = "PointCloud"
+upstream_mesh = "TriangleMesh"
+upstream_skeleton = "CurveSkeleton"
+upstream_angles = "AnglesAndInternodes"
+max_image_size = 1500
+max_point_cloud_size = 10000000
+thumbnail_size = 150
+use_colmap_poses = true
+
+# --------------- Evaluation --------------- #
 [AnglesAndInternodesEvaluation]
 upstream_task = "AnglesAndInternodes"
 ground_truth = "ImagesFilesetExists"  # "ImagesFilesetExists" with manual measures / "VirtualPlantObj" with computer generated plants
 free_ends = 0.4
 free_ends_eps = 1e-2
-
-[Visualization]
-upstream_point_cloud = "PointCloud"
-upstream_mesh = "TriangleMesh"
-upstream_colmap = "Colmap"
-upstream_angles = "AnglesAndInternodes"
-upstream_skeleton = "CurveSkeleton"
-upstream_images = "ImagesFilesetExists"
-max_image_size = 1500
-max_point_cloud_size = 10000000
-thumbnail_size = 150
 
 [Clean]
 no_confirm = true

@@ -1,11 +1,10 @@
 [Voxels]
 upstream_mask = "ImagesFilesetExists"
 upstream_colmap = "DummyTask"
-query = "{\"channel\":\"background\"}"
+query = "{\"channel\":\"background\"}"  # use the (inverted) background masks
 camera_metadata = "camera"
-voxel_size = 0.05
+voxel_size = 0.06  # ~9x smaller than real plants
 type = "carving"
-log = false
 invert = true
 
 [PointCloud]
@@ -16,6 +15,7 @@ level_set_value = 0.0
 upstream_task = "PointCloud"
 library = "open3d" # or "cgal"
 filtering = "most connected triangles"  # ["", "most connected triangles", "largest connected triangles", "dbscan point-cloud"]
+depth = 9  # depth parameter used by Open3D to mesh the point cloud
 
 [CurveSkeleton]
 upstream_task = "TriangleMesh"
@@ -29,15 +29,24 @@ stem_axis_inverted = false
 upstream_task = "TreeGraph"
 characteristic_length = 1.0
 stem_axis_inverted = false
+organ_type = "fruit"
+node_sampling_dist = 1.3  # ~9x smaller than real plants
+min_fruit_size = 0.7  # ~9x smaller than real plants
 
 [Visualization]
-use_colmap_poses = false
+upstream_images = "ImagesFilesetExists"
+upstream_point_cloud = "PointCloud"
+upstream_mesh = "TriangleMesh"
+upstream_skeleton = "CurveSkeleton"
+upstream_angles = "AnglesAndInternodes"
 upstream_virtualplantobj = "VirtualPlantObj"
 query = "{\"channel\":\"rgb\"}"  # default is an empty dict '{}'
+max_image_size = 1500
+max_point_cloud_size = 10000000
+thumbnail_size = 150
+use_colmap_poses = false
 
-### Evaluation ####
-
-## PointCloud
+# --------------- Evaluation --------------- #
 [PointCloudGroundTruth]
 upstream_task = "VirtualPlantObj" # The dataset must have an obj in VirtualPlant
 pcd_size = 100000 # default 100000
@@ -47,7 +56,6 @@ upstream_task = "PointCloud"
 ground_truth = "PointCloudGroundTruth"
 max_distance = 2.0 # default to 2.0
 
-## AnglesAndInternodes
 [AnglesAndInternodesEvaluation]
 upstream_task = "AnglesAndInternodes"
 ground_truth = "VirtualPlantObj"
