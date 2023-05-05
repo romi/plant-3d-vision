@@ -82,7 +82,7 @@ class Visualization(RomiTask):
         If ``True`` (default), use ``DTW`` library to align sequences of angles and internode on manual measures.
         If no manual measure exists, this will do nothing.
     """
-    upstream_task = luigi.TaskParameter(default=Colmap)
+    upstream_task = None
 
     upstream_images = luigi.TaskParameter(default=ImagesFilesetExists)
     upstream_colmap = luigi.TaskParameter(default=Colmap)
@@ -111,8 +111,11 @@ class Visualization(RomiTask):
         super().__init__()
         self.task_id = "Visualization"
 
-    # def requires(self):
-        # return []
+    def requires(self):
+        if self.use_colmap_poses:
+            return self.upstream_colmap
+        else:
+            return []
 
     def run(self):
         import tempfile
