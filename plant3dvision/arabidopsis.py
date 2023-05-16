@@ -748,6 +748,35 @@ def vector_from_points(pts, origin=None):
     return v[0]
 
 
+def orient_vector(ref_vec, vec):
+    """Orient a vector using a reference vector.
+
+    Parameters
+    ----------
+    ref_vec : numpy.ndarray
+        The reference vector to use to orient.
+    vec : numpy.ndarray
+        The vector to orient.
+
+    Returns
+    -------
+    numpy.ndarray
+        The oriented vector.
+
+    Notes
+    -----
+    The *dot product* of two vectors is the product of the magnitude of the vectors and the cosine of the angle formed by these two vectors.
+    So if the *dot product* is:
+      - equal to `0`, the two vectors are orthogonal
+      - positive, the two vectors are collinear
+      - negative, the two vectors are anti-collinear
+    """
+    if vec.dot(ref_vec) < 0:
+        return -vec
+    else:
+        return vec
+
+
 def compute_stem_and_fruit_directions(tree, max_node_dist=10., branching_points=None, min_fruit_length=10.):
     """Compute the stem and fruit directions.
 
@@ -825,16 +854,20 @@ def compute_stem_and_fruit_directions(tree, max_node_dist=10., branching_points=
         proj_bp_coord = project_points(bp_coord, stem_line_proj_mat, proj_stem_mean)
         # Compute stem direction:
         stem_dir = vector_from_points(proj_stem_points, origin=proj_bp_coord)
-        if stem_dir.dot(proj_stem_points[-1, :] - proj_bp_coord):
-            stem_dir = -stem_dir
+        # Compute the vector oriented toward the last sampled stem point:
+        last_sp_vector = proj_stem_points[-1, :] - proj_bp_coord
+        # Orient the stem vector (to point upward):
+        stem_dir = orient_vector(last_sp_vector, stem_dir)
 
         for fruit_nodes in fruit_nodes_list:
             # Get the coordinates of selected fruit nodes:
             fruit_points = nodes_coordinates(tree, fruit_nodes)
             # Compute fruit direction:
             fruit_dir = vector_from_points(fruit_points, origin=proj_bp_coord)
-            if fruit_dir.dot(fruit_points[-1, :] - proj_bp_coord):
-                fruit_dir = -fruit_dir
+            # Compute the vector oriented toward the last sampled fruit point:
+            last_fp_vector = fruit_points[-1, :] - proj_bp_coord
+            # Orient the fruit vector:
+            fruit_dir = orient_vector(last_fp_vector, fruit_dir)
             fruit_dirs.append(fruit_dir)
             stem_dirs.append(stem_dir)
             bp_coords.append(proj_bp_coord)
@@ -848,11 +881,11 @@ def compute_angles_and_internodes_from_directions(fruit_dirs, stem_dirs, bp_coor
 
     Parameters
     ----------
-    fruit_dirs : list of numpy.array
+    fruit_dirs : list of numpy.ndarray
         The list of fruit directions as 1-D arrays.
-    stem_dirs : list of numpy.array
+    stem_dirs : list of numpy.ndarray
         The list of stem directions as 1-D arrays.
-    bp_coords : list of numpy.array
+    bp_coords : list of numpy.ndarray
         The list of branching point coordinates as 1-D arrays.
 
     Returns
