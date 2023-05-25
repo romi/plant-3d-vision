@@ -512,8 +512,8 @@ class AnglesAndInternodesEvaluation(EvaluationTask):
     free_ends = luigi.FloatParameter(default=0.4)
     free_ends_eps = luigi.FloatParameter(default=1e-2)
     n_jobs = luigi.IntParameter(default=-1)
-    gt_angles = luigi.Parameter(default="auto")
-    pred_angles = luigi.Parameter(default="auto")
+    gt_angles_type = luigi.Parameter(default="auto")
+    pred_angles_type = luigi.Parameter(default="auto")
 
     def run(self):
         from math import degrees
@@ -525,57 +525,56 @@ class AnglesAndInternodesEvaluation(EvaluationTask):
         # - Get the ground-truth angles and internodes
         if str(self.ground_truth.task_family) in ["VirtualPlant", "VirtualPlantObj"]:
             # For computer generated plants, get them from dataset metadata:
-            angles_gt = self.ground_truth().output_file().get_metadata("angles")
-            internodes_gt = self.ground_truth().output_file().get_metadata("internodes")
+            gt_angles = self.ground_truth().output_file().get_metadata("angles")
+            gt_internodes = self.ground_truth().output_file().get_metadata("internodes")
         else:
             # For real plants, get them from manual measures file (measures.json):
             input_file = self.input_file()
-            angles_gt = input_file.get_scan().get_measures("angles")
-            internodes_gt = input_file.get_scan().get_measures("internodes")
+            gt_angles = list(map(float, input_file.get_scan().get_measures("angles")))
+            gt_internodes = list(map(float, input_file.get_scan().get_measures("internodes")))
 
         # - Get the predicted angles and internodes from pipe result
-        pred_angles_jsonfile = self.upstream_task().output().get().get_files()[0]
-        pred_internodes_jsonfile = self.upstream_task().output().get().get_files()[0]
-        pred_angles = io.read_json(pred_angles_jsonfile)["angles"]
-        pred_internodes = io.read_json(pred_internodes_jsonfile)["internodes"]
+        pred_jsonfile = self.upstream_task().output().get().get_files()[0]
+        pred_angles = io.read_json(pred_jsonfile)["angles"]
+        pred_internodes = io.read_json(pred_jsonfile)["internodes"]
 
-        self.gt_angles = str(self.gt_angles)
-        self.pred_angles = str(self.pred_angles)
+        self.gt_angles_type = str(self.gt_angles_type)
+        self.pred_angles_type = str(self.pred_angles_type)
         # - Remove potential plural form if detected:
-        self.gt_angles = self.gt_angles[:-1] if self.gt_angles.endswith('s') else self.gt_angles
-        self.pred_angles = self.pred_angles[:-1] if self.pred_angles.endswith('s') else self.pred_angles
+        self.gt_angles_type = self.gt_angles_type[:-1] if self.gt_angles_type.endswith('s') else self.gt_angles_type
+        self.pred_angles_type = self.pred_angles_type[:-1] if self.pred_angles_type.endswith('s') else self.pred_angles_type
         # - Check this is a valid value, else fall back to automatic mode:
-        if self.gt_angles not in ["auto", "degree", "radian"]:
-            logger.error(f"Invalid value for 'gt_angles' ({self.gt_angles}), falling back to 'auto' mode!")
-            self.gt_angles = "auto"
-        if self.pred_angles not in ["auto", "degree", "radian"]:
-            logger.error(f"Invalid value for 'pred_angles' ({self.pred_angles}), falling back to 'auto' mode!")
-            self.pred_angles = "auto"
+        if self.gt_angles_type not in ["auto", "degree", "radian"]:
+            logger.error(f"Invalid value for 'gt_angles_type' ({self.gt_angles_type}), falling back to 'auto' mode!")
+            self.gt_angles_type = "auto"
+        if self.pred_angles_type not in ["auto", "degree", "radian"]:
+            logger.error(f"Invalid value for 'pred_angles_type' ({self.pred_angles_type}), falling back to 'auto' mode!")
+            self.pred_angles_type = "auto"
         # - If in "auto" mode, try to guess the type of angles (degree or radians):
-        if self.gt_angles == "auto":
-            self.gt_angles = "radians" if is_radians(angles_gt) else "degrees"
-            logger.info(f"Guessed that ground-truth angle values are in {self.gt_angles}.")
-        if self.pred_angles == "auto":
-            self.pred_angles = "radians" if is_radians(pred_angles) else "degrees"
-            logger.info(f"Guessed that predicted angle values are in {self.pred_angles}.")
+        if self.gt_angles_type == "auto":
+            self.gt_angles_type = "radians" if is_radians(gt_angles) else "degrees"
+            logger.info(f"Guessed that ground-truth angle values are in {self.gt_angles_type}.")
+        if self.pred_angles_type == "auto":
+            self.pred_angles_type = "radians" if is_radians(pred_angles) else "degrees"
+            logger.info(f"Guessed that predicted angle values are in {self.pred_angles_type}.")
 
         # - Convert radian to degree for easier reading of the values and figures:
-        if self.gt_angles == "radians":
+        if self.gt_angles_type == "radians":
             # Convert predicted angles from radians to degrees
-            angles_gt = list(map(degrees, angles_gt))
-        if self.pred_angles == "radians":
+            gt_angles = list(map(degrees, gt_angles))
+        if self.pred_angles_type == "radians":
             # Convert predicted angles from radians to degrees
             pred_angles = list(map(degrees, pred_angles))
 
-        dtwcomputer = align_sequences(pred_angles, angles_gt, pred_internodes, internodes_gt,
-                                      free_ends=self.free_ends, free_ends_eps=self.free_ends_eps, n_jobs=self.n_jobs)
+        dtwcomputer = align_sequences(pred_angles, gt_angles, pred_internodes, gt_internodes, free_ends=self.free_ends,
+                                      free_ends_eps=self.free_ends_eps, n_jobs=self.n_jobs)
 
         # - Export results:
         # Export the alignment figure:
         outfs = self.output().get()
         f = outfs.create_file("alignment_figure.png")
         f_path = join(f.db.basedir, f.get_scan().id, f.get_fileset().id, f.id)
-        dtwcomputer.plot_results(f_path, valrange=[(0, 360), None])
+        dtwcomputer.plot_results(f_path, valrange=[(0, 360), None], dataset_name=f.get_scan().id)
         # Export the text alignment results:
         results = dtwcomputer.get_results()
         summary = dtwcomputer.summarize()

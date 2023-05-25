@@ -104,8 +104,33 @@ def _find_two_closest(values):
     return pairs
 
 
-def align_sequences(pred_angles, angles_gt, pred_internodes, internodes_gt, **kwargs):
-    """Align sequences of angles and internodes with DTW."""
+def align_sequences(pred_angles, gt_angles, pred_internodes, gt_internodes, **kwargs):
+    """Align sequences of angles and internodes with DTW.
+
+    Parameters
+    ----------
+    pred_angles : list
+        The sequence of predicted angles.
+    gt_angles : list
+        The sequence of ground-truth angles.
+    pred_internodes : list
+        The sequence of predicted internodes.
+    gt_internodes : list
+        The sequence of ground-truth internodes.
+
+    Other Parameters
+    ----------------
+    free_ends : 2-tuple of int, optional
+        A tuple of 2 integers ``(k,l)`` that specifies relaxation bounds on the alignment of sequences endpoints:
+        relaxed by ``k`` at the sequence beginning and relaxed by ``l`` at the sequence ending.
+        Default is ``(0, 1)``.
+    free_ends_eps : float, optional
+        Minimum difference to previous minimum normalized cost to consider tested free-ends as the new best combination.
+        Default is ``1e-4``.
+    n_jobs : int, optional
+        Number of jobs to run in parallel.
+        Default to ``-1`` to use all available cores.
+    """
     from dtw import DTW
     from dtw.metrics import mixed_dist
     from dtw.tasks.search_free_ends import brute_force_free_ends_search
@@ -114,18 +139,18 @@ def align_sequences(pred_angles, angles_gt, pred_internodes, internodes_gt, **kw
     free_ends_eps = kwargs.get('free_ends_eps', 1e-4)
     n_jobs = kwargs.get('n_jobs', -1)
 
-    # Creates the ground-truth array of angles and internodes:
-    seq_gt = np.array([angles_gt, internodes_gt]).T
-    # Creates the predicted array of angles and internodes:
-    seq_predicted = np.array([pred_angles, pred_internodes]).T
+    # Creates the array of ground-truth angles and internodes:
+    gt_array = np.array([gt_angles, gt_internodes]).T
+    # Creates the array of predicted angles and internodes:
+    pred_array = np.array([pred_angles, pred_internodes]).T
 
-    # Set some DTW parameter based on the obtained sequences:
-    max_ref = max(seq_gt[:, 1])
-    max_test = max(seq_predicted[:, 1])
-    max_in = max(max_ref, max_test)
+    # Get max internode distance for standardization:
+    max_gt_internode = max(gt_internodes)
+    max_pred_internode = max(pred_internodes)
+    max_internode = max(max_gt_internode, max_pred_internode)
     # Initialize a DWT instance:
-    dtwcomputer = DTW(seq_predicted, seq_gt, constraints="merge_split", free_ends=(0, 1), ldist=mixed_dist,
-                      mixed_type=[True, False], mixed_spread=[1, max_in], mixed_weight=[0.5, 0.5],
+    dtwcomputer = DTW(pred_array, gt_array, constraints="merge_split", free_ends=(0, 1), ldist=mixed_dist,
+                      mixed_type=[True, False], mixed_spread=[1, max_internode], mixed_weight=[0.5, 0.5],
                       names=["Angles", "Internodes"])
     # Performs brute force search (parallel):
     free_ends, n_cost = brute_force_free_ends_search(dtwcomputer, max_value=free_ends,
