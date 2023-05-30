@@ -16,7 +16,7 @@ usage() {
 
   echo "OPTIONS:"
   echo "  -t, --tag
-    Docker image tag to use, default to '$vtag'."
+    Docker image tag to use, default to '${vtag}'."
   # Docker options:
   echo "  --no-cache
     Do not use cache when building the image, (re)start from scratch."
@@ -35,11 +35,11 @@ while [ "$1" != "" ]; do
     ;;
   --no-cache)
     shift
-    docker_opts="$docker_opts --no-cache"
+    docker_opts="${docker_opts} --no-cache"
     ;;
   --pull)
     shift
-    docker_opts="$docker_opts --pull"
+    docker_opts="${docker_opts} --pull"
     ;;
   -h | --help)
     usage
@@ -55,20 +55,16 @@ done
 
 # Get the date to estimate docker image build time:
 start_time=$(date +%s)
-
 # Start the docker image build:
-docker build -t roboticsmicrofarms/plant-3d-vision:$vtag $docker_opts -f docker/Dockerfile .
-
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-NC='\033[0m' # No Color
+docker build -t roboticsmicrofarms/plant-3d-vision:${vtag} ${docker_opts} \
+  -f docker/Dockerfile .
 # Get docker build status:
 docker_build_status=$?
-# Print build time if successful (code 0), else print exit status code
-if [ $docker_build_status == 0 ]; then
-  echo -e "\n${GREEN}Docker build SUCCEEDED in $(expr `date +%s` - $start_time)s!${NC}"
+# Print build time if successful (code 0), else print exit code
+if [ ${docker_build_status} == 0 ]; then
+  echo -e "\n${INFO}Docker build SUCCEEDED in $(expr $(date +%s) - ${start_time})s!"
 else
-  echo -e "\n${RED}Docker build FAILED after $(expr `date +%s` - $start_time)s with code ${docker_build_status}!${NC}"
+  echo -e "\n${ERROR}Docker build FAILED after $(expr $(date +%s) - ${start_time})s with code ${docker_build_status}!"
 fi
-# Exit with docker build exit status code:
-exit $docker_build_status
+# Exit with 'docker build' exit code:
+exit ${docker_build_status}
