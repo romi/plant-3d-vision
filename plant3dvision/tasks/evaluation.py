@@ -457,7 +457,7 @@ class CylinderRadiusEstimation(RomiTask):
 
 
 class AnglesAndInternodesEvaluation(EvaluationTask):
-    """ Evaluation of the `AnglesAndInternodes` tasks.
+    """Evaluation of the `AnglesAndInternodes` tasks.
 
     Attributes
     ----------
