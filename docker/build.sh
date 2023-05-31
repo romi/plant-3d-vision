@@ -1,28 +1,39 @@
 #!/bin/bash
+# - Defines colors and message types:
+RED="\033[0;31m"
+GREEN="\033[0;32m"
+YELLOW="\033[0;33m"
+NC="\033[0m" # No Color
+INFO="${GREEN}INFO${NC}    "
+WARNING="${YELLOW}WARNING${NC} "
+ERROR="${RED}ERROR${NC}   "
+bold() { echo -e "\e[1m$*\e[0m"; }
 
+# - Default variables
+# Image tag to use, 'latest' by default:
 vtag="latest"
+# String aggregating the docker build options to use:
 docker_opts=""
 
 usage() {
-  echo "USAGE:"
-  echo "  ./docker/build.sh [OPTIONS]
-    "
+  echo -e "$(bold USAGE):"
+  echo "  ./docker/build.sh [OPTIONS]"
+  echo ""
 
-  echo "DESCRIPTION:"
+  echo -e "$(bold DESCRIPTION):"
   echo "  Build a docker image named 'roboticsmicrofarms/plant-3d-vision' using 'Dockerfile' in the same location.
   It must be run from the 'plant-3d-vision' repository root folder as it is the build context and it will be copied during at image build time!
-  Do not forget to initialize or update the sub-modules if necessary!
-  "
+  Do not forget to initialize or update the sub-modules if necessary!"
+  echo ""
 
-  echo "OPTIONS:"
+  echo -e "$(bold OPTIONS):"
   echo "  -t, --tag
-    Docker image tag to use, default to '${vtag}'."
-  # Docker options:
+    Image tag to use." \
+    "By default, use the '${vtag}' tag."
   echo "  --no-cache
     Do not use cache when building the image, (re)start from scratch."
   echo "  --pull
     Always attempt to pull a newer version of the parent image."
-  # General options:
   echo "  -h, --help
     Output a usage message and exit."
 }

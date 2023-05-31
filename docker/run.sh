@@ -8,6 +8,7 @@ NC="\033[0m" # No Color
 INFO="${GREEN}INFO${NC}    "
 WARNING="${YELLOW}WARNING${NC} "
 ERROR="${RED}ERROR${NC}   "
+bold() { echo -e "\e[1m$*\e[0m"; }
 
 # - Default variables
 # Docker image tag to use, 'latest' by default:
@@ -33,17 +34,17 @@ ml_pipeline_cmd="cd plant-3d-vision/ && ./check_ml_pipe.sh"
 gpu_cmd="nvidia-smi"
 
 usage() {
-  echo "USAGE:"
+  echo -e "$(bold USAGE):"
   echo "  ./docker/run.sh [OPTIONS] [TEST OPTION]"
   echo ""
 
-  echo "DESCRIPTION:"
+  echo -e "$(bold DESCRIPTION):"
   echo "  Start a docker container using the 'roboticsmicrofarms/plant-3d-vision' image.
 
   It must be run from the 'plant-3d-vision' repository root folder if you wish to use one of the self-testing option!"
   echo ""
 
-  echo "OPTIONS:"
+  echo -e "$(bold OPTIONS):"
   echo "  -t, --tag
     Image tag to use." \
     "By default, use the '${vtag}' tag."
@@ -61,7 +62,7 @@ usage() {
     Output a usage message and exit."
   echo ""
 
-  echo "TEST OPTIONS:"
+  echo "$(bold TEST OPTIONS):"
   echo "You may select ONE of the test option below to execute this test instead of accessing the terminal or running a command."
   echo "  --unittest
     Run the unit tests defined in 'plant-3d-vision/tests/unit'."
