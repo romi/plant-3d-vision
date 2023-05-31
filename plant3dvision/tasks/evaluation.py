@@ -4,10 +4,12 @@
 import os
 import random
 import tempfile
+from io import BytesIO
 
 import luigi
 import numpy as np
 import open3d as o3d
+from PIL import Image
 
 from plant3dvision.metrics import CompareMaskFilesets
 from plant3dvision.metrics import CompareSegmentedPointClouds
@@ -16,7 +18,15 @@ from plant3dvision.tasks import config
 from plant3dvision.tasks import proc2d
 from plant3dvision.tasks import proc3d
 from plant3dvision.tasks.arabidopsis import AnglesAndInternodes
-from plantdb import io
+from plantdb.io import read_json
+from plantdb.io import read_npz
+from plantdb.io import read_point_cloud
+from plantdb.io import to_file
+from plantdb.io import write_image
+from plantdb.io import write_json
+from plantdb.io import write_npz
+from plantdb.io import write_point_cloud
+from plantdb.io import write_triangle_mesh
 from romitask.log import configure_logger
 from romitask.task import DatabaseConfig
 from romitask.task import FilesetTarget
@@ -44,7 +54,7 @@ class EvaluationTask(RomiTask):
 
     def run(self):
         res = self.evaluate()
-        io.write_json(self.output_file(), res)
+        write_json(self.output_file(), res)
 
 
 class VoxelsGroundTruth(RomiTask):
@@ -58,8 +68,8 @@ class VoxelsGroundTruth(RomiTask):
         outfs = self.output().get()
         # Convert the input MTL file into a ground truth voxel matrix:
         with tempfile.TemporaryDirectory() as tmpdir:
-            io.to_file(x, os.path.join(tmpdir, "plant.obj"))
-            io.to_file(x, os.path.join(tmpdir, "plant.mtl"))
+            to_file(x, os.path.join(tmpdir, "plant.obj"))
+            to_file(x, os.path.join(tmpdir, "plant.mtl"))
             x = pywavefront.Wavefront(os.path.join(tmpdir, "plant.obj"),
                                       collect_faces=True, create_materials=True)
             res = {}
@@ -71,8 +81,8 @@ class VoxelsGroundTruth(RomiTask):
                 t.triangles = o3d.utility.Vector3iVector(np.asarray(x.meshes[k].faces))
                 t.vertices = o3d.utility.Vector3dVector(np.asarray(x.vertices))
                 t.compute_triangle_normals()
-                o3d.io.write_triangle_mesh(os.path.join(tmpdir, "tmp.stl"),
-                                           t)
+                o3d.write_triangle_mesh(os.path.join(tmpdir, "tmp.stl"),
+                                        t)
                 m = trimesh.load(os.path.join(tmpdir, "tmp.stl"))
                 v = m.voxelized(cl.Voxels().voxel_size)
 
@@ -94,7 +104,7 @@ class VoxelsGroundTruth(RomiTask):
             for k in res.keys():
                 bg = np.minimum(bg, 1 - res[k])
             res["background"] = bg
-            io.write_npz(self.output_file(), res)
+            write_npz(self.output_file(), res)
 
 
 class PointCloudGroundTruth(RomiTask):
@@ -108,8 +118,8 @@ class PointCloudGroundTruth(RomiTask):
         outfs = self.output().get()
         colors = config.PointCloudColorConfig().colors
         with tempfile.TemporaryDirectory() as tmpdir:
-            io.to_file(x, os.path.join(tmpdir, "plant.obj"))
-            io.to_file(x, os.path.join(tmpdir, "plant.mtl"))
+            to_file(x, os.path.join(tmpdir, "plant.obj"))
+            to_file(x, os.path.join(tmpdir, "plant.mtl"))
             x = pywavefront.Wavefront(os.path.join(tmpdir, "plant.obj"),
                                       collect_faces=True, create_materials=True)
             res = o3d.geometry.PointCloud()
@@ -143,7 +153,7 @@ class PointCloudGroundTruth(RomiTask):
                 res = res + pcd
                 point_labels += [class_name] * len(pcd.points)
 
-            io.write_point_cloud(self.output_file(), res)
+            write_point_cloud(self.output_file(), res)
             self.output_file().set_metadata({'labels': point_labels})
 
 
@@ -158,8 +168,8 @@ class ClusteredMeshGroundTruth(RomiTask):
         colors = config.PointCloudColorConfig().colors
         output_fileset = self.output().get()
         with tempfile.TemporaryDirectory() as tmpdir:
-            io.to_file(x, os.path.join(tmpdir, "plant.obj"))
-            io.to_file(x, os.path.join(tmpdir, "plant.mtl"))
+            to_file(x, os.path.join(tmpdir, "plant.obj"))
+            to_file(x, os.path.join(tmpdir, "plant.mtl"))
             x = pywavefront.Wavefront(os.path.join(tmpdir, "plant.obj"),
                                       collect_faces=True, create_materials=True)
             res = o3d.geometry.PointCloud()
@@ -189,7 +199,7 @@ class ClusteredMeshGroundTruth(RomiTask):
                     newt.remove_unreferenced_vertices()
 
                     f = output_fileset.create_file("%s_%03d" % (class_name, j))
-                    io.write_triangle_mesh(f, newt)
+                    write_triangle_mesh(f, newt)
                     f.set_metadata("label", class_name)
 
 
@@ -198,8 +208,8 @@ class SegmentedPointCloudEvaluation(EvaluationTask):
     ground_truth = luigi.TaskParameter(default=PointCloudGroundTruth)
 
     def evaluate(self):
-        prediction = io.read_point_cloud(self.upstream_task().output_file())
-        groundtruth = io.read_point_cloud(self.ground_truth().output_file())
+        prediction = read_point_cloud(self.upstream_task().output_file())
+        groundtruth = read_point_cloud(self.ground_truth().output_file())
         labels_gt = self.ground_truth().output_file().get_metadata('labels')
         labels = self.upstream_task().output_file().get_metadata('labels')
 
@@ -218,8 +228,8 @@ class PointCloudEvaluation(EvaluationTask):
     max_distance = luigi.FloatParameter(default=2)
 
     def evaluate(self):
-        source = io.read_point_cloud(self.upstream_task().output_file())
-        target = io.read_point_cloud(self.ground_truth().output_file())
+        source = read_point_cloud(self.upstream_task().output_file())
+        target = read_point_cloud(self.ground_truth().output_file())
         labels = self.upstream_task().output_file().get_metadata('labels')
         labels_gt = self.ground_truth().output_file().get_metadata('labels')
 
@@ -291,8 +301,8 @@ class VoxelsEvaluation(EvaluationTask):
         prediction_file = self.upstream_task().output().get().get_files()[0]
         gt_file = self.ground_truth().output().get().get_files()[0]
 
-        voxels = io.read_npz(prediction_file)
-        gts = io.read_npz(gt_file)
+        voxels = read_npz(prediction_file)
+        gts = read_npz(gt_file)
 
         histograms = {}
         from matplotlib import pyplot as plt
@@ -331,7 +341,7 @@ class VoxelsEvaluation(EvaluationTask):
 
             outfs = self.output().get()
             f = outfs.create_file("img_" + c)
-            io.write_image(f, x, "png")
+            write_image(f, x, "png")
 
             # maxval = np.max(prediction_c)
             # minval = np.min(prediction_c)
@@ -395,7 +405,7 @@ class CylinderRadiusGroundTruth(RomiTask):
         # - Visualization:
         # o3d.visualization.draw_geometries([gt_cyl])
         # - Write the PLY & metadata:
-        io.write_point_cloud(self.output_file(), gt_cyl)
+        write_point_cloud(self.output_file(), gt_cyl)
         cylinder_md = {
             'radius': self.radius,
             'height': self.height,
@@ -430,7 +440,7 @@ class CylinderRadiusEstimation(RomiTask):
         # - Load the PLY file containing the cylinder point cloud:
         cylinder_fileset = self.input().get()
         input_file = self.input_file()
-        pcd = io.read_point_cloud(input_file)
+        pcd = read_point_cloud(input_file)
 
         # - Get the ground-truth value for cylinder radius:
         if str(self.upstream_task.task_family) == "CylinderRadiusGroundTruth":
@@ -453,7 +463,7 @@ class CylinderRadiusEstimation(RomiTask):
             output["gt_radius"] = gt_radius
             output["err (%)"] = err
         # - Write results to JSON:
-        io.write_json(self.output_file(), output)
+        write_json(self.output_file(), output)
 
 
 class AnglesAndInternodesEvaluation(EvaluationTask):
@@ -517,7 +527,6 @@ class AnglesAndInternodesEvaluation(EvaluationTask):
 
     def run(self):
         from math import degrees
-        from os.path import join
         from plant3dvision.evaluation import is_radians
         from plant3dvision.evaluation import align_sequences
         from plant3dvision.utils import jsonify
@@ -535,20 +544,22 @@ class AnglesAndInternodesEvaluation(EvaluationTask):
 
         # - Get the predicted angles and internodes from pipe result
         pred_jsonfile = self.upstream_task().output().get().get_files()[0]
-        pred_angles = io.read_json(pred_jsonfile)["angles"]
-        pred_internodes = io.read_json(pred_jsonfile)["internodes"]
+        pred_angles = read_json(pred_jsonfile)["angles"]
+        pred_internodes = read_json(pred_jsonfile)["internodes"]
 
         self.gt_angles_type = str(self.gt_angles_type)
         self.pred_angles_type = str(self.pred_angles_type)
         # - Remove potential plural form if detected:
         self.gt_angles_type = self.gt_angles_type[:-1] if self.gt_angles_type.endswith('s') else self.gt_angles_type
-        self.pred_angles_type = self.pred_angles_type[:-1] if self.pred_angles_type.endswith('s') else self.pred_angles_type
+        self.pred_angles_type = self.pred_angles_type[:-1] if self.pred_angles_type.endswith(
+            's') else self.pred_angles_type
         # - Check this is a valid value, else fall back to automatic mode:
         if self.gt_angles_type not in ["auto", "degree", "radian"]:
             logger.error(f"Invalid value for 'gt_angles_type' ({self.gt_angles_type}), falling back to 'auto' mode!")
             self.gt_angles_type = "auto"
         if self.pred_angles_type not in ["auto", "degree", "radian"]:
-            logger.error(f"Invalid value for 'pred_angles_type' ({self.pred_angles_type}), falling back to 'auto' mode!")
+            logger.error(
+                f"Invalid value for 'pred_angles_type' ({self.pred_angles_type}), falling back to 'auto' mode!")
             self.pred_angles_type = "auto"
         # - If in "auto" mode, try to guess the type of angles (degree or radians):
         if self.gt_angles_type == "auto":
@@ -570,11 +581,13 @@ class AnglesAndInternodesEvaluation(EvaluationTask):
                                       free_ends_eps=self.free_ends_eps, n_jobs=self.n_jobs)
 
         # - Export results:
+        scan_id = self.output().get().scan.id
         # Export the alignment figure:
-        outfs = self.output().get()
-        f = outfs.create_file("alignment_figure.png")
-        f_path = join(f.db.basedir, f.get_scan().id, f.get_fileset().id, f.id)
-        dtwcomputer.plot_results(f_path, valrange=[(0, 360), None], dataset_name=f.get_scan().id)
+        fig_file = self.output_file(f"alignment_figure_{scan_id}", create=True)
+        img_buf = BytesIO()
+        dtwcomputer.plot_results(img_buf, valrange=[(0, 360), None], dataset_name=scan_id)
+        img = Image.open(img_buf)
+        write_image(fig_file, img, ext="png")
         # Export the text alignment results:
         results = dtwcomputer.get_results()
         summary = dtwcomputer.summarize()
@@ -582,4 +595,4 @@ class AnglesAndInternodesEvaluation(EvaluationTask):
         json_results = {}
         json_results.update(jsonify(summary))
         json_results.update(jsonify(results))
-        io.write_json(self.output_file(), json_results)
+        write_json(self.output_file(), json_results)
