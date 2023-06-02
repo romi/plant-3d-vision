@@ -542,10 +542,14 @@ class AnglesAndInternodesEvaluation(EvaluationTask):
             gt_angles = list(map(float, input_file.get_scan().get_measures("angles")))
             gt_internodes = list(map(float, input_file.get_scan().get_measures("internodes")))
 
-        # - Get the predicted angles and internodes from pipe result
-        pred_jsonfile = self.upstream_task().output().get().get_files()[0]
-        pred_angles = read_json(pred_jsonfile)["angles"]
-        pred_internodes = read_json(pred_jsonfile)["internodes"]
+        # - Get the predicted angles and internodes from upstream outputs:
+        pred_jsonfile = self.upstream_task().output().get().get_file("AnglesAndInternodes")
+        pred_sequences = read_json(pred_jsonfile)
+        pred_angles = pred_sequences["angles"]
+        pred_internodes = pred_sequences["internodes"]
+
+        if len(pred_angles) == 0 or len(pred_internodes) == 0:
+            raise IOError(f"Got an empty sequence of angles and/or internodes from prediction file!")
 
         self.gt_angles_type = str(self.gt_angles_type)
         self.pred_angles_type = str(self.pred_angles_type)
