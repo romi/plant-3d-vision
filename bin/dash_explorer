@@ -1,0 +1,164 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+import argparse
+from pathlib import Path
+
+import plotly.graph_objects as go
+from dash import Dash
+from dash import Input
+from dash import Output
+from dash import callback
+from dash import dcc
+from dash import html
+
+from plant3dvision.visu import plotly_direction_data
+from plant3dvision.visu import plotly_mesh_data
+from plant3dvision.visu import plotly_pointcloud_data
+from plant3dvision.visu import plotly_treegraph_data
+from plantdb import FSDB
+from plantdb.io import read_graph
+from plantdb.io import read_json
+from plantdb.io import read_point_cloud
+from plantdb.io import read_triangle_mesh
+from plantdb.log import configure_logger
+
+TASKS = [
+    "PointCloud",
+    "TriangleMesh",
+    "CurveSkeleton",
+    "TreeGraph",
+    "AnglesAndInternodes",
+]
+
+
+def parsing():
+    parser = argparse.ArgumentParser(description="Explore the tasks outputs on selected dataset.")
+    parser.add_argument('dataset', type=str,
+                        help="Path to the dataset to explore (directory)")
+    return parser
+
+
+def get_data(dataset):
+    dataset = Path(dataset)
+    db_path = dataset.parent
+    dataset_name = dataset.name
+    db = FSDB(db_path)
+    db.connect()
+    scan = db.get_scan(dataset_name, create=False)
+    # List all fileset in the scan
+    fs_list = scan.list_filesets()
+    # Find the fileset corresponding to the task:
+    fileset_names = {}
+    for task in TASKS:
+        try:
+            fileset_names[task] = [fs for fs in fs_list if fs.startswith(task)][0]
+        except IndexError:
+            fileset_names[task] = "None"
+    # - Load the PointCloud:
+    pcd_fs = scan.get_fileset(fileset_names['PointCloud'])
+    pcd_file = pcd_fs.get_file('PointCloud')
+    if pcd_file is not None:
+        pcd = read_point_cloud(pcd_file)
+    else:
+        pcd = None
+    # - Load the TriangleMesh:
+    mesh_fs = scan.get_fileset(fileset_names['TriangleMesh'])
+    mesh_file = mesh_fs.get_file('TriangleMesh')
+    if mesh_file is not None:
+        mesh = read_triangle_mesh(mesh_file)
+    else:
+        mesh = None
+    # - Load the TreeGraph:
+    tree_fs = scan.get_fileset(fileset_names['TreeGraph'])
+    tree_file = tree_fs.get_file('TreeGraph')
+    if tree_file is not None:
+        tree = read_graph(tree_file)
+    else:
+        tree = None
+    # - Load the estimated fruit directions:
+    fruit_dir_fs = scan.get_fileset(fileset_names['AnglesAndInternodes'])
+    fruit_dir_file = fruit_dir_fs.get_file('fruit_direction')
+    if fruit_dir_file is not None:
+        fruit_dir = read_json(fruit_dir_file)
+    else:
+        fruit_dir = None
+
+    db.disconnect()
+    return pcd, mesh, tree, fruit_dir
+
+
+def get_graph_objects(data):
+    go_data = {}
+
+    go_data['PointCloud'] = plotly_pointcloud_data(data['PointCloud'])
+    go_data['TriangleMesh'] = plotly_mesh_data(data['TriangleMesh'])
+    go_data['TreeGraph'] = plotly_treegraph_data(data["TreeGraph"])
+    fruit_dir = data["FruitDirection"]
+    go_data['FruitDirection'] = plotly_direction_data(fruit_dir["fruit_dirs"], fruit_dir["bp_coords"], "fruit")
+
+    return go_data
+
+
+def select_go_data(checklist, go_data):
+    selected_go_data = []
+    for name, check in checklist.items():
+        if check:
+            if isinstance(go_data[name], list):
+                selected_go_data.extend(go_data[name])
+            else:
+                selected_go_data.append(go_data[name])
+    return selected_go_data
+
+
+def dash_app(data):
+    app = Dash(__name__)
+    n_data = len(data)
+    init_check = [True] * n_data
+
+    go_data = get_graph_objects(data)
+    checklist = dict(zip(go_data.keys(), init_check))
+    fig = go.Figure(data=select_go_data(checklist, go_data))
+
+    layout_style = {"height": 900, "width":1400}
+    fig.update_layout(**layout_style)
+    fig.update_scenes(aspectmode='data')
+
+    app.layout = html.Div([
+        html.H1(children='Plant reconstruction explorer', style={'textAlign': 'center'}),
+        dcc.Checklist(list(data.keys()), inline=True, value=init_check, id='checklist-selection'),
+        dcc.Graph(figure=fig, id='graph-content')
+    ])
+
+    @callback(
+        Output('graph-content', 'figure'),
+        Input('checklist-selection', 'value')
+    )
+    def update_graph(value):
+        checklist = dict(zip(go_data.keys(), value))
+        fig = go.Figure(data=select_go_data(checklist, go_data))
+        fig.update_layout(**layout_style)
+        fig.update_scenes(aspectmode='data')
+        return fig
+
+    return app
+
+
+if __name__ == '__main__':
+    # - Parse the input arguments to variables:
+    parser = parsing()
+    args = parser.parse_args()
+
+    # - Configure a logger from this application:
+    global logger
+    logger = configure_logger('dash_explorer')
+
+    pcd, mesh, tree, fruit_dir = get_data(args.dataset)
+    data = {
+        "PointCloud": pcd,
+        "TriangleMesh": mesh,
+        "TreeGraph": tree,
+        "FruitDirection": fruit_dir
+    }
+
+    app = dash_app(data)
+    app.run_server(debug=True)
