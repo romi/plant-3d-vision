@@ -44,6 +44,7 @@ class TreeGraph(RomiTask):
         io.write_graph(self.output_file(), t)
         return
 
+
 class AnglesAndInternodes(RomiTask):
     """ Computes organs successive angles and internodes.
 
@@ -106,17 +107,27 @@ class AnglesAndInternodes(RomiTask):
         if task_name == "TreeGraph":
             from plant3dvision.arabidopsis import compute_stem_and_fruit_directions
             from plant3dvision.arabidopsis import compute_angles_and_internodes_from_directions
+            # Load the tree graph from upstream TreeGraph task:
             t = io.read_graph(self.input_file())
             # Compute angles and internodes from tree graph:
             # measures = arabidopsis.compute_angles_and_internodes(t)
-            fruit_dirs, stem_dirs, bp_coords, fruit_pts = compute_stem_and_fruit_directions(t,
-                                                                                           max_node_dist=float(
-                                                                                               self.node_sampling_dist),
-                                                                                           min_fruit_length=float(
-                                                                                               self.min_fruit_size))
+            dirs = compute_stem_and_fruit_directions(t,
+                                                     max_node_dist=float(self.node_sampling_dist),
+                                                     min_fruit_length=float(self.min_fruit_size))
+            fruit_dirs, stem_dirs, bp_coords, fruit_pts = dirs
             measures = compute_angles_and_internodes_from_directions(fruit_dirs, stem_dirs, bp_coords)
             measures["fruit_points"] = [list(map(list, fpts)) for fpts in fruit_pts]  # array are not JSON serializable
-
+            # Save estimated fruit and stem directions as JSON files:
+            fruit_dir_file = self.output_file("fruit_direction", create=True)
+            io.write_json(fruit_dir_file,
+                          {'fruit_dirs': {i: list(dirs) for i, dirs in enumerate(fruit_dirs)},
+                           'bp_coords': {i: list(coords) for i, coords in enumerate(bp_coords)}}
+                          )
+            stem_dir_file = self.output_file("stem_direction", create=True)
+            io.write_json(stem_dir_file,
+                          {'stem_dirs': {i: list(dirs) for i, dirs in enumerate(stem_dirs)},
+                           'bp_coords': {i: list(coords) for i, coords in enumerate(bp_coords)}}
+                          )
         # angles and internodes from point cloud
         else:
             if task_name == "ClusteredMesh":  # mesh to point cloud
@@ -146,9 +157,10 @@ class AnglesAndInternodes(RomiTask):
 
             from plant3dvision.arabidopsis import angles_and_internodes_from_point_cloud
             measures = angles_and_internodes_from_point_cloud(stem_pcd, organ_pcd_list,
-                                                                          self.characteristic_length,
-                                                                          self.stem_axis, self.stem_axis_inverted,
-                                                                          self.min_elongation_ratio,
-                                                                          self.min_fruit_size)
+                                                              self.characteristic_length,
+                                                              self.stem_axis, self.stem_axis_inverted,
+                                                              self.min_elongation_ratio,
+                                                              self.min_fruit_size)
         io.write_json(self.output_file(), measures)
+
         return
