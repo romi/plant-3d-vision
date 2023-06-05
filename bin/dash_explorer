@@ -101,42 +101,37 @@ def get_graph_objects(data):
 
 def select_go_data(checklist, go_data):
     selected_go_data = []
-    for name, check in checklist.items():
-        if check:
-            if isinstance(go_data[name], list):
-                selected_go_data.extend(go_data[name])
-            else:
-                selected_go_data.append(go_data[name])
+    for name in checklist:
+        if isinstance(go_data[name], list):
+            selected_go_data.extend(go_data[name])
+        else:
+            selected_go_data.append(go_data[name])
     return selected_go_data
 
 
 def dash_app(data):
     app = Dash(__name__)
-    n_data = len(data)
-    init_check = [True] * n_data
 
     go_data = get_graph_objects(data)
-    checklist = dict(zip(go_data.keys(), init_check))
+    init_checklist = list(go_data.keys())
+    checklist = dict(zip(go_data.keys(), init_checklist))
     fig = go.Figure(data=select_go_data(checklist, go_data))
 
-    layout_style = {"height": 900, "width":1400}
-    fig.update_layout(**layout_style)
     fig.update_scenes(aspectmode='data')
 
     app.layout = html.Div([
-        html.H1(children='Plant reconstruction explorer', style={'textAlign': 'center'}),
-        dcc.Checklist(list(data.keys()), inline=True, value=init_check, id='checklist-selection'),
-        dcc.Graph(figure=fig, id='graph-content')
-    ])
+        html.Link(href="https://fonts.googleapis.com/css?family=Nunito Sans", rel="stylesheet"),
+        html.H1(children='Plant reconstruction explorer', style={'textAlign': 'center', 'padding': '10px 10px', 'background-color': 'rgb(30 179 123)'}),
+        dcc.Checklist(list(data.keys()), inline=True, value=init_checklist, id='checklist-selection', style={'margin': "auto"}),
+        dcc.Graph(figure=fig, id='graph-content', style={'width': '98vw', 'height': '95vh'}, config={'responsive': True})
+    ], style={'font-family': '"Nunito Sans"'})
 
     @callback(
         Output('graph-content', 'figure'),
         Input('checklist-selection', 'value')
     )
     def update_graph(value):
-        checklist = dict(zip(go_data.keys(), value))
-        fig = go.Figure(data=select_go_data(checklist, go_data))
-        fig.update_layout(**layout_style)
+        fig = go.Figure(data=select_go_data(value, go_data))
         fig.update_scenes(aspectmode='data')
         return fig
 

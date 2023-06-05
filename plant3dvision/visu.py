@@ -47,7 +47,7 @@ def plotly_pointcloud_data(pcd, n_pts=9000, marker_kwargs=None):
         marker_style.update(marker_kwargs)
 
     x, y, z = pcd_arr.T
-    return go.Scatter3d(x=x, y=y, z=z, mode="markers", marker=marker_style)
+    return go.Scatter3d(x=x, y=y, z=z, mode="markers", name="point cloud", marker=marker_style)
 
 
 def plotly_pointcloud(pcd, n_pts=9000, height=900, width=900, title="Point cloud",
@@ -127,7 +127,7 @@ def plotly_mesh_data(mesh, mesh_kwargs=None):
 
     x, y, z = np.array(mesh.vertices).T
     i, j, k = np.array(mesh.triangles).T
-    return go.Mesh3d(x=x, y=y, z=z, i=i, j=j, k=k, **mesh_style)
+    return go.Mesh3d(x=x, y=y, z=z, i=i, j=j, k=k, name='triangular mesh', **mesh_style)
 
 def plotly_mesh(mesh, height=900, width=900, title="Triangular mesh",
                 mesh_kwargs=None, layout_kwargs=None):
