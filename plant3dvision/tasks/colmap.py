@@ -434,6 +434,13 @@ class Colmap(RomiTask):
     ----------
     upstream_task : luigi.TaskParameter, optional
         Task upstream of this task. Defaults to ``ImagesFilesetExists``.
+    scan_id : luigi.Parameter, optional
+        The dataset id (scan name) to use to create the ``FilesetTarget``.
+        If unspecified (default), the current active scan will be used.
+    query : luigi.DictParameter, optional
+        A filtering dictionary to apply on input ```Fileset`` metadata.
+        Key(s) and value(s) must be found in metadata to select the ``File``.
+        By default, no filtering is performed, all inputs are used.
     matcher : luigi.Parameter, optional
         Type of matcher to use, choose either "exhaustive" or "sequential".
         *Exhaustive matcher* tries to match every other image.
@@ -483,9 +490,6 @@ class Colmap(RomiTask):
     robust_alignment_max_error : luigi.IntParameter
         Maximum alignment error allowed during ``model_aligner`` COLMAP step.
         Defaults to ``10``.
-    query : luigi.DictParameter
-        A filtering dictionary on metadata, similar to `romitask.task.FileByFileTask`.
-        Key(s) and value(s) must be found in metadata to select the `File`s from the upstream task.
     distance_threshold : luigi.FloatParamater
         A maximum distance (3D) from the CNC poses to consider the COLMAP estimated pose as correct.
         If non-null, a "pose_estimation" metadata stating "correct" or "incorrect" is added to each image according to this threshold.
@@ -510,14 +514,14 @@ class Colmap(RomiTask):
     See Also
     --------
     plant3dvision.colmap.ColmapRunner
-    romitask.task.RomiTask
 
     References
     ----------
     .. [#] `COLMAP official tutorial. <https://colmap.github.io/tutorial.html>`_
 
     """
-    upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)
+    upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)  # override default attribute from ``RomiTask``
+    query = luigi.DictParameter(default={})
     matcher = luigi.Parameter(default="exhaustive")
     compute_dense = luigi.BoolParameter(default=False)
     align_pcd = luigi.BoolParameter(default=True)
@@ -530,7 +534,6 @@ class Colmap(RomiTask):
     robust_alignment_max_error = luigi.IntParameter(default=10)
     bounding_box = luigi.DictParameter(default=None)
     cli_args = luigi.DictParameter(default={})
-    query = luigi.DictParameter(default={})
     distance_threshold = luigi.FloatParameter(default=0)
 
     def _workspace_as_bounding_box(self):
@@ -763,7 +766,7 @@ class Colmap(RomiTask):
                                path=self.output().get().path(), vignette=hardware_str + "\n" + camera_str,
                                suffix="_estimated")
 
-        # - Compute the euclidean distances between CNC & COLMAP poses & export it to a file:
+        # - Compute the Euclidean distances between CNC & COLMAP poses & export it to a file:
         euclidean_distances = {}
         for im in images_fileset:
             euclidean_distances[im.id] = euclidean(cnc_poses[im.id][:3], colmap_poses[im.id][:3])
