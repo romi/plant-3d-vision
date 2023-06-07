@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""
-Python wrapper around COLMAP.
+"""Python wrapper around COLMAP.
 
 You can use multiple sources of colmap executable by setting the ``COLMAP_EXE`` environment variable:
   - use local installation (from sources) of colmap with ``export COLMAP_EXE='colmap'``
@@ -17,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 from os.path import splitext
+from pathlib import Path
 
 import imageio
 import numpy as np
@@ -294,13 +294,14 @@ class ColmapRunner(object):
 
     """
 
-    def __init__(self, fileset, matcher_method="exhaustive", compute_dense=False, all_cli_args={}, align_pcd=False,
+    def __init__(self, img_files, matcher_method="exhaustive", compute_dense=False, all_cli_args={}, align_pcd=False,
                  use_calibration=False, bounding_box=None, **kwargs):
-        """
+        """ColmapRunner constructor.
+
         Parameters
         ----------
-        fileset : list of plantdb.db.File
-            The `Fileset` containing source images to use for reconstruction.
+        img_files : list of plantdb.db.File
+            The list of image ``File`` to use for reconstruction.
         matcher_method : {'exhaustive', 'sequential'}, optional
             Method to use to perform feature matching operation, default is 'exhaustive'.
         compute_dense : bool, optional
@@ -349,10 +350,10 @@ class ColmapRunner(object):
         >>> # -- Example comparing the CPU vs. GPU performances (requires a CUDA capable NVIDIA GPU):
         >>> # - Creates a ColmapRunner with GPU features enabled:
         >>> gpu_args = {"feature_extractor": {"--ImageReader.single_camera": "1"}}
-        >>> gpu_colmap = ColmapRunner(fs, all_cli_args=gpu_args, align_pcd=True)
+        >>> gpu_colmap = ColmapRunner(fs, all_cli_args=gpu_args,align_pcd=True)
         >>> # - Creates a ColmapRunner with CPU features enabled:
         >>> cpu_args = {"feature_extractor": {"--ImageReader.single_camera": "1", "--SiftExtraction.use_gpu": "0"}, "exhaustive_matcher": {"--SiftMatching.use_gpu": "0"}}
-        >>> cpu_colmap = ColmapRunner(fs, all_cli_args=cpu_args, align_pcd=True)
+        >>> cpu_colmap = ColmapRunner(fs, all_cli_args=cpu_args,align_pcd=True)
         >>> # Time the "feature extraction" step on GPU:
         >>> t_start = time.time()
         >>> gpu_colmap.feature_extractor()
@@ -403,12 +404,12 @@ class ColmapRunner(object):
         >>> # -- Examples of WRONG bounding-box definition:
         >>> bbox = {"x" : [2200, 2600], "y" : [2200, 2600], "z" : [-2200, 2200]}
         >>> args = {"feature_extractor": {"--ImageReader.single_camera": "1"}}
-        >>> colmap = ColmapRunner(fs, all_cli_args=args, bounding_box=bbox)
+        >>> colmap = ColmapRunner(fs, all_cli_args=args,bounding_box=bbox)
         >>> points, images, cameras, sparse_pcd, dense_pcd, bounding_box = colmap.run()
 
         """
         # -- Initialize attributes:
-        self.fileset = fileset  # list of plantdb.fsdb.File
+        self.fileset = img_files  # list of plantdb.fsdb.File
         self.matcher_method = matcher_method
         self.compute_dense = compute_dense
         self.all_cli_args = all_cli_args
@@ -417,10 +418,10 @@ class ColmapRunner(object):
         self.bounding_box = bounding_box
         # -- Initialize COLMAP directories, poses file & log file:
         # - Get / create a temporary COLMAP working directory
-        self.colmap_workdir = os.environ.get("COLMAP_WD", tempfile.mkdtemp())
-        self.imgs_dir = os.path.join(self.colmap_workdir, 'images')  # COLMAP's 'images' directory
-        self.sparse_dir = os.path.join(self.colmap_workdir, 'sparse')  # COLMAP's 'sparse reconstruction' directory
-        self.dense_dir = os.path.join(self.colmap_workdir, 'dense')  # COLMAP's 'dense reconstruction' directory
+        self.colmap_workdir = Path(os.environ.get("COLMAP_WD", tempfile.mkdtemp()))
+        self.imgs_dir = self.colmap_workdir / 'images'  # COLMAP's 'images' directory
+        self.sparse_dir = self.colmap_workdir / 'sparse'  # COLMAP's 'sparse reconstruction' directory
+        self.dense_dir = self.colmap_workdir / 'dense'  # COLMAP's 'dense reconstruction' directory
         # - Make sure those directories exists & create them otherwise:
         self._init_directories()
         # - Fill COLMAP's 'images' directory with files from the 'images' Fileset (self.fileset)
@@ -435,9 +436,9 @@ class ColmapRunner(object):
 
     def _init_directories(self):
         """Initialize 'images', 'sparse' & 'dense' reconstruction directory."""
-        os.makedirs(self.imgs_dir, exist_ok=True)
-        os.makedirs(self.sparse_dir, exist_ok=True)
-        os.makedirs(self.dense_dir, exist_ok=True)
+        self.imgs_dir.mkdir(parents=True, exist_ok=True)
+        self.sparse_dir.mkdir(parents=True, exist_ok=True)
+        self.dense_dir.mkdir(parents=True, exist_ok=True)
         return
 
     def _init_images_directory(self):
@@ -708,7 +709,7 @@ class ColmapRunner(object):
         varenv = {}
         varenv.update({'PYOPENCL_CTX': os.environ.get('PYOPENCL_CTX', '0')})
         # Defines the mount point
-        mount = docker.types.Mount(self.colmap_workdir, self.colmap_workdir, type='bind')
+        mount = docker.types.Mount(str(self.colmap_workdir), str(self.colmap_workdir), type='bind')
         # Create the bash command called inside the docker container
         cmd = " ".join(process)
         logger.debug('Docker subprocess: ' + cmd)
