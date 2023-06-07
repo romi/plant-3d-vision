@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 import os
-import random
 import tempfile
 from io import BytesIO
 
@@ -39,10 +38,22 @@ logger = configure_logger(__name__)
 
 
 class EvaluationTask(RomiTask):
-    upstream_task = luigi.TaskParameter()
+    """Abstract evaluation task class.
+
+    Attributes
+    ----------
+    upstream_task : luigi.TaskParameter()
+        The task to evaluate.
+    scan_id : luigi.Parameter, optional
+        The dataset id (scan name) to use to create the ``FilesetTarget``.
+        If unspecified (default), the current active scan will be used.
+    ground_truth : luigi.TaskParameter()
+        The task providing the ground-truth to evaluate against the `upstream_task`.
+    """
     ground_truth = luigi.TaskParameter()
 
     def requires(self):
+        """Require the upstream task and the ground truth to be 'complete'."""
         return [self.upstream_task(), self.ground_truth()]
 
     def output(self):
@@ -58,7 +69,19 @@ class EvaluationTask(RomiTask):
 
 
 class VoxelsGroundTruth(RomiTask):
-    upstream_task = luigi.TaskParameter(default=VirtualPlantObj)
+    """Return the ground truth volume given a virtual plant `.obj` and `.mtl` files.
+
+    Attributes
+    ----------
+    upstream_task : luigi.TaskParameter, optional
+        The upstream task providing the virtual plant `.obj` and `.mtl` files.
+        Defaults to `VirtualPlantObj`.
+    scan_id : luigi.Parameter, optional
+        The dataset id (scan name) to use to create the ``FilesetTarget``.
+        If unspecified (default), the current active scan will be used.
+
+    """
+    upstream_task = luigi.TaskParameter(default=VirtualPlantObj)  # override default attribute from ``RomiTask``
 
     def run(self):
         import pywavefront
@@ -108,7 +131,22 @@ class VoxelsGroundTruth(RomiTask):
 
 
 class PointCloudGroundTruth(RomiTask):
-    upstream_task = luigi.TaskParameter(default=VirtualPlantObj)
+    """Return the ground truth point cloud given a virtual plant `.obj` and `.mtl` files.
+
+    Attributes
+    ----------
+    upstream_task : luigi.TaskParameter, optional
+        The upstream task providing the virtual plant `.obj` and `.mtl` files.
+        Defaults to `VirtualPlantObj`.
+    scan_id : luigi.Parameter, optional
+        The dataset id (scan name) to use to create the ``FilesetTarget``.
+        If unspecified (default), the current active scan will be used.
+    pcd_size : luigi.IntParameter, optional
+        The number of point to return for the point cloud.
+        Defaults to `100000`.
+
+    """
+    upstream_task = luigi.TaskParameter(default=VirtualPlantObj)  # override default attribute from ``RomiTask``
     pcd_size = luigi.IntParameter(default=100000)
 
     def run(self):
@@ -158,7 +196,19 @@ class PointCloudGroundTruth(RomiTask):
 
 
 class ClusteredMeshGroundTruth(RomiTask):
-    upstream_task = luigi.TaskParameter(default=VirtualPlantObj)
+    """Return the ground truth clustered mesh given a virtual plant `.obj` and `.mtl` files.
+
+    Attributes
+    ----------
+    upstream_task : luigi.TaskParameter, optional
+        The upstream task providing the virtual plant `.obj` and `.mtl` files.
+        Defaults to `VirtualPlantObj`.
+    scan_id : luigi.Parameter, optional
+        The dataset id (scan name) to use to create the ``FilesetTarget``.
+        If unspecified (default), the current active scan will be used.
+
+    """
+    upstream_task = luigi.TaskParameter(default=VirtualPlantObj)  # override default attribute from ``RomiTask``
 
     def run(self):
         import pywavefront
@@ -204,8 +254,26 @@ class ClusteredMeshGroundTruth(RomiTask):
 
 
 class SegmentedPointCloudEvaluation(EvaluationTask):
-    upstream_task = luigi.TaskParameter(default=proc3d.SegmentedPointCloud)
-    ground_truth = luigi.TaskParameter(default=PointCloudGroundTruth)
+    """Evaluate a task generating a segmented point cloud.
+
+    Attributes
+    ----------
+    upstream_task : luigi.TaskParameter()
+        The task, generating a segmented point cloud, to evaluate.
+        Defaults to `SegmentedPointCloud`.
+    scan_id : luigi.Parameter, optional
+        The dataset id (scan name) to use to create the ``FilesetTarget``.
+        If unspecified (default), the current active scan will be used.
+    ground_truth : luigi.TaskParameter()
+        The task providing the ground-truth to evaluate against the `upstream_task`.
+        Defaults to `PointCloudGroundTruth`.
+
+    See Also
+    --------
+    plant3dvision.metrics.CompareSegmentedPointClouds
+    """
+    upstream_task = luigi.TaskParameter(default=proc3d.SegmentedPointCloud)  # override default attribute from ``RomiTask``
+    ground_truth = luigi.TaskParameter(default=PointCloudGroundTruth)  # override default attribute from ``EvaluationTask``
 
     def evaluate(self):
         prediction = read_point_cloud(self.upstream_task().output_file())
@@ -223,8 +291,29 @@ class SegmentedPointCloudEvaluation(EvaluationTask):
 
 
 class PointCloudEvaluation(EvaluationTask):
-    upstream_task = luigi.TaskParameter(default=proc3d.PointCloud)
-    ground_truth = luigi.TaskParameter(default=PointCloudGroundTruth)
+    """Evaluate a task generating a point cloud.
+
+    Attributes
+    ----------
+    upstream_task : luigi.TaskParameter()
+        The task, generating a point cloud, to evaluate.
+        Defaults to `PointCloud`.
+    scan_id : luigi.Parameter, optional
+        The dataset id (scan name) to use to create the ``FilesetTarget``.
+        If unspecified (default), the current active scan will be used.
+    ground_truth : luigi.TaskParameter()
+        The task providing the ground-truth to evaluate against the `upstream_task`.
+        Defaults to `PointCloudGroundTruth`.
+    max_distance : luigi.FloatParameter
+        Maximum correspondence points-pair distance.
+        Defaults to `2`.
+
+    See Also
+    --------
+    open3d.cuda.pybind.pipelines.registration.evaluate_registration
+    """
+    upstream_task = luigi.TaskParameter(default=proc3d.PointCloud)  # override default attribute from ``RomiTask``
+    ground_truth = luigi.TaskParameter(default=PointCloudGroundTruth)  # override default attribute from ``EvaluationTask``
     max_distance = luigi.FloatParameter(default=2)
 
     def evaluate(self):
@@ -233,8 +322,7 @@ class PointCloudEvaluation(EvaluationTask):
         labels = self.upstream_task().output_file().get_metadata('labels')
         labels_gt = self.ground_truth().output_file().get_metadata('labels')
 
-        res = o3d.pipelines.registration.evaluate_registration(source, target,
-                                                               self.max_distance)
+        res = o3d.pipelines.registration.evaluate_registration(source, target, self.max_distance)
         eval = {"id": self.upstream_task().task_id}
         eval["all"] = {
             "fitness": res.fitness,
@@ -246,11 +334,9 @@ class PointCloudEvaluation(EvaluationTask):
                 idx_gt = [i for i in range(len(labels_gt)) if labels_gt[i] == l]
 
                 subpcd_source = o3d.geometry.PointCloud()
-                subpcd_source.points = o3d.utility.Vector3dVector(
-                    np.asarray(source.points)[idx])
+                subpcd_source.points = o3d.utility.Vector3dVector(np.asarray(source.points)[idx])
                 subpcd_target = o3d.geometry.PointCloud()
-                subpcd_target.points = o3d.utility.Vector3dVector(
-                    np.asarray(target.points)[idx_gt])
+                subpcd_target.points = o3d.utility.Vector3dVector(np.asarray(target.points)[idx_gt])
 
                 if len(subpcd_target.points) == 0:
                     continue
@@ -258,9 +344,7 @@ class PointCloudEvaluation(EvaluationTask):
                 logger.debug("label : %s" % l)
                 logger.debug("gt points: %i" % len(subpcd_target.points))
                 logger.debug("pcd points: %i" % len(subpcd_source.points))
-                res = o3d.pipelines.registration.evaluate_registration(subpcd_source,
-                                                                       subpcd_target,
-                                                                       self.max_distance)
+                res = o3d.pipelines.registration.evaluate_registration(subpcd_source, subpcd_target, self.max_distance)
                 eval[l] = {
                     "fitness": res.fitness,
                     "inlier_rmse": res.inlier_rmse
@@ -270,9 +354,32 @@ class PointCloudEvaluation(EvaluationTask):
 
 
 class Segmentation2DEvaluation(EvaluationTask):
-    upstream_task = luigi.TaskParameter(default=proc2d.Segmentation2D)
-    ground_truth = luigi.TaskParameter(default=Segmentation2DGroundTruthFilesetExists)
-    hist_bins = luigi.IntParameter(default=100)
+    """Evaluate a task generating labelled masks.
+
+    Attributes
+    ----------
+    upstream_task : luigi.TaskParameter()
+        The task, generating labelled masks, to evaluate.
+        Defaults to `PointCloud`.
+    scan_id : luigi.Parameter, optional
+        The dataset id (scan name) to use to create the ``FilesetTarget``.
+        If unspecified (default), the current active scan will be used.
+    ground_truth : luigi.TaskParameter()
+        The task providing the ground-truth to evaluate against the `upstream_task`.
+        Defaults to `PointCloudGroundTruth`.
+    dilation_amount : luigi.IntParameter
+        Dilate the zones of white pixels by this many pixels before the comparison.
+        Defaults to `0`.
+    labels : luigi.ListParameter
+        List of label to consider for evaluation.
+        Defaults to `[]`.
+
+    See Also
+    --------
+    plant3dvision.metrics.CompareMaskFilesets
+    """
+    upstream_task = luigi.TaskParameter(default=proc2d.Segmentation2D)  # override default attribute from ``RomiTask``
+    ground_truth = luigi.TaskParameter(default=Segmentation2DGroundTruthFilesetExists)  # override default attribute from ``EvaluationTask``
     dilation_amount = luigi.IntParameter(default=0)
     labels = luigi.ListParameter(default=[])
 
@@ -290,12 +397,26 @@ class Segmentation2DEvaluation(EvaluationTask):
 
 
 class VoxelsEvaluation(EvaluationTask):
-    upstream_task = luigi.TaskParameter(default=cl.Voxels)
-    ground_truth = luigi.TaskParameter(default=VoxelsGroundTruth)
-    hist_bins = luigi.IntParameter(default=100)
+    """Evaluate a task generating a volume.
 
-    def requires(self):
-        return [self.upstream_task(), self.ground_truth()]
+    Attributes
+    ----------
+    upstream_task : luigi.TaskParameter()
+        The task, generating a volume, to evaluate.
+        Defaults to `Voxels`.
+    scan_id : luigi.Parameter, optional
+        The dataset id (scan name) to use to create the ``FilesetTarget``.
+        If unspecified (default), the current active scan will be used.
+    ground_truth : luigi.TaskParameter()
+        The task providing the ground-truth to evaluate against the `upstream_task`.
+        Defaults to `VoxelsGroundTruth`.
+
+    See Also
+    --------
+    plant3dvision.metrics.CompareMaskFilesets
+    """
+    upstream_task = luigi.TaskParameter(default=cl.Voxels)  # override default attribute from ``RomiTask``
+    ground_truth = luigi.TaskParameter(default=VoxelsGroundTruth)  # override default attribute from ``EvaluationTask``
 
     def evaluate(self):
         prediction_file = self.upstream_task().output().get().get_files()[0]
@@ -361,15 +482,20 @@ class CylinderRadiusGroundTruth(RomiTask):
 
     Parameters
     ----------
-    upstream_task : luigi.TaskParameter, optional
-        The task upstream to `CylinderRadiusEstimation`, defaults to `"ImagesFilesetExists"`.
-        Valid option is: "ImagesFilesetExists".
+    upstream_task : None
+        No upstream task is required.
+    scan_id : luigi.Parameter, optional
+        The dataset id (scan name) to use to create the ``FilesetTarget``.
+        If unspecified (default), the current active scan will be used.
     radius : luigi.Parameter, optional
-        The radius of the cylinder to create. Defaults to "random", but can be a float.
+        The radius of the cylinder to create.
+        Defaults to "random", but can be a float.
     height : luigi.Parameter, optional
-        The height of the cylinder to create. Defaults to "random", but can be a float.
+        The height of the cylinder to create.
+        Defaults to "random", but can be a float.
     nb_points : luigi.IntParameter, optional
-        The number of points used to create the cylinder point cloud. Defaults to "10000".
+        The number of points used to create the cylinder point cloud.
+        Defaults to "10000".
 
     Notes
     -----
@@ -379,23 +505,25 @@ class CylinderRadiusGroundTruth(RomiTask):
     Output task format: PLY point cloud & JSON metadata (with known radius).
 
     """
-    upstream_task = None
+    upstream_task = None  # override default attribute from ``RomiTask``
     radius = luigi.Parameter(default="random")
     height = luigi.Parameter(default="random")
     nb_points = luigi.IntParameter(default=10000)
 
     def requires(self):
+        """No upstream task is required to generate the cylinder."""
         return []
 
     def run(self):
+        rng = np.random.default_rng()
         # - Get the radius value:
         if self.radius == "random":
-            self.radius = random.uniform(1, 100)
+            self.radius = rng.uniform(1, 100)
         else:
             self.radius = float(self.radius)
         # - Get the height value:
         if self.height == "random":
-            self.height = random.uniform(1, 100)
+            self.height = rng.uniform(1, 100)
         else:
             self.height = float(self.height)
 
@@ -422,6 +550,9 @@ class CylinderRadiusEstimation(RomiTask):
     upstream_task : luigi.TaskParameter, optional
         The task upstream to `CylinderRadiusEstimation`, defaults to `"CylinderRadiusGroundTruth"`.
         Valid options are: "CylinderRadiusGroundTruth", "PointCloud".
+    scan_id : luigi.Parameter, optional
+        The dataset id (scan name) to use to create the ``FilesetTarget``.
+        If unspecified (default), the current active scan will be used.
 
     Notes
     -----
@@ -430,7 +561,7 @@ class CylinderRadiusEstimation(RomiTask):
     Output task format: JSON result file
 
     """
-    upstream_task = luigi.TaskParameter(CylinderRadiusGroundTruth)
+    upstream_task = luigi.TaskParameter(CylinderRadiusGroundTruth)  # override default attribute from ``RomiTask``
 
     def input(self):
         return self.upstream_task().output()
