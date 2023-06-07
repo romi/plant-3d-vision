@@ -5,7 +5,7 @@
 plant3dvision.proc2d
 --------------------
 
-This module contains all functions for processing of 2D data.
+This module contains all functions for processing of 2D images data.
 
 """
 
@@ -23,7 +23,7 @@ EPS = 1e-9
 
 
 def undistort(img, camera_mtx, distortion_vect):
-    """Uses opencv to undistort an image thanks to a camera model.
+    """Use OpenCV to undistort an image thanks to a camera model.
 
     Parameters
     ----------
@@ -42,6 +42,24 @@ def undistort(img, camera_mtx, distortion_vect):
     -------
     numpy.ndarray
         The undistorted RGB (NxMx3) array.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import matplotlib.pyplot as plt
+    >>> from imageio.v3 import imread
+    >>> from plant3dvision import test_db_path
+    >>> from plant3dvision.proc2d import undistort
+    >>> path = test_db_path()
+    >>> img = imread(path.joinpath('real_plant/images/00000_rgb.jpg'))
+    >>> camera_mtx = np.array([[1.16e+03, 0., 7.20e+02], [0., 1.16e+03, 5.40e+02], [0., 0., 1.]])
+    >>> distortion_vect = np.array([-0.00115644, 0., 0., 0.])
+    >>> undistorted_img = undistort(img, camera_mtx, distortion_vect)
+    >>> plt.imshow(undistorted_img)
+    >>> plt.title("Undistorted image")
+    >>> plt.axis('off')
+    >>> plt.tight_layout()
+    >>> plt.show()
 
     """
     undistorted_data = cv2.undistort(img, camera_mtx, distortion_vect, None)
@@ -69,7 +87,6 @@ def linear(img, coefs):
     >>> import numpy as np
     >>> import matplotlib.pyplot as plt
     >>> from imageio.v3 import imread
-    >>> from skimage.exposure import rescale_intensity
     >>> from plant3dvision import test_db_path
     >>> from plant3dvision.proc2d import linear, dilation
     >>> path = test_db_path()
@@ -117,7 +134,6 @@ def excess_green(img):
     >>> import numpy as np
     >>> import matplotlib.pyplot as plt
     >>> from imageio.v3 import imread
-    >>> from skimage.exposure import rescale_intensity
     >>> from plant3dvision import test_db_path
     >>> from plant3dvision.proc2d import excess_green, dilation
     >>> path = test_db_path()
@@ -176,7 +192,6 @@ def dilation(img, n):
     >>> import numpy as np
     >>> import matplotlib.pyplot as plt
     >>> from imageio.v3 import imread
-    >>> from skimage.exposure import rescale_intensity
     >>> from plant3dvision import test_db_path
     >>> from plant3dvision.proc2d import linear, dilation
     >>> path = test_db_path()

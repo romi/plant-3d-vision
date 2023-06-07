@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+
+"""Task submodule dedicated to the processing of 2D images that creates 2D images."""
+
 import sys
 
 import luigi
+import numpy
 import numpy as np
-from skimage.exposure import rescale_intensity
 from tqdm import tqdm
 
+import plantdb.db
 from plant3dvision.camera import colmap_params_from_kwargs
 from plant3dvision.tasks.colmap import Colmap
+from plant3dvision.utils import jsonify
 from plantdb import io
 from romitask.log import configure_logger
 from romitask.task import FileByFileTask
-from romitask.task import FilesetExists
+from romitask.task import ModelFilesetExists
 from romitask.task import ImagesFilesetExists
 
 logger = configure_logger(__name__)
@@ -58,12 +63,13 @@ class Undistorted(FileByFileTask):
         from plant3dvision.tasks.calibration import ExtrinsicCalibrationExists
         from plant3dvision.tasks.calibration import IntrinsicCalibrationExists
         if self.extrinsic_calib_scan_id == "" and str(self.camera_model_src).lower() == 'intrinsiccalibration':
-            logger.critical("If you use an IntrinsicCalibration as source for camera model, you have to define `extrinsic_calib_scan_id`!")
+            logger.critical(
+                "If you use an IntrinsicCalibration as source for camera model, you have to define `extrinsic_calib_scan_id`!")
             sys.exit("Missing poses estimation in IntrinsicCalibration.")
 
         if self.intrinsic_calib_scan_id != "":
             intrinsic_calib_scan = IntrinsicCalibrationExists(scan_id=self.intrinsic_calib_scan_id,
-                                                            camera_model=self.camera_model)
+                                                              camera_model=self.camera_model)
         if self.extrinsic_calib_scan_id != "":
             extrinsic_calib_scan = ExtrinsicCalibrationExists(scan_id=self.extrinsic_calib_scan_id)
 
@@ -92,10 +98,10 @@ class Undistorted(FileByFileTask):
         images_files = images_fileset.get_files(query=self.query)
         output_fileset = self.output().get()
         for fi in tqdm(images_files, unit="file"):
-            # Add 'calibrated_pose' to image metadata
+            # Add 'calibrated_pose' to input image metadata
             if poses is not None:
                 fi.set_metadata({'calibrated_pose': poses[fi.id]})
-            # Add 'colmap_camera' to image metadata
+            # Add 'colmap_camera' to input image metadata
             if str(self.camera_model_src).lower() == 'intrinsiccalibration':
                 fi.set_metadata({'colmap_camera': colmap_camera})
             elif str(self.camera_model_src).lower() == 'extrinsiccalibration':
@@ -106,21 +112,30 @@ class Undistorted(FileByFileTask):
                 outm = outfi.get_metadata()
                 outfi.set_metadata({**m, **outm})
 
-    def f(self, fi, outfs):
+    def f(self, fi: plantdb.db.File, outfs: plantdb.db.Fileset) -> plantdb.db.File or None:
+        """Undistort the input image ``File``."""
         from plant3dvision import proc2d
         from plant3dvision.camera import get_camera_kwargs_from_images_metadata
         from plant3dvision.camera import get_camera_arrays_from_params
-        x = io.read_image(fi)
+        logger.debug(f"Loading file: {fi.filename}")
+        img = io.read_image(fi)
+        # Get the camera model from the image metadata:
         cam_kwargs = get_camera_kwargs_from_images_metadata(fi)
         if cam_kwargs is not None:
+            # Get the matrices to apply to undistort the image:
             camera_mtx, distortion_vect = get_camera_arrays_from_params(**cam_kwargs)
-            x = proc2d.undistort(x, camera_mtx, distortion_vect)
+            # Undistort the image:
+            img = proc2d.undistort(img, camera_mtx, distortion_vect)
+            # Save the undistorted image:
             outfi = outfs.create_file(fi.id)
-            io.write_image(outfi, x)
+            io.write_image(outfi, img)
+            # Add metadata to the undistorted image:
+            md = {'upstream_task': str(self.upstream_task), "Camera model source": str(self.camera_model_src)}
+            outfi.set_metadata(md)
             return outfi
         else:
             logger.error(f"Could not find a camera model in '{fi.filename}' metadata!")
-            return
+            return None
 
 
 class Masks(FileByFileTask):
@@ -141,10 +156,10 @@ class Masks(FileByFileTask):
         List of parameters, only used if `type` is `"linear"`.
         They are the linear coefficient to apply to each RGB channel of the original image.
         Defaults to `[0, 1, 0]`.
-    dilation : luigi.IntParameter, optional
-        Dilation factor for the binary mask images. Defaults to `0`.
     threshold : luigi.FloatParameter, optional
         Binarization threshold applied after transforming the image. Defaults to ``0.3``.
+    dilation : luigi.IntParameter, optional
+        Dilation factor for the binary mask images. Defaults to `0`.
     query : luigi.DictParameter
         A filtering dictionary on metadata, inherited from `romitask.task.FileByFileTask`.
         Key(s) and value(s) must be found in metadata to select the `File`s from the upstream task.
@@ -170,10 +185,10 @@ class Masks(FileByFileTask):
     >>> from romitask.task import ImagesFilesetExists
     >>> from plant3dvision.tasks.colmap import Colmap
     >>> from plant3dvision.tasks.proc2d import Masks, Undistorted
-    >>> image_fs = ImagesFilesetExists(db=db, scan_id='real_plant')
-    >>> colmap_task = Colmap(db=db, scan_id='real_plant')
-    >>> undistort_task = Undistorted(db=db, scan_id='real_plant')
-    >>> mask_task = Masks(db=db, scan_id='real_plant', query="{'channel':'rgb'}")
+    >>> image_fs = ImagesFilesetExists(scan_id='real_plant')
+    >>> colmap_task = Colmap(scan_id='real_plant')
+    >>> undistort_task = Undistorted(scan_id='real_plant')
+    >>> mask_task = Masks(scan_id='real_plant', query="{'channel':'rgb'}")
     >>> luigi.build([image_fs, colmap_task, undistort_task, mask_task], local_scheduler=True)
     >>> db.disconnect()
 
@@ -181,42 +196,46 @@ class Masks(FileByFileTask):
     upstream_task = luigi.TaskParameter(default=Undistorted)
     type = luigi.Parameter("linear")
     parameters = luigi.ListParameter(default=[0, 1, 0])
-    dilation = luigi.IntParameter(default=0)
     threshold = luigi.FloatParameter(default=0.3)
+    dilation = luigi.IntParameter(default=0)
 
-    def f_raw(self, x):
+    def f_raw(self, img: numpy.ndarray) -> numpy.ndarray:
+        """Apply the selected filter to the image."""
         from plant3dvision import proc2d
-        x = np.asarray(x, dtype=float)
-        logger.debug(f"x shape: {x.shape}")
-        x = rescale_intensity(x, out_range=(0, 1))
-        logger.debug(f"x shape: {x.shape}")
+        logger.debug(f"Image shape: {img.shape}")
         if self.type == "linear":
-            coefs = self.parameters
-            return proc2d.linear(x, coefs)
+            return proc2d.linear(img, list(self.parameters))
         elif self.type == "excess_green":
-            return proc2d.excess_green(x)
+            return proc2d.excess_green(img)
         else:
             raise Exception(f"Unknown masking type '{self.type}'!")
 
-    def f(self, fi, outfs):
+    def f(self, fi: plantdb.db.File, outfs: plantdb.db.Fileset) -> plantdb.db.File:
+        """Compute the binary mask image for the input image ``File``."""
         from plant3dvision import proc2d
         logger.debug(f"Loading file: {fi.filename}")
-        x = io.read_image(fi)
-        x = self.f_raw(x)
-
-        x = x > self.threshold
+        img = io.read_image(fi)
+        # Apply the filter:
+        img = self.f_raw(img)
+        # Threshold the filtered image to make a binary mask:
+        img = img > self.threshold
+        # Apply dilation to the binary mask, if any:
         if self.dilation > 0:
-            x = proc2d.dilation(x, self.dilation)
-        x = np.array(255 * x, dtype=np.uint8)
-
+            img = proc2d.dilation(img, self.dilation)
+        # Convert back to uint8 type:
+        img = np.array(255 * img, dtype=np.uint8)
+        # Save the binary mask image:
         outfi = outfs.create_file(fi.id)
-        io.write_image(outfi, x)
+        io.write_image(outfi, img)
+        # Add metadata to the binary mask image:
+        md = {'upstream_task': str(self.upstream_task.get_task_family()), 'filter': str(self.type), 'threshold': self.threshold,
+              'dilation': self.dilation}
+        if self.type == "linear":
+            md.update({'linear_coeff': list(self.parameters)})
+        if self.query != {}:
+            md.update({'query': jsonify(self.query)})
+        outfi.set_metadata({self.get_task_family(): md})
         return outfi
-
-
-class ModelFileset(FilesetExists):
-    # scan_id = luigi.Parameter()
-    fileset_id = "models"
 
 
 class Segmentation2D(Masks):
@@ -267,7 +286,7 @@ class Segmentation2D(Masks):
     parameters = None
 
     upstream_task = luigi.TaskParameter(default=Undistorted)
-    model_fileset = luigi.TaskParameter(default=ModelFileset)
+    model_fileset = luigi.TaskParameter(default=ModelFilesetExists)
     model_id = luigi.Parameter()
     query = luigi.DictParameter(default={})
     Sx = luigi.IntParameter(default=896)
