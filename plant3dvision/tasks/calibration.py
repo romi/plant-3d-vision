@@ -27,6 +27,11 @@ class CreateCharucoBoard(RomiTask):
 
     Attributes
     ----------
+    upstream_task : None
+        No upstream task is required.
+    scan_id : luigi.Parameter, optional
+        The dataset id (scan name) to use to create the ``FilesetTarget``.
+        If unspecified (default), the current active scan will be used.
     n_squares_x : luigi.IntParameter, optional
         Number of square in x-axis to create the ChArUco board. Defaults to `14`.
     n_squares_y : luigi.IntParameter, optional
@@ -39,7 +44,7 @@ class CreateCharucoBoard(RomiTask):
         The dictionary of ArUco markers. Defaults to `"DICT_4X4_1000"`.
 
     """
-    upstream_task = None
+    upstream_task = None  # override default attribute from ``RomiTask``
     n_squares_x = luigi.IntParameter(default=14)
     n_squares_y = luigi.IntParameter(default=10)
     square_length = luigi.FloatParameter(default=2.)
@@ -60,7 +65,6 @@ class CreateCharucoBoard(RomiTask):
         Notes
         -----
         The image is saved as PNG and has the creation parameters as `File` metadata in the database.
-
         """
         from plant3dvision.calibration import get_charuco_board
         board = get_charuco_board(self.n_squares_x, self.n_squares_y,
@@ -90,21 +94,27 @@ class DetectCharuco(FileByFileTask):
     ----------
     upstream_task : luigi.TaskParameter, optional
         The upstream task is the images fileset. Defaults to ``ImagesFilesetExists``.
-    board_fileset : luigi.TaskParameter, optional
-        The fileset containing the ChArUco used to generate the images fileset. Defaults to ``CreateCharucoBoard``.
-    min_n_corners : luigi.IntParameter, optional
-        The minimum number of corners to detect in the image to extract markers position from it. Defaults to `20`.
+    scan_id : luigi.Parameter, optional
+        The dataset id (scan name) to use to create the ``FilesetTarget``.
+        If unspecified (default), the current active scan will be used.
     query : luigi.DictParameter, optional
-        Can be used to filter the images. Defaults to no filtering.
+        A filtering dictionary to apply on input ```Fileset`` metadata.
+        Key(s) and value(s) must be found in metadata to select the ``File``.
+        By default, no filtering is performed, all inputs are used.
+    board_fileset : luigi.TaskParameter, optional
+        The fileset containing the ChArUco used to generate the images fileset.
+        Defaults to ``CreateCharucoBoard``.
+    min_n_corners : luigi.IntParameter, optional
+        The minimum number of corners to detect in the image to extract markers position from it.
+        Defaults to `20`.
 
     """
-    upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)
+    upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)  # override default attribute from ``FileByFileTask``
     board_fileset = luigi.TaskParameter(default=CreateCharucoBoard)
     min_n_corners = luigi.IntParameter(default=20)
-    query = luigi.DictParameter(default={})
 
     def requires(self):
-        """This task requires the creation of a ChArUco board and to acquire images of this board."""
+        """Require a ChArUco board and a set of images of this board (scan)."""
         return {"board": CreateCharucoBoard(), "images": self.upstream_task()}
 
     def run(self):
@@ -125,7 +135,7 @@ class DetectCharuco(FileByFileTask):
                 outfi.set_metadata({**m, **outm})
 
     def f(self, fi, outfs):
-        """Performs detection & labelling of ChArUco corners per image.
+        """Detect & label ChArUco corners for a given image file.
 
         Parameters
         ----------
@@ -190,11 +200,14 @@ class IntrinsicCalibration(RomiTask):
     Attributes
     ----------
     upstream_task : luigi.TaskParameter, optional
-        The upstream task is the detected markers fileset. Defaults to ``DetectCharuco``.
+        The upstream task is the detected markers fileset.
+        Defaults to ``DetectCharuco``.
+    scan_id : luigi.Parameter, optional
+        The dataset id (scan name) to use to create the ``FilesetTarget``.
+        If unspecified (default), the current active scan will be used.
     board_fileset : luigi.TaskParameter, optional
-        The fileset containing the ChArUco used to generate the images fileset. Defaults to ``CreateCharucoBoard``.
-    query : luigi.DictParameter, optional
-        Can be used to filter the images. Defaults to no filtering.
+        The fileset containing the ChArUco used to generate the images fileset.
+        Defaults to ``CreateCharucoBoard``.
 
     Notes
     -----
@@ -224,10 +237,9 @@ class IntrinsicCalibration(RomiTask):
     """
     upstream_task = luigi.TaskParameter(default=DetectCharuco)
     board_fileset = luigi.TaskParameter(default=CreateCharucoBoard)
-    query = luigi.DictParameter(default={})
 
     def requires(self):
-        """Iintrinsic calibration requires an image of the ChArUco board and a set of detected corners & ids."""
+        """Intrinsic calibration requires an image of the ChArUco board and a set of detected corners & ids."""
         return {"board": self.board_fileset(), "markers": self.upstream_task()}
 
     def output(self):
@@ -239,8 +251,9 @@ class IntrinsicCalibration(RomiTask):
         from plant3dvision.camera import get_opencv_params_from_arrays
         from plant3dvision.camera import get_radial_params_from_arrays
         from plant3dvision.camera import get_simple_radial_params_from_arrays
-        # Get the 'image' `Fileset` to segment and filter by `query`:
+        # Get the JSON files describing the markers:
         markers_files = self.input()["markers"].get().get_files()
+        # Get the 'charuco_board' file:
         board_file = self.input()["board"].get().get_file("charuco_board")
         self.aruco_kwargs = board_file.get_metadata()
 
@@ -320,7 +333,11 @@ class ExtrinsicCalibration(RomiTask):
     Attributes
     ----------
     upstream_task : luigi.TaskParameter, optional
-        The upstream task is the detected markers fileset. Defaults to `DetectCharuco`.
+        The upstream task with the image files to use to perform this task.
+        Defaults to `ImagesFilesetExists`.
+    scan_id : luigi.Parameter, optional
+        The dataset id (scan name) to use to create the ``FilesetTarget``.
+        If unspecified (default), the current active scan will be used.
     matcher : luigi.Parameter, optional
         Type of matcher to use, choose either "exhaustive" or "sequential".
         *Exhaustive matcher* tries to match every other image.
@@ -365,7 +382,7 @@ class ExtrinsicCalibration(RomiTask):
     .. [#] `COLMAP official tutorial. <https://colmap.github.io/tutorial.html>`_
 
     """
-    upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)
+    upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)  # override default attribute from ``RomiTask``
     matcher = luigi.Parameter(default="exhaustive")
     intrinsic_calibration_scan_id = luigi.Parameter(default="")
     camera_model = luigi.Parameter(default="SIMPLE_RADIAL")
@@ -606,10 +623,42 @@ class ExtrinsicCalibration(RomiTask):
 
 
 class IntrinsicCalibrationExists(DatasetExists):
-    """Task that requires a dataset (scan) with an 'camera_model' fileset to exist."""
+    """Require a dataset with a 'camera_model' fileset to exist and return it.
+
+    Attributes
+    ----------
+    upstream_task : None
+        No upstream task is required.
+    scan_id : luigi.Parameter
+        The dataset id (scan name) that should exist.
+    camera_model : luigi.Parameter, optional
+        The name of the camera model to return.
+
+    See Also
+    --------
+    plant3dvision.tasks.calibration.IntrinsicCalibration
+
+    Notes
+    -----
+    This task return the two arrays used to correct lens distortions as obtained from the `IntrinsicCalibration` task.
+    """
     camera_model = luigi.Parameter(default="OPENCV")
 
     def output(self):
+        """Return the camera intrinsic parameters obtained from the `IntrinsicCalibration` task.
+
+        Returns
+        -------
+        numpy.ndarray
+            The camera matrix.
+        numpy.ndarray
+            The camera distortion vector.
+
+        See Also
+        --------
+        plant3dvision.camera.get_camera_arrays_from_params
+        plant3dvision.proc2d.undistort
+        """
         from plant3dvision.camera import get_camera_arrays_from_params
         db = DatabaseConfig().scan.db
         calibration_scan = db.get_scan(self.scan_id)
@@ -622,20 +671,46 @@ class IntrinsicCalibrationExists(DatasetExists):
         return True
 
     def run(self):
+        """Check the existence of the dataset related to the `IntrinsicCalibration` task."""
         db = DatabaseConfig().scan.db
         calibration_scan = db.get_scan(self.scan_id)
         if calibration_scan is None:
             raise OSError(f"Scan {self.scan_id} does not exist!")
-        # - Check an ExtrinsicCalibration task has been performed for the calibration scan:
+        # - Check an IntrinsicCalibration task has been performed for the calibration scan:
         calib_fs = calibration_scan.get_filesets('camera_model')
         if len(calib_fs) == 0:
             raise Exception(f"Could not find an 'camera_model' fileset in calibration scan '{calibration_scan.id}'!")
 
 
 class ExtrinsicCalibrationExists(DatasetExists):
-    """Task that requires a dataset (scan) with an 'ExtrinsicCalibration*' fileset to exist."""
+    """Require a dataset with an 'ExtrinsicCalibration*' fileset to exist, return intrinsic and extrinsic parameters.
+
+    Attributes
+    ----------
+    upstream_task : None
+        No upstream task is required.
+    scan_id : luigi.Parameter
+        The dataset id (scan name) that should exist.
+
+    See Also
+    --------
+    plant3dvision.tasks.calibration.ExtrinsicCalibration
+
+    Notes
+    -----
+    This task return the camera intrinsic (model) and extrinsic (poses) parameters.
+    """
 
     def output(self):
+        """Return the camera intrinsic (model) and extrinsic (poses) parameters.
+
+        Returns
+        -------
+        dict
+            Image id indexed dictionary of camera intrinsic parameters as obtained by the `ExtrinsicCalibration` task.
+        dict
+            Image id indexed dictionary of camera extrinsic parameters as obtained by the `ExtrinsicCalibration` task.
+        """
         db = DatabaseConfig().scan.db
         calibration_scan = db.get_scan(self.scan_id)
         images_fs = calibration_scan.get_fileset('images')
@@ -647,6 +722,7 @@ class ExtrinsicCalibrationExists(DatasetExists):
         return True
 
     def run(self):
+        """Check the existence of the dataset related to the `ExtrinsicCalibration` task."""
         db = DatabaseConfig().scan.db
         calibration_scan = db.get_scan(self.scan_id)
         if calibration_scan is None:
