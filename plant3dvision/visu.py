@@ -8,6 +8,132 @@ These functions should be used in notebooks.
 
 import numpy as np
 import plotly.graph_objects as go
+from matplotlib import pyplot as plt
+from matplotlib.widgets import Slider
+from pkg_resources import parse_version
+
+
+def _slider(label, mini, maxi, init, step=1, fmt="%1.0f"):
+    """Matplotlib slider creation.
+
+    Parameters
+    ----------
+    label : str
+        Name of the slider
+    mini : int
+        Min value of the slider
+    maxi : int
+        Max value of the slider
+    init : int
+        Initial value of the slider
+    step : int, optional
+        Step value of the slider
+    fmt : str, optional
+        Formatting of the displayed value selected by the slider
+
+    Notes
+    -----
+    The parameter `step` is not accessible for matplotlib version before 2.2.2.
+
+    Returns
+    -------
+    matplotlib.widgets.Slider
+        A matplotlib slider to use in figures to select values
+
+    """
+    from matplotlib import __version__
+    axcolor = 'lightgoldenrodyellow'
+    rect = [0.25, 0.1, 0.65, 0.03]  # [left, bottom, width, height]
+    if parse_version(__version__) >= parse_version("2.2"):
+        axz = plt.axes(rect, facecolor=axcolor)
+        zs = Slider(axz, label=label, valmin=mini, valmax=maxi, valstep=step,
+                    closedmax=True, valinit=init, valfmt=fmt)
+    else:
+        axz = plt.axes(rect, axisbg=axcolor)
+        zs = Slider(axz, label=label, valmin=mini, valmax=maxi, valstep=step,
+                    closedmax=True, valinit=init, valfmt=fmt)
+
+    return zs
+
+
+def _volume_slice_view(ax, arr, **kwargs):
+    """View a slice of the volume array.
+
+    Parameters
+    ----------
+    axe : matplotlib.axes.Axes
+        The `Axes` instance to update.
+    arr : numpy.ndarray
+        A 2D array to show.
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        The updated `Axes` instance.
+    matplotlib.image.AxesImage
+        The `AxesImage` instance.
+
+    """
+    fig_img = ax.imshow(arr, interpolation='none', origin='upper', **kwargs)
+    ax.xaxis.tick_top()  # move the x-axis to the top
+    return ax, fig_img
+
+
+def plt_volume_slice_viewer(array, cmap="viridis", **kwargs):
+    """Volume viewer.
+
+    Parameters
+    ----------
+    array : numpy.ndarray
+        The volume array to slide trough.
+    cmap : str
+        A valid matplotlib colormap.
+
+    Returns
+    -------
+    matplotlib.widgets.Slider
+        The slider instance.
+
+    """
+    fig, ax = plt.subplots()
+    plt.subplots_adjust(bottom=0.25)  # save some space for the slider
+
+    init_slice = kwargs.get('init_slice', 0)
+
+    ax, l = _volume_slice_view(ax, array[:, :, init_slice], cmap=cmap)
+    dataset = kwargs.get('dataset', "")
+    if dataset != "":
+        plt.title(f"Volume viewer for '{dataset}'.")
+    else:
+        plt.title("Volume viewer.")
+
+    fig.colorbar(l, ax=ax)
+
+    max_slice = array.shape[-1] - 1
+    zs = _slider(label='z-slice', mini=0, maxi=max_slice, init=init_slice, step=1)
+
+    def update(val):
+        slice_id = int(zs.val)
+        l.set_data(array[:, :, slice_id])
+        fig.canvas.draw_idle()
+
+    zs.on_changed(update)
+
+    plt.show()
+    return zs
+
+def plotly_volume_slicer(array, cmap="viridis", height=900, width=900, title="Volume", layout_kwargs=None):
+    import plotly.express as px
+
+    layout_style = dict(height=height, width=width, title=title, showlegend=False)
+    if isinstance(layout_kwargs, dict):
+        layout_style.update(layout_kwargs)
+
+    fig = px.imshow(array.transpose(2,0,1), animation_frame=0, binary_string=True, color_continuous_scale=cmap, labels=dict(animation_frame="slice"))
+    fig.update_layout(**layout_style)
+    fig.update_scenes(aspectmode='data')
+
+    return fig
 
 
 def plotly_pointcloud_data(pcd, n_pts=9000, marker_kwargs=None):
@@ -128,6 +254,7 @@ def plotly_mesh_data(mesh, mesh_kwargs=None):
     x, y, z = np.array(mesh.vertices).T
     i, j, k = np.array(mesh.triangles).T
     return go.Mesh3d(x=x, y=y, z=z, i=i, j=j, k=k, name='triangular mesh', **mesh_style)
+
 
 def plotly_mesh(mesh, height=900, width=900, title="Triangular mesh",
                 mesh_kwargs=None, layout_kwargs=None):
@@ -471,7 +598,7 @@ def plotly_direction_data(vectors, origins, label=None, mode="markers+lines", li
         linepts = vector * np.mgrid[0:10:2j][:, np.newaxis] + origins[n]
         x, y, z = linepts.T
         dir_sc = go.Scatter3d(x=x, y=y, z=z, mode=mode, name=f"{label} {n}",
-                                  marker=marker_style, line=line_style)
+                              marker=marker_style, line=line_style)
         go_data.append(dir_sc)
 
     return go_data
