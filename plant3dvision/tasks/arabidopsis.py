@@ -13,13 +13,16 @@ logger = configure_logger(__name__)
 
 
 class TreeGraph(RomiTask):
-    """ Creates a tree graph of the plant from a skeleton.
+    """Creates a tree graph of the plant from a skeleton.
 
     Attributes
     ----------
     upstream_task : luigi.TaskParameter
         Upstream task that generate the skeleton.
         Defaults to ``CurveSkeleton``.
+    scan_id : luigi.Parameter, optional
+        The dataset id (scan name) to use to create the ``FilesetTarget``.
+        If unspecified (default), the current active scan will be used.
     z_axis : luigi.IntParameter
         Axis to use to get the *root node* as the node with minimal coordinates for that axis.
         Defaults to ``2``.
@@ -27,20 +30,34 @@ class TreeGraph(RomiTask):
         Direction of the stem along the specified `stem_axis`, inverted or not.
         Defaults to ``False``.
 
-    Module: plant3dvision.tasks.arabidopsis
-    Default upstream tasks: CurveSkeleton
-    Upstream task format: json
-    Output task format: json (TODO: precise)
-
+    See Also
+    --------
+    plant3dvision.arabidopsis.compute_tree_graph
     """
-    upstream_task = luigi.TaskParameter(default=CurveSkeleton)
+    upstream_task = luigi.TaskParameter(default=CurveSkeleton)  # override default attribute from ``RomiTask``
     z_axis = luigi.IntParameter(default=2)
     stem_axis_inverted = luigi.BoolParameter(default=False)
 
     def run(self):
-        from plant3dvision import arabidopsis
-        f = io.read_json(self.input_file())
-        t = arabidopsis.compute_tree_graph(f["points"], f["lines"], self.z_axis, self.stem_axis_inverted)
+        """Compute the tree graph and save it.
+
+        Raises
+        ------
+        NotImplementedError
+            If the `upstream_task` is not bound to a computation method.
+        """
+        task_name = self.get_task_family()
+        uptask_name = self.upstream_task.get_task_family()
+
+        if uptask_name == "CurveSkeleton":
+            from plant3dvision import arabidopsis
+            f = io.read_json(self.input_file())
+            t = arabidopsis.compute_tree_graph(f["points"], f["lines"], self.z_axis, self.stem_axis_inverted)
+        else:
+            logger.error(f"No implementation to compute `{task_name}` from `{uptask_name}`.")
+            logger.info(f"Select `upstream_task` among: [`CurveSkeleton`].")
+            raise NotImplementedError(f"No implementation to compute `{task_name}` from `{uptask_name}`.")
+
         io.write_graph(self.output_file(), t)
         return
 
