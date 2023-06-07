@@ -29,8 +29,16 @@ class Undistorted(FileByFileTask):
     Attributes
     ----------
     upstream_task : luigi.TaskParameter, optional
-        The task to use upstream to the `Undistorted` tasks. It should be a tasks that generates a ``Fileset`` of RGB images.
+        The task to use upstream to the `Undistorted` tasks.
+        It should be a tasks that generates a ``Fileset`` of RGB images.
         Defaults to ``'ImagesFilesetExists'``.
+    scan_id : luigi.Parameter, optional
+        The dataset id (scan name) to use to create the ``FilesetTarget``.
+        If unspecified (default), the current active scan will be used.
+    query : luigi.DictParameter, optional
+        A filtering dictionary to apply on input ```Fileset`` metadata.
+        Key(s) and value(s) must be found in metadata to select the ``File``.
+        By default, no filtering is performed, all inputs are used.
     camera_model_src : luigi.Parameter, optional
         Source of the camera model, can be in ['Colmap', 'IntrinsicCalibration', 'ExtrinsicCalibration']
     camera_model : luigi.Parameter, optional
@@ -39,9 +47,6 @@ class Undistorted(FileByFileTask):
         Name of the intrinsic calibration scan (dataset) to use. Used only if  `camera_model_src='IntrinsicCalibration'`.
     extrinsic_calib_scan_id : luigi.Parameter, optional
         Name of the extrinsic calibration scan (dataset) to use. Used only if  `camera_model_src='ExtrinsicCalibration'`.
-    query : luigi.DictParameter
-        A filtering dictionary on metadata, inherited from `romitask.task.FileByFileTask`.
-        Key(s) and value(s) must be found in metadata to select the `File`s from the upstream task.
 
     See Also
     --------
@@ -53,7 +58,7 @@ class Undistorted(FileByFileTask):
     The output of this task is an image fileset.
 
     """
-    upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)
+    upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)  # override default attribute from ``RomiTask``
     camera_model_src = luigi.Parameter("Colmap")  # ['Colmap', 'IntrinsicCalibration', 'ExtrinsicCalibration']
     camera_model = luigi.Parameter(default="SIMPLE_RADIAL")  # set it if `camera_model_src = 'IntrinsicCalibration'`
     intrinsic_calib_scan_id = luigi.Parameter(default="")  # set this to a scan with an `IntrinsicCalibration` task
@@ -146,8 +151,17 @@ class Masks(FileByFileTask):
     Parameters
     ----------
     upstream_task : luigi.TaskParameter, optional
-        The task to use upstream to the `Masks` tasks. It should be a tasks that generates a ``Fileset`` of RGB images.
-        It can thus be ``ImagesFilesetExists`` or ``Undistorted``. Defaults to `'Undistorted'`.
+        The task to use upstream to this task.
+        It should be a tasks that generates a ``Fileset`` of RGB images.
+        It can thus be ``ImagesFilesetExists`` or ``Undistorted``.
+        Defaults to `'Undistorted'`.
+    scan_id : luigi.Parameter, optional
+        The dataset id (scan name) to use to create the ``FilesetTarget``.
+        If unspecified (default), the current active scan will be used.
+    query : luigi.DictParameter, optional
+        A filtering dictionary to apply on input ```Fileset`` metadata.
+        Key(s) and value(s) must be found in metadata to select the ``File``.
+        By default, no filtering is performed, all inputs are used.
     type : luigi.Parameter, optional
         The type of image tranformation algorithm to use prior to masking by thresholding.
         It can be "linear" or "excess_green". Defaults to `'linear'`.
@@ -160,9 +174,6 @@ class Masks(FileByFileTask):
         Binarization threshold applied after transforming the image. Defaults to ``0.3``.
     dilation : luigi.IntParameter, optional
         Dilation factor for the binary mask images. Defaults to `0`.
-    query : luigi.DictParameter
-        A filtering dictionary on metadata, inherited from `romitask.task.FileByFileTask`.
-        Key(s) and value(s) must be found in metadata to select the `File`s from the upstream task.
 
     See Also
     --------
@@ -193,7 +204,7 @@ class Masks(FileByFileTask):
     >>> db.disconnect()
 
     """
-    upstream_task = luigi.TaskParameter(default=Undistorted)
+    upstream_task = luigi.TaskParameter(default=Undistorted)  # override default attribute from ``RomiTask``
     type = luigi.Parameter("linear")
     parameters = luigi.ListParameter(default=[0, 1, 0])
     threshold = luigi.FloatParameter(default=0.3)
@@ -239,7 +250,7 @@ class Masks(FileByFileTask):
 
 
 class Segmentation2D(Masks):
-    """ Compute masks using trained deep learning models.
+    """Compute masks using trained deep learning models.
 
     Module: plant3dvision.tasks.proc2d
     Description: compute masks using trained deep learning models
@@ -250,45 +261,48 @@ class Segmentation2D(Masks):
     Attributes
     ----------
     upstream_task : luigi.TaskParameter, optional
-        Upstream task to access RBG images to segment, valid values in {'ImagesFilesetExists', 'Undistorted'}
-        'Undistorted' by default.
+        The task to use upstream to this task.
+        It should be a tasks that generates a ``Fileset`` of RGB images.
+        It can thus be ``ImagesFilesetExists`` or ``Undistorted``.
+        Defaults to `'Undistorted'`.
+    scan_id : luigi.Parameter, optional
+        The dataset id (scan name) to use to create the ``FilesetTarget``.
+        If unspecified (default), the current active scan will be used.
+    query : luigi.DictParameter, optional
+        A filtering dictionary to apply on input ```Fileset`` metadata.
+        Key(s) and value(s) must be found in metadata to select the ``File``.
+        By default, no filtering is performed, all inputs are used.
     model_fileset : luigi.TaskParameter, optional
         Upstream model training task, valid values in {'ModelFileset'}.
         'ModelFileset' by default.
     model_id : luigi.Parameter
         Name of the trained model to use from the 'model' `Fileset`.
         This should be the file name without extension.
-    query : DictParameter
-        Query to pass to filter upstream 'image' `Fileset`.
-        It filters file by metadata, e.g. '{"channel": "rgb"}' will process only input files such that "channel"
-        metadata is equal to "rgb".
     Sx, Sy : luigi.IntParameter
         Size of the input image in the neural network.
         Input image are cropped, from their center, to this size.
+        Defaults to `896`.
     labels : luigi.ListParameter, optional
         List of labels identifiers produced by the neural network to use to generate (binary) mask files.
-        Default to `[]` use all labels identifiers from model.
+        Defaults to `[]`, use all labels identifiers from model.
     inverted_labels : luigi.ListParameter, optional
         List of labels identifiers that requires inversion of their predicted mask.
-        Default to `["background"]`.
+        Defaults to `["background"]`.
     binarize : luigi.BoolParameter, optional
         If `True`, use a `threshold` to binarize predictions, else returns the prediction map.
-        Default to `True`.
+        Defaults to `True`.
     threshold : luigi.FloatParameter, optional
         Threshold to binarize predictions, required if ``binarize=True``.
-        Default to `0.01`.
+        Defaults to `0.01`.
     dilation : luigi.IntParameter, optional
         Dilation factor to apply to a binary mask.
-        Default to `1`.
+        Defaults to `1`.
 
     """
-    type = None
-    parameters = None
-
-    upstream_task = luigi.TaskParameter(default=Undistorted)
+    type = None  # override default attribute from ``Masks``
+    parameters = None  # override default attribute from ``Masks``
     model_fileset = luigi.TaskParameter(default=ModelFilesetExists)
     model_id = luigi.Parameter()
-    query = luigi.DictParameter(default={})
     Sx = luigi.IntParameter(default=896)
     Sy = luigi.IntParameter(default=896)
     labels = luigi.ListParameter(default=[])
