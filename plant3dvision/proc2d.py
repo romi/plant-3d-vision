@@ -10,7 +10,10 @@ This module contains all functions for processing of 2D data.
 """
 
 import cv2
+import numpy as np
+from skimage.exposure import rescale_intensity
 from skimage.morphology import binary_dilation
+from skimage.morphology import disk
 
 from romitask.log import configure_logger
 
@@ -26,9 +29,9 @@ def undistort(img, camera_mtx, distortion_vect):
     ----------
     img : numpy.ndarray
         RGB image as an NxMx3 array.
-    camera_mtx : numpy.array
+    camera_mtx : numpy.ndarray
         3x3 floating-point camera matrix.
-    distortion_vect : numpy.array
+    distortion_vect : numpy.ndarray
         Vector of distortion coefficients (k1, k2, p1, p2, k3)
 
     See Also
@@ -65,28 +68,35 @@ def linear(img, coefs):
     --------
     >>> import numpy as np
     >>> import matplotlib.pyplot as plt
-    >>> from imageio import imread
+    >>> from imageio.v3 import imread
     >>> from skimage.exposure import rescale_intensity
     >>> from plant3dvision import test_db_path
     >>> from plant3dvision.proc2d import linear, dilation
     >>> path = test_db_path()
-    >>> im = imread(path.joinpath('real_plant/images/00000_rgb.jpg'))
-    >>> im = np.asarray(im, dtype=float)  # transform the uint8 RGB image into a float RGB numpy array
-    >>> im = rescale_intensity(im, out_range=[0., 1.])  # rescale to [0., 1.]
-    >>> threshold = 0.4
-    >>> filter = linear(im, [0., 1., 0.])  # apply `linear` filter
-    >>> mask = filter > threshold  # convert to binary mask using threshold
-    >>> mask = dilation(mask, 2)  # apply a dilation to binary mask
-    >>> fig, ax = plt.subplots(1, 3)
-    >>> ax[0].imshow(im)
-    >>> ax[0].set_title("Original image")
-    >>> ax[1].imshow(filter)
-    >>> ax[1].set_title("Filtered image")
-    >>> ax[2].imshow(mask, cmap='gray')
-    >>> ax[2].set_title("Mask image")
+    >>> img = imread(path.joinpath('real_plant/images/00000_rgb.jpg'))
+    >>> filter_img = linear(img, [0.1, 1., 0.1])  # apply `linear` filter
+    >>> threshold = 0.3
+    >>> mask = filter_img > threshold  # convert to binary mask using threshold
+    >>> radius = 2
+    >>> dilated_mask = dilation(mask, radius)  # apply a dilation to binary mask
+    >>> fig, axes = plt.subplots(2, 2, figsize=(8, 7))
+    >>> axes[0, 0].imshow(img)
+    >>> axes[0, 0].set_title("Original image")
+    >>> axes[0, 1].imshow(filter_img, cmap='gray')
+    >>> axes[0, 1].set_title("Mask image (linear filter)")
+    >>> axes[1, 0].imshow(mask, cmap='gray')
+    >>> axes[1, 0].set_title(f"Binary mask image (threshold={threshold})")
+    >>> axes[1, 1].imshow(dilated_mask, cmap='gray')
+    >>> axes[1, 1].set_title(f"Dilated binary mask image (radius={radius})")
+    >>> [ax.set_axis_off() for ax in axes.flatten()]
+    >>> plt.tight_layout()
+    >>> plt.show()
 
     """
-    return (coefs[0] * img[:, :, 0] + coefs[1] * img[:, :, 1] + coefs[2] * img[:, :, 2])
+    if not img.dtype == "float":
+        img = np.asarray(img, dtype=float)  # transform the uint8 RGB image into a float RGB numpy array
+    img = rescale_intensity(img, out_range=(0., 1.))
+    return coefs[0] * img[:, :, 0] + coefs[1] * img[:, :, 1] + coefs[2] * img[:, :, 2]
 
 
 def excess_green(img):
@@ -106,27 +116,34 @@ def excess_green(img):
     --------
     >>> import numpy as np
     >>> import matplotlib.pyplot as plt
-    >>> from imageio import imread
+    >>> from imageio.v3 import imread
     >>> from skimage.exposure import rescale_intensity
     >>> from plant3dvision import test_db_path
     >>> from plant3dvision.proc2d import excess_green, dilation
     >>> path = test_db_path()
-    >>> im = imread(path.joinpath('real_plant/images/00000_rgb.jpg'))
-    >>> im = np.asarray(im, dtype=float)  # transform the uint8 RGB image into a float RGB numpy array
-    >>> im = rescale_intensity(im, out_range=(0., 1.))  # rescale to [0., 1.]
-    >>> threshold = 0.4
-    >>> filter = excess_green(im)  # apply `excess_green` filter
-    >>> mask = filter > threshold  # convert to binary mask using threshold
-    >>> mask = dilation(mask, 2)  # apply a dilation to binary mask
-    >>> fig, ax = plt.subplots(1, 3)
-    >>> ax[0].imshow(im)
-    >>> ax[0].set_title("Original image")
-    >>> ax[1].imshow(filter)
-    >>> ax[1].set_title("Filtered image")
-    >>> ax[2].imshow(mask, cmap='gray')
-    >>> ax[2].set_title("Mask image")
+    >>> img = imread(path.joinpath('real_plant/images/00000_rgb.jpg'))
+    >>> filter_img = excess_green(img)  # apply `excess_green` filter
+    >>> threshold = 0.3
+    >>> mask = filter_img > threshold  # convert to binary mask using threshold
+    >>> radius = 2
+    >>> dilated_mask = dilation(mask, radius)  # apply a dilation to binary mask
+    >>> fig, axes = plt.subplots(2, 2, figsize=(8, 7))
+    >>> axes[0, 0].imshow(img)
+    >>> axes[0, 0].set_title("Original image")
+    >>> axes[0, 1].imshow(filter_img, cmap='gray')
+    >>> axes[0, 1].set_title("Mask image (excess green filter)")
+    >>> axes[1, 0].imshow(mask, cmap='gray')
+    >>> axes[1, 0].set_title(f"Binary mask image (threshold={threshold})")
+    >>> axes[1, 1].imshow(dilated_mask, cmap='gray')
+    >>> axes[1, 1].set_title(f"Dilated binary mask image (radius={radius})")
+    >>> [ax.set_axis_off() for ax in axes.flatten()]
+    >>> plt.tight_layout()
+    >>> plt.show()
 
     """
+    if not img.dtype == "float":
+        img = np.asarray(img, dtype=float)  # transform the uint8 RGB image into a float RGB numpy array
+    img = rescale_intensity(img, out_range=(0., 1.))
     s = img.sum(axis=2) + EPS
     r = img[:, :, 0] / s
     g = img[:, :, 1] / s
@@ -135,18 +152,19 @@ def excess_green(img):
 
 
 def dilation(img, n):
-    """Dilates a binary image by `n` pixels
+    """Dilates a binary image by `n` pixels using a sequence of cross-shaped footprint.
 
     Parameters
     ----------
     img : numpy.ndarray
         Binary input image to dilate.
     n : int
-        Number of pixels.
+        Number of pixels, equivalent to a radius.
 
     See Also
     --------
     skimage.morphology.binary_dilation
+    skimage.morphology.disk
 
     Returns
     -------
@@ -157,25 +175,30 @@ def dilation(img, n):
     --------
     >>> import numpy as np
     >>> import matplotlib.pyplot as plt
-    >>> from imageio import imread
+    >>> from imageio.v3 import imread
     >>> from skimage.exposure import rescale_intensity
     >>> from plant3dvision import test_db_path
     >>> from plant3dvision.proc2d import linear, dilation
     >>> path = test_db_path()
-    >>> im = imread(path.joinpath('real_plant/images/00000_rgb.jpg'))
-    >>> im = np.asarray(im, dtype=float)  # transform the uint8 RGB image into a float RGB numpy array
-    >>> im = rescale_intensity(im, out_range=(0., 1.))  # rescale to [0., 1.]
-    >>> threshold = 0.4
-    >>> filter = linear(im)  # apply `linear` filter
-    >>> mask = filter > threshold  # convert to binary mask using threshold
-    >>> dilated_mask = dilation(mask, 2)  # apply a dilation to binary mask
-    >>> fig, ax = plt.subplots(1, 3)
-    >>> ax[0].imshow(mask)
-    >>> ax[0].set_title("Binary image")
-    >>> ax[1].imshow(dilated_mask)
-    >>> ax[1].set_title(f"Dilated binary image (n={n})")
+    >>> img = imread(path.joinpath('real_plant/images/00000_rgb.jpg'))
+    >>> filter_img = linear(img, [0.1, 1., 0.1])  # apply `linear` filter
+    >>> threshold = 0.3
+    >>> mask = filter_img > threshold  # convert to binary mask using threshold
+    >>> radius = 2
+    >>> dilated_mask = dilation(mask, radius)  # apply a dilation to binary mask
+    >>> fig, axes = plt.subplots(2, 2, figsize=(8, 7))
+    >>> axes[0, 0].imshow(img)
+    >>> axes[0, 0].set_title("Original image")
+    >>> axes[0, 1].imshow(filter_img, cmap='gray')
+    >>> axes[0, 1].set_title("Filtered image (linear)")
+    >>> axes[1, 0].imshow(mask, cmap='gray')
+    >>> axes[1, 0].set_title(f"Binary mask image (threshold={threshold})")
+    >>> axes[1, 1].imshow(dilated_mask, cmap='gray')
+    >>> axes[1, 1].set_title(f"Dilated binary mask image (radius={radius})")
+    >>> [ax.set_axis_off() for ax in axes.flatten()]
+    >>> plt.tight_layout()
+    >>> plt.show()
 
     """
-    for i in range(n):
-        img = binary_dilation(img)
+    img = binary_dilation(img, footprint=disk(n, decomposition='sequence'))
     return img
