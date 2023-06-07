@@ -604,6 +604,9 @@ class AnglesAndInternodesEvaluation(EvaluationTask):
     ----------
     upstream_task : str, optional
         Name of the upstream task, defaults to `'AnglesAndInternodes'`.
+    scan_id : luigi.Parameter, optional
+        The dataset id (scan name) to use to create the ``FilesetTarget``.
+        If unspecified (default), the current active scan will be used.
     ground_truth : {'ImagesFilesetExists', 'VirtualPlant', 'VirtualPlantObj'}, optional
         Indicates the source of the ground-truth values.
         Use 'ImagesFilesetExists' with manual measures to load the `measures.json` file.
@@ -637,16 +640,6 @@ class AnglesAndInternodesEvaluation(EvaluationTask):
     --------
     plant3dvision.evaluation.align_sequences
     plant3dvision.evaluation.is_radians
-
-    Examples
-    --------
-    cp -R plant-3d-vision/tests /tmp/
-    romi_run_task AnglesAndInternodes /tmp/tests/testdata/virtual_plant --config config/geom_pipe_virtual.toml
-    romi_run_task AnglesAndInternodesEvaluation /tmp/tests/testdata/virtual_plant --config config/geom_pipe_virtual.toml
-
-    cp -R /data/ROMI/test_db /tmp/
-    romi_run_task AnglesAndInternodesEvaluation /tmp/test_db/test_v0.10
-
     """
     upstream_task = luigi.TaskParameter(default=AnglesAndInternodes)
     ground_truth = luigi.TaskParameter(default=ImagesFilesetExists)
@@ -656,32 +649,29 @@ class AnglesAndInternodesEvaluation(EvaluationTask):
     gt_angles_type = luigi.Parameter(default="auto")
     pred_angles_type = luigi.Parameter(default="auto")
 
-    def run(self):
-        from math import degrees
-        from plant3dvision.evaluation import is_radians
-        from plant3dvision.evaluation import align_sequences
-        from plant3dvision.utils import jsonify
-
-        # - Get the ground-truth angles and internodes
+    def _get_ground_truth(self):
         if str(self.ground_truth.get_task_family()) in ["VirtualPlant", "VirtualPlantObj"]:
             # For computer generated plants, get them from dataset metadata:
-            gt_angles = self.ground_truth().output_file().get_metadata("angles")
-            gt_internodes = self.ground_truth().output_file().get_metadata("internodes")
+            angles = self.ground_truth().output_file().get_metadata("angles")
+            internodes = self.ground_truth().output_file().get_metadata("internodes")
         else:
             # For real plants, get them from manual measures file (measures.json):
             input_file = self.input_file()
-            gt_angles = list(map(float, input_file.get_scan().get_measures("angles")))
-            gt_internodes = list(map(float, input_file.get_scan().get_measures("internodes")))
+            angles = list(map(float, input_file.get_scan().get_measures("angles")))
+            internodes = list(map(float, input_file.get_scan().get_measures("internodes")))
+        return angles, internodes
 
-        # - Get the predicted angles and internodes from upstream outputs:
+    def _get_predicted(self):
         pred_jsonfile = self.upstream_task().output().get().get_file("AnglesAndInternodes")
         pred_sequences = read_json(pred_jsonfile)
-        pred_angles = pred_sequences["angles"]
-        pred_internodes = pred_sequences["internodes"]
-
-        if len(pred_angles) == 0 or len(pred_internodes) == 0:
+        angles = pred_sequences["angles"]
+        internodes = pred_sequences["internodes"]
+        if len(angles) == 0 or len(internodes) == 0:
             raise IOError(f"Got an empty sequence of angles and/or internodes from prediction file!")
+        return angles, internodes
 
+    def _guess_angles_type(self, gt_angles, pred_angles):
+        from plant3dvision.evaluation import is_radians
         self.gt_angles_type = str(self.gt_angles_type)
         self.pred_angles_type = str(self.pred_angles_type)
         # - Remove potential plural form if detected:
@@ -703,6 +693,16 @@ class AnglesAndInternodesEvaluation(EvaluationTask):
         if self.pred_angles_type == "auto":
             self.pred_angles_type = "radians" if is_radians(pred_angles) else "degrees"
             logger.info(f"Guessed that predicted angle values are in {self.pred_angles_type}.")
+
+    def run(self):
+        from math import degrees
+        from plant3dvision.evaluation import align_sequences
+        from plant3dvision.utils import jsonify
+
+        # - Get the ground-truth angles and internodes
+        gt_angles, gt_internodes = self._get_ground_truth()
+        # - Get the predicted angles and internodes from upstream outputs:
+        pred_angles, pred_internodes = self._get_predicted()
 
         # - Convert radian to degree for easier reading of the values and figures:
         if self.gt_angles_type == "radians":
