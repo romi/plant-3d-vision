@@ -32,6 +32,13 @@ class Visualization(RomiTask):
     ----------
     upstream_task : None, optional
         No upstream task required.
+    scan_id : luigi.Parameter, optional
+        The dataset id (scan name) to use to create the ``FilesetTarget``.
+        If unspecified (default), the current active scan will be used.
+    query : luigi.DictParameter, optional
+        A filtering dictionary to apply on input ```Fileset`` metadata.
+        Key(s) and value(s) must be found in metadata to select the ``File``.
+        By default, no filtering is performed, all inputs are used.
     upstream_point_cloud : luigi.TaskParameter, optional
         Upstream task that generate the point cloud to use in visualizer (plant-3d-explorer).
         Defaults to ``PointCloud``, no alternatives yet.
@@ -50,9 +57,6 @@ class Visualization(RomiTask):
     upstream_images : luigi.TaskParameter, optional
         Upstream task that generate the 'images' ``Fileset`` to use in visualizer (plant-3d-explorer).
         Defaults to ``ImagesFilesetExists``, could be ``VirtualScan``.
-    query : luigi.DictParameter, optional
-        Can be used to filter the images.
-        Defaults to ``{}``, that is NO filtering.
     upstream_virtualplantobj : luigi.TaskParameter, optional
         Upstream task that generate the virtual plant OBJ file.
         Defaults to ``ImagesFilesetExists``, no alternatives yet.
@@ -83,6 +87,7 @@ class Visualization(RomiTask):
         If no manual measure exists, this will do nothing.
     """
     upstream_task = None
+    query = luigi.DictParameter(default={})
 
     upstream_images = luigi.TaskParameter(default=ImagesFilesetExists)
     upstream_colmap = luigi.TaskParameter(default=Colmap)
@@ -100,7 +105,6 @@ class Visualization(RomiTask):
     upstream_segmentedpcd_evaluation = luigi.TaskParameter(default=SegmentedPointCloudEvaluation)
     upstream_segmentation2d_evaluation = luigi.TaskParameter(default=Segmentation2DEvaluation)
 
-    query = luigi.DictParameter(default={})
     use_colmap_poses = luigi.BoolParameter(default=True)
     max_image_size = luigi.IntParameter(default=1500)
     max_point_cloud_size = luigi.IntParameter(default=10000000)
