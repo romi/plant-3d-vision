@@ -16,36 +16,48 @@ logger = configure_logger(__name__)
 
 
 class Voxels(RomiTask):
-    """ Computes a volume from backprojection of 2D segmented images.
+    """Computes a volume from backprojection of 2D segmented images.
 
     Attributes
     ----------
+    upstream_task : None
+        No upstream task is required.
+    scan_id : luigi.Parameter, optional
+        The dataset id (scan name) to use to create the ``FilesetTarget``.
+        If unspecified (default), the current active scan will be used.
     upstream_mask : luigi.TaskParameter, optional
         Upstream task that generate the masks.
         Defaults to ``Masks``.
     upstream_colmap : luigi.TaskParameter, optional
         Upstream task that generate the camera intrinsics (fx, fy, cx, cy) & poses ('rotmat', 'tvec').
         Defaults to ``Colmap``.
+    query : luigi.DictParameter, optional
+        A filtering dictionary to apply on input ```Fileset`` metadata.
+        Key(s) and value(s) must be found in metadata to select the ``File``.
+        By default, no filtering is performed, all inputs are used.
     camera_metadata : luigi.Parameter, optional
         Name of the entry to get from the images metadata dictionary.
         Use it to get the camera intrinsics (fx, fy, cx, cy) & poses ('rotmat', 'tvec').
         Use "colmap_camera" to use estimations by COLMAP.
         Use "camera" to use information from the VirtualPlantImager.
-        Defaults to ``colmap_camera``.
+        Defaults to ``'colmap_camera'``.
     voxel_size : luigi.FloatParameter
         Size of a (cubic) voxel, to compare with the `bounding_box` to reconstruct.
         That is if ``voxel_size=1.``, then the final shape of the _volume_ is the same as the ``bounding_box``.
         defaults to ``1.``.
-    type : luigi.Parameter in {"carving", "averaging"}
+    type : luigi.Parameter
         Type of back-projection to performs.
+        Valid values are in ["carving", "averaging"].
+        Defaults to ``"carving"``.
     log : luigi.BoolParameter, optional
         If ``True``, convert the mask images to logarithmic values for 'averaging' `type` prior to back-projection.
         Defaults to ``True``.
     invert : luigi.BoolParameter, optional
         If ``True``, invert the values of the mask.
         Defaults to ``False``.
-    labels : luigi.ListParameter
+    labels : luigi.ListParameter, optional
         List of labels to use from a labelled mask dataset.
+        Defaults to an empty list.
     bounding_box : luigi.DictParameter, optional
         Volume dictionary used to define the space to reconstruct.
         By default, it uses the scanner workspace defined in the 'images' fileset.
@@ -64,7 +76,7 @@ class Voxels(RomiTask):
     Output fileset format: NPZ file with as many arrays as `self.labels`
 
     """
-    upstream_task = None
+    upstream_task = None  # override default attribute from ``RomiTask``
     upstream_mask = luigi.TaskParameter(default=Masks)
     upstream_colmap = luigi.TaskParameter(default=Colmap)
 
