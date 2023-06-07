@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""
-Check manual measurement files `measures.json`.
+"""Check manual measurement files `measures.json`.
+
+This tool compare the angle and internode sequence lengths.
 """
 
 import argparse
@@ -129,10 +130,10 @@ def main():
     parser = parsing()
     args = parser.parse_args()
 
+    # - Configure a logger from this application:
     global logger
     logger = configure_logger("check_measures")
 
-    print(args.dataset_path)
     # - If only one path in the list, get the first one:
     if len(args.dataset_path) == 1:
         args.dataset_path = args.dataset_path[0]
@@ -141,26 +142,31 @@ def main():
         # Process the input string `args.dataset_path` with ``glob``:
         #   - check existence of path:
         #   - may contain UNIX matching symbols (like '*' or '?'):
-        folders = sorted(glob.glob(args.dataset_path))
+        folders = glob.glob(args.dataset_path)
+        # Resolve path (make it absolute & normalize):
+        folders = [Path(path).resolve() for path in folders]
         # Check that globed paths are directory (and exist, implied):
-        folders = sorted([path for path in folders if Path(path).is_dir()])
+        folders = sorted([path for path in folders if path.is_dir()])
     elif isinstance(args.dataset_path, list):
+        # Resolve path (make it absolute & normalize):
+        folders = [Path(path).resolve() for path in args.dataset_path]
         # Check that listed paths are directory (and exist, implied):
-        folders = sorted([path for path in args.dataset_path if Path(path).is_dir()])
+        folders = sorted([path for path in folders if path.is_dir()])
     else:
-        logger.critical(f"Can not understand input dataset path: {args.dataset_path}")
-        sys.exit(f"Error with input dataset path!")
+        logger.critical(f"Can not understand input dataset path: '{args.dataset_path}'")
+        sys.exit(f"Error with input dataset path for '{args.task}' module!")
 
     if len(folders) == 0:
         # Stop here if the list of folder to process is empty:
-        logger.critical("The parsed dataset_path is empty!")
+        logger.critical("The parsed `dataset_path` is empty!")
         sys.exit(f"Error with input dataset path!")
-    elif len(folders) > 1:
-        fnames = [Path(folder).name for folder in folders]
-        logger.info(f"Got a list of {len(folders)} scan dataset to analyze: {', '.join(fnames)}")
+
+    if isinstance(folders, list):
+        dataset = [folder.name for folder in folders]
+        logger.info(f"Got a list of {len(folders)} scan dataset to analyze: {', '.join(dataset)}")
         for folder in folders:
             args.dataset_path = folder
-            print("")  # to facilitate the search in the console by separating the datasets
+            print("\n")  # to facilitate the search in the console by separating the datasets
             logger.info(f"Processing dataset '{Path(args.dataset_path).name}'.")
             try:
                 check_measures(args)
