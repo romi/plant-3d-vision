@@ -79,7 +79,7 @@ class Voxels(RomiTask):
     bounding_box = luigi.DictParameter(default=None)
 
     def requires(self):
-        if self.upstream_colmap.task_family == 'Colmap':
+        if self.upstream_colmap.get_task_family() == 'Colmap':
             return {'masks': self.upstream_mask(), 'colmap': self.upstream_colmap()}
         else:
             return {'masks': self.upstream_mask()}
@@ -96,7 +96,7 @@ class Voxels(RomiTask):
             self.bounding_box = self.output().get().scan.get_metadata("bounding_box")
         logger.debug(f"Bounding-box from scan metadata: {self.bounding_box}")
         # Get it from Colmap if required:
-        if self.bounding_box is None and self.upstream_colmap.task_family == 'Colmap':
+        if self.bounding_box is None and self.upstream_colmap.get_task_family() == 'Colmap':
             colmap_fileset = self.input()['colmap'].get()
             if self.bounding_box is None:
                 self.bounding_box = colmap_fileset.get_metadata("bounding_box")

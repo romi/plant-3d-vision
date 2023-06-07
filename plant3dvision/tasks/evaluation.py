@@ -46,7 +46,7 @@ class EvaluationTask(RomiTask):
         return [self.upstream_task(), self.ground_truth()]
 
     def output(self):
-        fileset_id = self.task_family  # self.upstream_task().task_id + "Evaluation"
+        fileset_id = self.get_task_family()  # self.upstream_task().task_id + "Evaluation"
         return FilesetTarget(DatabaseConfig().scan, fileset_id)
 
     def evaluate(self):
@@ -443,9 +443,9 @@ class CylinderRadiusEstimation(RomiTask):
         pcd = read_point_cloud(input_file)
 
         # - Get the ground-truth value for cylinder radius:
-        if str(self.upstream_task.task_family) == "CylinderRadiusGroundTruth":
+        if str(self.upstream_task.get_task_family()) == "CylinderRadiusGroundTruth":
             gt_radius = cylinder_fileset.get_metadata("radius")
-        elif str(self.upstream_task.task_family) == "PointCloud":
+        elif str(self.upstream_task.get_task_family()) == "PointCloud":
             try:
                 gt_radius = input_file.get_scan().get_measures()["radius"]
             except KeyError:
@@ -532,7 +532,7 @@ class AnglesAndInternodesEvaluation(EvaluationTask):
         from plant3dvision.utils import jsonify
 
         # - Get the ground-truth angles and internodes
-        if str(self.ground_truth.task_family) in ["VirtualPlant", "VirtualPlantObj"]:
+        if str(self.ground_truth.get_task_family()) in ["VirtualPlant", "VirtualPlantObj"]:
             # For computer generated plants, get them from dataset metadata:
             gt_angles = self.ground_truth().output_file().get_metadata("angles")
             gt_internodes = self.ground_truth().output_file().get_metadata("internodes")

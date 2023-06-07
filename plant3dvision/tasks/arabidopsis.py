@@ -102,7 +102,7 @@ class AnglesAndInternodes(RomiTask):
     min_fruit_size = luigi.FloatParameter(default=6.)
 
     def run(self):
-        task_name = str(self.upstream_task.task_family)
+        task_name = str(self.upstream_task.get_task_family())
 
         if task_name == "TreeGraph":
             from plant3dvision.arabidopsis import compute_stem_and_fruit_directions
