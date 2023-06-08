@@ -16,12 +16,12 @@ class TestGeomAnglesAndInternodes(unittest.TestCase):
         print(f"Testing geometric pipeline with data: {real_plant_data}")
 
         # Perform a Clean before running the pipe
-        process = run_task(geom_pipe_real_conf, "Clean", real_plant_data)
-        assert(process.returncode == 0)
+        process = run_task("Clean", real_plant_data, geom_pipe_real_conf)
+        self.assertTrue(process.returncode == 0)
 
         # Perform the AnglesAndInternodes task
-        process = run_task(geom_pipe_real_conf, "AnglesAndInternodes", real_plant_data)
-        assert(process.returncode == 0)
+        process = run_task("AnglesAndInternodes", real_plant_data, geom_pipe_real_conf)
+        self.assertTrue(process.returncode == 0)
 
         # Check if a minimum number of angles and internodes were computed
         angles_and_internodes_json_file = open(glob.glob(real_plant_data + "AnglesAndInternodes_*" + "/" + "AnglesAndInternodes.json")[0])
@@ -34,8 +34,8 @@ class TestGeomAnglesAndInternodes(unittest.TestCase):
         print("found angles=", len(angles), "found internodes=", len(internodes))
 
         # TODO : Improve the robustness of these following asserts (use appropriate metrics)
-        assert(len(angles) > 10)
-        assert(len(internodes) > 10)
+        self.assertTrue(len(angles) > 10)
+        self.assertTrue(len(internodes) > 10)
 
         angles_and_internodes_json_file.close()
 
@@ -46,12 +46,12 @@ class TestGeomAnglesAndInternodes(unittest.TestCase):
         print(f"Testing geometric pipeline with data: {virtual_plant_data}")
 
         # Perform a Clean before running the pipe
-        process = run_task(geom_pipe_virtual_conf, "Clean", virtual_plant_data)
-        assert(process.returncode == 0)
+        process = run_task("Clean", virtual_plant_data, geom_pipe_virtual_conf)
+        self.assertTrue(process.returncode == 0)
 
         # Perform the AnglesAndInternodes
-        process = run_task(geom_pipe_virtual_conf, "AnglesAndInternodes", virtual_plant_data)
-        assert(process.returncode == 0)
+        process = run_task("AnglesAndInternodes", virtual_plant_data, geom_pipe_virtual_conf)
+        self.assertTrue(process.returncode == 0)
 
         # Check if a minimum number of angles and internodes were computed
         angles_and_internodes_json_file = open(glob.glob(virtual_plant_data + "AnglesAndInternodes_*" + "/" + "AnglesAndInternodes.json")[0])
@@ -64,8 +64,8 @@ class TestGeomAnglesAndInternodes(unittest.TestCase):
         print("found angles=", len(angles), "found internodes=", len(internodes))
 
         # TODO : Improve the robustness of these following asserts (use appropriate metrics)
-        assert(len(angles) > 10)
-        assert(len(internodes) > 10)
+        self.assertTrue(len(angles) > 10)
+        self.assertTrue(len(internodes) > 10)
 
         angles_and_internodes_json_file.close()
     
@@ -77,8 +77,8 @@ class TestMLAnglesAndInternodes(unittest.TestCase):
         print(f"Testing CNN pipeline with data: {real_plant_data}")
 
         # Perform a Clean before running the pipe
-        process = run_task(ml_pipe_real_conf, "Clean", real_plant_data)
-        assert(process.returncode == 0)
+        process = run_task("Clean", real_plant_data, ml_pipe_real_conf)
+        self.assertTrue(process.returncode == 0)
 
         # Make sure that the weights files exists, otherwise download it
         fname = "Resnet_896_896_epoch50.pt"
@@ -91,8 +91,8 @@ class TestMLAnglesAndInternodes(unittest.TestCase):
             model_file.close()
         
         # Perform the AnglesAndInternodes
-        process = run_task(ml_pipe_real_conf, "AnglesAndInternodes", real_plant_data)
-        assert(process.returncode == 0)
+        process = run_task("AnglesAndInternodes", real_plant_data, ml_pipe_real_conf)
+        self.assertTrue(process.returncode == 0)
 
         # Check if a minimum number of angles and internodes were computed
         angles_and_internodes_json_file = open(glob.glob(real_plant_data + "AnglesAndInternodes_*" + "/" + "AnglesAndInternodes.json")[0])
@@ -105,8 +105,8 @@ class TestMLAnglesAndInternodes(unittest.TestCase):
         print("found angles=", len(angles), "found internodes=", len(internodes))
 
         # TODO : Improve the robustness of these following asserts (use appropriate metrics)
-        assert(len(angles) > 10)
-        assert(len(internodes) > 10)
+        self.assertTrue(len(angles) > 10)
+        self.assertTrue(len(internodes) > 10)
 
         angles_and_internodes_json_file.close()
     
@@ -117,8 +117,8 @@ class TestMLAnglesAndInternodes(unittest.TestCase):
         print(f"Testing CNN pipeline with data: {virtual_plant_data}")
 
         # Peform a Clean before running the pipe
-        process = run_task(ml_virtual_plant_conf, "Clean", virtual_plant_data)
-        assert(process.returncode == 0)
+        process = run_task("Clean", virtual_plant_data, ml_virtual_plant_conf)
+        self.assertTrue(process.returncode == 0)
 
         # Make sure that the weights files exists, otherwise download it
         fname = "Resnet_896_896_epoch50.pt"
@@ -131,8 +131,8 @@ class TestMLAnglesAndInternodes(unittest.TestCase):
             model_file.close()
         
         # Perform the AnglesAndInternodes
-        process = run_task(ml_virtual_plant_conf, "AnglesAndInternodes", virtual_plant_data)
-        assert(process.returncode == 0)
+        process = run_task("AnglesAndInternodes", virtual_plant_data, ml_virtual_plant_conf)
+        self.assertTrue(process.returncode == 0)
 
         # Check if a minimum number of angles and internodes were computed
         angles_and_internodes_json_file = open(glob.glob(virtual_plant_data + "AnglesAndInternodes_*" + "/" + "AnglesAndInternodes.json")[0])
