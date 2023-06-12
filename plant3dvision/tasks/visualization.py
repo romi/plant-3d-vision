@@ -117,7 +117,7 @@ class Visualization(RomiTask):
 
     def requires(self):
         if self.use_colmap_poses:
-            return self.upstream_colmap
+            return self.upstream_colmap()
         else:
             return []
 
