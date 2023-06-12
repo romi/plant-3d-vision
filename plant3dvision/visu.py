@@ -12,6 +12,50 @@ from matplotlib import pyplot as plt
 from matplotlib.widgets import Slider
 from pkg_resources import parse_version
 
+def plt_image_carousel(image_files, height=7, width=8, scan_name="Carousel"):
+    import ipywidgets as widgets
+    from plantdb.io import read_image
+    from IPython.display import display
+
+    scan_name = image_files[0].get_filset().get_scan().id
+    play = widgets.Play(interval=1500, value=0, min=0, max=len(image_files) - 1, step=1,
+                        description="Press play")
+    slider = widgets.IntSlider(min=0, max=len(image_files) - 1, step=1,
+                               description="Image")
+    slider.style.handle_color = 'lightblue'
+    widgets.jslink((play, 'value'), (slider, 'value'))
+    ui = widgets.HBox([play, slider])
+
+    def get_img(im_id):
+        return read_image(image_files[im_id]), image_files[im_id].id
+
+    def f(im_id):
+        fig, axe = plt.subplots(figsize=(width, height))
+        im, fname = get_img(im_id)
+        axe.imshow(im)
+        axe.set_axis_off()
+        axe.set_title(f"{scan_name} - Image '{fname}'")
+        plt.show()
+
+    output = widgets.interactive_output(f, {'im_id': slider})
+    return display(ui, output)
+
+def plotly_image_carousel(image_files, height=900, width=900, title="Carousel", layout_kwargs=None):
+    import plotly.express as px
+    from plantdb.io import read_image
+
+    layout_style = {'height': height, 'width': width, 'title': title, 'showlegend': False,
+                    'xaxis': {'visible': False}, 'yaxis': {'visible': False}}
+    if isinstance(layout_kwargs, dict):
+        layout_style.update(layout_kwargs)
+
+    array = np.array([read_image(im) for im in image_files])
+    fig = px.imshow(array, animation_frame=0, binary_string=True, labels=dict(animation_frame="Image"))
+    fig.update_layout(**layout_style)
+    fig.update_scenes(aspectmode='data')
+
+    return fig
+
 
 def _slider(label, mini, maxi, init, step=1, fmt="%1.0f"):
     """Matplotlib slider creation.
@@ -122,6 +166,7 @@ def plt_volume_slice_viewer(array, cmap="viridis", **kwargs):
     plt.show()
     return zs
 
+
 def plotly_volume_slicer(array, cmap="viridis", height=900, width=900, title="Volume", layout_kwargs=None):
     import plotly.express as px
 
@@ -129,7 +174,8 @@ def plotly_volume_slicer(array, cmap="viridis", height=900, width=900, title="Vo
     if isinstance(layout_kwargs, dict):
         layout_style.update(layout_kwargs)
 
-    fig = px.imshow(array.transpose(2,0,1), animation_frame=0, binary_string=True, color_continuous_scale=cmap, labels=dict(animation_frame="slice"))
+    fig = px.imshow(array.transpose(2, 0, 1), animation_frame=0, binary_string=True, color_continuous_scale=cmap,
+                    labels=dict(animation_frame="slice"))
     fig.update_layout(**layout_style)
     fig.update_scenes(aspectmode='data')
 
