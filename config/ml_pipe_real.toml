@@ -1,27 +1,21 @@
 [Colmap]
 upstream_task = "ImagesFilesetExists"
 matcher = "exhaustive"
+intrinsic_calibration_scan_id = ""  # use a dataset with calibrated intrinsic camera poses
+extrinsic_calibration_scan_id = ""  # use a dataset with calibrated extrinsic camera poses
 compute_dense = false
 align_pcd = true
-calibration_scan_id = ""
-
-  [Colmap.cli_args.feature_extractor]
-  "--ImageReader.single_camera" = "1" # in colmap default to 0
-  "--SiftExtraction.use_gpu" = "1"
-
-  [Colmap.cli_args.exhaustive_matcher]
-  "--SiftMatching.use_gpu" = "1"
-
-  [Colmap.cli_args.model_aligner]
-  "--robust_alignment_max_error" = "10"
-
-  # [Colmap.bounding_box] # default to None
-  # x = [150, 650]
-  # y = [150, 650]
-  # z = [-90, 300]
+use_gpu = true
+robust_alignment_max_error = 10
+distance_threshold = 5  # maximum allowed Euclidean distance from CNC pose
+# [Colmap.bounding_box] # default to None
+# x = [150, 650]
+# y = [150, 650]
+# z = [-90, 300]
 
 [Undistorted]
 upstream_task = "ImagesFilesetExists"
+query = "{\"channel\":\"rgb\", \"pose_estimation\":\"correct\"}"  # RGB images with a valid COLMAP pose
 
 [ModelFileset]
 scan_id = "models"
@@ -60,8 +54,8 @@ min_contrast = 10.0
 min_score = 0.01 # default to 0.2
 
 [SegmentedPointCloud]
-upstream_segmentation = "Segmentation2D"
 upstream_task = "PointCloud"
+upstream_segmentation = "Segmentation2D"
 use_colmap_poses = true
 
 [ClusteredMesh]
@@ -91,7 +85,7 @@ free_ends_eps = 1e-2
 
 [Visualization]
 upstream_point_cloud = "PointCloud"
-upstream_mesh = "TriangleMesh"
+upstream_mesh = "ClusteredMesh"
 upstream_colmap = "Colmap"
 upstream_angles = "AnglesAndInternodes"
 upstream_skeleton = "CurveSkeleton"
