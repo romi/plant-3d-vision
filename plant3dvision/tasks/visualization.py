@@ -218,12 +218,13 @@ class Visualization(RomiTask):
             measures["angles"] = angles
             measures["internodes"] = internodes
 
-        f_measures = output_fileset.create_file("measures")
-        io.write_json(f_measures, measures)
-        files_metadata["measures"] = "measures"
+        if measures != {}:
+            f_measures = output_fileset.create_file("measures")
+            io.write_json(f_measures, measures)
+            files_metadata["measures"] = "measures"
 
         # ANGLES
-        if self.upstream_angles().complete():
+        if self.upstream_angles().complete() and measures != {}:
             logger.info("Preparing angle and internode sequences...")
             angles_file = self.upstream_angles().output_file()
             sequences = io.read_json(angles_file)
