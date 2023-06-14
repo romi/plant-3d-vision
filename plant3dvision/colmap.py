@@ -41,14 +41,13 @@ COLMAP_EXE = os.environ.get('COLMAP_EXE', DEFAULT_COLMAP)
 def _has_nvidia_gpu():
     """Returns ``True`` if an NVIDIA GPU is reachable, else ``False``."""
     try:
-        out = subprocess.getoutput('nvidia-smi')
+        out = subprocess.run('nvidia-smi', capture_output=True)
     except FileNotFoundError:
-        print("nvidia-smi is not installed on your system!")
+        logger.warning("nvidia-smi is not installed on your system!")
         return False
     else:
         # `nvidia-smi` utility might be installed but GPU or driver unreachable!
-        if 'failed' in out:
-            print(out)
+        if 'failed' in out or 'not found' in out:
             return False
         else:
             return True
