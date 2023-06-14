@@ -84,7 +84,6 @@ def linear(img, coefs):
 
     Examples
     --------
-    >>> import numpy as np
     >>> import matplotlib.pyplot as plt
     >>> from imageio.v3 import imread
     >>> from plant3dvision import test_db_path
@@ -129,9 +128,12 @@ def excess_green(img):
     numpy.ndarray
         The excess green image
 
+    References
+    ----------
+    Woebbecke, D. M., Meyer, G. E., Von Bargen, K., & Mortensen, D. A. (1995). Color indices for weed identification under various soil, residue, and lighting conditions. Transactions of the ASAE, 38(1), 259-269.
+
     Examples
     --------
-    >>> import numpy as np
     >>> import matplotlib.pyplot as plt
     >>> from imageio.v3 import imread
     >>> from plant3dvision import test_db_path
@@ -189,7 +191,6 @@ def dilation(img, n):
 
     Examples
     --------
-    >>> import numpy as np
     >>> import matplotlib.pyplot as plt
     >>> from imageio.v3 import imread
     >>> from plant3dvision import test_db_path
