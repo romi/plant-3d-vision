@@ -51,6 +51,7 @@ RUN echo "Fix CUDA GPG key..." && \
     chown -R ${USER_NAME}: /home/${USER_NAME} && \
     # Create the folder used to mount the database:
     mkdir -p ${DB_LOCATION} && \
+    chown -R ${USER_NAME}: ${DB_LOCATION} && \
     # Ugly fix for OpenCL:
     ln -s /usr/lib/x86_64-linux-gnu/libOpenCL.so.1 /usr/lib/libOpenCL.so && \
     mkdir -p /etc/OpenCL/vendors && \
