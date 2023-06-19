@@ -47,7 +47,7 @@ def _has_nvidia_gpu():
         return False
     else:
         # `nvidia-smi` utility might be installed but GPU or driver unreachable!
-        if 'failed' in out or 'not found' in out:
+        if 'failed' in out.stdout.decode() or 'not found' in out.stdout.decode():
             return False
         else:
             return True
