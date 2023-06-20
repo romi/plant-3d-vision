@@ -798,13 +798,13 @@ def compute_stem_and_fruit_directions(tree, max_node_dist=10., branching_points=
 
     Returns
     -------
-    list of numpy.array
+    list of numpy.ndarray
         The list of fruit directions as 1-D arrays.
-    list of numpy.array
+    list of numpy.ndarray
         The list of stem directions as 1-D arrays.
-    list of numpy.array
+    list of numpy.ndarray
         The list of branching point coordinates as 1-D arrays.
-    list of numpy.array
+    list of numpy.ndarray
         The list of fruit coordinates for sampled fruit nodes.
 
     Notes
