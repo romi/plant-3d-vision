@@ -13,6 +13,28 @@ from matplotlib.widgets import Slider
 from pkg_resources import parse_version
 
 def plt_image_carousel(image_files, height=7, width=8, scan_name="Carousel"):
+    """An image carousel based on matplotlib.
+
+    Parameters
+    ----------
+    image_files : list of plantdb.FSDB.File
+        The list of image File to represent.
+    height : float, optional
+        The height of the figure to create, in inches.
+        Defaults to ``7``.
+    width : float, optional
+        The width of the figure to create, in inches.
+        Defaults to ``8``.
+    scan_name : str, optional
+        The name to give to the dataset.
+        Defaults to ``"Carousel"``.
+
+    Returns
+    -------
+    IPython.display.DisplayHandle
+        The carousel to display.
+
+    """
     import ipywidgets as widgets
     from plantdb.io import read_image
     from IPython.display import display
@@ -41,6 +63,38 @@ def plt_image_carousel(image_files, height=7, width=8, scan_name="Carousel"):
     return display(ui, output)
 
 def plotly_image_carousel(image_files, height=900, width=900, title="Carousel", layout_kwargs=None):
+    """An image carousel based on Plotly.
+
+    Parameters
+    ----------
+    image_files : list of plantdb.FSDB.File
+        The list of image File to represent.
+    height : float, optional
+        The height of the figure to create, in pixels.
+        Defaults to ``900``.
+    width : float, optional
+        The width of the figure to create, in pixels.
+        Defaults to ``900``.
+    title : str, optional
+        The title to give to the figure.
+        Defaults to ``"Carousel"``.
+    layout_kwargs : dict, optiona
+        A dictionary to customize the figure layout.
+
+    Returns
+    -------
+    plotly.graph_objects.Figure
+        The plotly figure to display.
+
+    See Also
+    --------
+    plotly.graph_objects.Figure
+
+    References
+    ----------
+    Plotly documentation for `Layout`: https://plotly.com/python/reference/layout/
+
+    """
     import plotly.express as px
     from plantdb.io import read_image
 
@@ -168,6 +222,37 @@ def plt_volume_slice_viewer(array, cmap="viridis", **kwargs):
 
 
 def plotly_volume_slicer(array, cmap="viridis", height=900, width=900, title="Volume", layout_kwargs=None):
+    """A Plotly representation for the volume array as a 2D slider.
+
+    Parameters
+    ----------
+    array : numpy.ndarray
+        The volume array to represent.
+    cmap : str
+        The name of the colormap to use, defaults to 'viridis'.
+    height : int, optional
+        The height of the figure layout, in pixels, default to `900`.
+    width : int, optional
+        The width of the figure layout, in pixels, default to `900`.
+    title : str, optional
+        Title to add to the figure, default to `"Point cloud"`.
+    layout_kwargs : dict, optional
+        Layout styling dictionary, may override `height`, `width` & `title`.
+
+    Returns
+    -------
+    plotly.graph_objects.Figure
+        The plotly figure to display.
+
+    See Also
+    --------
+    plotly.graph_objects.Figure
+
+    References
+    ----------
+    Plotly documentation for `Layout`: https://plotly.com/python/reference/layout/
+
+    """
     import plotly.express as px
 
     layout_style = dict(height=height, width=width, title=title, showlegend=False)
@@ -233,9 +318,9 @@ def plotly_pointcloud(pcd, n_pts=9000, height=900, width=900, title="Point cloud
     n_pts : int, optional
         The number of point to display, defaults to `9000`.
     height : int, optional
-        The height of the figure layout, default to `900`.
+        The height of the figure layout, in pixels, default to `900`.
     width : int, optional
-        The width of the figure layout, default to `900`.
+        The width of the figure layout, in pixels, default to `900`.
     title : str, optional
         Title to add to the figure, default to `"Point cloud"`.
     marker_kwargs : dict, optional
@@ -293,7 +378,7 @@ def plotly_mesh_data(mesh, mesh_kwargs=None):
     Plotly documentation for `Mesh3d`: https://plotly.com/python/reference/mesh3d/
 
     """
-    mesh_style = {"color": 'lightgreen', "opacity": 0.8}
+    mesh_style = {"color": 'lightgreen', "opacity": 1.}
     if isinstance(mesh_kwargs, dict):
         mesh_style.update(mesh_kwargs)
 
@@ -337,13 +422,7 @@ def plotly_mesh(mesh, height=900, width=900, title="Triangular mesh",
     Plotly documentation for `Layout`: https://plotly.com/python/reference/layout/
 
     """
-    mesh_style = {"color": 'lightgreen', "opacity": 0.8}
-    if isinstance(mesh_kwargs, dict):
-        mesh_style.update(mesh_kwargs)
-
-    x, y, z = np.array(mesh.vertices).T
-    i, j, k = np.array(mesh.triangles).T
-    go_mesh = go.Mesh3d(x=x, y=y, z=z, i=i, j=j, k=k, **mesh_style)
+    go_mesh = plotly_mesh_data(mesh, mesh_kwargs)
 
     layout_style = dict(height=height, width=width, title=title, showlegend=False)
     if isinstance(layout_kwargs, dict):
@@ -355,6 +434,56 @@ def plotly_mesh(mesh, height=900, width=900, title="Triangular mesh",
 
     return fig
 
+def plotly_skeleton_data(skeleton, line_kwargs=None):
+    """A Plotly representation of the skeleton.
+
+    Parameters
+    ----------
+    skeleton : dict
+        The skeleton to render, a dictionary with "points" and "lines".
+    height : int, optional
+        The height of the figure layout, default to `900`.
+    width : int, optional
+        The width of the figure layout, default to `900`.
+    title : str, optional
+        Title to add to the figure, default to `"Skeleton"`.
+    line_kwargs : dict, optional
+        Line styling dictionary, default to `{"size": 1, "color": 'green', "opacity": 0.8}`.
+    layout_kwargs : dict, optional
+        Layout styling dictionary, may override `height`, `width` & `title`.
+
+    Returns
+    -------
+    a list of plotly.graph_objects.Scatter3d
+        The 3D lines (scatter plot) to represent the skeleton.
+
+    See Also
+    --------
+    plant3dvision.proc3d.skeletonize
+    plotly.graph_objects.Scatter3d
+
+    References
+    ----------
+    Plotly documentation for `Scatter3d`: https://plotly.com/python/reference/scatter3d/
+
+    """
+
+    points = skeleton["points"]
+    lines = skeleton["lines"]
+
+    line_style = {"width": 4}
+    if isinstance(line_kwargs, dict):
+        line_style.update(line_kwargs)
+
+    lines_3d = []
+    for line in lines:
+        start, stop = line
+        xt, yt, zt = points[start]
+        xp, yp, zp = points[stop]
+        sc = go.Scatter3d(x=[xt, xp], y=[yt, yp], z=[zt, zp], mode='lines', line=line_style)
+        lines_3d.append(sc)
+
+    return lines_3d
 
 def plotly_skeleton(skeleton, height=900, width=900, title="Skeleton",
                     line_kwargs=None, layout_kwargs=None):
@@ -392,20 +521,7 @@ def plotly_skeleton(skeleton, height=900, width=900, title="Skeleton",
     Plotly documentation for `Layout`: https://plotly.com/python/reference/layout/
 
     """
-    points = skeleton["points"]
-    lines = skeleton["lines"]
-
-    line_style = {"width": 4}
-    if isinstance(line_kwargs, dict):
-        line_style.update(line_kwargs)
-
-    lines_3d = []
-    for line in lines:
-        start, stop = line
-        xt, yt, zt = points[start]
-        xp, yp, zp = points[stop]
-        sc = go.Scatter3d(x=[xt, xp], y=[yt, yp], z=[zt, zp], mode='lines', line=line_style)
-        lines_3d.append(sc)
+    lines_3d = plotly_skeleton_data(skeleton, line_kwargs)
 
     layout_style = dict(height=height, width=width, title=title, showlegend=False)
     if isinstance(layout_kwargs, dict):
@@ -698,6 +814,66 @@ def plotly_fruit_directions(fruit_vectors, branching_points, height=900, width=9
         layout_style.update(layout_kwargs)
 
     fig = go.Figure(data=go_data)
+    fig.update_layout(**layout_style)
+    fig.update_scenes(aspectmode='data')
+
+    return fig
+
+
+def plotly_sequences(sequences, height=900, width=900, title="Sequences",
+                    line_kwargs=None, marker_kwargs=None, layout_kwargs=None):
+    """Plot the obtained sequences.
+
+    Parameters
+    ----------
+    sequences : dict
+        The sequences dictionary to plot, usually contains "angles" and "internodes" entries.
+
+    Returns
+    -------
+    plotly.graph_objects.Figure
+        The plotly figure to display.
+
+    See Also
+    --------
+    plotly.graph_objects.Scatter3d
+    plotly.graph_objects.Figure
+
+    References
+    ----------
+    Plotly documentation for `Scatter3d`: https://plotly.com/python/reference/scatter3d/
+
+    """
+    from plotly.subplots import make_subplots
+
+    n_figs = len(sequences)
+    names = list(sequences.keys())
+    idx = np.array(range(len(sequences[names[0]])))
+
+    line_style = {'color': 'firebrick', 'width': 2, 'dash': 'dash'}
+    if isinstance(line_kwargs, dict):
+        line_style.update(line_kwargs)
+
+    marker_style = {"size": 2}
+    if isinstance(marker_kwargs, dict):
+        marker_style.update(marker_kwargs)
+
+    fig = make_subplots(rows=n_figs, cols=1, vertical_spacing=0.1, subplot_titles=names)
+    for i in range(n_figs):
+        name = names[i]
+        sc = go.Scatter(x=idx, y=sequences[name], name=name, mode='lines+markers', line=line_style, marker=marker_style)
+        fig.add_trace(sc, row=i + 1, col=1)
+        # Add the name of the sequence as Y-axis label:
+        fig.update_yaxes(title_text=name, row=i + 1, col=1)
+        # Add the X-axis label for the last subplot:
+        if i == n_figs -1:
+            fig.update_xaxes(title_text="index", row=i + 1, col=1)
+        fig.update_traces(textposition='top center')
+
+    layout_style = dict(height=height, width=width, title=title, showlegend=False)
+    if isinstance(layout_kwargs, dict):
+        layout_style.update(layout_kwargs)
+
     fig.update_layout(**layout_style)
     fig.update_scenes(aspectmode='data')
 
