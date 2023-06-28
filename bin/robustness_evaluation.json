@@ -16,7 +16,7 @@
 
     "Colmap": {
         "prev_task" : "",
-        "comp_func" : ["compare_to_cnc_poses", "compare_to_calibrated_poses", "compare_intrinsic_params"]
+        "comp_func" : ["compare_to_cnc_poses", "estimated_pose_variability", "compare_to_calibrated_poses", "compare_intrinsic_params"]
     },
 
     "Undistorted": {

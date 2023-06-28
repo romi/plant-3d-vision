@@ -6,6 +6,8 @@ from pathlib import Path
 
 import numpy as np
 import open3d as o3d
+from matplotlib import pyplot as plt
+
 import plantdb
 from plant3dvision.metrics import CompareMaskFilesets
 from plant3dvision.metrics import chamfer_distance
@@ -391,6 +393,91 @@ def compare_intrinsic_params(db, task_name, scans_list):
     return
 
 
+def estimated_pose_variability(db, task_name, scans_list):
+    """Generate a figure showing the colmap poses variability to CNC pose & median pose.
+
+    Parameters
+    ----------
+    db : plantdb.fsdb.FSDB
+        Local ROMI database instance with the replicated scan datasets.
+    task_name : str
+        Name of the task to test.
+    scans_list : list of plantdb.fsdb.Scan
+        List of ``Scan`` instances to compare.
+
+    """
+    from scipy.spatial.distance import euclidean
+    ref_scan_name = '_'.join(scans_list[0].id.split('_')[:-1])
+    # We get the CNC poses from the first scan of the list as they are replicates:
+    cnc_poses_by_image = get_cnc_poses(scans_list[0], axes='xyz')
+
+    # - Get the dictionary of colmap poses (XYZ) indexed by image id by scan id:
+    colmap_poses_by_scan = {}  # scan_id indexed
+    for scan in scans_list:
+        colmap_poses_by_scan[scan.id] = get_image_poses(scan, "estimated_pose")
+
+    # Get the list of image ids:
+    im_ids = list(colmap_poses_by_scan[scans_list[0].id].keys())
+    # - Get the list of all colmap poses (XYZ) indexed by image id:
+    colmap_poses_by_image = {im: [] for im in im_ids}
+    for scan_id, scan_poses in colmap_poses_by_scan.items():
+        for im_id, pose in scan_poses.items():
+            colmap_poses_by_image[im_id].append(pose)
+
+    # - Now compute mean pose per image:
+    mean_pose_by_image = {}
+    for im_id, pose in colmap_poses_by_image.items():
+        mean_pose_by_image[im_id] = np.mean(np.array(pose), axis=0)
+    # - Now compute median pose per image:
+    median_pose_by_image = {}
+    for im_id, pose in colmap_poses_by_image.items():
+        median_pose_by_image[im_id] = np.median(np.array(pose), axis=0)
+
+    # - Compute the distance of estimated colmap poses from the CNC pose for each replicate and image:
+    dist2cnc_pose_by_image = {}
+    for im_id, colmap_poses in colmap_poses_by_image.items():
+        xyz_cnc = cnc_poses_by_image[im_id]
+        dist2cnc_pose_by_image[im_id] = [euclidean(pose, xyz_cnc) for pose in colmap_poses]
+    # - Compute the distance of estimated colmap poses from the median pose for each replicate and image:
+    dist2median_pose_by_image = {}
+    for im_id, colmap_poses in colmap_poses_by_image.items():
+        xyz_median = median_pose_by_image[im_id]
+        dist2median_pose_by_image[im_id] = [euclidean(pose, xyz_median) for pose in colmap_poses]
+
+    def _bxplt(ax, dist_dict, title):
+        labels = list(dist_dict.keys())
+        data = list(dist_dict.values())
+        ax.boxplot(data, labels=labels)
+        ax.set_title(title)
+        ax.set_xticklabels(ax.get_xticks(), rotation = 45)
+        ax.set_xlabel("Image index.")
+        ax.set_ylabel("Euclidean distance in mm.")
+        ax.grid(linestyle='-.')
+        return ax
+
+    fig, axes = plt.subplots(nrows=2, ncols=1, figsize=[12, 8])
+    axes[0] = _bxplt(axes[0], dist2cnc_pose_by_image, "Distance to CNC pose.")
+    axes[1] = _bxplt(axes[1], dist2median_pose_by_image, "Distance to median pose.")
+    plt.suptitle(f"{ref_scan_name} - {task_name} pose estimation variability (n={len(scans_list)})")
+    plt.tight_layout()
+    plt.savefig(Path(db.basedir) / f'{ref_scan_name} - {task_name}_poses_boxplot.png')
+
+    with open(Path(db.basedir) / f'{task_name}_estimated_poses_deviation.json', 'w') as out_file:
+        json.dump({
+            'global mean distance to cnc pose': float(np.mean(np.array(list(dist2cnc_pose_by_image.values())))),
+            'global std distance to cnc pose': float(np.std(np.array(list(dist2cnc_pose_by_image.values())))),
+            'global mean distance to median pose': float(np.mean(np.array(list(dist2median_pose_by_image.values())))),
+            'global std distance to median pose': float(np.std(np.array(list(dist2median_pose_by_image.values())))),
+            'replicate mean distance to cnc pose': list(np.mean(np.array(list(dist2cnc_pose_by_image.values())), axis=1)),
+            'replicate std distance to cnc pose': list(np.std(np.array(list(dist2cnc_pose_by_image.values())), axis=1)),
+            'replicate mean distance to median pose': list(np.mean(np.array(list(dist2median_pose_by_image.values())), axis=1)),
+            'replicate std distance to median pose': list(np.std(np.array(list(dist2median_pose_by_image.values())), axis=1)),
+            'distance to cnc pose': dist2cnc_pose_by_image,
+            'distance to median pose': dist2median_pose_by_image
+        }, out_file, indent=2)
+
+    return
+
 def compare_to_cnc_poses(db, task_name, scans_list):
     """Compare the poses estimated/calibrated by COLMAP to the one from the CNC.
 
@@ -426,7 +513,6 @@ def compare_to_cnc_poses(db, task_name, scans_list):
 
     # - Get all poses estimated by COLMAP indexed by image id and by replicate id:
     colmap_poses = {}  # {scan_id: {img_id: [x, y, z]}}
-    poses_array = []
     for scan in scans_list:
         if task_name.startswith("Colmap"):
             colmap_poses[scan.id] = compute_colmap_poses_from_metadata(scan)  # {img_id: [x, y, z]}
@@ -434,10 +520,9 @@ def compare_to_cnc_poses(db, task_name, scans_list):
             colmap_poses[scan.id] = get_image_poses(scan, "calibrated_pose")
         else:
             logger.critical(f"Nothing defined here for a task named '{task_name}'!")
-        poses_array.append([p for im_id, p in colmap_poses[scan.id].items()])
 
     # - Get the list of all colmap poses (XYZ) indexed by image id:
-    colmap_poses_by_image = {im: [] for im in colmap_poses[scan.id].keys()}
+    colmap_poses_by_image = {im: [] for im in image_ids}
     for scan_id, scan_poses in colmap_poses.items():
         for im_id, pose in scan_poses.items():
             colmap_poses_by_image[im_id].append(pose)

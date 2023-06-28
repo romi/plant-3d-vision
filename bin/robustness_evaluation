@@ -3,11 +3,12 @@
 
 import argparse
 import datetime
-import json
+import glob
 import logging
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -26,9 +27,9 @@ dirname, filename = os.path.split(os.path.abspath(__file__))
 CONF_FILE = os.path.join(dirname, "robustness_evaluation.json")
 URL = "https://docs.romi-project.eu/plant_imager/developer/pipeline_repeatability/"
 
-DESC = """Robustness evaluation of the Reconstruction & Quantification pipelines.
+DESC = """Task robustness evaluation.
 
-Evaluating the repeatability of a Reconstruction & Quantification (R&Q) pipeline is made as follows:
+Evaluating the robustness of a task from the Reconstruction & Quantification (R&Q) pipeline is made as follows:
  1. duplicate the selected scan dataset in a temporary directory (and clean it from previous R&Q if necessary)
  2. run the R&Q pipeline up to the previous task of the selected task to evaluate, if any
  3. copy/replicate this result to a new database (append a replicate id to the dataset name)
@@ -59,39 +60,45 @@ def parsing():
                                      formatter_class=argparse.RawDescriptionHelpFormatter,
                                      epilog=f"Detailed explanations here: {URL}")
 
-    parser.add_argument("ref_scan", type=str,
-                        help="Reference scan dataset to use for repeatability evaluation.")
     parser.add_argument("task", type=str, default="AnglesAndInternodes",
                         choices=valid_tasks, metavar='task',
                         help=f"Task to evaluate, should be in: {', '.join(valid_tasks)}")
-    parser.add_argument("config_file", type=str,
+    parser.add_argument("dataset_path", type=str, default='', nargs='*',
+                        help="Path to scan dataset to use for task robustness evaluation.")
+    parser.add_argument('--config', dest='config', type=str, default="",
                         help="Path to the pipeline TOML configuration file.")
 
     # -- Evaluation options:
     eval = parser.add_argument_group('Evaluation options')
-    eval.add_argument("-n", "--replicate_number", default=30, type=int,
-                      help="Number of replicate to use for repeatability evaluation. Defaults to `30`.")
+    eval.add_argument("-n", "--n_replicates", default=30, type=int,
+                      help="Number of replicates to create for task robustness evaluation."
+                           "Defaults to `30`.")
     eval.add_argument("-c", "--clean", action="store_true", default=False,
-                      help="Force Clean task on scan dataset.")
+                      help="Run a Clean task on scan dataset prior to duplication.")
     eval.add_argument("-f", "--full-pipe", dest='full_pipe', action="store_true", default=False,
-                      help="Run the whole Reconstruction & Quantification pipeline on each replicate independently.")
+                      help="Use this to run the whole pipeline independently for each replicate."
+                           "Else the task to evaluate is run on clones of the results from the upstream task, if any.")
     eval.add_argument("-np", "--no-pipeline", dest='no_pipeline', action="store_true", default=False,
-                      help="Do not run the pipeline, only compare tasks outputs.")
-    eval.add_argument("--models", default=False,
-                      help="Models database location to use with ML pipeline.")
+                      help="Do not run the pipeline, only compare tasks outputs."
+                           "Use with `--eval-db` to rerun this code on an existing test evaluation database!")
 
     # -- Evaluation database options:
     db = parser.add_argument_group('Database options')
     db.add_argument("--suffix", default="", type=str,
-                    help="Suffix to append to the created database directory.")
+                    help="Suffix to append to the evaluation database directory to create.")
     db.add_argument('--eval-db', dest='eval_db', type=str, default="",
-                    help="Evaluation database location to use. Use at your own risks!")
+                    help="Existing evaluation database location to use."
+                         "Use with `-np` to rerun this code on an existing test evaluation database!")
     db.add_argument('--date-fmt', dest='date_fmt', type=str, default=DATETIME_FMT,
-                    help="Datetime format to use prefix for evaluation database name. Defaults to `DATETIME_FMT`.")
+                    help="Datetime format to use as prefix for the name of the evaluation database directory to create."
+                         "Defaults to `DATETIME_FMT`.")
     db.add_argument('--no-date', dest='no_date', action="store_true", default=False,
-                    help=f"Do not add the datetime as prefix.")
+                    help=f"Do not add the datetime as prefix to the name of the evaluation database directory to create.")
 
-    parser.add_argument('--log-level', dest='log_level', type=str, default='INFO',
+    others = parser.add_argument_group('Other options')
+    others.add_argument("--models", default=False,
+                      help="Models database location to use with ML pipeline.")
+    others.add_argument('--log-level', dest='log_level', type=str, default='INFO',
                         choices=list(logging._nameToLevel.keys()),
                         help="Set message logging level. Defaults to `INFO`.")
 
@@ -100,17 +107,17 @@ def parsing():
     #   - YES:
     #     ->Evaluation database contain scan datasets
     #       - NO: use it instead of auto-generated path
-    #       - YES: use number of scans as replicate number & compute repeatability evaluation
+    #       - YES: use number of scans as replicate number & evaluate task robustness
 
     return parser
 
 
-def file_by_file_comparison(db, task_name, scan_replicates):
+def file_by_file_comparison(eval_db_path, task_name, scan_replicates):
     """Compares task folders, file by file, dump results to JSON.
 
     Parameters
     ----------
-    db : plantdb.fsdb.FSDB
+    eval_db_path : plantdb.fsdb.FSDB
         Local ROMI database instance with the replicated scan datasets
     task_name : str
         name of the task to evaluation
@@ -150,17 +157,17 @@ def file_by_file_comparison(db, task_name, scan_replicates):
         logger.info(f"Mean Similarity: {average_similarity:.2f} %")
 
     # Write a JSON summary file of the comparison:
-    with open(Path(db.basedir) / 'filebyfile_comparison.json', 'w') as out_file:
+    with open(Path(eval_db_path.basedir) / 'filebyfile_comparison.json', 'w') as out_file:
         json.dump({'Similarity (%)': fcmp, 'Mean similarity (%)': average_similarity}, out_file)
     return
 
 
-def compare_task_output(db, task_name, scan_replicates, independent_runs=False):
+def compare_task_output(eval_db_path, task_name, scan_replicates, independent_runs=False):
     """Method to compare tasks outputs on a series of replicated datasets.
 
     Parameters
     ----------
-    db : plantdb.fsdb.FSDB
+    eval_db_path : plantdb.fsdb.FSDB
         Local ROMI database instance with the replicated scan datasets
     task_name : str
         Name of the task to evaluation.
@@ -177,13 +184,13 @@ def compare_task_output(db, task_name, scan_replicates, independent_runs=False):
     It is possible to define more than one comparison method per task.
 
     """
-    db.connect()
+    eval_db_path.connect()
     # - Check the list of scan replicates for successful call of `romi_run_task`
     # (scan dataset should contain the `task_name` output fileset):
     valid_replicates = []
     for scan in scan_replicates:
         try:
-            _ = _get_task_fileset(db.get_scan(scan.name), task_name).id
+            _ = _get_task_fileset(eval_db_path.get_scan(scan.name), task_name).id
         except AssertionError as e:
             logger.error(e)
         else:
@@ -192,7 +199,7 @@ def compare_task_output(db, task_name, scan_replicates, independent_runs=False):
     logger.info(f"Got {n_actual_replicates} valid replicates of task '{task_name}' (with an output fileset).")
 
     # - Performs file-by-file comparisons for the selected task:
-    file_by_file_comparison(db, task_name, valid_replicates)
+    file_by_file_comparison(eval_db_path, task_name, valid_replicates)
     # - Load the metric for the selected task from the JSON configuration file:
     comparison_config = json.load(open(CONF_FILE))
 
@@ -205,27 +212,27 @@ def compare_task_output(db, task_name, scan_replicates, independent_runs=False):
                 continue
             # Check the task has been called by pipeline (should produce output fileset), otherwise continue the loop
             try:
-                _ = _get_task_fileset(db.get_scan(valid_replicates[0].name), task)
+                _ = _get_task_fileset(eval_db_path.get_scan(valid_replicates[0].name), task)
             except AssertionError:
                 continue
-            _perform_comparisons(db, comp_func, task, valid_replicates)
+            _perform_comparisons(eval_db_path, comp_func, task, valid_replicates)
     else:
         comp_func = comparison_config[task_name]["comp_func"]
-        _perform_comparisons(db, comp_func, task_name, valid_replicates)
+        _perform_comparisons(eval_db_path, comp_func, task_name, valid_replicates)
 
     return
 
 
-def _perform_comparisons(db, comp_func, task_name, valid_replicates):
+def _perform_comparisons(eval_db_path, comp_func, task_name, valid_replicates):
     """Method that calls for the task comparison function(s) on the list of scan replicates that successfully ran it."""
     if isinstance(comp_func, str):
         comp_func = [comp_func]  # make a list to work in following loop
     # Get the list of `plantdb.fsdb.Scan` instances to compare from list of Path:
-    valid_replicates = [db.get_scan(scan.name) for scan in valid_replicates]
+    valid_replicates = [eval_db_path.get_scan(scan.name) for scan in valid_replicates]
     # - More than one comparison function can be applied to a same task!
     for func in comp_func:
         logger.info(f"Comparing '{task_name}' outputs with '{func}'...")
-        eval(func + "(db, task_name, valid_replicates)")
+        eval(func + "(eval_db_path, task_name, valid_replicates)")
         # try:
         #     eval(func + "(db, task_name)")
         # except NameError:
@@ -246,12 +253,12 @@ def _copy_tree(origin, dest):
     return
 
 
-def fill_tmp_db(ref_scan, models_path=None, extra_scans=None, clean=False):
+def fill_tmp_db(dataset_path, models_path=None, extra_scans=None, clean=False):
     """Fill the temporary DB with replicates of `ref_scan` and run the pipeline up to the previous task.
 
     Parameters
     ----------
-    ref_scan : pathlib.Path or str
+    dataset_path : pathlib.Path or str
         Path to the 'reference scan dataset' to use for evaluation.
     models_path : pathlib.Path
         Name of models directory to copy in evaluation DB, to use with task ``Segmentation2D``.
@@ -295,21 +302,19 @@ def fill_tmp_db(ref_scan, models_path=None, extra_scans=None, clean=False):
 
     # Copy the 'reference scan dataset' to the temporary directory
     logger.info("Copy the 'reference scan dataset' to the temporary directory...")
-    tmp_scan_dir = tmp_path / f"{ref_scan.name}"
-    _copy_tree(ref_scan, tmp_scan_dir)
+    tmp_scan_dir = tmp_path / f"{dataset_path.name}"
+    _copy_tree(dataset_path, tmp_scan_dir)
 
-    _check_clean(tmp_scan_dir, clean)
+    _run_clean_if_requested(tmp_scan_dir, clean)
 
     return tmp_scan_dir
 
 
-def _check_clean(tmp_scan_dir, clean):
-    """Check for previous analysis & if yes, clean the dataset, can be forced by `clean`."""
+def _run_clean_if_requested(tmp_scan_dir, clean):
+    """Clean the input dataset if requested."""
     bak_cfg_file = tmp_scan_dir / "pipeline.toml"
-    if bak_cfg_file.is_file():
-        romi_run_task(tmp_scan_dir, "Clean", str(bak_cfg_file))
-    elif clean:
-        # Create a Clean task configuration:
+    if clean:
+        # Create a quiet Clean task configuration:
         with open(bak_cfg_file, 'w') as cfg_f:
             cfg = {"Clean": {"no_confirm": True}}
             toml.dump(cfg, cfg_f)
@@ -319,21 +324,21 @@ def _check_clean(tmp_scan_dir, clean):
     return
 
 
-def fill_eval_db(eval_db, ref_scan, nb, models_path=None, extra_scans=None):
+def fill_eval_db(eval_db_path, dataset_path, n_replicate, models_path=None, extra_scans=None):
     """Fill the evaluation DB with replicates of `ref_scan` and run the pipeline up to the previous task.
 
     Parameters
     ----------
-    eval_db : pathlib.Path
-        Path to the evaluation DB.
-    ref_scan : pathlib.Path
-        Path to the scan dataset to use for evaluation.
-    nb : int
-        Number time to duplicate the reference scan dataset.
+    eval_db_path : pathlib.Path
+        The path to the evaluation DB.
+    dataset_path : pathlib.Path
+        The path to the dataset to use for evaluation.
+    n_replicate : int
+        Number time to duplicate the reference dataset.
     models_path : pathlib.Path
         Name of models directory to copy in evaluation DB, to use with task ``Segmentation2D``.
     extra_scans : list of pathlib.Path
-        Name of other scan dataset directories to copy in evaluation DB.
+        Name of other dataset directories to copy in evaluation DB.
 
     Returns
     -------
@@ -356,16 +361,17 @@ def fill_eval_db(eval_db, ref_scan, nb, models_path=None, extra_scans=None):
     # - If ML models are needed, copy them to evaluation DB directory:
     if models_path is not None:
         logger.info("Copy the required ML models dataset...")
-        _copy_tree(models_path, eval_db / "models")
+        _copy_tree(models_path, eval_db_path / "models")
     # - If extra scans are needed, copy them to evaluation DB directory:
     if extra_scans is not None:
         for x_scan in extra_scans:
             logger.info(f"Copy the required calibration dataset '{x_scan.name}'...")
-            _copy_tree(x_scan, eval_db / x_scan.name)
+            _copy_tree(x_scan, eval_db_path / x_scan.name)
 
-    for i in range(nb):
-        copied_scan_name = eval_db / f"{ref_scan.name}_{i}"
-        shutil.copytree(str(ref_scan), str(copied_scan_name))
+    n_fill = len(str(n_replicate))
+    for i in range(n_replicate):
+        copied_scan_name = eval_db_path / f"{dataset_path.name}_{str(i).zfill(n_fill)}"
+        shutil.copytree(str(dataset_path), str(copied_scan_name))
         scan_replicates.append(copied_scan_name.expanduser())
 
     return scan_replicates
@@ -407,12 +413,12 @@ def get_eval_db_path(root_location, task_name, suffix="", date_fmt=DATETIME_FMT,
     return Path(root_location / folder_name)
 
 
-def initialize_eval_db(test_db="", **kwargs):
+def initialize_eval_db(eval_db_path="", **kwargs):
     """Initialize the local FSDB "evaluation database".
 
     Parameters
     ----------
-    test_db : str or pathlib.Path
+    eval_db_path : str or pathlib.Path
         Full path to the evaluation database directory.
 
     Other Parameters
@@ -444,26 +450,26 @@ def initialize_eval_db(test_db="", **kwargs):
 
     """
     # - Get the path to the evaluation DB to create:
-    if test_db == "":
-        test_db = get_eval_db_path(**kwargs).absolute()
+    if eval_db_path == "":
+        eval_db_path = get_eval_db_path(**kwargs).absolute()
     else:
-        test_db = Path(test_db).absolute()
+        eval_db_path = Path(eval_db_path).absolute()
     # Create the evaluation DB directory:
-    test_db.mkdir(exist_ok=True)
+    eval_db_path.mkdir(exist_ok=True)
     # - Creates the marker file to be able to get a `plantdb.fsdb.FSDB` instance:
-    marker_file = test_db / MARKER_FILE_NAME
+    marker_file = eval_db_path / MARKER_FILE_NAME
     marker_file.touch()
-    return test_db
+    return eval_db_path
 
 
-def get_replicates_list(eval_db, ref_scan):
+def get_replicates_list(eval_db_path, ds_path):
     """Get the list of scan replicates.
 
     Parameters
     ----------
-    eval_db : pathlib.Path
+    eval_db_path : pathlib.Path
         Full path to evaluation database.
-    ref_scan : pathlib.Path
+    ds_path : pathlib.Path
         Full path to scan dataset to use for evaluation.
 
     Returns
@@ -474,21 +480,21 @@ def get_replicates_list(eval_db, ref_scan):
     Examples
     --------
     >>> from pathlib import Path
-    >>> eval_db = Path('~/romi_db/calibration_robustness/20220905155852_eval_ExtrinsicCalibration_opencv')
-    >>> ref_scan = Path('~/romi_db/calibration_robustness/db/extrinsic_calib_1')
-    >>> get_replicates_list(eval_db.expanduser(), ref_scan.expanduser())
+    >>> eval_db_path = Path('~/romi_db/calibration_robustness/20220905155852_eval_ExtrinsicCalibration_opencv')
+    >>> ds_path = Path('~/romi_db/calibration_robustness/db/extrinsic_calib_1')
+    >>> get_replicates_list(eval_db_path.expanduser(),ds_path.expanduser())
 
     """
     return sorted(
-        list([idir.expanduser() for idir in eval_db.iterdir() if idir.is_dir() and ref_scan.name in idir.name]))
+        list([idir.expanduser() for idir in eval_db_path.iterdir() if idir.is_dir() and ds_path.name in idir.name]))
 
 
-def romi_run_task(scan_path, task_name, cfg_file):
+def romi_run_task(dataset_path, task_name, cfg_file):
     """Run configured pipeline for given task on a scan.
 
     Parameters
     ----------
-    scan_path : pathlib.Path
+    dataset_path : pathlib.Path
        Path to the scan dataset directory.
     task_name : str
         Name of the ROMI task to run.
@@ -496,9 +502,9 @@ def romi_run_task(scan_path, task_name, cfg_file):
         Path to the configuration file to use to run the pipeline (``romi_run_task``).
 
     """
-    logger.info(f"Executing task '{task_name}' on scan dataset '{str(scan_path)}'.")
+    logger.info(f"Executing task '{task_name}' on scan dataset '{str(dataset_path)}'.")
     # TODO: use luigi.build() instead of subprocess.run call ?
-    cmd = ["romi_run_task", task_name, str(scan_path), "--config", cfg_file, "--local-scheduler"]
+    cmd = ["romi_run_task", task_name, str(dataset_path), "--config", cfg_file, "--local-scheduler"]
     logger.info(cmd)
     subprocess.run(cmd, check=True)
     return
@@ -521,30 +527,40 @@ def _check_markers(path):
     return
 
 
-def check_extra_scans(db_location, config_file):
-    """Use the configuration file to search for defined calibration scan id(s) to copy."""
+def check_extra_dataset(db_location, config_file):
+    """Use the configuration file to search for defined calibration dataset id(s) to copy.
+
+    Parameters
+    ----------
+    db_location : pathlib.Path
+        The path to the database hosting the input dataset used for robustness evaluation.
+    config_file : pathlib.Path
+        The path to the pipeline configuration file.
+
+    Returns
+    -------
+    list
+        The list of extra dataset required to run the robustness evaluation with this pipeline configuration.
+    """
     pipeline_cfg = toml.load(open(config_file, 'r'))
-    extra_scans = []
+    extra_ds = []
     for section, cfg_dict in pipeline_cfg.items():
         for k, v in cfg_dict.items():
             if "calibration_scan_id" in k and v != "":
-                extra_scans.append(db_location / v)
-    nx = len(extra_scans)
+                extra_ds.append(db_location / v)
+    nx = len(extra_ds)
     if nx != 0:
-        extra_scans_str = ', '.join([xs.name for xs in extra_scans])
+        extra_scans_str = ', '.join([xs.name for xs in extra_ds])
         logger.info(f"Found '{nx}' calibration scan{'s' if nx > 1 else ''} to copy: {extra_scans_str}")
-    return extra_scans
+    return extra_ds
 
 
-def main():
-    # - Parse the input arguments to variables:
-    parser = parsing()
-    args = parser.parse_args()
-
+def run_task_eval(args):
+    """Run the robustness evaluation of a task on a dataset."""
     # - Get the path to the reference scan dataset:
-    ref_scan_path = Path(args.ref_scan).expanduser()
+    dataset_path = Path(args.dataset_path).expanduser()
     # - Path to the local database that contain the reference scan dataset:
-    db_location = ref_scan_path.parent
+    db_location = dataset_path.parent
     # - Load the JSON config file `robustness_evaluation.json`:
     config = json.load(open(CONF_FILE))
     # - Get the task to execute prior to the one to evaluate, if any, from the JSON evaluation configuration file:
@@ -571,58 +587,60 @@ def main():
     # - Initialize the logger
     global logger
     logger = configure_logger(filename, eval_db_path, args.log_level)
-    logger.info(f"Path to the 'reference scan dataset' is: '{ref_scan_path}'")
+    logger.info(f"Robustness evaluation of task {args.task} is running on dataset '{Path(args.dataset_path).name}'...")
+    logger.info(f"Path to the 'input scan dataset' is: '{dataset_path}'")
+    # TODO: check if the scan is "raw" or not using call to some Clean task methods to get insight?
     if args.eval_db != "":
         logger.info(f"Got a manually defined evaluation database location: '{args.eval_db}'.")
     else:
         logger.info(f"Created an evaluation database at location: '{eval_db_path}'.")
 
-    # - Search pipeline config for '*calibration_scan_id':
-    extra_scans = check_extra_scans(db_location, args.config_file)
+    # - Check if some extra dataset are required (search in pipeline config, e.g. for '*calibration_scan_id'):
+    extra_dataset = check_extra_dataset(db_location, args.config)
     # - Get the path to the CNN model
-    models_path = Path(args.models).expanduser() if args.models else None
+    path2cnn_model = Path(args.models).expanduser() if args.models else None
 
     # - Scan evaluation DB to check if it's already populated with replicates:
-    scan_replicates = get_replicates_list(eval_db_path, ref_scan_path)
+    scan_replicates = get_replicates_list(eval_db_path, dataset_path)
     n_replicates = len(scan_replicates)
     has_tmp_db = False
     # Case without/with scan datasets in the evaluation database root directory
     if n_replicates == 0:
-        n_replicates = int(args.replicate_number)
+        n_replicates = int(args.n_replicates)
         # If there is a previous task to run:
         if prev_task != "":
             # Create & populate the temporary DB:
-            ref_scan_path = fill_tmp_db(ref_scan_path, models_path, extra_scans, clean=args.clean)
+            dataset_path = fill_tmp_db(dataset_path, path2cnn_model, extra_dataset, clean=args.clean)
             has_tmp_db = True
             # Run the previous task on the temporary DB, if any:
             logger.info(f"Call to '{prev_task}' task on the 'temporary scan dataset'...")
-            romi_run_task(ref_scan_path, prev_task, args.config_file)
+            romi_run_task(dataset_path, prev_task, args.config)
             # Duplicate the results of the previous task to the evaluation database:
             logger.info(f"Duplicate the 'temporary scan dataset' {n_replicates} times...")
         else:
-            bak_cfg_file = ref_scan_path / "pipeline.toml"
+            bak_cfg_file = dataset_path / "pipeline.toml"
             # If a previous analysis is found (directory has a `pipeline.toml`) or a clean was requested:
             if bak_cfg_file.is_file() or args.clean:
                 # Copy to a temporary DB, clean it, replace reference scan path by clean one
-                ref_scan_path = fill_tmp_db(ref_scan_path, clean=args.clean)
+                dataset_path = fill_tmp_db(dataset_path, clean=args.clean)
                 has_tmp_db = True
                 logger.info(f"Duplicate the 'temporary scan dataset' {n_replicates} times...")
             else:
                 logger.info(f"Duplicate the 'reference scan dataset' {n_replicates} times...")
         # Duplicate the scan dataset as many times as requested
-        scan_replicates = fill_eval_db(eval_db_path, ref_scan_path, n_replicates, models_path, extra_scans)
+        scan_replicates = fill_eval_db(eval_db_path, dataset_path, n_replicates, path2cnn_model, extra_dataset)
     else:
         # If there is something in the root directory that mean you gave a value to `--eval_db`
         # And we thus consider that it should already contain the replicated scans!
         logger.info(f"Found {n_replicates} replicate scans in evaluation database!")
-        if n_replicates != int(args.replicate_number):
+        if n_replicates != int(args.n_replicates):
             logger.warning(
-                f"Not the same number of replicates found ({n_replicates}) and requested ({int(args.replicate_number)})!")
+                f"Not the same number of replicates found ({n_replicates}) and requested ({int(args.n_replicates)})!")
 
     # Clean the temporary DB:
-    tmp_db = ref_scan_path.parent
+    tmp_db = dataset_path.parent
     if has_tmp_db and tmp_db.is_dir():
-        shutil.rmtree(ref_scan_path.parent)
+        shutil.rmtree(dataset_path.parent)
 
     # - Instantiate `FSDB` local "evaluation database":
     _check_markers(eval_db_path)
@@ -639,10 +657,47 @@ def main():
         else:
             logger.info(f"Repeat calls to task '{args.task}' on {n_replicates} replicate scans...")
         for replicated_scan in tqdm(scan_replicates, unit='replicate'):
-            romi_run_task(replicated_scan, args.task, args.config_file)
+            romi_run_task(replicated_scan, args.task, args.config)
 
     # - Compare the output(s) of the task(s) between replicated datasets:
     compare_task_output(test_db, args.task, scan_replicates, independent_runs=args.full_pipe)
+
+
+def main():
+    # - Parse the input arguments to variables:
+    parser = parsing()
+    args = parser.parse_args()
+
+    # - If only one path in the list, get the first one:
+    if len(args.dataset_path) == 1:
+        args.dataset_path = args.dataset_path[0]
+
+    if isinstance(args.dataset_path, str):
+        # Process the input string `args.dataset_path` with ``glob``:
+        #   - check existence of path:
+        #   - may contain UNIX matching symbols (like '*' or '?'):
+        folders = glob.glob(args.dataset_path)
+        # Resolve path (make it absolute & normalize):
+        folders = [Path(path).resolve() for path in folders]
+        # Check that globed paths are directory (and exist, implied):
+        folders = sorted([path for path in folders if path.is_dir()])
+    elif isinstance(args.dataset_path, list):
+        # Resolve path (make it absolute & normalize):
+        folders = [Path(path).resolve() for path in args.dataset_path]
+        # Check that listed paths are directory (and exist, implied):
+        folders = sorted([path for path in folders if path.is_dir()])
+    else:
+        sys.exit(f"Error with input dataset path for '{args.task}' module!")
+
+    print(f"Found {len(folders)} folders!")
+
+    for folder in folders:
+        args.dataset_path = folder
+        print("\n")  # to facilitate the search in the console by separating the datasets
+        try:
+            run_task_eval(args)
+        except Exception as e:
+            print(e)
 
 
 if __name__ == '__main__':
