@@ -30,7 +30,7 @@ from romitask.task import RomiTask
 logger = configure_logger(__name__)
 
 
-def get_cnc_poses(scan_dataset):
+def get_cnc_poses(scan_dataset, axes='xyzpt'):
     """Get the CNC poses from the 'images' fileset using "pose" or "approximate_pose" metadata.
 
     Parameters
@@ -57,23 +57,31 @@ def get_cnc_poses(scan_dataset):
     >>> import os
     >>> from plantdb.fsdb import FSDB
     >>> from plant3dvision.tasks.colmap import get_cnc_poses
-    >>> db = FSDB(os.environ.get('DB_LOCATION', '/data/ROMI/DB'))
+    >>> db = FSDB(os.environ.get('DB_LOCATION', '/Data/ROMI/DB'))
     >>> # Example 1 - Compute & use the calibrated poses from/on a calibration scan:
     >>> db.connect()
     >>> db.list_scans()
-    >>> scan_id = "sgk_300_90_36"
+    >>> scan_id = "sango_90_300_36"
     >>> scan = db.get_scan(scan_id)
     >>> cnc_poses = get_cnc_poses(scan)
-    >>> print(cnc_poses)
+    >>> print(cnc_poses['00000_rgb'])  # X, Y, Z, pan, tilt coordinates
+    >>> xyz_cnc_poses = get_cnc_poses(scan, axes='xyz')
+    >>> print(xyz_cnc_poses['00000_rgb'])  # X, Y, Z coordinates
     >>> db.disconnect()
 
     """
+    DEF_AXES = 'xyzpt'
     img_fs = scan_dataset.get_fileset('images')
     approx_poses = {im.id: im.get_metadata("approximate_pose") for im in img_fs.get_files()}
     poses = {im.id: im.get_metadata("pose") for im in img_fs.get_files()}
     cnc_poses = {im.id: poses[im.id] if poses[im.id] is not None else approx_poses[im.id] for im in img_fs.get_files()}
     # Filter-out 'None' pose:
     cnc_poses = {im_id: pose for im_id, pose in cnc_poses.items() if poses is not None}
+    # Select axes coordinates to return if non-default:
+    if axes != DEF_AXES:
+        axes_idx = [DEF_AXES.index(ax.lower()) for ax in axes]
+        cnc_poses = {im_id: [pose[ax_idx] for ax_idx in axes_idx] for im_id, pose in cnc_poses.items()}
+    # Warn if nb of obtained poses is different from images in scan dataset:
     n_poses = len(cnc_poses)
     n_imgs = len(img_fs.get_files())
     if n_poses != n_imgs:

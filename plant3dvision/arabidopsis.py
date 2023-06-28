@@ -332,9 +332,9 @@ def get_organ_features(organ_bb, stem_skeleton):
     Parameters
     ----------
     organ_bb : open3d.geometry.OrientedBoundingBox
-        bounding box around the organ
+        Oriented bounding box around the organ.
     stem_skeleton: numpy.ndarray
-        Nx3 array
+        Nx3 array of points describing the stem skeleton.
 
     Returns
     -------
@@ -402,7 +402,7 @@ def angles_and_internodes_from_point_cloud(stem_pcd, organ_pcd_list, characteris
     dict
         list of angles, internodes and fruit points
     """
-    import open3d
+    import open3d as o3d
 
     stem_points = np.asarray(stem_pcd.points)
 
@@ -414,7 +414,7 @@ def angles_and_internodes_from_point_cloud(stem_pcd, organ_pcd_list, characteris
 
     stem_frame_axis = np.arange(stem_axis_min, stem_axis_max, characteristic_length)
 
-    kdtree = open3d.geometry.KDTreeFlann(stem_pcd)
+    kdtree = o3d.geometry.KDTreeFlann(stem_pcd)
 
     point = stem_points[idx_min]
     root = stem_points[idx_min]
@@ -445,7 +445,7 @@ def angles_and_internodes_from_point_cloud(stem_pcd, organ_pcd_list, characteris
     # calculate features as direction and corresponding node id for each organ
     organs_features_list = []
     for i, o in enumerate(organ_pcd_list):
-        bb = open3d.geometry.OrientedBoundingBox.create_from_points(o.points)
+        bb = o3d.geometry.OrientedBoundingBox.create_from_points(o.points)
         organ_features = get_organ_features(bb, ordered_stem_skeleton)
         organ_features["points"] = np.asarray(o.points).tolist()
         elongation_ratio = np.linalg.norm(organ_features["direction"]) / np.linalg.norm(organ_features["width"])
