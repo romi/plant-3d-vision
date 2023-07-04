@@ -224,11 +224,11 @@ class Visualization(RomiTask):
             files_metadata["measures"] = "measures"
 
         # ANGLES
-        if self.upstream_angles().complete() and measures != {}:
+        if self.upstream_angles().complete():
             logger.info("Preparing angle and internode sequences...")
             angles_file = self.upstream_angles().output_file()
             sequences = io.read_json(angles_file)
-            if self.align_sequences:
+            if self.align_sequences and measures != {}:
                 # Automatic alignment of sequences with DTW:
                 from dtw.tasks.compare_sequences import sequence_comparison
                 max_inter = np.max(list(sequences['internodes']) + list(measures["internodes"]))
