@@ -109,7 +109,7 @@ class Visualization(RomiTask):
     max_image_size = luigi.IntParameter(default=1500)
     max_point_cloud_size = luigi.IntParameter(default=10000000)
     thumbnail_size = luigi.IntParameter(default=150)
-    align_sequences = luigi.BoolParameter(default=True)
+    align_sequences = luigi.BoolParameter(default=False)
 
     def __init__(self):
         super().__init__()
@@ -232,8 +232,9 @@ class Visualization(RomiTask):
                 # Automatic alignment of sequences with DTW:
                 from dtw.tasks.compare_sequences import sequence_comparison
                 max_inter = np.max(list(sequences['internodes']) + list(measures["internodes"]))
-                dtwcomputer = sequence_comparison(np.array([sequences['angles'], sequences['internodes']]).T,
-                                                  np.array([measures["angles"], measures["internodes"]]).T,
+                # WARNING: here we invert the reference (here the automatic estimation) and the test (here he manual measures) sequences!
+                dtwcomputer = sequence_comparison(np.array([measures["angles"], measures["internodes"]]).T,
+                                                  np.array([sequences['angles'], sequences['internodes']]).T,
                                                   names=["Angles", "Internodes"],
                                                   dist_type="mixed", mixed_type=[True, False],
                                                   mixed_spread=[1, max_inter])
