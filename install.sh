@@ -7,7 +7,7 @@ YELLOW="\033[0;33m"
 NC="\033[0m" # No Color
 INFO="${GREEN}INFO${NC}    "
 WARNING="${YELLOW}WARNING${NC} "
-ERROR="${ERROR}ERROR${NC}   "
+ERROR="${RED}ERROR${NC}   "
 bold() { echo -e "\e[1m$*\e[0m"; }
 
 # Name of the conda environment to create:
@@ -27,21 +27,21 @@ usage() {
   echo ""
 
   echo -e "$(bold DESCRIPTION):"
-  echo -e "  Install the sources for the 'plant-3d-vision' ROMI library in a conda environment."
+  echo -e "  Install the sources and dependencies for the 'plant-3d-vision' ROMI library in a conda environment."
   echo ""
 
   echo -e "$(bold OPTIONS):"
   echo "  -n, --name
     Name of the conda environment to use, defaults to '${name}'."
   echo "  --dev
-    Install sources in developer mode."
+    Install the sources in developer mode."
   echo "  --doc
-    Install packages required to build documentation."
+    Install the packages required to build documentation."
   echo "  --notebook
-    Install packages required to run jupyter notebooks."
+    Install the packages required to run jupyter notebooks."
   echo "  --python
-    Set version of python to use, defaults to '${py_version}'.
-    Only used it the conda environment is created."
+    Set the version of python to use, defaults to '${py_version}'.
+    Only used if the conda environment is created."
   # General options:
   echo "  -h, --help
     Output a usage message and exit."
@@ -92,12 +92,14 @@ CONDA_ENV_PATH=${CONDA_BASE_PATH}/envs/${name}
 
 if [ -d $CONDA_ENV_PATH ]; then
   echo -e "${WARNING}# - Using existing '${name}' conda environment..."
+  eval "$(conda shell.bash hook)"
   conda activate ${name}
 else
   echo -e "${INFO}# - Creating '${name}' conda environment..."
   start_time=$(date +%s)
   conda create -n ${name} python=${py_version}
   echo -e "${INFO}Conda environment creation done in $(expr $(date +%s) - ${start_time}) s."
+  eval "$(conda shell.bash hook)"
   conda activate ${name}
 fi
 
