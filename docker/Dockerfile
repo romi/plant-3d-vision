@@ -14,14 +14,14 @@ ENV USER_ID=1000
 # Required by `pip`:
 ENV PATH=$PATH:"/home/${USER_NAME}/.local/bin"
 # Required by `romi_run_task`:
-ENV DB_LOCATION="/myapp/db"
+ENV ROMI_DB="/myapp/db"
 ENV COLMAP_EXE='colmap'
 ENV PYOPENCL_CTX='0'
-# Required by `nvidia-container-runtime`
+# Required by `nvidia-container-runtime`:
 ENV NVIDIA_VISIBLE_DEVICES all
 ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
 
-# Change Shell to 'bash', default is 'sh'
+# Change Shell to 'bash', default is 'sh':
 SHELL [ "/bin/bash", "-c" ]
 
 RUN echo "Fix CUDA GPG key..." && \
@@ -46,12 +46,14 @@ RUN echo "Fix CUDA GPG key..." && \
     # Clean-up apt cache
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
-    # Create a non-root user and give it rights over its "home" folder:
-    adduser --disabled-password --gecos '' --uid ${USER_ID} ${USER_NAME} && \
+    # Create a `romi` group with GID 2020:
+    addgroup --gid 2020 romi && \
+    # Create a non-root user, member of the romi group (2020), and give it rights over its "home" folder:
+    adduser --disabled-password --gecos '' --ingroup romi --uid ${USER_ID} ${USER_NAME} && \
     chown -R ${USER_NAME}: /home/${USER_NAME} && \
     # Create the folder used to mount the database:
-    mkdir -p ${DB_LOCATION} && \
-    chown -R ${USER_NAME}: ${DB_LOCATION} && \
+    mkdir -p ${ROMI_DB} && \
+    chown -R ${USER_NAME}: ${ROMI_DB} && \
     # Ugly fix for OpenCL:
     ln -s /usr/lib/x86_64-linux-gnu/libOpenCL.so.1 /usr/lib/libOpenCL.so && \
     mkdir -p /etc/OpenCL/vendors && \

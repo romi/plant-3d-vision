@@ -5,10 +5,10 @@ RED="\033[0;31m"
 GREEN="\033[0;32m"
 YELLOW="\033[0;33m"
 NC="\033[0m" # No Color
+bold() { echo -e "\e[1m$*\e[0m"; }
 INFO="${GREEN}INFO${NC}    "
 WARNING="${YELLOW}WARNING${NC} "
-ERROR="${RED}ERROR${NC}   "
-bold() { echo -e "\e[1m$*\e[0m"; }
+ERROR="${RED}$(bold ERROR)${NC}   "
 
 # - Default variables
 # Docker image tag to use, 'latest' by default:
@@ -17,12 +17,11 @@ vtag="latest"
 cmd=''
 # Volume mounting options:
 mount_option=""
-# If the `DB_LOCATION` variable is set, use it as default database location, else set it to empty:
-if [ -z ${DB_LOCATION+x} ]; then
-  echo -e "${WARNING}Environment variable DB_LOCATION is not defined, set it to use as default database location!"
+# If the `ROMI_DB` variable is set, use it as default database location, else set it to empty:
+if [ -z ${ROMI_DB+x} ]; then
   host_db=''
 else
-  host_db=${DB_LOCATION}
+  host_db=${ROMI_DB}
 fi
 
 # - Test commands:
@@ -50,7 +49,7 @@ usage() {
     "By default, use the '${vtag}' tag."
   echo "  -db, --database
     Path to the host database to mount inside the docker container." \
-    "By default, use the 'DB_LOCATION' environment variable (if defined)."
+    "By default, use the 'ROMI_DB' environment variable (if defined)."
   echo "  -v, --volume
     Volume mapping between host and container to mount a local directory in the container." \
     "Absolute paths are required and multiple use of this option is allowed." \
@@ -145,14 +144,20 @@ while [ "$1" != "" ]; do
   shift
 done
 
+# If the `ROMI_DB` variable is set, use it as default database location, else set it to empty:
+if [ -z ${ROMI_DB+x} ]; then
+  echo -e "${WARNING}Environment variable 'ROMI_DB' is not defined, set it to use as default database location!"
+fi
+
 # Use local database path `$host_db` to create a bind mount to '/myapp/db':
 if [ "${host_db}" != "" ]; then
   mount_option="${mount_option} -v ${host_db}:/myapp/db"
   echo -e "${INFO}Automatic bind mount of '${host_db}' (host) to '/myapp/db' (container)!"
 else
+  # Only raise next ERROR message if not a SELF-TEST:
   if [ ${self_test} == 0 ]; then
     echo -e "${ERROR}No local host database defined!"
-    echo -e "${INFO}Set 'DB_LOCATION' or use the '-db' | '--database' option to define it."
+    echo -e "${INFO}Set 'ROMI_DB' or use the '-db' | '--database' option to define it."
     exit 1
   fi
 fi
@@ -161,11 +166,15 @@ fi
 if [ "${host_db}" != "" ]; then
   group_name=$(stat -c "%G" ${host_db})                              # get the name of the group for the 'host database path'
   gid=$(getent group ${group_name} | cut --delimiter ':' --fields 3) # get the 'gid' of this group
-#  echo "Automatic group name definition to '$group_name'!"
-#  echo "Automatic group id definition to '$gid'!"
+  echo -e "${INFO}Automatic group name definition to '$group_name'!"
+  echo -e "${INFO}Automatic group id definition to '$gid'!"
 else
   group_name='myuser'
   gid=1000
+  # Only raise next WARNING message if not a SELF-TEST:
+  if [ ${self_test} == 0 ]; then
+    echo -e "${WARNING}Using default group name '${group_name}' & '${gid}'."
+  fi
 fi
 
 # Check if we have a TTY or not
