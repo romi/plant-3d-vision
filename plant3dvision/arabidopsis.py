@@ -588,7 +588,7 @@ def compute_angles_and_internodes(T, n_nodes_fruit=5, n_nodes_stem=5):
     >>> import networkx as nx
     >>> from plantdb.io import read_graph
     >>> from plantdb.fsdb import FSDB
-    >>> db = FSDB(os.environ['DB_LOCATION'])  # requires definition of this environment variable!
+    >>> db = FSDB(os.environ['ROMI_DB'])  # requires definition of this environment variable!
     >>> db.connect()
     >>> scan = db.get_scan("real_plant")
     >>> fs = scan.get_fileset("TreeGraph__False_CurveSkeleton_c304a2cc71")

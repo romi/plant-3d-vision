@@ -30,7 +30,7 @@ upstream_task = "TreeGraph"
 characteristic_length = 1.0
 stem_axis_inverted = false
 organ_type = "fruit"
-node_sampling_dist = 1.3  # ~9x smaller than real plants
+node_sampling_dist = 2  # ~9x smaller than real plants
 min_fruit_size = 0.7  # ~9x smaller than real plants
 
 [Visualization]

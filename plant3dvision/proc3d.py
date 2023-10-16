@@ -143,7 +143,7 @@ def skeletonize(mesh):
     >>> from plant3dvision.proc3d import skeletonize
     >>> from plantdb.io import read_triangle_mesh
     >>> from plantdb.fsdb import FSDB
-    >>> db = FSDB(os.environ['DB_LOCATION'])  # requires definition of this environment variable!
+    >>> db = FSDB(os.environ['ROMI_DB'])  # requires definition of this environment variable!
     >>> db.connect()
     >>> scan = db.get_scan("sgk_45")
     >>> fs = scan.get_fileset("TriangleMesh_9_most_connected_t_open3d_00e095c359")
@@ -414,7 +414,7 @@ def skeleton_from_distance_to_root_clusters(pcd, root_index, binsize, k, connect
 
     References
     ----------
-    Xu, Hui et al. "Knowledge and heuristic-based modeling of laser-scanned trees" 
+    Xu, Hui et al. "Knowledge and heuristic-based modeling of laser-scanned trees"
     """
     g = knn_graph(pcd, k)
     if connect_all_points:

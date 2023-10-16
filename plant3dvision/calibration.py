@@ -321,7 +321,7 @@ def pose_estimation_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_
     >>> from plant3dvision.tasks.colmap import compute_colmap_poses_from_metadata
     >>> from plant3dvision.tasks.colmap import pose_estimation_figure
     >>> from plant3dvision.tasks.colmap import use_precalibrated_poses
-    >>> db = FSDB(os.environ.get('DB_LOCATION', '/Data/ROMI/DB'))
+    >>> db = FSDB(os.environ.get('ROMI_DB', '/Data/ROMI/DB'))
     >>> # Example 1 - Get the CNC & COLMAP poses and compare them:
     >>> db.connect()
     >>> db.list_scans()

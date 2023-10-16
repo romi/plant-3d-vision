@@ -144,22 +144,22 @@ This will also allow all users from the `romi` group to access the files within 
 #### Initialise and register a local `plantdb` database
 Assuming you want to put your local `plantdb` database under `/Data/ROMI/DB`.
 
-Let's start by setting an environment variable named `$DB_LOCATION` to the end of our `.bashrc` file:
+Let's start by setting an environment variable named `$ROMI_DB` to the end of our `.bashrc` file:
 ```shell
 cat << EOF >> /home/$USER/.bashrc
 # ROMI plant-3d-vision - Set the local plantdb database location:
-export DB_LOCATION='/Data/ROMI/DB'
+export ROMI_DB='/Data/ROMI/DB'
 EOF
 ```
 
 Then create the directories and the required `romidb` marker file with:
 ```shell
-source ~/.bashrc  # to 'activate' the $DB_LOCATION environment variable
-mkdir -p $DB_LOCATION
-touch $DB_LOCATION/romidb
+source ~/.bashrc  # to 'activate' the $ROMI_DB environment variable
+mkdir -p $ROMI_DB
+touch $ROMI_DB/romidb
 ```
 
-In any case, please avoid doing horrendous things like `chmod -R 777 $DB_LOCATION`!
+In any case, please avoid doing horrendous things like `chmod -R 777 $ROMI_DB`!
 
 #### Create a `romi` group and give it rights over the local `plantdb` database
 
@@ -173,11 +173,11 @@ In any case, please avoid doing horrendous things like `chmod -R 777 $DB_LOCATIO
    ```
 3. Change the group of the local DB
    ```shell
-   sudo chown -R :romi $DB_LOCATION
+   sudo chown -R :romi $ROMI_DB
    ```
 4. Check the rights with:
    ```shell
-   ls -al $DB_LOCATION
+   ls -al $ROMI_DB
    ```
    This should yield something like:
    ```

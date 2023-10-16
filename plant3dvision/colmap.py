@@ -338,7 +338,7 @@ class ColmapRunner(object):
         >>> from plant3dvision.colmap import ColmapRunner
         >>> from plantdb.fsdb import FSDB
         >>> # - Connect to a ROMI database to access an 'images' fileset to reconstruct with COLMAP:
-        >>> db = FSDB(os.environ.get('DB_LOCATION', "/data/ROMI/DB/"))
+        >>> db = FSDB(os.environ.get('ROMI_DB', "/data/ROMI/DB/"))
         >>> db.connect()
         >>> # - Select the dataset to reconstruct:
         >>> dataset = db.get_scan("arabido_test4")
