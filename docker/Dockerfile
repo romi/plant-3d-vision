@@ -10,7 +10,7 @@ LABEL description="Plant reconstruction and phenotyping pipeline."
 ENV LANG=C.UTF-8
 ENV PYTHONUNBUFFERED=1
 ENV USER_NAME=myuser
-ENV USER_ID=1000
+ENV USER_ID=1010
 # Required by `pip`:
 ENV PATH=$PATH:"/home/${USER_NAME}/.local/bin"
 # Required by `romi_run_task`:
@@ -58,32 +58,38 @@ RUN echo "Fix CUDA GPG key..." && \
     ln -s /usr/lib/x86_64-linux-gnu/libOpenCL.so.1 /usr/lib/libOpenCL.so && \
     mkdir -p /etc/OpenCL/vendors && \
     echo "libnvidia-opencl.so.1" > /etc/OpenCL/vendors/nvidia.icd && \
-    # Upgrade pip
+    # Upgrade pip:
     python3 -m pip install --upgrade pip
 
 # Change to non-root user:
 USER ${USER_NAME}
 # Change working directory:
 WORKDIR /home/${USER_NAME}
-
-# Copy the source files (repository):
+# Copy the source files starting from the root folder (relative to context build):
 COPY --chown=${USER_NAME} ./ plant-3d-vision/
 
-# Install the required dependencies, sub-modules and plant-3d-vision:
 RUN cd plant-3d-vision/ && \
+    # Install `plantdb` dependencies and sources:
     python3 -m pip install --user -r plantdb/requirements.txt && \
     python3 -m pip install --user plantdb/ && \
+    # Install `romitask` dependencies and sources:
     python3 -m pip install --user -r romitask/requirements.txt && \
     python3 -m pip install --user romitask/ && \
+    # Install `romiseg` dependencies and sources:
     python3 -m pip install --user torch==1.12.1+cu102 torchvision==0.13.1+cu102 --extra-index-url https://download.pytorch.org/whl/cu102 && \
     python3 -m pip install --user romiseg/ && \
+    # Install `romicgal` dependencies and sources:
     python3 -m pip install --user pybind11 && \
     python3 -m pip install --user romicgal/ && \
+    # Install `dtw` dependencies and sources:
     python3 -m pip install --user -r dtw/requirements.txt && \
     python3 -m pip install --user dtw/ && \
+    # Install `plant-3d-vision` dependencies and sources:
     python3 -m pip install --user -r requirements.txt && \
     python3 -m pip install --user . && \
+    # Clean pip cache:
     rm -rf .cache/pip && \
+    # Download the trained CNN model file:
     ./get_model.sh
 
 CMD ["/bin/bash", "-c", "romi_run_task -h"]

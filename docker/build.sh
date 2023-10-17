@@ -28,8 +28,8 @@ usage() {
 
   echo -e "$(bold OPTIONS):"
   echo "  -t, --tag
-    Image tag to use." \
-    "By default, use the '${vtag}' tag."
+    Image tag to use.
+    By default, use the '${vtag}' tag."
   echo "  --no-cache
     Do not use cache when building the image, (re)start from scratch."
   echo "  --pull

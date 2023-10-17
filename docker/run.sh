@@ -79,6 +79,7 @@ usage() {
     Test correct access to NVIDIA GPU resources from docker container."
 }
 
+docker_option=""
 self_test=0
 while [ "$1" != "" ]; do
   case $1 in
@@ -137,8 +138,9 @@ while [ "$1" != "" ]; do
     exit
     ;;
   *)
-    usage
-    exit 1
+    docker_option="${docker_option} $1" # append
+    shift
+    docker_option="${docker_option} $1" # append
     ;;
   esac
   shift
@@ -184,11 +186,16 @@ else
   USE_TTY=""
 fi
 
+if [ "${docker_option}" != "" ]; then
+  echo -e "${INFO}Extra docker arguments: '${docker_option}'!"
+fi
+
 if [ "${cmd}" = "" ]; then
   # Start in interactive mode. ~/.bashrc will be loaded.
   docker run --rm --gpus all ${mount_option} \
     --user myuser:${gid} \
     --env PYOPENCL_CTX='0' \
+    ${docker_option} \
     ${USE_TTY} roboticsmicrofarms/plant-3d-vision:${vtag} \
     bash
 else
@@ -198,6 +205,7 @@ else
   docker run --rm --gpus all ${mount_option} \
     --user myuser:${gid} \
     --env PYOPENCL_CTX='0' \
+    ${docker_option} \
     ${USE_TTY} roboticsmicrofarms/plant-3d-vision:${vtag} \
     bash -c "${cmd}"
   # Get command exit code:
