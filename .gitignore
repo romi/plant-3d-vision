@@ -129,3 +129,11 @@ CMakeFiles/
 # VSCode
 /.vscode/
 
+/.idea/inspectionProfiles/profiles_settings.xml
+/.idea/.gitignore
+/.idea/git_toolbox_prj.xml
+/.idea/misc.xml
+/.idea/modules.xml
+/.idea/other.xml
+/.idea/plant-3d-vision.iml
+/.idea/vcs.xml

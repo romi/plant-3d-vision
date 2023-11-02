@@ -3,6 +3,7 @@
 import argparse
 from pathlib import Path
 
+import numpy as np
 import plotly.graph_objects as go
 from dash import Dash
 from dash import Input
@@ -11,10 +12,12 @@ from dash import callback
 from dash import dcc
 from dash import html
 
+from plant3dvision.evaluation import is_radians
 from plant3dvision.visu import plotly_direction_data
 from plant3dvision.visu import plotly_mesh_data
 from plant3dvision.visu import plotly_pointcloud_data
 from plant3dvision.visu import plotly_treegraph_data
+from plant3dvision.visu import plotly_vert_sequences
 from plantdb import FSDB
 from plantdb.io import read_graph
 from plantdb.io import read_json
@@ -29,7 +32,7 @@ TASKS = [
     "TreeGraph",
     "AnglesAndInternodes",
 ]
-
+FONT_FAMILY = '"Nunito Sans", verdana, arial, sans-serif'
 
 def parsing():
     parser = argparse.ArgumentParser(description="Explore the tasks outputs on selected dataset.")
@@ -47,13 +50,7 @@ def parsing():
     return parser
 
 
-def get_data(dataset):
-    dataset = Path(dataset)
-    db_path = dataset.parent
-    dataset_name = dataset.name
-    db = FSDB(db_path)
-    db.connect()
-    scan = db.get_scan(dataset_name, create=False)
+def locate_task_filesets(scan):
     # List all fileset in the scan
     fs_list = scan.list_filesets()
     # Find the fileset corresponding to the task:
@@ -63,6 +60,21 @@ def get_data(dataset):
             fileset_names[task] = [fs for fs in fs_list if fs.startswith(task)][0]
         except IndexError:
             fileset_names[task] = "None"
+    return fileset_names
+
+
+def get_3d_data(dataset):
+    """Get the PointCloud, TriangleMesh, TreeGraph, AnglesAndInternodes."""
+    global logger
+
+    dataset = Path(dataset)
+    db_path = dataset.parent
+    dataset_name = dataset.name
+    db = FSDB(db_path)
+    db.connect()
+    scan = db.get_scan(dataset_name, create=False)
+    # Find the fileset corresponding to the task:
+    fileset_names = locate_task_filesets(scan)
 
     # - Load the PointCloud:
     pcd = None
@@ -115,49 +127,127 @@ def get_data(dataset):
 def get_graph_objects(data):
     go_data = {}
 
-    go_data['PointCloud'] = plotly_pointcloud_data(data['PointCloud'])
-    go_data['TriangleMesh'] = plotly_mesh_data(data['TriangleMesh'])
-    go_data['TreeGraph'] = plotly_treegraph_data(data["TreeGraph"])
+    go_data['PointCloud'] = plotly_pointcloud_data(data['PointCloud'], n_pts=9000, showlegend=False)
+    go_data['TriangleMesh'] = plotly_mesh_data(data['TriangleMesh'], showlegend=False)
+    go_data['TreeGraph'] = plotly_treegraph_data(data["TreeGraph"],
+                                                 legendgroup='tree', legendgrouptitle={'text': 'TreeGraph'})
     fruit_dir = data["FruitDirection"]
-    go_data['FruitDirection'] = plotly_direction_data(fruit_dir["fruit_dirs"], fruit_dir["bp_coords"], "fruit")
-
+    go_data['FruitDirection'] = plotly_direction_data(fruit_dir["fruit_dirs"], fruit_dir["bp_coords"], "fruit",
+                                                      legendgroup='fruit', legendgrouptitle={'text': 'FruitDirection'})
     return go_data
 
 
-def select_go_data(checklist, go_data):
+def select_go_data(checklist, go_data, hoverdata=None):
     selected_go_data = []
     for name in checklist:
         if isinstance(go_data[name], list):
             selected_go_data.extend(go_data[name])
         else:
             selected_go_data.append(go_data[name])
+
+    if hoverdata is not None:
+        global data
+        fruit = hoverdata['points'][0]['y']
+        fruit_dir = data["FruitDirection"]
+        big_fruits = plotly_direction_data({f: fruit_dir["fruit_dirs"][str(f)] for f in range(fruit, fruit + 2)},
+                                           {f: fruit_dir["bp_coords"][str(f)] for f in range(fruit, fruit + 2)},
+                                           "big fruit", line_kwargs={"width": 25},
+                                           showlegend=False)
+        selected_go_data.extend(big_fruits)
+
     return selected_go_data
 
 
-def dash_app(data):
+def get_sequences_data(dataset):
+    """Get the AnglesAndInternodes sequences."""
+    global logger
+
+    dataset = Path(dataset)
+    db_path = dataset.parent
+    dataset_name = dataset.name
+    db = FSDB(db_path)
+    db.connect()
+    scan = db.get_scan(dataset_name, create=False)
+    # Find the fileset corresponding to the task:
+    fileset_names = locate_task_filesets(scan)
+    # Load the measures fileset:
+    measures_fs = scan.get_fileset(fileset_names['AnglesAndInternodes'])
+    measures_file = measures_fs.get_file('AnglesAndInternodes')
+    measures = read_json(measures_file)
+    try:
+        assert measures != {}
+    except:
+        measures = {"angles": [np.nan], "internodes": [np.nan]}
+        logger.warning(f"No AnglesAndInternodes sequences found!")
+    else:
+        angles = measures["angles"]
+        internodes = measures["internodes"]
+        logger.info(f"Found a sequence of {len(angles)} angles.")
+        logger.info(f"Found a sequence of {len(internodes)} internodes.")
+        # Convert angles if in radians
+        if is_radians(measures["angles"]):
+            from math import degrees
+            measures["angles"] = list(map(degrees, measures["angles"]))
+            logger.info("Converted estimated angles from radians to degrees.")
+
+    db.disconnect()
+    return {'angles': measures["angles"], 'internodes': measures["internodes"]}
+
+
+def dash_app(data, measures):
     app = Dash(__name__)
 
     go_data = get_graph_objects(data)
+    # Initialize the checkboxes:
     init_checklist = list(go_data.keys())
     checklist = dict(zip(go_data.keys(), init_checklist))
-    fig = go.Figure(data=select_go_data(checklist, go_data))
-
-    fig.update_scenes(aspectmode='data')
+    # Generates the sequence figure:
+    seq_fig = plotly_vert_sequences(measures, marker_kwargs={'size': 10})
+    seq_fig.update_layout(font_family=FONT_FAMILY)
+    # No need to initialize the '3d-viewer' as the callback will take care of it!
 
     app.layout = html.Div([
         html.Link(href="https://fonts.googleapis.com/css?family=Nunito Sans", rel="stylesheet"),
-        html.H1(children='Plant reconstruction explorer', style={'textAlign': 'center', 'padding': '10px 10px', 'background-color': 'rgb(30 179 123)'}),
-        dcc.Checklist(list(data.keys()), inline=True, value=init_checklist, id='checklist-selection', style={'margin': "auto"}),
-        dcc.Graph(figure=fig, id='graph-content', style={'width': '98vw', 'height': '95vh'}, config={'responsive': True})
-    ], style={'font-family': '"Nunito Sans"'})
+        # Main title:
+        html.H1('Plant reconstruction explorer',
+                style={'textAlign': 'center', 'padding': '0px 10px', 'margin': '0px',
+                       'background-color': 'rgb(30 179 123)'}),
+        html.Div([
+            # 3D viewer:
+            html.Div([
+                html.H2(children='3D viewer',
+                        style={'textAlign': 'center', 'padding': '0px 5px', 'margin': '0px',
+                               'background-color': 'rgb(200 200 200)'}),
+                dcc.Checklist(list(data.keys()), inline=True, value=init_checklist, id='checklist-selection',
+                              style={'margin': "auto"}),
+                dcc.Graph(id='3d-viewer',
+                          style={'width': '49vw', 'height': '95vh'}, config={'responsive': True})
+            ], style={'padding': 2, 'flex': 1}),
+            # Sequence graphs:
+            html.Div([
+                html.H2(children='Sequences viewer',
+                        style={'textAlign': 'center', 'padding': '0px 5px', 'margin': '0px',
+                               'background-color': 'rgb(200 200 200)'}),
+                dcc.Graph(figure=seq_fig, id='sequences',
+                          style={'width': '49vw', 'height': '95vh'})
+            ], style={'padding': 2, 'flex': 1}),
+        ], style={'display': 'flex', 'flexDirection': 'row'},
+        ),
+    ], style={'padding': 1, 'display': 'grid', 'font-family': FONT_FAMILY}
+    )
 
     @callback(
-        Output('graph-content', 'figure'),
-        Input('checklist-selection', 'value')
+        Output('3d-viewer', 'figure'),
+        Input('checklist-selection', 'value'),
+        Input('sequences', 'hoverData'),
+        Input('sequences', 'clickData'),
     )
-    def update_graph(value):
-        fig = go.Figure(data=select_go_data(value, go_data))
+    def update_graph(value, hoverData, clickData):
+        if clickData is not None:
+            hoverData = clickData
+        fig = go.Figure(data=select_go_data(value, go_data, hoverData))
         fig.update_scenes(aspectmode='data')
+        fig.update_layout(font_family=FONT_FAMILY)
         return fig
 
     return app
@@ -169,19 +259,19 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # - Configure a logger from this application:
-    global logger
     logger = configure_logger('dash_explorer')
 
-    pcd, mesh, tree, fruit_dir = get_data(args.dataset)
+    pcd, mesh, tree, fruit_dir = get_3d_data(args.dataset)
     data = {
         "PointCloud": pcd,
         "TriangleMesh": mesh,
         "TreeGraph": tree,
         "FruitDirection": fruit_dir
     }
+    measures = get_sequences_data(args.dataset)
 
-    app = dash_app(data)
+    app = dash_app(data, measures)
     if args.docker:
-        args.host="0.0.0.0"
+        args.host = "0.0.0.0"
 
     app.run(debug=True, host=args.host, port=args.port)
