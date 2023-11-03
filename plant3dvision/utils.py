@@ -131,7 +131,7 @@ def yes_no_choice(question: str, default=True) -> bool:
 
 def fit_circle(x, y):
     """Fit a circle for a set of 2D points.
-    
+
     This is a rip-off from https://scipy-cookbook.readthedocs.io/items/Least_Squares_Circle.html.
     """
     import numpy as np
@@ -207,3 +207,16 @@ def plot_points_circle(x, y, cx, cy, r, figname=None):
         plt.show()
     plt.close()
     return None
+
+
+def locate_task_filesets(scan, tasks):
+    # List all fileset in the scan
+    fs_list = scan.list_filesets()
+    # Find the fileset corresponding to the task:
+    fileset_names = {}
+    for task in tasks:
+        try:
+            fileset_names[task] = [fs for fs in fs_list if fs.startswith(task)][0]
+        except IndexError:
+            fileset_names[task] = "None"
+    return fileset_names
