@@ -890,7 +890,7 @@ def plotly_sequences(sequences, height=900, width=900, title="Sequences",
     return fig
 
 
-def plotly_vert_sequences(sequences, line_kwargs=None, marker_kwargs=None, layout_kwargs=None):
+def plotly_vert_sequences(sequences, y_axis=None, y_axis_label=None, line_kwargs=None, marker_kwargs=None, layout_kwargs=None):
     """Plot the obtained sequences.
 
     Parameters
@@ -927,7 +927,13 @@ def plotly_vert_sequences(sequences, line_kwargs=None, marker_kwargs=None, layou
     if isinstance(marker_kwargs, dict):
         marker_style.update(marker_kwargs)
 
-    fig = make_subplots(rows=1, cols=n_figs, horizontal_spacing=0.1, shared_yaxes=True)
+    y_values = idx
+    if y_axis is not None and len(y_axis) == len(idx):
+        y_values = list(y_axis)
+    if y_axis_label is None:
+        y_axis_label = "Interval index"
+
+    fig = make_subplots(rows=1, cols=n_figs, horizontal_spacing=0.02, shared_yaxes=True)
     for i in range(n_figs):
         name = names[i]
         # Create the hover template & x-axis label:
@@ -937,18 +943,18 @@ def plotly_vert_sequences(sequences, line_kwargs=None, marker_kwargs=None, layou
         else:
             ht = ["Distance: %{x:.2f}mm<br>" + f"Fruits: {organ} - {organ + 1}" for organ in idx]
             xaxis_label = "Distance (mm)"
-        sc = go.Scatter(x=sequences[name], y=idx, name="",
+        sc = go.Scatter(x=sequences[name], y=y_values, name="",
                         mode='lines+markers', line=line_style, marker=marker_style, hovertemplate=ht)
         fig.add_trace(sc, row=1, col=i + 1)
         if name == 'angles':
             # Add a "reference line" at 137.5:
-            fig.add_trace(go.Scatter(x=[137.5, 137.5], y=[0, len(idx) - 1], mode="lines",
+            fig.add_trace(go.Scatter(x=[137.5, 137.5], y=[0, max(y_values)], mode="lines",
                                      line={'color': 'blue', 'width': 1, 'dash': 'dashdot'}))
         # Add the name of the sequence as X-axis label:
         fig.update_xaxes(title_text=xaxis_label, row=1, col=i + 1)
         # Add the Y-axis label for the first subplot:
         if i == 0:
-            fig.update_yaxes(title_text="Interval index", row=1, col=i + 1)
+            fig.update_yaxes(title_text=y_axis_label, row=1, col=i + 1)
         fig.update_yaxes(showspikes=True, spikemode="across", spikecolor="black", spikethickness=1)
         fig.update_traces(textposition='top center')
 
