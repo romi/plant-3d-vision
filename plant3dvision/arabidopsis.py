@@ -597,6 +597,7 @@ def compute_angles_and_internodes(T, n_nodes_fruit=5, n_nodes_stem=5):
     >>>
 
     """
+    from math import degrees
     unordered_main_stem = get_nodes_by_label(T, "stem")
     unordered_branching_points = get_nodes_by_label(T, "node")
     angles = []
@@ -676,7 +677,7 @@ def compute_angles_and_internodes(T, n_nodes_fruit=5, n_nodes_stem=5):
         angles = angles.tolist()
 
     return {
-        "angles": angles,
+        "angles": list(map(degrees, angles)),
         "internodes": internodes,
         "fruit_points": all_fruit_points
     }
@@ -687,14 +688,14 @@ def get_proj_matrix(pts, dim=2):
 
     Parameters
     ----------
-    pts : numpy.array
+    pts : numpy.ndarray
         The array of points to use to create the projection matrix.
     dim : int, optional
         The dimension to project the point.
 
     Returns
     -------
-    numpy.array
+    numpy.ndarray
         The projection matrix.
     """
     c_pts = pts - pts.mean(axis=0)
@@ -710,16 +711,16 @@ def project_points(pts, proj_mat, origin=None):
 
     Parameters
     ----------
-    pts : numpy.array
+    pts : numpy.ndarray
         The array of 3D points to project.
-    proj_mat : numpy.array
+    proj_mat : numpy.ndarray
         The 3x3 projection matrix.
-    origin : numpy.array, optional
+    origin : numpy.ndarray, optional
         The origin of the points as 1-D array, if `None` (default) computed to their mean.
 
     Returns
     -------
-    numpy.array
+    numpy.ndarray
         The array of projected points.
     """
     if origin is None:
@@ -732,14 +733,14 @@ def vector_from_points(pts, origin=None):
 
     Parameters
     ----------
-    pts : numpy.array
+    pts : numpy.ndarray
         The array of 3D points to project.
-    origin : numpy.array, optional
+    origin : numpy.ndarray, optional
         The origin of the points as 1-D array, if `None` (default) computed to their mean.
 
     Returns
     -------
-    numpy.array
+    numpy.ndarray
         The main vector for given points.
     """
     if origin is None:
@@ -824,6 +825,21 @@ def compute_stem_and_fruit_directions(tree, max_node_dist=10., branching_points=
     plant3dvision.tree.select_stem_nodes_by_euclidean_distance
     plant3dvision.tree.get_ordered_branching_point_nodes
 
+    Examples
+    --------
+    >>> from plant3dvision.arabidopsis import compute_stem_and_fruit_directions
+    >>> from plant3dvision.utils import locate_task_filesets
+    >>> from plantdb.fsdb import FSDB
+    >>> from plantdb.io import read_graph
+    >>> db_path = '/data/ROMI/Romi_Alexis/analyse_jo'
+    >>> db = FSDB(db_path)
+    >>> db.connect()
+    >>> scan = db.get_scan('Col-0_E1_1', create=False)
+    >>> fileset_names = locate_task_filesets(scan, ["TreeGraph", "AnglesAndInternodes"])
+    >>> tree_fs = scan.get_fileset(fileset_names['TreeGraph'])
+    >>> tree = read_graph(tree_fs.get_file('TreeGraph'))
+    >>> fruit_dirs, stem_dirs, bp_coords, fruit_pts = compute_stem_and_fruit_directions(tree)
+
     """
     from plant3dvision.tree import nodes_coordinates
     from plant3dvision.tree import select_fruit_nodes
@@ -893,37 +909,49 @@ def compute_angles_and_internodes_from_directions(fruit_dirs, stem_dirs, bp_coor
     dict
         A dictionary with the computed angles, internodes lengths and fruit points.
 
+    Examples
+    --------
+    >>> from plant3dvision.arabidopsis import compute_angles_and_internodes_from_directions
+    >>> from plant3dvision.arabidopsis import compute_stem_and_fruit_directions
+    >>> from plant3dvision.utils import locate_task_filesets
+    >>> from plantdb.fsdb import FSDB
+    >>> from plantdb.io import read_graph
+    >>> db_path = '/data/ROMI/Romi_Alexis/analyse_jo'
+    >>> db = FSDB(db_path)
+    >>> db.connect()
+    >>> scan = db.get_scan('Col-0_E1_1', create=False)
+    >>> fileset_names = locate_task_filesets(scan, ["TreeGraph", "AnglesAndInternodes"])
+    >>> tree_fs = scan.get_fileset(fileset_names['TreeGraph'])
+    >>> tree = read_graph(tree_fs.get_file('TreeGraph'))
+    >>> db.disconnect()
+    >>> fruit_dirs, stem_dirs, bp_coords, fruit_pts = compute_stem_and_fruit_directions(tree)
+    >>> sequence = compute_angles_and_internodes_from_directions(fruit_dirs, stem_dirs, bp_coords)
+    >>> print(sequence["angles"])
     """
-    node_info_list = {nid: {
-        "fruit_direction": fruit_dirs[nid],
-        "stem_direction": stem_dirs[nid],
-        "node_point": bp_coords[nid]
-    } for nid in range(len(fruit_dirs))}
+    from math import degrees
 
     angles = []
     internodes = []
-    for i in range(1, len(node_info_list)):
-        n1 = np.cross(node_info_list[i - 1]["fruit_direction"], node_info_list[i - 1]["stem_direction"])
-        n2 = np.cross(node_info_list[i]["fruit_direction"], node_info_list[i]["stem_direction"])
-        p1 = node_info_list[i - 1]["node_point"]
-        p2 = node_info_list[i]["node_point"]
-        v1 = node_info_list[i - 1]["fruit_direction"]
-        v2 = node_info_list[i]["fruit_direction"]
-        v3 = node_info_list[i]["node_point"] - node_info_list[i - 1]["node_point"]
-
-        # Angle between the planes, between 0 and PI
-        angle = np.arccos(np.dot(n1, n2))
-
-        # IF basis is direct, then angle is positive (depends on stem axis inversion ?)
-        if np.linalg.det([v1, v2, v3]) < 0:
+    for i in range(1, len(fruit_dirs)):
+        # Internode vector is defined between two branching points:
+        internode_vec = bp_coords[i] - bp_coords[i - 1]
+        # Internode distance is taken as the norm of the internode vector:
+        internode_dist = np.linalg.norm(internode_vec)
+        # Normal to the plane formed by the previous fruit & stem vectors:
+        prev_normal = np.cross(fruit_dirs[i - 1], stem_dirs[i - 1])
+        # Normal to the current fruit & stem vectors:
+        curr_normal = np.cross(fruit_dirs[i], stem_dirs[i])
+        # Compute the angle between the two planes:
+        angle = np.arccos(np.dot(prev_normal, curr_normal))
+        # If the basis formed by the two fruit vectors and stem vector is negative, we complement the angle:
+        if np.linalg.det([fruit_dirs[i - 1], fruit_dirs[i], stem_dirs[i - 1]]) < 0:
             angle = 2 * np.pi - angle
-
         angles.append(angle)
-        internodes.append(np.linalg.norm(p2 - p1))
+        internodes.append(internode_dist)
 
-    # complement angles if needed
-    if np.median(angles) > np.pi:
-        angles = 2 * np.pi - np.array(angles)
-        angles = angles.tolist()
+    # # - Complement angles if needed
+    # if np.median(angles) > np.pi:
+    #     angles = 2 * np.pi - np.array(angles)
+    #     angles = angles.tolist()
 
-    return {"angles": angles, "internodes": internodes}
+    return {"angles": list(map(degrees, angles)), "internodes": internodes}
