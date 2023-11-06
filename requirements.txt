@@ -18,3 +18,5 @@ scikit-image
 toml
 joblib
 matplotlib
+dash
+dash-iconify

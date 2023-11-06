@@ -9,9 +9,12 @@ import plotly.graph_objects as go
 from dash import Dash
 from dash import Input
 from dash import Output
+from dash import State
 from dash import callback
 from dash import dcc
+from dash import ctx
 from dash import html
+from dash_iconify import DashIconify
 
 from plant3dvision.evaluation import is_radians
 from plant3dvision.utils import locate_task_filesets
@@ -61,14 +64,16 @@ def parsing():
     return parser
 
 
-def get_3d_data(dataset):
+def get_3d_data(db_path, dataset_name):
     """Load the computed data from tasks PointCloud, TriangleMesh, TreeGraph & AnglesAndInternodes.
 
     Parameters
     ----------
-    dataset : str
+    db_path : str or pathlib.Path
         The path to the dataset containing the data to load.
         Should be in a local ROMI database (FSDB).
+    dataset_name : str
+        Name of the dataset to load from the database.
 
     Returns
     -------
@@ -76,10 +81,6 @@ def get_3d_data(dataset):
         A dictionary containing the loaded 3D data to render.
     """
     global logger  # use the global logger
-
-    dataset = Path(dataset)
-    db_path = dataset.parent  # the root of the database is one level (directory) higher.
-    dataset_name = dataset.name  # name of the dataset is the name of the directory
 
     # Connect to the local ROMI database:
     db = FSDB(db_path)
@@ -229,13 +230,13 @@ def get_graph_objects(data):
     if data['StemDirection'] is not None:
         stem_dir = data["StemDirection"]
         go_data['StemDirection'] = plotly_direction_data(stem_dir["stem_dirs"], stem_dir["bp_coords"], "stem",
-                                                          legendgroup='stem',
-                                                          legendgrouptitle={'text': 'StemDirection'})
+                                                         legendgroup='stem',
+                                                         legendgrouptitle={'text': 'StemDirection'})
 
     return go_data
 
 
-def select_go_data(checklist, go_data, hoverdata=None):
+def select_go_data(checklist, go_data, hoverdata=None, fruit_range=None):
     """Select the 3D data to render.
 
     Parameters
@@ -273,14 +274,15 @@ def select_go_data(checklist, go_data, hoverdata=None):
     return selected_go_data
 
 
-def get_sequences_data(dataset):
+def get_sequences_data(db_path, dataset_name):
     """Get the angle and internode sequences from the `AnglesAndInternodes` task.
 
     Parameters
     ----------
-    dataset :  str
-        The path to the dataset containing the data to load.
-        Should be in a local ROMI database (FSDB).
+    db_path : str or pathlib.Path
+        The path to the local ROMI database (FSDB).
+    dataset_name : str
+        Name of the dataset to load from the database.
 
     Returns
     -------
@@ -288,10 +290,6 @@ def get_sequences_data(dataset):
         A dictionary containing the loaded angle and internode sequences.
     """
     global logger
-
-    dataset = Path(dataset)
-    db_path = dataset.parent  # the root of the database is one level (directory) higher.
-    dataset_name = dataset.name  # name of the dataset is the name of the directory
 
     # Connect to the local ROMI database:
     db = FSDB(db_path)
@@ -341,6 +339,9 @@ def dash_app(data, measures):
     """
     # - Create the `plotly.graph_objects` corresponding to each 3D structures to render.
     go_data = get_graph_objects(data)
+    n_fruits = len(data["FruitDirection"]["fruit_dirs"])
+    range_selection = {-1: "root"}
+    range_selection.update({f: f"fruit_{f}" for f in range(n_fruits)})
 
     # - Initialize the checkboxes:
     init_checklist = [k for k, v in go_data.items() if v is not None]
@@ -349,7 +350,8 @@ def dash_app(data, measures):
     # No need to initialize the 'sequences' figure as the `update_sequence_graph` callback will take care of it!
 
     # - Create the Dash app:
-    app = Dash(__name__)
+    global dataset_name
+    app = Dash(__name__, title=f"{dataset_name}")
     # - Create the app layout:
     #   * create two rows with a CSS grid:
     #     1. first row is the top title
@@ -357,6 +359,8 @@ def dash_app(data, measures):
     app.layout = html.Div([
         # Add the 'Nunito Sans' font from Google:
         html.Link(href="https://fonts.googleapis.com/css?family=Nunito Sans", rel="stylesheet"),
+        html.Link(href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css",
+                  rel="stylesheet"),
         # Main title:
         html.H1('Plant reconstruction explorer',
                 style={'textAlign': 'center', 'padding': '0px 10px', 'margin': '0px',
@@ -391,8 +395,17 @@ def dash_app(data, measures):
             # 3D viewer:
             html.Div([
                 dcc.Graph(id='3d-viewer',
-                          style={'width': '49vw', 'height': '89vh'}, config={'responsive': True})
-            ], style={'padding': '0px', 'margin': '0px'}),
+                          style={'height': '89vh'}, config={'responsive': True}),
+                html.Div([
+                    html.Button(DashIconify(icon="fa6-solid:circle-arrow-up", width=30),
+                                id='fruit-slider-up', n_clicks=0),
+                    dcc.RangeSlider(id="fruit-slider", min=-1, max=n_fruits-1, step=1, value=[-1, n_fruits-1],
+                                    marks=range_selection, vertical=True, verticalHeight=800, allowCross=False,
+                                    pushable=1),
+                    html.Button(DashIconify(icon="fa6-solid:circle-arrow-down", width=30),
+                                id='fruit-slider-down', n_clicks=0),
+                ]),
+            ], style={'display': 'grid', 'grid-template-columns': '0.95fr 0.05fr', 'padding': '0px', 'margin': '0px'}),
             # Sequence graphs:
             html.Div([
                 dcc.Graph(id='sequences',
@@ -409,16 +422,39 @@ def dash_app(data, measures):
         Input('checklist-selection', 'value'),
         Input('sequences', 'hoverData'),
         Input('sequences', 'selectedData'),
+        Input('fruit-slider', 'value'),
+        State('fruit-slider', 'min'),
+        State('fruit-slider', 'max'),
     )
-    def update_3d_viewer(value, hoverData, selectedData):
-        global mini, maxi, axes_ratio
-        if selectedData is not None:
-            hoverData = selectedData
-        fig = go.Figure(data=select_go_data(value, go_data, hoverData))
+    def update_3d_viewer(value, hover_data, selected_data, fruit_range, fs_mini, fs_maxi):
+        global mini, maxi, data
+        if selected_data is not None:
+            hover_data = selected_data
+        fig = go.Figure(data=select_go_data(value, go_data, hover_data, fruit_range))
+
+        x_range = [mini[0], maxi[0]]
+        y_range = [mini[1], maxi[1]]
+        z_range = [mini[2], maxi[2]]
+        if fruit_range is not None and fruit_range != [fs_mini, fs_maxi]:
+            bp_coords = data["FruitDirection"]["bp_coords"]
+            f_low, f_high = fruit_range
+            if f_low == fs_mini:
+                z_range[0] = mini[2]
+            else:
+                f_low_coord = bp_coords[str(f_low)][2]
+                z_range[0] = f_low_coord * 1.05 if f_low_coord < 0 else f_low_coord * 0.95
+            if f_high == fs_maxi:
+                z_range[1] = maxi[2]
+            else:
+                f_high_coord = bp_coords[str(f_high)][2]
+                z_range[1] = f_high_coord * 1.05 if f_high_coord > 0 else f_high_coord * 0.95
+
+        range_arr = np.array([x_range, y_range, z_range])
+        axes_ratio = get_axes_ratio(range_arr[:, 0], range_arr[:, 1])
         fig.update_scenes(aspectmode='manual',
-                          xaxis={'range': (mini[0], maxi[0])}, aspectratio_x=axes_ratio[0],
-                          yaxis={'range': (mini[1], maxi[1])}, aspectratio_y=axes_ratio[1],
-                          zaxis={'range': (mini[2], maxi[2])}, aspectratio_z=axes_ratio[2])
+                          xaxis={'range': x_range}, aspectratio_x=axes_ratio[0],
+                          yaxis={'range': y_range}, aspectratio_y=axes_ratio[1],
+                          zaxis={'range': z_range}, aspectratio_z=axes_ratio[2])
         fig.update_layout(uirevision='none', font_family=FONT_FAMILY, paper_bgcolor="#F3F3F3",
                           margin={'t': 25, 'b': 5})
         return fig
@@ -442,6 +478,24 @@ def dash_app(data, measures):
                               margin={'t': 25, 'b': 5})
         return seq_fig
 
+    @callback(
+        Output("fruit-slider", "value"),
+        State("fruit-slider", "min"),
+        State("fruit-slider", "max"),
+        State("fruit-slider", "value"),
+        Input("fruit-slider-up", 'n_clicks'),
+        Input("fruit-slider-down", 'n_clicks')
+    )
+    def update_fruit_slider_range(mini, maxi, range, up, down):
+        if "fruit-slider-up" == ctx.triggered_id:
+            if range[1] < maxi:
+                return [range[0] + 1, range[1] + 1]
+        elif "fruit-slider-down" == ctx.triggered_id:
+            if range[0] > mini:
+                return [range[0] - 1, range[1] - 1]
+        else:
+            return range
+
     return app
 
 
@@ -456,12 +510,16 @@ if __name__ == '__main__':
     # - Configure a logger from this application:
     logger = configure_logger('dash_explorer')
 
+    dataset = Path(args.dataset)
+    db_path = dataset.parent  # the root of the database is one level (directory) higher.
+    dataset_name = dataset.name  # name of the dataset is the name of the directory
+
     # - Load the 3D viewer data and get the display range:
-    data = get_3d_data(args.dataset)
+    data = get_3d_data(db_path, dataset_name)
     mini, maxi = get_global_range(data["PointCloud"], data["TriangleMesh"])
     axes_ratio = get_axes_ratio(mini, maxi)
     # - Load the sequences:
-    measures = get_sequences_data(args.dataset)
+    measures = get_sequences_data(db_path, dataset_name)
 
     # - Start the Dash app:
     app = dash_app(data, measures)
