@@ -220,3 +220,27 @@ def locate_task_filesets(scan, tasks):
         except IndexError:
             fileset_names[task] = "None"
     return fileset_names
+
+
+def is_radians(angles):
+    """Guess if the Sequence of angles is in radians or degrees.
+
+    Parameters
+    ----------
+    angles : list of float
+        Sequence of angle values.
+
+    Returns
+    -------
+    bool
+        `True` if the sequence is in radians, else `False.
+
+    Notes
+    -----
+    This assumes that the angles can not be greater than 360 degrees or its equivalent in radians.
+    """
+    from math import radians
+    if all([angle < radians(360) for angle in angles]):
+        return True
+    else:
+        return False

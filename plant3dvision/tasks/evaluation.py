@@ -671,7 +671,7 @@ class AnglesAndInternodesEvaluation(EvaluationTask):
         return angles, internodes
 
     def _guess_angles_type(self, gt_angles, pred_angles):
-        from plant3dvision.evaluation import is_radians
+        from plant3dvision.utils import is_radians
         self.gt_angles_type = str(self.gt_angles_type)
         self.pred_angles_type = str(self.pred_angles_type)
         # - Remove potential plural form if detected:
