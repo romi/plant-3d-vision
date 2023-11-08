@@ -16,7 +16,7 @@ from dash import ctx
 from dash import html
 from dash_iconify import DashIconify
 
-from plant3dvision.evaluation import is_radians
+from plant3dvision.utils import is_radians
 from plant3dvision.utils import locate_task_filesets
 from plant3dvision.visu import plotly_direction_data
 from plant3dvision.visu import plotly_mesh_data
@@ -51,15 +51,15 @@ FONT_FAMILY = '"Nunito Sans", verdana, arial, sans-serif'
 def parsing():
     parser = argparse.ArgumentParser(description="Explore the tasks outputs on selected dataset.")
     parser.add_argument('dataset', type=str,
-                        help="Path to the dataset to explore (directory)")
+                        help="path to the dataset to explore (directory)")
 
     app_args = parser.add_argument_group("Dash app options")
-    app_args.add_argument('--port', type=int, default=8080,
-                          help="Port used to serve the application.")
     app_args.add_argument('--host', type=str, default="127.0.0.1",
-                          help="Port used to serve the application.")
+                          help="host IP used to serve the application")
+    app_args.add_argument('--port', type=int, default=8080,
+                          help="port used to serve the application")
     app_args.add_argument('--docker', action="store_true",
-                          help="Use it to indicate that the app in running in a container.")
+                          help="indicate that the app in running in a container")
 
     return parser
 
