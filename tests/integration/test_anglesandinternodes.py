@@ -10,7 +10,7 @@ from utilities import run_task
 class TestGeomAnglesAndInternodes(unittest.TestCase):
     def test_real_plant(self):
 
-        geom_pipe_real_conf = os.path.join(Path(__file__).parents[2], "config/geom_pipe_real.toml")
+        geom_pipe_real_conf = os.path.join(Path(__file__).parents[2], "configs/test_geom_pipe_real.toml")
         print(f"Testing geometric pipeline with conf: {geom_pipe_real_conf}")
         real_plant_data = os.path.join(Path(__file__).parents[1], "testdata/real_plant/")
         print(f"Testing geometric pipeline with data: {real_plant_data}")
@@ -40,7 +40,7 @@ class TestGeomAnglesAndInternodes(unittest.TestCase):
         angles_and_internodes_json_file.close()
 
     def test_virtual_plant(self):
-        geom_pipe_virtual_conf = os.path.join(Path(__file__).parents[2], "config/geom_pipe_virtual.toml")
+        geom_pipe_virtual_conf = os.path.join(Path(__file__).parents[2], "configs/test_geom_pipe_virtual.toml")
         print(f"Testing geometric pipeline with conf: {geom_pipe_virtual_conf}")
         virtual_plant_data = os.path.join(Path(__file__).parents[1],"testdata/virtual_plant/")
         print(f"Testing geometric pipeline with data: {virtual_plant_data}")
@@ -68,10 +68,10 @@ class TestGeomAnglesAndInternodes(unittest.TestCase):
         self.assertTrue(len(internodes) > 10)
 
         angles_and_internodes_json_file.close()
-    
+
 class TestMLAnglesAndInternodes(unittest.TestCase):
     def test_real_plant(self):
-        ml_pipe_real_conf = os.path.join(Path(__file__).parents[2], "config/ml_pipe_real.toml")
+        ml_pipe_real_conf = os.path.join(Path(__file__).parents[2], "configs/ml_pipe_real.toml")
         print(f"Testing CNN pipeline with conf: {ml_pipe_real_conf}")
         real_plant_data = os.path.join(Path(__file__).parents[1], "testdata/real_plant/")
         print(f"Testing CNN pipeline with data: {real_plant_data}")
@@ -89,7 +89,7 @@ class TestMLAnglesAndInternodes(unittest.TestCase):
             model_file = open(model_name, 'wb')
             model_file.write(r.content)
             model_file.close()
-        
+
         # Perform the AnglesAndInternodes
         process = run_task("AnglesAndInternodes", real_plant_data, ml_pipe_real_conf)
         self.assertTrue(process.returncode == 0)
@@ -109,9 +109,9 @@ class TestMLAnglesAndInternodes(unittest.TestCase):
         self.assertTrue(len(internodes) > 10)
 
         angles_and_internodes_json_file.close()
-    
+
     def test_virtual_plant(self):
-        ml_virtual_plant_conf = os.path.join(Path(__file__).parents[2], "config/ml_pipe_virtual.toml")
+        ml_virtual_plant_conf = os.path.join(Path(__file__).parents[2], "configs/ml_pipe_virtual.toml")
         print(f"Testing CNN pipeline with conf: {ml_virtual_plant_conf}")
         virtual_plant_data = os.path.join(Path(__file__).parents[1], "testdata/virtual_plant/")
         print(f"Testing CNN pipeline with data: {virtual_plant_data}")
@@ -129,7 +129,7 @@ class TestMLAnglesAndInternodes(unittest.TestCase):
             model_file = open(model_name, 'wb')
             model_file.write(r.content)
             model_file.close()
-        
+
         # Perform the AnglesAndInternodes
         process = run_task("AnglesAndInternodes", virtual_plant_data, ml_virtual_plant_conf)
         self.assertTrue(process.returncode == 0)

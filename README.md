@@ -305,7 +305,7 @@ Assuming you are in the `plant-3d-vision` root directory of the repository:
 CWD=$(pwd)  # get the absolute path to the `plant-3d-vision` directory
 docker run -it --rm --gpus all \
   -v $CWD/tests/testdata/:/myapp/db \
-  -v $CWD/config/:/myapp/config \
+  -v $CWD/configs/:/myapp/configs \
   roboticsmicrofarms/plant-3d-vision:latest \
   bash -c "romi_run_task AnglesAndInternodes /myapp/db/real_plant/ --config /myapp/config/geom_pipe_real.toml"
 ```
@@ -333,7 +333,7 @@ Assuming you are in the `plant-3d-vision` root directory of the repository:
 CWD=$(pwd)  # get the absolute path to the `plant-3d-vision` directory
 ./docker/run.sh \
   -db $CWD/tests/testdata/ \
-  -v $CWD/config/:/myapp/config \
+  -v $CWD/configs/:/myapp/configs \
   -c "romi_run_task AnglesAndInternodes /myapp/db/real_plant/ --config /myapp/config/geom_pipe_real.toml"
 ```
 
@@ -359,7 +359,7 @@ Assuming you are in the `plant-3d-vision` root directory of the repository:
 ```shell
 cp -R tests/testdata /tmp/.  # copy the test DB to the temporary directory
 conda activate plant3dvision  # activate the conda environment
-romi_run_task AnglesAndInternodes /tmp/testdata/real_plant/ --config config/geom_pipe_real.toml
+romi_run_task AnglesAndInternodes /tmp/testdata/real_plant/ --config configs/test_geom_pipe_real.toml
 ```
 
 This will perform the `AnglesAndInternodes` task (reconstruction and analysis) of the `real_plant` test dataset using the `geom_pipe_real.toml` configuration.

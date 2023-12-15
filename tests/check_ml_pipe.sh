@@ -12,7 +12,7 @@ bold() { echo -e "\e[1m$*\e[0m"; }
 
 # - Default variables
 # Default configuration file used for CNN based pipeline is:
-cfg='config/ml_pipe_real.toml'
+cfg='configs/ml_pipe_real.toml'
 # Default database location:
 db='tests/testdata'
 # Default test dataset for CNN based pipeline is the "real_plant":
@@ -83,7 +83,7 @@ while [ "$1" != "" ]; do
     ;;
   --virtual)
     dataset=${v_dataset}
-    cfg='config/ml_pipe_virtual.toml'
+    cfg='configs/ml_pipe_virtual.toml'
     ;;
   --tmp)
     tmp=1

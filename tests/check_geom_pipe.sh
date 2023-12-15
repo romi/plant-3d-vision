@@ -15,10 +15,10 @@ bold() { echo -e "\e[1m$*\e[0m"; }
 db='tests/testdata'
 # Defaults for 'real_plant' dataset & config:
 r_dataset="${db}/real_plant/"
-r_cfg='tests/testcfg/geom_pipe_real.toml'
+r_cfg='configs/test_geom_pipe_real.toml'
 # Defaults for 'virtual_plant' dataset & config:
 v_dataset="${db}/virtual_plant/"
-v_cfg='tests/testcfg/geom_pipe_virtual.toml'
+v_cfg='configs/test_geom_pipe_virtual.toml'
 
 # Default tested ROMI task for GEOMETRIC based pipeline is "AnglesAndInternodes":
 task='AnglesAndInternodes'
