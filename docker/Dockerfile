@@ -1,4 +1,4 @@
-FROM roboticsmicrofarms/colmap:3.7
+FROM colmap/colmap:20240118.3
 LABEL maintainer="Jonathan LEGRAND <jonathan.legrand@ens-lyon.fr>"
 LABEL corresponding_author="Peter Hanappe <peter@romi-project.eu>"
 LABEL project="Robotics for microfarms"
@@ -24,24 +24,12 @@ ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
 # Change Shell to 'bash', default is 'sh':
 SHELL [ "/bin/bash", "-c" ]
 
-RUN echo "Fix CUDA GPG key..." && \
-    # Install the cuda-keyring package (https://developer.nvidia.com/blog/updating-the-cuda-linux-gpg-repository-key/) \
-    apt-key del 7fa2af80 && \
-    wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/cuda-keyring_1.0-1_all.deb && \
-    dpkg -i cuda-keyring_1.0-1_all.deb && \
-    rm cuda-keyring_1.0-1_all.deb && \
-    # Remove duplicate .list entries (https://developer.nvidia.com/blog/updating-the-cuda-linux-gpg-repository-key/)
-    sed -i '/developer\.download\.nvidia\.com\/compute\/cuda\/repos/d' /etc/apt/sources.list && \
-    # Remove Machine Learning repository (https://forums.developer.nvidia.com/t/updating-the-cuda-linux-gpg-repository-key/212897/8)
-    sed -i '/developer\.download\.nvidia\.com\/compute\/machine-learning\/repos/d' /etc/apt/sources.list.d/* && \
-    rm /etc/apt/sources.list.d/cuda*.list && \
-    echo "Resume dependencies installation..." && \
-    # Update package manager
-    apt-get update && \
+RUN apt-get update && \
     # Install the required dependencies
     apt-get install -yq --no-install-recommends \
     nano \
     ocl-icd-libopencl1 opencl-headers clinfo \
+    python3 python3-pip \
     libjpeg-dev libffi-dev && \
     # Clean-up apt cache
     apt-get clean && \
@@ -57,9 +45,7 @@ RUN echo "Fix CUDA GPG key..." && \
     # Ugly fix for OpenCL:
     ln -s /usr/lib/x86_64-linux-gnu/libOpenCL.so.1 /usr/lib/libOpenCL.so && \
     mkdir -p /etc/OpenCL/vendors && \
-    echo "libnvidia-opencl.so.1" > /etc/OpenCL/vendors/nvidia.icd && \
-    # Upgrade pip:
-    python3 -m pip install --upgrade pip
+    echo "libnvidia-opencl.so.1" > /etc/OpenCL/vendors/nvidia.icd
 
 # Change to non-root user:
 USER ${USER_NAME}
@@ -88,7 +74,7 @@ RUN cd plant-3d-vision/ && \
     python3 -m pip install --user -r requirements.txt && \
     python3 -m pip install --user . && \
     # Clean pip cache:
-    rm -rf .cache/pip && \
+    python3 -m pip cache purge && \
     # Download the trained CNN model file:
     ./get_model.sh
 
