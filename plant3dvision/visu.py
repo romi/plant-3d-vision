@@ -294,8 +294,26 @@ def plotly_pointcloud_data(pcd, n_pts=9000, marker_kwargs=None, **kwargs):
     ----------
     Plotly documentation for `Scatter3d`: https://plotly.com/python/reference/scatter3d/
 
+    Examples
+    --------
+    >>> from plant3dvision.visu import plotly_pointcloud_data
+    >>> from plant3dvision.utils import locate_task_filesets
+    >>> from plantdb.fsdb import FSDB
+    >>> from plantdb.io import read_point_cloud
+    >>> from os import environ
+    >>> db = FSDB(environ.get('ROMI_DB', "/data/ROMI/DB/"))
+    >>> db.connect()
+    >>> scan = db.get_scan('Col-0_E1_1', create=False)
+    >>> fileset_names = locate_task_filesets(scan, ["PointCloud", "AnglesAndInternodes"])
+    >>> pcd_fs = scan.get_fileset(fileset_names['PointCloud'])
+    >>> pcd = read_point_cloud(pcd_fs.get_file('PointCloud'))
+    >>> db.disconnect()
+    >>>
+
     """
-    if len(pcd.points) > n_pts:
+    if isinstance(n_pts, str) and n_pts == "all":
+        pcd_arr = np.array(pcd.points)
+    elif len(pcd.points) > n_pts:
         rng = np.random.default_rng()
         pcd_arr = rng.choice(pcd.points, 9000)
     else:
