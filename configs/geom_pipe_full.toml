@@ -5,7 +5,7 @@ compute_dense = false  # wether a dense point cloud should be computed by COLMAP
 align_pcd = true  # align and scale spare (& dense) point cloud(s) using CNC coordinates
 use_gpu = true  # use GPU when possible, either use CPU
 single_camera = true  # wether a single camera was used for acquisition
-robust_alignment_max_error = 10  # the maximum alignment error allowed during ``model_aligner``
+alignment_max_error = 10  # the maximum alignment error allowed during ``model_aligner``
 intrinsic_calibration_scan_id = ""  # use a dataset with calibrated intrinsic camera poses
 extrinsic_calibration_scan_id = ""  # use a dataset with calibrated extrinsic camera poses
 distance_threshold = 0  # the maximum 3D Euclidean distance to CNC pose to validate COLMAP pose estimation
@@ -15,7 +15,7 @@ distance_threshold = 0  # the maximum 3D Euclidean distance to CNC pose to valid
 #[Colmap.cli_args.exhaustive_matcher]
 #"--SiftMatching.use_gpu" = "1"  # equivalent to `use_gpu = true`
 #[Colmap.cli_args.model_aligner]
-#"--robust_alignment_max_error" = "10"  # equivalent to `robust_alignment_max_error = 10`
+#"--alignment_max_error" = "10"  # equivalent to `alignment_max_error = 10`
 #[Colmap.bounding_box] # default to None
 #x = [150, 650]
 #y = [150, 650]

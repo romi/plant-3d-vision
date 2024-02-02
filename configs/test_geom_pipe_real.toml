@@ -6,7 +6,7 @@ compute_dense = false
 align_pcd = true
 use_gpu = true
 single_camera = true
-robust_alignment_max_error = 10
+alignment_max_error = 10
 intrinsic_calibration_scan_id = ""  # use a dataset with calibrated intrinsic camera poses
 extrinsic_calibration_scan_id = ""  # use a dataset with calibrated extrinsic camera poses
 

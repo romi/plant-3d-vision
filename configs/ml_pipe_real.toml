@@ -6,7 +6,7 @@ extrinsic_calibration_scan_id = ""  # use a dataset with calibrated extrinsic ca
 compute_dense = false
 align_pcd = true
 use_gpu = true
-robust_alignment_max_error = 10
+alignment_max_error = 10
 distance_threshold = 5  # maximum allowed Euclidean distance from CNC pose
 # [Colmap.bounding_box] # default to None
 # x = [150, 650]
