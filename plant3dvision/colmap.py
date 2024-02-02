@@ -6,7 +6,7 @@
 You can use multiple sources of colmap executable by setting the ``COLMAP_EXE`` environment variable:
   - use local installation (from sources) of colmap with ``export COLMAP_EXE='colmap'``
   - use a docker image with COLMAP 3.6 with ``export COLMAP_EXE='geki/colmap'``
-  - use a docker image with COLMAP 3.7 with ``export COLMAP_EXE='roboticsmicrofarms/colmap'``
+  - use a docker image with COLMAP 3.8+ with ``export COLMAP_EXE='roboticsmicrofarms/colmap'``
 
 Using docker image requires the docker engine to be available on your system and the docker SDK.
 """
@@ -21,19 +21,19 @@ from pathlib import Path
 import imageio
 import numpy as np
 import open3d as o3d
-from plantdb import io
+from packaging import version
 
 from plant3dvision import proc3d
 from plant3dvision.thirdparty import read_model
+from plantdb import io
 from romitask.log import configure_logger
 
 logger = configure_logger(__name__)
 
-#: List of valid colmap executable values:
-ALL_COLMAP_EXE = ['colmap', 'geki/colmap', 'roboticsmicrofarms/colmap']
 #: Default colmap executable:
-DEFAULT_COLMAP = ALL_COLMAP_EXE[-1]
-
+DEFAULT_COLMAP = 'colmap'
+#: List of valid colmap executable values:
+COLMAP_DOCKER = ['geki/colmap', 'colmap/colmap', 'roboticsmicrofarms/colmap']
 # - Try to get colmap executable to use from '$COLMAP_EXE' environment variable, or set it to use docker container by default:
 COLMAP_EXE = os.environ.get('COLMAP_EXE', DEFAULT_COLMAP)
 
@@ -54,17 +54,33 @@ def _has_nvidia_gpu():
 
 
 def colmap_cameras_to_dict(cameras_bin):
-    """Convert COLMAP cameras binary file to a dictionary of camera model.
+    """Convert COLMAP ``cameras.bin`` binary file to a dictionary of camera model.
 
     Parameters
     ----------
-    cameras_bin : str
+    cameras_bin : str or pathlib.Path
         Path to the COLMAP cameras binary file ``cameras.bin``.
 
     Returns
     -------
     dict
         Dictionary of camera model.
+
+    Examples
+    --------
+    >>> from plant3dvision.colmap import colmap_cameras_to_dict
+    >>> from plant3dvision.colmap import test_runner
+    >>> colmap = test_runner()
+    >>> colmap.feature_extractor()  #1 - Extract features from images
+    >>> colmap.matcher()  #2 - Match extracted features from images, requires `feature_extractor()`
+    >>> colmap.mapper()  #3 - Sparse point cloud reconstruction, requires `matcher()`
+    >>> intrinsics = colmap_cameras_to_dict(f"{colmap.sparse_dir}/0/cameras.bin")
+    >>> print(intrinsics)
+    {1: {'id': 1,
+      'model': 'SIMPLE_RADIAL',
+      'width': 1440,
+      'height': 1080,
+      'params': [1163.6854403549555, 720.0, 540.0, -0.0027575417518382324]}}
     """
     # - Read computed binary camera models:
     cameras = read_model.read_cameras_binary(cameras_bin)
@@ -93,6 +109,16 @@ def colmap_points_to_dict(points_bin):
     -------
     dict
         Dictionary of points with metadata.
+
+    Examples
+    --------
+    >>> from plant3dvision.colmap import colmap_points_to_dict
+    >>> from plant3dvision.colmap import test_runner
+    >>> colmap = test_runner()
+    >>> colmap.feature_extractor()  #1 - Extract features from images
+    >>> colmap.matcher()  #2 - Match extracted features from images, requires `feature_extractor()`
+    >>> colmap.mapper()  #3 - Sparse point cloud reconstruction, requires `matcher()`
+    >>> colmap_pts = colmap_points_to_dict(f"{colmap.sparse_dir}/0/points3D.bin")
     """
     # - Read reconstructed binary sparse model:
     points = read_model.read_points3d_binary(points_bin)
@@ -115,13 +141,25 @@ def colmap_points_to_pcd(points_bin):
 
     Parameters
     ----------
-    points_bin : str
+    points_bin : str or pathlib.Path
         Path to the COLMAP points binary file ``points3D.bin``.
 
     Returns
     -------
     open3d.geometry.PointCloud
         Colored point cloud object.
+
+    Examples
+    --------
+    >>> from plant3dvision.colmap import colmap_points_to_pcd
+    >>> from plant3dvision.colmap import test_runner
+    >>> colmap = test_runner()
+    >>> colmap.feature_extractor()  #1 - Extract features from images
+    >>> colmap.matcher()  #2 - Match extracted features from images, requires `feature_extractor()`
+    >>> colmap.mapper()  #3 - Sparse point cloud reconstruction, requires `matcher()`
+    >>> sparse_pcd = colmap_points_to_pcd(f"{colmap.sparse_dir}/0/points3D.bin")
+    >>> import open3d as o3d
+    >>> o3d.visualization.draw(sparse_pcd)
     """
     # - Read reconstructed binary sparse model:
     points = read_model.read_points3d_binary(points_bin)
@@ -139,23 +177,35 @@ def colmap_points_to_pcd(points_bin):
 
 
 def colmap_images_to_dict(images_bin):
-    """Convert COLMAP `images` binary file to a dictionary of images with metadata.
+    """Convert COLMAP ``images.bin`` binary file to a dictionary of images with metadata.
 
     Parameters
     ----------
-    images_bin : str
+    images_bin : str or pathlib.Path
         Path to the COLMAP images binary file ``images.bin``.
 
     Returns
     -------
     dict
-        Dictionary of images id with metadata.
+        Image id indexed dictionary of extrinsics metadata.
+
+    Examples
+    --------
+    >>> from plant3dvision.colmap import colmap_images_to_dict
+    >>> from plant3dvision.colmap import test_runner
+    >>> colmap = test_runner()
+    >>> colmap.feature_extractor()  #1 - Extract features from images
+    >>> colmap.matcher()  #2 - Match extracted features from images, requires `feature_extractor()`
+    >>> colmap.mapper()  #3 - Sparse point cloud reconstruction, requires `matcher()`
+    >>> extrinsics = colmap_images_to_dict(f"{colmap.sparse_dir}/0/images.bin")
+    >>> print(list(extrinsics.keys()))
+
     """
     # - Read image binary model:
     images = read_model.read_images_binary(images_bin)
     res = {}
-    for key, im in images.items():
-        res[key] = {
+    for _, im in images.items():
+        res[im.name] = {
             'id': im.id,
             'qvec': im.qvec.tolist(),
             'tvec': im.tvec.tolist(),
@@ -180,6 +230,23 @@ def cameras_model_to_opencv_model(cameras):
     -------
     dict
         Dictionary of OpenCV cameras model.
+
+    Examples
+    --------
+    >>> from plant3dvision.colmap import cameras_model_to_opencv_model
+    >>> from plant3dvision.colmap import colmap_cameras_to_dict
+    >>> from plant3dvision.colmap import test_runner
+    >>> colmap = test_runner()
+    >>> colmap.feature_extractor()  #1 - Extract features from images
+    >>> colmap.matcher()  #2 - Match extracted features from images, requires `feature_extractor()`
+    >>> colmap.mapper()  #3 - Sparse point cloud reconstruction, requires `matcher()`
+    >>> intrinsics = colmap_cameras_to_dict(f"{colmap.sparse_dir}/0/cameras.bin")
+    >>> cameras_model_to_opencv_model(intrinsics)
+    {1: {'id': 1,
+      'model': 'OPENCV',
+      'width': 1440,
+      'height': 1080,
+      'params': [1163.6854403549555, 1163.6854403549555, 720.0, 540.0, -0.0027575417518382324, -0.0027575417518382324, 0.0, 0.0]}}
 
     Raises
     ------
@@ -236,14 +303,88 @@ def compute_estimated_pose(rotmat, tvec):
     return np.array(pose).flatten().tolist()
 
 
+def export_camera_parameters(image_files, intrinsics, extrinsics):
+    """Export camera intrinsics and extrinsic to images metadata.
+
+    Parameters
+    ----------
+    image_files : list of plantdb.db.File
+        The list of image `File` to set metadata.
+    intrinsics : dict
+        An OPENCV intrinsics camera parameter dictionary.
+    extrinsics : dict
+        A dictionary of images.
+
+    See Also
+    --------
+    plant3dvision.colmap.colmap_cameras_to_dict
+    plant3dvision.colmap.colmap_images_to_dict
+
+    Returns
+    -------
+    list of plantdb.db.File
+        The ist of image files with metadata.
+
+
+    Examples
+    --------
+    >>> from plant3dvision.colmap import export_camera_parameters
+    >>> from plant3dvision.colmap import ColmapRunner
+    >>> from plantdb.test_database import test_database
+    >>> db = test_database('real_plant')
+    >>> db.connect()
+    >>> # - Select the dataset to reconstruct:
+    >>> dataset = db.get_scan("real_plant")
+    >>> # - Get the corresponding 'images' fileset:
+    >>> images_fileset = dataset.get_fileset('images')
+    >>> image_files = images_fileset.get_files()
+    >>> args = {"feature_extractor": {"--ImageReader.single_camera": "1"}}
+    >>> colmap = ColmapRunner(image_files, all_cli_args=args, colmap_exe="roboticsmicrofarms/colmap:3.8")
+    >>> colmap.feature_extractor()  #1 - Extract features from images
+    >>> colmap.matcher()  #2 - Match extracted features from images, requires `feature_extractor()`
+    >>> colmap.mapper()  #3 - Sparse point cloud reconstruction, requires `matcher()`
+    >>> intrinsics = colmap.get_intrinsics()
+    >>> extrinsics = colmap.get_extrinsics()
+    >>> image_files = export_camera_parameters(image_files, intrinsics, extrinsics)
+
+    >>> img = images_fileset.get_file(list(extrinsics.keys())[0].split('.')[0])
+    >>> img.get_metadata()
+    """
+    # -- Export computed intrinsics ('camera_model') & extrinsic ('rotmat', 'tvec' & 'estimated_pose') to metadata:
+    logger.info(f"Exporting estimated camera intrinsics and extrinsic parameters to images metadata...")
+    for fi in image_files:
+        try:
+            assert fi.filename in extrinsics
+        except KeyError:
+            logger.error(f"No pose & camera model defined by COLMAP for image '{fi.filename}'!")
+        else:
+            camera = {
+                "rotmat": extrinsics[fi.filename]["rotmat"],
+                "tvec": extrinsics[fi.filename]["tvec"],
+                "camera_model": intrinsics[extrinsics[fi.filename]['camera_id']]
+            }
+            # - Add a 'colmap_camera' entry to the file metadata:
+            fi.set_metadata("colmap_camera", camera)
+            # - Add an 'estimated_pose' entry to the file metadata:
+            estimated_pose = compute_estimated_pose(np.array(extrinsics[fi.filename]["rotmat"]),
+                                                    np.array(extrinsics[fi.filename]["tvec"]))
+            fi.set_metadata("estimated_pose", estimated_pose)
+
+    return image_files
+
+#: List of valid COLMAP matcher methods:
+MATCHER_METHODS = ['exhaustive', 'sequential', 'spatial']
+#: Default COLMAP matcher method:
+DEF_MATCHER_METHODS = MATCHER_METHODS[0]
+
 class ColmapRunner(object):
     """COLMAP SfM methods wrapper, to apply to an 'image' fileset.
 
     Attributes
     ----------
-    fileset : plantdb.db.Fileset
-        The `Fileset` containing source images to use for reconstruction.
-    matcher_method : {'exhaustive', 'sequential'}
+    image_files : list of plantdb.db.File
+        The list of image ``File`` to use for reconstruction.
+    matcher_method : {'exhaustive', 'sequential', 'spatial'}
         Method to use to perform feature matching operation.
     compute_dense : bool
         If ``True``, it will compute the dense point cloud.
@@ -301,7 +442,7 @@ class ColmapRunner(object):
         ----------
         img_files : list of plantdb.db.File
             The list of image ``File`` to use for reconstruction.
-        matcher_method : {'exhaustive', 'sequential'}, optional
+        matcher_method : {'exhaustive', 'sequential', 'spatial'}, optional
             Method to use to perform feature matching operation, default is 'exhaustive'.
         compute_dense : bool, optional
             If ``True`` (default ``False``), compute dense point cloud.
@@ -333,26 +474,38 @@ class ColmapRunner(object):
 
         Examples
         --------
-        >>> import os
-        >>> # os.environ['COLMAP_EXE'] = "geki/colmap"  # Use this to manually switch between local COLMAP install ('colmap') or docker container ('geki/colmap')
         >>> from plant3dvision.colmap import ColmapRunner
-        >>> from plantdb.fsdb import FSDB
-        >>> # - Connect to a ROMI database to access an 'images' fileset to reconstruct with COLMAP:
-        >>> db = FSDB(os.environ.get('ROMI_DB', "/data/ROMI/DB/"))
+        >>> from plantdb.test_database import test_database
+        >>> db = test_database('real_plant')
         >>> db.connect()
         >>> # - Select the dataset to reconstruct:
-        >>> dataset = db.get_scan("arabido_test4")
+        >>> dataset = db.get_scan("real_plant")
         >>> # - Get the corresponding 'images' fileset:
-        >>> fs = dataset.get_fileset('images')
+        >>> images_fileset = dataset.get_fileset('images')
+        >>> image_files = images_fileset.get_files()
+
+        >>> args = {"feature_extractor": {"--ImageReader.single_camera": "1"}}
+        >>> colmap = ColmapRunner(image_files, matcher_method="spatial", align_pcd=True, all_cli_args=args, colmap_exe="roboticsmicrofarms/colmap:3.8")
+        >>> colmap.feature_extractor()  #1 - Extract features from images
+        >>> colmap.matcher()  #2 - Match extracted features from images, requires `feature_extractor()`
+        >>> colmap.mapper()  #3 - Sparse point cloud reconstruction, requires `matcher()`
+        >>> colmap.model_aligner()  #4 - OPTIONAL, align sparse point cloud to coordinate system of given camera centers
+        >>> from plant3dvision.colmap import colmap_points_to_pcd
+        >>> sparse_pcd = colmap_points_to_pcd(f'{colmap.sparse_dir}/0/points3D.bin')
+        >>> import open3d as o3d
+        >>> o3d.visualization.draw(sparse_pcd)
+
+        >>> colmap_poses = {im.id: im.get_metadata("approximate_pose") for im in images_fileset.get_files()}
+
 
         >>> import time
         >>> # -- Example comparing the CPU vs. GPU performances (requires a CUDA capable NVIDIA GPU):
         >>> # - Creates a ColmapRunner with GPU features enabled:
         >>> gpu_args = {"feature_extractor": {"--ImageReader.single_camera": "1"}}
-        >>> gpu_colmap = ColmapRunner(fs, all_cli_args=gpu_args,align_pcd=True)
+        >>> gpu_colmap = ColmapRunner(image_files, all_cli_args=gpu_args,align_pcd=True)
         >>> # - Creates a ColmapRunner with CPU features enabled:
         >>> cpu_args = {"feature_extractor": {"--ImageReader.single_camera": "1", "--SiftExtraction.use_gpu": "0"}, "exhaustive_matcher": {"--SiftMatching.use_gpu": "0"}}
-        >>> cpu_colmap = ColmapRunner(fs, all_cli_args=cpu_args,align_pcd=True)
+        >>> cpu_colmap = ColmapRunner(image_files, all_cli_args=cpu_args,align_pcd=True)
         >>> # Time the "feature extraction" step on GPU:
         >>> t_start = time.time()
         >>> gpu_colmap.feature_extractor()
@@ -373,7 +526,7 @@ class ColmapRunner(object):
         >>> # -- Examples of a step-by-step SfM reconstruction:
         >>> from plant3dvision.colmap import colmap_cameras_to_dict, colmap_images_to_dict, colmap_points_to_pcd
         >>> args = {"feature_extractor": {"--ImageReader.single_camera": "1"}}
-        >>> colmap = ColmapRunner(fs, all_cli_args=args)
+        >>> colmap = ColmapRunner(image_files, align_pcd=True, all_cli_args=args)
         >>> colmap.feature_extractor()  #1 - Extract features from images
         >>> colmap.matcher()  #2 - Match extracted features from images, requires `feature_extractor()`
         >>> colmap.mapper()  #3 - Sparse point cloud reconstruction, requires `matcher()`
@@ -381,14 +534,16 @@ class ColmapRunner(object):
         >>> colmap.image_undistorter()  #5 - OPTIONAL, undistort images, required by `patch_match_stereo()`
         >>> colmap.patch_match_stereo()  #6 - OPTIONAL, dense point cloud reconstruction
         >>> colmap.stereo_fusion()  #7 - OPTIONAL, dense point cloud coloring, requires `patch_match_stereo()`
+        >>> import open3d as o3d
         >>> # After step #3, you can access the generated cameras model:
         >>> cameras = colmap_cameras_to_dict(f'{colmap.sparse_dir}/0/cameras.bin')
         >>> # After step #3, you can access the generated images model:
         >>> images = colmap_images_to_dict(f'{colmap.sparse_dir}/0/images.bin')
         >>> # After step #3, you can access the generated sparse point cloud model:
         >>> sparse_pcd = colmap_points_to_pcd(f'{colmap.sparse_dir}/0/points3D.bin')
+        >>> o3d.visualization.draw(sparse_pcd)
         >>> # After step #7, you can access the generated dense colored point cloud model:
-        >>> dense_pcd = open3d.io.read_point_cloud(f'{colmap.dense_dir}/fused.ply')
+        >>> dense_pcd = o3d.io.read_point_cloud(f'{colmap.dense_dir}/fused.ply')
 
         >>> # -- Example of a one-line COLMAP SfM reconstruction based on instance initialization:
         >>> points, images, cameras, sparse_pcd, dense_pcd, bounding_box = colmap.run()
@@ -402,14 +557,15 @@ class ColmapRunner(object):
 
         >>> # -- Examples of WRONG bounding-box definition:
         >>> bbox = {"x" : [2200, 2600], "y" : [2200, 2600], "z" : [-2200, 2200]}
-        >>> args = {"feature_extractor": {"--ImageReader.single_camera": "1"}}
-        >>> colmap = ColmapRunner(fs, all_cli_args=args,bounding_box=bbox)
+        >>> args = {"feature_extractor": {"--ImageReader.single_camera": "1"}, 'model_aligner': {"--alignment_max_error": "10000"}}
+        >>> colmap = ColmapRunner(image_files, align_pcd=True, all_cli_args=args, bounding_box=bbox)
         >>> points, images, cameras, sparse_pcd, dense_pcd, bounding_box = colmap.run()
+        >>> o3d.io.write_point_cloud(f"{colmap.colmap_workdir}/pointcloud.ply", sparse_pcd)
 
         """
         # -- Initialize attributes:
-        self.fileset = img_files  # list of plantdb.fsdb.File
-        self.matcher_method = matcher_method
+        self.image_files = img_files  # list of plantdb.fsdb.File
+        self.matcher_method = matcher_method if matcher_method in MATCHER_METHODS else DEF_MATCHER_METHODS
         self.compute_dense = compute_dense
         self.all_cli_args = all_cli_args
         self.align_pcd = align_pcd
@@ -423,7 +579,7 @@ class ColmapRunner(object):
         self.dense_dir = self.colmap_workdir / 'dense'  # COLMAP's 'dense reconstruction' directory
         # - Make sure those directories exists & create them otherwise:
         self._init_directories()
-        # - Fill COLMAP's 'images' directory with files from the 'images' Fileset (self.fileset)
+        # - Fill COLMAP's 'images' directory with files from the 'images' Fileset (self.image_files)
         self._init_images_directory()
         # - Initialize the `poses.txt` file required by COLMAP:
         self._init_poses()
@@ -431,6 +587,9 @@ class ColmapRunner(object):
         self.log_file = f"{self.colmap_workdir}/colmap.log"
         logger.info(f"See {self.log_file} for a detailed log about COLMAP jobs...")
         # - Check the COLMAP executable to use:
+        self.exe = None
+        self.colmap_version = None
+        self._header = None
         self._init_exe(kwargs.get('colmap_exe', COLMAP_EXE))
 
     def _init_directories(self):
@@ -447,7 +606,7 @@ class ColmapRunner(object):
         """
         n_rgb_im = 0  # Count the number of RGB images
         n_cp_im = 0  # Count the number of copied RGB images
-        for img_f in self.fileset:
+        for img_f in self.image_files:
             # - Check the image file exists in COLMAP's 'images' directory, if not create it:
             filepath = os.path.join(self.imgs_dir, img_f.filename)
             img_md = img_f.metadata
@@ -488,7 +647,7 @@ class ColmapRunner(object):
 
         """
         # - Search if "exact poses" can be found in all 'images' fileset metadata:
-        exact_poses = all([f.get_metadata('pose') is not None for f in self.fileset])
+        exact_poses = all([f.get_metadata('pose') != {} for f in self.image_files])
 
         # - Defines "where" (which metadata) to get the "camera pose" from:
         if self.use_calibration:
@@ -504,7 +663,7 @@ class ColmapRunner(object):
         with open(f"{self.colmap_workdir}/poses.txt", mode='w') as pose_file:
             # - Try to get the camera pose from each image File metadata:
             missing_pose = []
-            for img_f in self.fileset:
+            for img_f in self.image_files:
                 # - Try to get the pose metadata, may be `None`:
                 p = img_f.get_metadata(pose_md)
                 # - If a pose metadata was found for the file, add it to COLMAP's 'poses.txt' file:
@@ -542,6 +701,10 @@ class ColmapRunner(object):
         .. [roboticsmicrofarms_colmap] Colmap docker image on `roboticsmicrofarms <https://hub.docker.com/repository/docker/roboticsmicrofarms/colmap>`_' docker hub.
 
         """
+
+        def _parse_colmap_version(out):
+            return out.split(' ')[1].split('-')[0]
+
         # - Performs some verifications prior to using system install of COLMAP:
         if colmap_exe == 'colmap':
             # Check `colmap` is available system-wide:
@@ -550,14 +713,10 @@ class ColmapRunner(object):
             except FileNotFoundError:
                 raise ValueError("Colmap is not installed on your system!")
             else:
-                try:
-                    # If previous try/except worked first line should be something like:
-                    # COLMAP 3.6 -- Structure-from-Motion and Multi-View Stereo
-                    assert float(out[7:10]) >= 3.6
-                except AssertionError:
-                    raise ValueError("Colmap >= 3.6 is required!")
+                self.colmap_exe = colmap_exe
+                colmap_version = _parse_colmap_version(out)
         # - Performs some verifications prior to using docker image with COLMAP:
-        elif colmap_exe.split(":")[0] in ['geki/colmap', 'roboticsmicrofarms/colmap']:
+        elif colmap_exe.split(":")[0] in COLMAP_DOCKER:
             import docker
             from docker.errors import ImageNotFound
             client = docker.from_env()
@@ -565,23 +724,46 @@ class ColmapRunner(object):
             try:
                 colmap_exe, tag = colmap_exe.split(":")
             except ValueError:
+                logger.error(f"Could not get docker image tag from {colmap_exe}!")
                 tag = 'latest'
+            self.colmap_exe = f"{colmap_exe}:{tag}"
             # Check the image exists locally or download it:
             try:
-                client.images.get(colmap_exe)
+                client.images.get(self.colmap_exe)
             except ImageNotFound:
+                logger.warning(f"Could not find '{self.colmap_exe}' image locally...")
                 client.images.pull(colmap_exe, tag=tag)
+            else:
+                logger.info(f"Found '{colmap_exe}' image locally...")
+            # Get the 'default output' (banner, license or header) when starting a container:
+            default_out = client.containers.run(self.colmap_exe, "")
+            self._header = default_out.decode("utf-8")
+            # Get the output of the `colmap -h` command:
+            out = client.containers.run(self.colmap_exe, "colmap -h")
+            out = out.decode("utf-8")
+            # Remove the 'default output' (banner, license or header) to get only the output of `colmap -h` command:
+            out = out.replace(self._header, "")
+            colmap_version = _parse_colmap_version(out)
+            # Remove unsused container:
+            client.containers.prune()
         else:
             raise ValueError(f"Unknown COLMAP executable '{colmap_exe}'!")
+
+        self.colmap_version = version.parse(colmap_version)
+        try:
+            assert version.parse("3.6") <= self.colmap_version
+        except AssertionError:
+            raise ValueError(f"Colmap >=3.6 is required, found {self.colmap_version}!")
+        else:
+            logger.info(f"Using Colmap {self.colmap_version} from '{self.colmap_exe}'.")
+
         return
 
-    def _colmap_cmd(self, colmap_exe, method, args, cli_args, to_log=True):
+    def _colmap_cmd(self, method, args, cli_args, to_log=True):
         """Create & call the COLMAP command to execute.
 
         Parameters
         ----------
-        colmap_exe : {'colmap', 'geki/colmap', 'roboticsmicrofarms/colmap'}
-            COLMAP executable to use.
         method : str
             COLMAP method to use, _e.g._ 'feature_extractor'.
         args : list
@@ -651,39 +833,22 @@ class ColmapRunner(object):
         # -- Check the method's command-line arguments dict:
         if not isinstance(cli_args, dict):
             cli_args = cli_args.get_wrapped()  # Convert luigi FrozenOrderedDict to a Dict instance
-        # - Check if GPU is available and deactivate it otherwise:
-        if method == 'feature_extractor' and not _has_nvidia_gpu():
-            if cli_args["--SiftExtraction.use_gpu"] == '1':
-                logger.warning('No NVIDIA GPU detected, using CPU for feature extraction!')
-            cli_args["--SiftExtraction.use_gpu"] = '0'
-        # - Check if GPU is available and deactivate it otherwise:
-        if method in ["exhaustive_matcher", "sequential_matcher"] and not _has_nvidia_gpu():
-            if cli_args["--SiftMatching.use_gpu"] == '1':
-                logger.warning('No NVIDIA GPU detected, using CPU for feature matching!')
-            cli_args["--SiftMatching.use_gpu"] = '0'
-        # - Set the maximum error allowed during 'robust alignment' step to 10 if unspecified:
-        if method in ["model_aligner"]:
-            if "--robust_alignment_max_error" not in cli_args:
-                cli_args["--robust_alignment_max_error"] = "10"
-
         # - Finally extend the COLMAP command to execute with the method's command-line arguments dict:
         for x in cli_args.keys():
             cmd.extend([x, str(cli_args[x])])
 
         # - Call this command in docker or subprocess:
-        if colmap_exe.split(":")[0] in ['geki/colmap', 'roboticsmicrofarms/colmap']:
-            out = self._colmap_docker(colmap_exe, cmd, to_log)
+        if self.colmap_exe.split(":")[0] in COLMAP_DOCKER:
+            out = self._colmap_docker(cmd, to_log)
         else:
             out = self._colmap_sources(cmd, to_log)
         return out
 
-    def _colmap_docker(self, colmap_image, process, to_log):
+    def _colmap_docker(self, process, to_log):
         """Call COLMAP using docker image.
 
         Parameters
         ----------
-        colmap_image : str
-            Name of the docker image to use, should obviously contain COLMAP executable.
         process : list
             COLMAP process to start.
         to_log : bool
@@ -697,11 +862,6 @@ class ColmapRunner(object):
 
         """
         import docker
-        # Try to get the tag of the docker image or set it to 'latest' by default:
-        try:
-            colmap_image, tag = colmap_image.split(":")
-        except ValueError:
-            tag = 'latest'
         # Initialize docker client manager:
         client = docker.from_env()
         # Defines environment variables:
@@ -717,18 +877,21 @@ class ColmapRunner(object):
         # Run the command & catch the output:
         if _has_nvidia_gpu():
             gpu_device = docker.types.DeviceRequest(count=-1, capabilities=[['gpu']])
-            out = client.containers.run(colmap_image + f":{tag}", cmd, environment=varenv, mounts=[mount],
-                                        device_requests=[gpu_device])
+            out = client.containers.run(self.colmap_exe, cmd, environment=varenv, mounts=[mount],
+                                        stdout=True, stderr=True, device_requests=[gpu_device])
         else:
-            out = client.containers.run(colmap_image + f":{tag}", cmd, environment=varenv, mounts=[mount])
+            out = client.containers.run(self.colmap_exe, cmd, environment=varenv, mounts=[mount],
+                                        stdout=True, stderr=True)
+        # Return the container logs decoded:
+        out = out.decode('utf8')
+        # Remove any header from the container:
+        if self._header is not None:
+            out = out.replace(self._header, "")
+
         if to_log:
             # Append the outputs of the COLMAP process to the log file:
             with open(self.log_file, mode="a") as f:
-                f.writelines(out.decode('utf8'))
-            out = ''
-        else:
-            # Return the container logs decoded:
-            out = out.decode('utf8')
+                f.writelines(out)
         return out
 
     def _colmap_sources(self, process, to_log):
@@ -766,28 +929,45 @@ class ColmapRunner(object):
             '--database_path', f'{self.colmap_workdir}/database.db',
             '--image_path', f'{self.colmap_workdir}/images'
         ]
-        cli_args = self.all_cli_args.get('feature_extractor', {})
+        # - Check if GPU is available:
+        if _has_nvidia_gpu():
+            use_gpu_opt = {"--SiftExtraction.use_gpu": '1'}
+        else:
+            use_gpu_opt = {"--SiftExtraction.use_gpu": '0'}
+        cli_args = self.all_cli_args.get('feature_extractor', use_gpu_opt)
         logger.info("Running colmap 'feature_extractor'...")
         logger.debug(f"args: {args}")
         logger.debug(f"cli_args: {cli_args}")
-        _ = self._colmap_cmd(COLMAP_EXE, 'feature_extractor', args, cli_args)
+        _ = self._colmap_cmd('feature_extractor', args, cli_args)
         return
 
     def matcher(self):
         """Perform feature matching after performing feature extraction."""
         args = ['--database_path', f'{self.colmap_workdir}/database.db']
+        # - Check if GPU is available:
+        if _has_nvidia_gpu():
+            use_gpu_opt = {"--SiftMatching.use_gpu": '1'}
+        else:
+            use_gpu_opt = {"--SiftMatching.use_gpu": '0'}
         if self.matcher_method == 'exhaustive':
-            cli_args = self.all_cli_args.get('exhaustive_matcher', {})
+            cli_args = self.all_cli_args.get('exhaustive_matcher', use_gpu_opt)
             logger.info("Running colmap 'exhaustive_matcher'...")
             logger.debug(f"args: {args}")
             logger.debug(f"cli_args: {cli_args}")
-            _ = self._colmap_cmd(COLMAP_EXE, 'exhaustive_matcher', args, cli_args)
+            _ = self._colmap_cmd('exhaustive_matcher', args, cli_args)
         elif self.matcher_method == 'sequential':
-            cli_args = self.all_cli_args.get('sequential_matcher', {})
+            cli_args = self.all_cli_args.get('sequential_matcher', use_gpu_opt)
             logger.info("Running colmap 'sequential_matcher'...")
             logger.debug(f"args: {args}")
             logger.debug(f"cli_args: {cli_args}")
-            _ = self._colmap_cmd(COLMAP_EXE, 'sequential_matcher', args, cli_args)
+            _ = self._colmap_cmd('sequential_matcher', args, cli_args)
+        elif self.matcher_method == 'spatial':
+            cli_args = self.all_cli_args.get('spatial_matcher', use_gpu_opt)
+            cli_args["--SpatialMatching.is_gps"] = "0"
+            logger.info("Running colmap 'spatial_matcher'...")
+            logger.debug(f"args: {args}")
+            logger.debug(f"cli_args: {cli_args}")
+            _ = self._colmap_cmd('spatial_matcher', args, cli_args)
         else:
             raise ValueError(f"Unknown matcher '{self.matcher_method}!")
         return
@@ -803,22 +983,26 @@ class ColmapRunner(object):
         logger.info("Running colmap 'mapper'...")
         logger.debug(f"args: {args}")
         logger.debug(f"cli_args: {cli_args}")
-        _ = self._colmap_cmd(COLMAP_EXE, 'mapper', args, cli_args)
+        _ = self._colmap_cmd('mapper', args, cli_args)
         return
 
     def model_aligner(self):
         """Align/geo-register model to coordinate system of given camera centers."""
         args = [
-            '--ref_images_path', f'{self.colmap_workdir}/poses.txt',
             '--input_path', f'{self.colmap_workdir}/sparse/0',
             '--output_path', f'{self.colmap_workdir}/sparse/0',
-            '--ref_is_gps', '0'  # new for COLMAP version > 3.6:
+            '--ref_images_path', f'{self.colmap_workdir}/poses.txt',
+            '--ref_is_gps', '0',
         ]
-        cli_args = self.all_cli_args.get('model_aligner', {"--robust_alignment_max_error": "10"})
+        # "alignment_max_error" is required for `model_aligner`!
+        cli_args = self.all_cli_args.get('model_aligner', {"--alignment_max_error": "10.0"})
+        # In version earlier than 3.9, it was named "robust_alignment_max_error":
+        if self.colmap_version <= version.parse("3.9"):
+            cli_args["--robust_alignment_max_error"] = cli_args.pop("--alignment_max_error")
         logger.info("Running colmap 'model_aligner'...")
         logger.debug(f"args: {args}")
         logger.debug(f"cli_args: {cli_args}")
-        _ = self._colmap_cmd(COLMAP_EXE, 'model_aligner', args, cli_args)
+        _ = self._colmap_cmd('model_aligner', args, cli_args)
         return
 
     def model_analyzer(self):
@@ -828,7 +1012,7 @@ class ColmapRunner(object):
         ]
         logger.info("Running colmap 'model_analyzer'...")
         logger.debug(f"args: {args}")
-        out = self._colmap_cmd(COLMAP_EXE, 'model_analyzer', args, {}, to_log=False)
+        out = self._colmap_cmd('model_analyzer', args, {}, to_log=False)
         logger.info(f"Reconstruction statistics: " + out.replace('\n', ', '))
         # Save it as a log file:
         with open(f'{self.colmap_workdir}/model_analyzer.log', 'w') as f:
@@ -846,7 +1030,7 @@ class ColmapRunner(object):
         logger.info("Running colmap 'image_undistorter'...")
         logger.debug(f"args: {args}")
         logger.debug(f"cli_args: {cli_args}")
-        _ = self._colmap_cmd(COLMAP_EXE, 'image_undistorter', args, cli_args)
+        _ = self._colmap_cmd('image_undistorter', args, cli_args)
         return
 
     def patch_match_stereo(self):
@@ -856,7 +1040,7 @@ class ColmapRunner(object):
         logger.info("Running colmap 'patch_match_stereo'...")
         logger.debug(f"args: {args}")
         logger.debug(f"cli_args: {cli_args}")
-        _ = self._colmap_cmd(COLMAP_EXE, 'patch_match_stereo', args, cli_args)
+        _ = self._colmap_cmd('patch_match_stereo', args, cli_args)
         return
 
     def stereo_fusion(self):
@@ -869,8 +1053,65 @@ class ColmapRunner(object):
         logger.info("Running colmap 'stereo_fusion'...")
         logger.debug(f"args: {args}")
         logger.debug(f"cli_args: {cli_args}")
-        _ = self._colmap_cmd(COLMAP_EXE, 'stereo_fusion', args, cli_args)
+        _ = self._colmap_cmd('stereo_fusion', args, cli_args)
         return
+
+    def get_intrinsics(self):
+        """Get the camera intrinsic dictionary."""
+        # Defines path to COLMAP image binary file and make sure it exists:
+        cam_bin = Path(f'{self.sparse_dir}/0/cameras.bin')
+        try:
+            assert cam_bin.is_file()
+        except:
+            logger.error(f"Could not find '{cam_bin}' file!")
+            logger.info("Call the `mapper` method first!")
+            return None
+        # - Read COLMAP 'cameras' binary and convert it to dictionary:
+        intrinsics = colmap_cameras_to_dict(cam_bin)
+        # - Convert 'cameras' dictionary to OpenCV cameras dictionary:
+        intrinsics = cameras_model_to_opencv_model(intrinsics)
+        return intrinsics
+
+    def get_extrinsics(self):
+        """Get the camera extrinsic dictionary."""
+        # Defines path to COLMAP `images.bin` binary file and make sure it exists:
+        img_bin = Path(f'{self.sparse_dir}/0/images.bin')
+        try:
+            assert img_bin.is_file()
+        except:
+            logger.error(f"Could not find '{img_bin}' file!")
+            logger.info("Call the `mapper` method first!")
+            return None
+        # - Read COLMAP 'cameras' binary and convert it to dictionary:
+        extrinsics = colmap_images_to_dict(img_bin)
+        return extrinsics
+
+    def export_camera_parameters(self):
+        """Export camera intrinsics and extrinsics to images metadata."""
+        intrinsics = self.get_intrinsics()
+        extrinsics = self.get_extrinsics()
+        if intrinsics is not None and extrinsics is not None:
+            self.image_files = export_camera_parameters(self.image_files, intrinsics, extrinsics)
+        return None
+
+    def get_sparse_pcd(self):
+        """Return the sparse point-cloud.
+
+        Returns
+        -------
+        open3d.geometry.PointCloud
+            Colored point cloud object.
+        """
+        pts_bin = Path(f'{self.sparse_dir}/0/points3D.bin')
+        try:
+            assert pts_bin.is_file()
+        except:
+            logger.error(f"Could not find '{pts_bin}' file!")
+            logger.info("Call the `mapper` method first!")
+            return None
+        # - Read COLMAP 'points3D' binary and convert to point cloud:
+        sparse_pcd = colmap_points_to_pcd(pts_bin)
+        return sparse_pcd
 
     def run(self):
         """Run a COLMAP SfM (& MVS) reconstruction.
@@ -946,40 +1187,17 @@ class ColmapRunner(object):
         self.model_analyzer()
 
         # -- Convert COLMAP binaries (cameras, images & points) to more accessible formats:
-        # - Read COLMAP 'cameras' binary and convert it to dictionary:
-        cameras = colmap_cameras_to_dict(f'{self.sparse_dir}/0/cameras.bin')
-        # - Convert 'cameras' dictionary to OpenCV cameras dictionary:
-        cameras = cameras_model_to_opencv_model(cameras)
-        # - Read COLMAP 'images' binary and convert it to dictionary:
-        images = colmap_images_to_dict(f'{self.sparse_dir}/0/images.bin')
+        intrinsics = self.get_intrinsics()
+        extrinsics = self.get_extrinsics()
         # - Read COLMAP 'points3D' binary and convert to point cloud:
-        sparse_pcd = colmap_points_to_pcd(f'{self.sparse_dir}/0/points3D.bin')
+        sparse_pcd = self.get_sparse_pcd()
         # - Read COLMAP 'points3D' binary and convert to dictionary:
         points = colmap_points_to_dict(f'{self.sparse_dir}/0/points3D.bin')
         # - Raise an error if sparse point cloud is empty:
         if len(sparse_pcd.points) == 0:
             raise Exception("Reconstructed sparse point cloud is EMPTY!")
 
-        # -- Map image file name to COLMAP image id:
-        img_names = {splitext(images[k]['name'])[0]: k for k in images.keys()}
-        # -- Export computed intrinsics ('camera_model') & extrinsic ('rotmat', 'tvec' & 'estimated_pose') to metadata:
-        for fi in self.fileset:
-            try:
-                # - Try to get the key corresponding to our file id in the COLMAP 'images' dictionary
-                key = img_names[fi.id]
-            except KeyError:
-                logger.error(f"No pose & camera model defined by COLMAP for image '{fi.id}'!")
-            else:
-                camera = {
-                    "rotmat": images[key]["rotmat"],
-                    "tvec": images[key]["tvec"],
-                    "camera_model": cameras[images[key]['camera_id']]
-                }
-                # - Add a 'colmap_camera' entry to the file metadata:
-                fi.set_metadata("colmap_camera", camera)
-                # - Add an 'estimated_pose' entry to the file metadata:
-                estimated_pose = compute_estimated_pose(np.array(images[key]["rotmat"]), np.array(images[key]["tvec"]))
-                fi.set_metadata("estimated_pose", estimated_pose)
+        self.image_files = export_camera_parameters(self.image_files, intrinsics, extrinsics)
 
         # -- If required, performs dense point cloud reconstruction:
         dense_pcd = None
@@ -1046,4 +1264,41 @@ class ColmapRunner(object):
             logger.info(f"Automatically estimated bounding-box: {self.bounding_box}")
         logger.info(f"See {self.log_file} for a detailed log about COLMAP jobs...")
 
-        return points, images, cameras, sparse_pcd, dense_pcd, self.bounding_box
+        return points, extrinsics, intrinsics, sparse_pcd, dense_pcd, self.bounding_box
+
+
+def test_runner(test_dataset='real_plant', colmap_exe="roboticsmicrofarms/colmap:3.8", **kwargs):
+    """Create a ColmapRunner instance.
+
+    Parameters
+    ----------
+    test_dataset : str
+        Name of the test dataset to use.
+        Defaults to 'real_plant'.
+    colmap_exe : str
+        Name of the `colmap_exe` to use.
+        Defaults to 'roboticsmicrofarms/colmap:3.8'
+
+    Returns
+    -------
+    plant3dvision.colmap.ColmapRunner
+        A ColmapRunner instance.
+
+    Examples
+    --------
+    >>> from plant3dvision.colmap import test_runner
+    >>> colmap = test_runner()
+    >>> print(colmap.colmap_exe)
+    roboticsmicrofarms/colmap:3.8
+
+   """
+    from plantdb.test_database import test_database
+    db = test_database(test_dataset)
+    db.connect()
+    # - Select the dataset to reconstruct:
+    dataset = db.get_scan(test_dataset)
+    # - Get the corresponding 'images' fileset:
+    images_fileset = dataset.get_fileset('images')
+    image_files = images_fileset.get_files()
+    args = {"feature_extractor": {"--ImageReader.single_camera": "1"}}
+    return ColmapRunner(image_files, all_cli_args=args, colmap_exe=colmap_exe, **kwargs)

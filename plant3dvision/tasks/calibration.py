@@ -358,7 +358,7 @@ class ExtrinsicCalibration(RomiTask):
     single_camera : luigi.BoolParameter
         Defines if there is only one camera.
         Defaults to ``True``.
-    robust_alignment_max_error : luigi.IntParameter
+    alignment_max_error : luigi.IntParameter
         Maximum alignment error allowed during ``model_aligner`` COLMAP step.
         Defaults to ``10``.
     cli_args : luigi.DictParameter, optional
@@ -388,7 +388,7 @@ class ExtrinsicCalibration(RomiTask):
     camera_model = luigi.Parameter(default="SIMPLE_RADIAL")
     use_gpu = luigi.BoolParameter(default=True)
     single_camera = luigi.BoolParameter(default=True)
-    robust_alignment_max_error = luigi.IntParameter(default=10)
+    alignment_max_error = luigi.IntParameter(default=10)
     cli_args = luigi.DictParameter(default={})
 
     def set_gpu_use(self):
@@ -418,12 +418,12 @@ class ExtrinsicCalibration(RomiTask):
         # - Define the camera model:
         self.cli_args["feature_extractor"]["--ImageReader.camera_model"] = str(self.camera_model)
 
-    def set_robust_alignment_max_error(self):
-        """Configure COLMAP CLI parameters to defines robust_alignment_max_error in model_aligner."""
+    def set_alignment_max_error(self):
+        """Configure COLMAP CLI parameters to defines alignment_max_error in model_aligner."""
         if "model_aligner" not in self.cli_args:
             self.cli_args["model_aligner"] = {}
         # - Define the camera model:
-        self.cli_args["model_aligner"]["--robust_alignment_max_error"] = str(self.robust_alignment_max_error)
+        self.cli_args["model_aligner"]["--alignment_max_error"] = str(self.alignment_max_error)
 
     def set_camera_params(self):
         """Configure COLMAP CLI parameters to use estimated camera parameters from intrinsic calibration scan."""
@@ -468,7 +468,7 @@ class ExtrinsicCalibration(RomiTask):
         self.set_gpu_use()
         self.set_single_camera()
         self.set_camera_model()
-        self.set_robust_alignment_max_error()
+        self.set_alignment_max_error()
         if self.intrinsic_calibration_scan_id != "":
             logger.info(f"Got an intrinsic calibration scan: '{self.intrinsic_calibration_scan_id}'.")
             self.set_camera_params()
