@@ -575,7 +575,7 @@ class CylinderRadiusEstimation(RomiTask):
 
         # - Get the ground-truth value for cylinder radius:
         if str(self.upstream_task.get_task_family()) == "CylinderRadiusGroundTruth":
-            gt_radius = cylinder_fileset.get_metadata("radius")
+            gt_radius = cylinder_fileset.get_metadata("radius", default=None)
         elif str(self.upstream_task.get_task_family()) == "PointCloud":
             try:
                 gt_radius = input_file.get_scan().get_measures()["radius"]

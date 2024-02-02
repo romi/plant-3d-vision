@@ -147,8 +147,8 @@ class Voxels(RomiTask):
         origin = np.array([x_min, y_min, z_min])
         # - Define labels to use with `Backprojection`, if any:
         if len(self.labels) == 0:
-            # Try to automatically get labels from the Mask metadata:
-            labels = masks_fileset.get_metadata("label_names")
+            # Try to automatically get labels from the Mask metadata, else set to `None`:
+            labels = masks_fileset.get_metadata("label_names", default=None)
             try:
                 assert labels is not None and len(labels) != 0
             except AssertionError:

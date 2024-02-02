@@ -69,11 +69,11 @@ def get_cnc_poses(scan_dataset, axes='xyzpt'):
     """
     DEF_AXES = 'xyzpt'
     img_fs = scan_dataset.get_fileset('images')
-    approx_poses = {im.id: im.get_metadata("approximate_pose") for im in img_fs.get_files()}
-    poses = {im.id: im.get_metadata("pose") for im in img_fs.get_files()}
-    cnc_poses = {im.id: poses[im.id] if poses[im.id] != {} else approx_poses[im.id] for im in img_fs.get_files()}
+    approx_poses = {im.id: im.get_metadata("approximate_pose", default=None) for im in img_fs.get_files()}
+    poses = {im.id: im.get_metadata("pose", default=None) for im in img_fs.get_files()}
+    cnc_poses = {im.id: poses[im.id] if poses[im.id] is not None else approx_poses[im.id] for im in img_fs.get_files()}
     # Filter-out 'None' pose:
-    cnc_poses = {im_id: pose for im_id, pose in cnc_poses.items() if poses != {}}
+    cnc_poses = {im_id: pose for im_id, pose in cnc_poses.items() if poses is not None}
     # Select axes coordinates to return if non-default:
     if axes != DEF_AXES:
         axes_idx = [DEF_AXES.index(ax.lower()) for ax in axes]
@@ -557,11 +557,11 @@ class Colmap(RomiTask):
         """
         images_fileset = self.input().get()
         # Try to get the "workspace" metadata from 'images' fileset
-        bounding_box = images_fileset.get_metadata("workspace")
+        bounding_box = images_fileset.get_metadata("workspace", default=None)
 
         # - Backward-compatibility
         if bounding_box is None:
-            bounding_box = images_fileset.scan.get_metadata('workspace')
+            bounding_box = images_fileset.scan.get_metadata('workspace', default=None)
         if bounding_box is None:
             try:
                 bounding_box = images_fileset.scan.get_metadata('scanner')['workspace']
