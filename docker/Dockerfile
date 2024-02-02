@@ -1,4 +1,5 @@
-FROM colmap/colmap:20240118.3
+FROM roboticsmicrofarms/colmap:3.8
+
 LABEL maintainer="Jonathan LEGRAND <jonathan.legrand@ens-lyon.fr>"
 LABEL corresponding_author="Peter Hanappe <peter@romi-project.eu>"
 LABEL project="Robotics for microfarms"
@@ -21,16 +22,16 @@ ENV PYOPENCL_CTX='0'
 ENV NVIDIA_VISIBLE_DEVICES all
 ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
 
-# Change Shell to 'bash', default is 'sh':
-SHELL [ "/bin/bash", "-c" ]
-
 RUN apt-get update && \
     # Install the required dependencies
     apt-get install -yq --no-install-recommends \
-    nano \
-    ocl-icd-libopencl1 opencl-headers clinfo \
-    python3 python3-pip \
-    libjpeg-dev libffi-dev && \
+        nano \
+        wget \
+        ocl-icd-libopencl1 opencl-headers clinfo \
+        python3-dev python3-pip \
+        gcc build-essential \
+        libeigen3-dev libcgal-dev \
+        libjpeg-dev libffi-dev && \
     # Clean-up apt cache
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
@@ -56,7 +57,6 @@ COPY --chown=${USER_NAME} ./ plant-3d-vision/
 
 RUN cd plant-3d-vision/ && \
     # Install `plantdb` dependencies and sources:
-    python3 -m pip install --user -r plantdb/requirements.txt && \
     python3 -m pip install --user plantdb/ && \
     # Install `romitask` dependencies and sources:
     python3 -m pip install --user -r romitask/requirements.txt && \
