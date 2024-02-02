@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Visualize a NPZ volume from Voxels tasks.
+Visualize a volume from Voxels tasks.
 """
 
 import argparse
@@ -12,11 +12,12 @@ from pathlib import Path
 import imageio
 
 from plant3dvision.visu import plt_volume_slice_viewer
+from plantdb import io
 from plantdb.fsdb import FSDB
 
 
 def parsing():
-    DESC = """Visualize a NPZ volume from Voxels tasks."""
+    DESC = """Visualize a volume file from a Voxels tasks."""
     parser = argparse.ArgumentParser(description=DESC)
 
     parser.add_argument("dataset",
@@ -35,7 +36,7 @@ def main(args):
     scan_name = dataset_path.name
 
     db = FSDB(db_location)
-    db.connect()
+    db.connect(unsafe=True)
 
     dataset = db.get_scan(scan_name)
     # List all filesets and get the one corresponding to the 'Voxels' task:
@@ -45,16 +46,15 @@ def main(args):
         if f.id.startswith("Voxel"):
             voxels_fs = f.id
 
-    voxels_fs = dataset.get_fileset(voxels_fs)
-    # Read the NPZ file:
-    npz_path = join(args.dataset, voxels_fs.id, voxels_fs.get_files()[0].filename)
-    print(npz_path)
-    npz = imageio.volread(npz_path)
-    # npz = read_volume(voxels_fs.get_files()[0])
-
-    zs = plt_volume_slice_viewer(npz[:, :, ::-1], cmap=args.cmap, dataset=str(scan_name))
+    voxels_file = dataset.get_fileset(voxels_fs).get_files()[0]
+    if voxels_file.filename.endswith(".npz"):
+        vol = io.read_npz(voxels_file)
+    else:
+        vol = io.read_volume(voxels_file)
     db.disconnect()
 
+    zs = plt_volume_slice_viewer(vol[:, :, ::-1], cmap=args.cmap, dataset=str(scan_name))
+    return
 
 def run():
     # - Parse the input arguments to variables:

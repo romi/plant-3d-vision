@@ -30,7 +30,7 @@ opts = dict(
         'bin/check_measures',
         'bin/colmap_poses',
         'bin/create_charuco_board',
-        'bin/npz_volume_viewer',
+        'bin/volume_viewer',
         'bin/robustness_evaluation',
         'bin/voronoi_texture_generator',
     ],
