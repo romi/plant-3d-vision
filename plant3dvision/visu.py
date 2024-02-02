@@ -10,7 +10,7 @@ import numpy as np
 import plotly.graph_objects as go
 from matplotlib import pyplot as plt
 from matplotlib.widgets import Slider
-from pkg_resources import parse_version
+from packaging import version
 
 
 def plt_image_carousel(image_files, height=7, width=8, scan_name="Carousel"):
@@ -144,7 +144,7 @@ def _slider(label, mini, maxi, init, step=1, fmt="%1.0f"):
     from matplotlib import __version__
     axcolor = 'lightgoldenrodyellow'
     rect = [0.25, 0.1, 0.65, 0.03]  # [left, bottom, width, height]
-    if parse_version(__version__) >= parse_version("2.2"):
+    if version.parse(__version__) >= version.parse("2.2"):
         axz = plt.axes(rect, facecolor=axcolor)
         zs = Slider(axz, label=label, valmin=mini, valmax=maxi, valstep=step,
                     closedmax=True, valinit=init, valfmt=fmt)
