@@ -106,7 +106,7 @@ class Voxels(RomiTask):
         # Get it from the `Scan` metadata:
         if self.bounding_box is None:
             self.bounding_box = self.output().get().scan.get_metadata("bounding_box")
-        logger.debug(f"Bounding-box from scan metadata: {self.bounding_box}")
+            logger.debug(f"Bounding-box from scan metadata: {self.bounding_box}")
         # Get it from Colmap if required:
         if self.bounding_box is None and self.upstream_colmap.get_task_family() == 'Colmap':
             colmap_fileset = self.input()['colmap'].get()
