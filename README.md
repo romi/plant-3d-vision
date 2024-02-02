@@ -248,11 +248,11 @@ EOF
 3. Install the submodules (`plantdb`, `romitask`, `romiseg`, `romicgal` & `dtw`) and `plant3dvision` in activated environment:
     ```bash
     conda activate plant3dvision
-    python3 -m pip install -r ./plantdb/requirements.txt
     python3 -m pip install -e ./plantdb/.
     python3 -m pip install -r ./romitask/requirements.txt
     python3 -m pip install -e ./romitask/.
     python3 -m pip install -e ./romiseg/.
+    conda install -c conda-forge libstdcxx-ng  # required to use `open3d.visualization.draw`
     python3 -m pip install -e ./romicgal/.
     python3 -m pip install -r ./dtw/requirements.txt
     python3 -m pip install -e ./dtw/.
