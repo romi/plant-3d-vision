@@ -8,8 +8,6 @@ from os.path import splitext
 import luigi
 import numpy as np
 import toml
-from plantdb import io
-from romitask import SCAN_TOML
 from scipy.spatial.distance import euclidean
 
 from plant3dvision.calibration import pose_estimation_figure
@@ -22,7 +20,9 @@ from plant3dvision.filenames import COLMAP_DENSE_ID
 from plant3dvision.filenames import COLMAP_IMAGES_ID
 from plant3dvision.filenames import COLMAP_POINTS_ID
 from plant3dvision.filenames import COLMAP_SPARSE_ID
+from plantdb import io
 from romitask import DatabaseConfig
+from romitask import SCAN_TOML
 from romitask.log import configure_logger
 from romitask.task import ImagesFilesetExists
 from romitask.task import RomiTask
@@ -54,15 +54,12 @@ def get_cnc_poses(scan_dataset, axes='xyzpt'):
 
     Examples
     --------
-    >>> import os
-    >>> from plantdb.fsdb import FSDB
     >>> from plant3dvision.tasks.colmap import get_cnc_poses
-    >>> db = FSDB(os.environ.get('ROMI_DB', '/Data/ROMI/DB'))
-    >>> # Example 1 - Compute & use the calibrated poses from/on a calibration scan:
+    >>> from plantdb.test_database import test_database
+    >>> db = test_database('real_plant')
     >>> db.connect()
-    >>> db.list_scans()
-    >>> scan_id = "sango_90_300_36"
-    >>> scan = db.get_scan(scan_id)
+    >>> # - Select the dataset to reconstruct:
+    >>> scan = db.get_scan('real_plant')
     >>> cnc_poses = get_cnc_poses(scan)
     >>> print(cnc_poses['00000_rgb'])  # X, Y, Z, pan, tilt coordinates
     >>> xyz_cnc_poses = get_cnc_poses(scan, axes='xyz')
@@ -74,9 +71,9 @@ def get_cnc_poses(scan_dataset, axes='xyzpt'):
     img_fs = scan_dataset.get_fileset('images')
     approx_poses = {im.id: im.get_metadata("approximate_pose") for im in img_fs.get_files()}
     poses = {im.id: im.get_metadata("pose") for im in img_fs.get_files()}
-    cnc_poses = {im.id: poses[im.id] if poses[im.id] is not None else approx_poses[im.id] for im in img_fs.get_files()}
+    cnc_poses = {im.id: poses[im.id] if poses[im.id] != {} else approx_poses[im.id] for im in img_fs.get_files()}
     # Filter-out 'None' pose:
-    cnc_poses = {im_id: pose for im_id, pose in cnc_poses.items() if poses is not None}
+    cnc_poses = {im_id: pose for im_id, pose in cnc_poses.items() if poses != {}}
     # Select axes coordinates to return if non-default:
     if axes != DEF_AXES:
         axes_idx = [DEF_AXES.index(ax.lower()) for ax in axes]
@@ -239,8 +236,9 @@ def use_precalibrated_poses(images_fileset, calibration_scan):
 
     Parameters
     ----------
-    images_fileset : plantdb.db.Fileset
-        Fileset containing source images to use for reconstruction.
+    images_fileset : list of plantdb.db.File
+        List of `File`s refering to images that should receive 'calibrated_pose' metadata.
+        Later, this will be used during reconstruction, instead of performing an estimation of each image pose.
     calibration_scan : plantdb.db.Scan
         Dataset containing calibrated poses to use for reconstruction.
         Should contain an 'ExtrinsicCalibration' ``Fileset``.
@@ -305,7 +303,7 @@ def use_precalibrated_poses(images_fileset, calibration_scan):
     # - Get the 'images' fileset from the extrinsic calibration scan
     calib_img_files = calibration_scan.get_fileset("images").get_files()
     # - Assign the calibrated pose of the i-th calibration image to the i-th image of the fileset to reconstruct
-    for i, fi in enumerate(images_fileset.get_files()):
+    for i, fi in enumerate(images_fileset):
         # - Assignment is order based...
         pose = calib_img_files[i].get_metadata("calibrated_pose")
         # - Assign this calibrated pose to the metadata of the image of the fileset to reconstruct
@@ -495,7 +493,7 @@ class Colmap(RomiTask):
     single_camera : luigi.BoolParameter
         Defines if there is only one camera.
         Defaults to ``True``.
-    robust_alignment_max_error : luigi.IntParameter
+    alignment_max_error : luigi.IntParameter
         Maximum alignment error allowed during ``model_aligner`` COLMAP step.
         Defaults to ``10``.
     distance_threshold : luigi.FloatParamater
@@ -539,7 +537,7 @@ class Colmap(RomiTask):
     camera_model = luigi.Parameter(default="SIMPLE_RADIAL")
     use_gpu = luigi.BoolParameter(default=True)
     single_camera = luigi.BoolParameter(default=True)
-    robust_alignment_max_error = luigi.IntParameter(default=10)
+    alignment_max_error = luigi.IntParameter(default=10)
     bounding_box = luigi.DictParameter(default=None)
     cli_args = luigi.DictParameter(default={})
     distance_threshold = luigi.FloatParameter(default=0)
@@ -604,12 +602,11 @@ class Colmap(RomiTask):
         # - Define the camera model:
         self.cli_args["feature_extractor"]["--ImageReader.camera_model"] = str(self.camera_model)
 
-    def set_robust_alignment_max_error(self):
-        """Configure COLMAP CLI parameters to defines robust_alignment_max_error in model_aligner."""
+    def set_alignment_max_error(self):
+        """Configure COLMAP CLI parameters to defines "alignment_max_error" parameter for `model_aligner` method."""
         if "model_aligner" not in self.cli_args:
             self.cli_args["model_aligner"] = {}
-        # - Define the camera model:
-        self.cli_args["model_aligner"]["--robust_alignment_max_error"] = str(self.robust_alignment_max_error)
+        self.cli_args["model_aligner"]["--alignment_max_error"] = str(self.alignment_max_error)
 
     def set_camera_params(self, calibration_scan_id, calib_type):
         """Configure COLMAP CLI parameters to defines estimated camera parameters from intrinsic calibration scan."""
@@ -653,7 +650,7 @@ class Colmap(RomiTask):
         self.set_gpu_use()
         self.set_single_camera()
         self.set_camera_model()
-        self.set_robust_alignment_max_error()
+        self.set_alignment_max_error()
 
         if self.extrinsic_calibration_scan_id != "":
             logger.info(f"Got an extrinsic calibration scan: '{self.extrinsic_calibration_scan_id}'.")
@@ -665,7 +662,7 @@ class Colmap(RomiTask):
 
         # - If no manual definition of cropping bounding-box, try to use the 'workspace' metadata
         if self.bounding_box is None:
-            logger.info("No manual definition of a cropping bounding-box...")
+            logger.info("Did not get a manually defined cropping bounding-box...")
             bounding_box = self._workspace_as_bounding_box()
             if bounding_box is None:
                 logger.warning("Could not find a 'workspace' metadata in the 'images' fileset!")
@@ -673,11 +670,12 @@ class Colmap(RomiTask):
                 logger.info("Found a 'workspace' metadata in the 'images' fileset.")
         else:
             bounding_box = dict(self.bounding_box)
-            logger.info("Found a manual definition of cropping bounding-box.")
+            logger.info("Got a manually defined cropping bounding-box.")
 
         current_scan = DatabaseConfig().scan
-        images_fileset = self.input().get().get_files(query=self.query)
+        image_files = self.input().get().get_files(query=self.query)
         cnc_poses = get_cnc_poses(current_scan)
+
         # - Defines if colmap should use an extrinsic calibration dataset:
         use_calibration = self.extrinsic_calibration_scan_id != ""
         if use_calibration:
@@ -689,9 +687,9 @@ class Colmap(RomiTask):
             check_colmap_cfg(current_cfg, current_scan, calibration_scan)
             # - Get pre-calibrated poses from extrinsic calib scan and set them as "calibrated_pose" metadata in current images fileset
             logger.info(f"Use poses from extrinsic calibration scan: {self.extrinsic_calibration_scan_id}...")
-            images_fileset = use_precalibrated_poses(images_fileset, calibration_scan)
+            image_files = use_precalibrated_poses(image_files, calibration_scan)
             # - Create the calibration figure:
-            colmap_poses = {im.id: im.get_metadata("calibrated_pose") for im in images_fileset.get_files()}
+            colmap_poses = {im.id: im.get_metadata("calibrated_pose") for im in image_files}
             camera_str = ""
             if self.use_calibration_camera:
                 cameras = get_colmap_cameras_from_calib_scan(calibration_scan)
@@ -705,18 +703,18 @@ class Colmap(RomiTask):
                                    ref_scan_id=str(self.extrinsic_calibration_scan_id), path=self.output().get().path(),
                                    header=camera_str)
         else:
-            logger.info("No extrinsic calibration required!")
+            logger.info("No extrinsic calibration requested!")
 
         # - Instantiate a ColmapRunner with parsed configuration:
         logger.debug("Instantiate a ColmapRunner...")
         colmap_runner = ColmapRunner(
-            images_fileset,
-            self.matcher,
-            self.compute_dense,
-            self.cli_args,
-            self.align_pcd,
-            use_calibration,  # impact the ``poses.txt`` file
-            bounding_box
+            image_files,
+            matcher_method=str(self.matcher),
+            compute_dense=bool(self.compute_dense),
+            all_cli_args=self.cli_args,
+            align_pcd=bool(self.align_pcd),
+            use_calibration=use_calibration,  # impact the ``poses.txt`` file
+            bounding_box=bounding_box
         )
         # - Run colmap reconstruction:
         logger.debug("Start a Colmap reconstruction...")
@@ -750,7 +748,7 @@ class Colmap(RomiTask):
             outfile.import_file(log_path)
 
         # - Get estimated camera poses from 'images' fileset metadata:
-        colmap_poses = {im.id: im.get_metadata("estimated_pose") for im in images_fileset}
+        colmap_poses = {im.id: im.get_metadata("estimated_pose") for im in image_files}
         camera_str = format_camera_params(cameras)
         if self.intrinsic_calibration_scan_id != "":
             camera_str = f"Intrinsic calibration scan:\n{self.intrinsic_calibration_scan_id}\n" + camera_str
@@ -776,7 +774,7 @@ class Colmap(RomiTask):
 
         # - Compute the Euclidean distances between CNC & COLMAP poses & export it to a file:
         euclidean_distances = {}
-        for im in images_fileset:
+        for im in image_files:
             euclidean_distances[im.id] = euclidean(cnc_poses[im.id][:3], colmap_poses[im.id][:3])
         with open(join(self.output().get().path(), "euclidean_distances.json"), 'w') as f:
             f.writelines(json.dumps({
@@ -787,7 +785,7 @@ class Colmap(RomiTask):
 
         # - If a distance threshold is given, add a "pose_estimation" metadata:
         if self.distance_threshold > 0.:
-            for im in images_fileset:
+            for im in image_files:
                 if euclidean_distances[im.id] >= self.distance_threshold:
                     im.set_metadata("pose_estimation", "incorrect")
                     logger.warning(f"Image {im.id} pose has been incorrectly estimated by COLMAP!")
