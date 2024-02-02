@@ -714,8 +714,8 @@ class ExtrinsicCalibrationExists(DatasetExists):
         db = DatabaseConfig().scan.db
         calibration_scan = db.get_scan(self.scan_id)
         images_fs = calibration_scan.get_fileset('images')
-        poses = {im.id: im.get_metadata("calibrated_pose") for im in images_fs.get_files()}
-        colmap_camera = {im.id: im.get_metadata("colmap_camera") for im in images_fs.get_files()}
+        poses = {im.id: im.get_metadata("calibrated_pose", default=None) for im in images_fs.get_files()}
+        colmap_camera = {im.id: im.get_metadata("colmap_camera", default=None) for im in images_fs.get_files()}
         return colmap_camera, poses
 
     def complete(self):

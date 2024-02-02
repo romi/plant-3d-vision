@@ -648,7 +648,7 @@ class ColmapRunner(object):
 
         """
         # - Search if "exact poses" can be found in all 'images' fileset metadata:
-        exact_poses = all([f.get_metadata('pose') != {} for f in self.image_files])
+        exact_poses = all([f.get_metadata('pose', default=None) is not None for f in self.image_files])
 
         # - Defines "where" (which metadata) to get the "camera pose" from:
         if self.use_calibration:
@@ -666,7 +666,7 @@ class ColmapRunner(object):
             missing_pose = []
             for img_f in self.image_files:
                 # - Try to get the pose metadata, may be `None`:
-                p = img_f.get_metadata(pose_md)
+                p = img_f.get_metadata(pose_md, default=None)
                 # - If a pose metadata was found for the file, add it to COLMAP's 'poses.txt' file:
                 if p is not None:
                     s = f"{img_f.filename} {p[0]} {p[1]} {p[2]}\n"
