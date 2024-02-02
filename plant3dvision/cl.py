@@ -86,14 +86,32 @@ class Backprojection(object):
 
     Examples
     --------
-    >>> from plant3dvision import test_db_path
-    >>> from plantdb.fsdb import FSDB
-    >>> db = FSDB(test_db_path())
-    >>> db.connect()
+    >>> import numpy as np
     >>> from plant3dvision.cl import Backprojection
-    >>> bp = Backprojection([300, 300, 150], [0, 0, 0], .5)
-    >>> vol = bp.process_fileset()
-
+    >>> from plantdb.test_database import test_database
+    >>> db = test_database('real_plant_analyzed')
+    >>> db.connect()
+    >>> # - Select the dataset to reconstruct:
+    >>> dataset = db.get_scan('real_plant_analyzed')
+    >>> # - Get the masks fileset & files:
+    >>> masks_fileset = dataset.get_fileset('Masks_1__0__1__0____channel____rgb_5619aa428d')
+    >>> masks_files = masks_fileset.get_files()
+    >>> # - Defines the voxel-size and the bounding box
+    >>> voxel_size = 0.5
+    >>> bbox = {'x': (300, 450), 'y': (300, 450), 'z': (-175, 105)}
+    >>> # - Compute the origin of the voxel array:
+    >>> (x_min, x_max), (y_min, y_max), (z_min, z_max) = bbox['x'], bbox['y'], bbox['z']
+    >>> origin = [x_min, y_min, z_min]
+    >>> # - Compute the shape of the voxel array:
+    >>> nx = int((x_max - x_min) / voxel_size) + 1
+    >>> ny = int((y_max - y_min) / voxel_size) + 1
+    >>> nz = int((z_max - z_min) / voxel_size) + 1
+    >>> shape = [nx, ny, nz]
+    >>> # Perform voxel-carving:
+    >>> bp = Backprojection(shape, origin, voxel_size, type="carving", labels=None)
+    >>> vol = bp.process_label(masks_files, 'colmap_camera')
+    >>> from plant3dvision.visu import plt_volume_slice_viewer
+    >>> zs = plt_volume_slice_viewer(vol[:, :, ::-1], cmap='viridis', dataset=dataset.id)
     """
 
     def __init__(self, shape, origin, voxel_size, type="carving", default_value=0, labels=None, log=False):
@@ -106,16 +124,15 @@ class Backprojection(object):
             Location of the origin of the voxel space.
         voxel_size : float
             Size of voxels.
-        type : {'carving', 'averaging'}
+        type : {'carving', 'averaging'}, optional
             Method to use for back-projection, defaults to "carving".
-        default_value : float
+        default_value : float, optional
             Default value when initializing the voxels (defaults to 0).
-        labels : list
+        labels : list, optional
             List of labels to use in case of ML pipeline, can be `None`.
-        log : bool
+        log : bool, optional
             If ``True``, convert the mask to logarithmic values.
             Defaults to ``False``.
-
         """
         self.shape = shape
         self.origin = origin
@@ -180,7 +197,7 @@ class Backprojection(object):
             rotation matrix of the camera pose
         tvec: list
             translation vector of the camera pose
-        mask: np.ndarray
+        mask: numpy.ndarray
             mask array (or float array if type is averaging)
 
         """
@@ -209,10 +226,10 @@ class Backprojection(object):
         queue.finish()
         return
 
-    def values(self):
+    def get_values(self):
         """Gets computed values from the OpenCL device."""
         cl.enqueue_copy(queue, self.values_h, self.values_d)
-        return self.values_h
+        return self.values_h.reshape(self.shape)
 
     def process_fileset(self, fs, camera_metadata, invert=False):
         """Processes a whole fileset.
@@ -232,6 +249,8 @@ class Backprojection(object):
             result = np.zeros((len(self.labels), *self.shape))
             for i, label in enumerate(self.labels):
                 logger.info(f"Processing label '{label}'...")
+                if i != 0:
+                    self.clear()
                 result[i, :] = self.process_label(fs, camera_metadata, label, invert)
             return result
         else:
@@ -252,9 +271,11 @@ class Backprojection(object):
             If ``True``, invert the values of the mask file to process.
             Defaults to ``False``.
 
+        Returns
+        -------
+        numpy.ndarray
+            The processed volume, for given label, if any.
         """
-        self.clear()  # clear
-
         if isinstance(fs, Fileset):
             fs = fs.get_files()
 
@@ -266,7 +287,7 @@ class Backprojection(object):
             # Get camera dictionary from mask metadata
             cam = fi.get_metadata(camera_metadata)
             if cam is None:
-                logger.warning(f"Could not get camera pose for {fi.id}, skipping...")
+                logger.warning(f"Could not get camera params from '{camera_metadata}' for {fi.id}, skipping...")
                 continue
             # Load camera intrinsic parameters:
             intrinsics = cam["camera_model"]['params'][0:4]
@@ -276,16 +297,12 @@ class Backprojection(object):
             # Load mask image:
             mask = io.read_image(fi)
             # Invert mask if required:
-            if invert and mask.dtype == np.uint8:
-                mask = 255 - mask
-            if invert and mask.dtype == np.float32:
-                mask = 1.0 - mask
+            if invert:
+                mask = np.invert(mask)
             # Process the view:
             self.process_view(intrinsics, rot, tvec, mask)
 
-        result = self.values()
-        result = result.reshape(self.shape)
-        return result
+        return self.get_values()
 
     def clear(self):
         """Clear computed values from the OpenCL device."""
