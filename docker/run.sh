@@ -29,9 +29,9 @@ fi
 # - Test commands:
 unittest_cmd="python -m unittest discover -s plant-3d-vision/tests/unit/"
 integration_test_cmd="python -m unittest discover -s plant-3d-vision/tests/integration/"
-pipeline_cmd="cd plant-3d-vision/tests/ && ./check_pipe.sh"
-geom_pipeline_cmd="cd plant-3d-vision/tests/ && ./check_geom_pipe.sh"
-ml_pipeline_cmd="cd plant-3d-vision/tests/ && ./check_ml_pipe.sh"
+pipeline_cmd="cd plant-3d-vision/ && ./tests/check_pipe.sh"
+geom_pipeline_cmd="cd plant-3d-vision/ && ./tests/check_geom_pipe.sh"
+ml_pipeline_cmd="cd plant-3d-vision/ && ./tests/check_ml_pipe.sh"
 gpu_cmd="nvidia-smi"
 
 usage() {
