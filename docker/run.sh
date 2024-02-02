@@ -11,6 +11,8 @@ WARNING="${YELLOW}WARNING${NC} "
 ERROR="${RED}$(bold ERROR)${NC}   "
 
 # - Default variables
+# Default group id to use when starting the container:
+gid=2020
 # Docker image tag to use, 'latest' by default:
 vtag="latest"
 # Command to execute after starting the docker container:
@@ -147,7 +149,7 @@ while [ "$1" != "" ]; do
 done
 
 # If the `ROMI_DB` variable is set, use it as default database location, else set it to empty:
-if [ -z ${ROMI_DB+x} ]; then
+if [ -z ${ROMI_DB+x} ] && [ ${self_test} == 0 ]; then
   echo -e "${WARNING}Environment variable 'ROMI_DB' is not defined, set it to use as default database location!"
 fi
 
@@ -168,14 +170,11 @@ fi
 if [ "${host_db}" != "" ]; then
   group_name=$(stat -c "%G" ${host_db})                              # get the name of the group for the 'host database path'
   gid=$(getent group ${group_name} | cut --delimiter ':' --fields 3) # get the 'gid' of this group
-  echo -e "${INFO}Automatic group name definition to '$group_name'!"
   echo -e "${INFO}Automatic group id definition to '$gid'!"
 else
-  group_name='myuser'
-  gid=1000
   # Only raise next WARNING message if not a SELF-TEST:
   if [ ${self_test} == 0 ]; then
-    echo -e "${WARNING}Using default group name '${group_name}' & '${gid}'."
+    echo -e "${WARNING}Using default group id '${gid}'."
   fi
 fi
 
@@ -193,7 +192,7 @@ fi
 if [ "${cmd}" = "" ]; then
   # Start in interactive mode. ~/.bashrc will be loaded.
   docker run --rm --gpus all ${mount_option} \
-    --user myuser:${gid} \
+    --user romi:${gid} \
     --env PYOPENCL_CTX='0' \
     ${docker_option} \
     ${USE_TTY} roboticsmicrofarms/plant-3d-vision:${vtag} \
@@ -203,7 +202,7 @@ else
   start_time=$(date +%s)
   # Start in non-interactive mode (run the command):
   docker run --rm --gpus all ${mount_option} \
-    --user myuser:${gid} \
+    --user romi:${gid} \
     --env PYOPENCL_CTX='0' \
     ${docker_option} \
     ${USE_TTY} roboticsmicrofarms/plant-3d-vision:${vtag} \

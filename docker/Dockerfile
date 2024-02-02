@@ -10,7 +10,7 @@ LABEL description="Plant reconstruction and phenotyping pipeline."
 
 ENV LANG=C.UTF-8
 ENV PYTHONUNBUFFERED=1
-ENV USER_NAME=myuser
+ENV USER_NAME=romi
 ENV USER_ID=1010
 # Required by `pip`:
 ENV PATH=$PATH:"/home/${USER_NAME}/.local/bin"
@@ -35,10 +35,8 @@ RUN apt-get update && \
     # Clean-up apt cache
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
-    # Create a `romi` group with GID 2020:
-    addgroup --gid 2020 romi && \
-    # Create a non-root user, member of the romi group (2020), and give it rights over its "home" folder:
-    adduser --disabled-password --gecos '' --ingroup romi --uid ${USER_ID} ${USER_NAME} && \
+    # Create a non-root user named romi' and create a "home" folder wih proper rights:
+    adduser --disabled-password --gecos '' --uid ${USER_ID} ${USER_NAME} && \
     chown -R ${USER_NAME}: /home/${USER_NAME} && \
     # Create the folder used to mount the database:
     mkdir -p ${ROMI_DB} && \
