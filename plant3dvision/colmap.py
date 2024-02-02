@@ -15,7 +15,6 @@ import os
 import subprocess
 import sys
 import tempfile
-from os.path import splitext
 from pathlib import Path
 
 import imageio
@@ -372,10 +371,12 @@ def export_camera_parameters(image_files, intrinsics, extrinsics):
 
     return image_files
 
+
 #: List of valid COLMAP matcher methods:
 MATCHER_METHODS = ['exhaustive', 'sequential', 'spatial']
 #: Default COLMAP matcher method:
 DEF_MATCHER_METHODS = MATCHER_METHODS[0]
+
 
 class ColmapRunner(object):
     """COLMAP SfM methods wrapper, to apply to an 'image' fileset.
@@ -736,10 +737,10 @@ class ColmapRunner(object):
             else:
                 logger.info(f"Found '{colmap_exe}' image locally...")
             # Get the 'default output' (banner, license or header) when starting a container:
-            default_out = client.containers.run(self.colmap_exe, "")
+            default_out = client.containers.run(self.colmap_exe, "", stdout=True, stderr=True)
             self._header = default_out.decode("utf-8")
             # Get the output of the `colmap -h` command:
-            out = client.containers.run(self.colmap_exe, "colmap -h")
+            out = client.containers.run(self.colmap_exe, "colmap -h", stdout=True, stderr=True)
             out = out.decode("utf-8")
             # Remove the 'default output' (banner, license or header) to get only the output of `colmap -h` command:
             out = out.replace(self._header, "")
