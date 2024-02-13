@@ -77,12 +77,14 @@ docker build \
   -f docker/Dockerfile .
 # Get docker build status:
 docker_build_status=$?
+# Get elapsed time:
+elapsed_time=$(expr $(date +%s) - ${start_time})
 
 # Print build time if successful (code 0), else print exit code
 if [ ${docker_build_status} == 0 ]; then
-  echo -e "\n${INFO}Docker build SUCCEEDED in $(expr $(date +%s) - ${start_time})s!"
+  echo -e "\n${INFO}Docker build SUCCEEDED in ${elapsed_time}s!"
 else
-  echo -e "\n${ERROR}Docker build FAILED after $(expr $(date +%s) - ${start_time})s with code ${docker_build_status}!"
+  echo -e "\n${ERROR}Docker build FAILED after ${elapsed_time}s with code ${docker_build_status}!"
 fi
-# Exit with 'docker build' exit code:
+# Exit with docker build exit code:
 exit ${docker_build_status}
