@@ -30,10 +30,14 @@ usage() {
   echo "  -t, --tag
     Image tag to use.
     By default, use the '${vtag}' tag."
+  # -- Docker options:
   echo "  --no-cache
     Do not use cache when building the image, (re)start from scratch."
   echo "  --pull
     Always attempt to pull a newer version of the parent image."
+  echo "  --plain
+    Plain output during docker build."
+  # -- General options:
   echo "  -h, --help
     Output a usage message and exit."
 }
@@ -45,12 +49,13 @@ while [ "$1" != "" ]; do
     vtag=$1
     ;;
   --no-cache)
-    shift
     docker_opts="${docker_opts} --no-cache"
     ;;
   --pull)
-    shift
     docker_opts="${docker_opts} --pull"
+    ;;
+  --plain)
+    docker_opts="${docker_opts} --progress=plain"
     ;;
   -h | --help)
     usage
@@ -67,10 +72,12 @@ done
 # Get the date to estimate docker image build time:
 start_time=$(date +%s)
 # Start the docker image build:
-docker build -t roboticsmicrofarms/plant-3d-vision:${vtag} ${docker_opts} \
+docker build \
+  -t roboticsmicrofarms/plant-3d-vision:${vtag} ${docker_opts} \
   -f docker/Dockerfile .
 # Get docker build status:
 docker_build_status=$?
+
 # Print build time if successful (code 0), else print exit code
 if [ ${docker_build_status} == 0 ]; then
   echo -e "\n${INFO}Docker build SUCCEEDED in $(expr $(date +%s) - ${start_time})s!"
