@@ -557,6 +557,44 @@ class CurveSkeleton(RomiTask):
         io.write_json(self.output_file(), out)
 
 
+class RefineSkeleton(RomiTask):
+    """Refine a 3D curve skeleton using stochastic deformation registration.
+
+
+    Attributes
+    ----------
+    upstream_task : luigi.TaskParameter
+        The task upstream to this one, should provide a triangular mesh.
+        Defaults to ``CurveSkeleton``.
+    upstream_task : luigi.TaskParameter
+        The task providing the point cloud to refine the skeleton from.
+        Defaults to ``PointCloud``.
+    scan_id : luigi.Parameter, optional
+        The dataset id (scan name) to use to create the ``FilesetTarget``.
+        If unspecified (default), the current active scan will be used.
+
+    See Also
+    --------
+    skeleton_refinement.stochastic_registration.perform_registration
+
+    Notes
+    -----
+    Task output is a JSON file with two entries, "points" and "lines".
+    """
+    upstream_task = luigi.TaskParameter(default=CurveSkeleton)  # override default attribute from ``RomiTask``
+    upstream_pcd = luigi.TaskParameter(default=PointCloud)
+
+    def requires(self):
+        return {"skeleton": self.upstream_task(), "pcd": self.upstream_pcd()}
+
+    def run(self):
+        from skeleton_refinement.stochastic_registration import perform_registration
+        skel = io.read_triangle_mesh(self.input()["skeleton"].get().get_files()[0])
+        pcd = io.read_point_cloud(self.input()["pcd"].get().get_files()[0])
+        refined_skel = perform_registration(pcd, skel)
+        refined_skel = {"points": refined_skel, "lines": skel['lines']}
+        io.write_json(self.output_file(), refined_skel)
+
 class VoxelsWithPrior(RomiTask):
     """Assign class to voxel adjusting for the possibility that projection can be wrongly labeled.
 
