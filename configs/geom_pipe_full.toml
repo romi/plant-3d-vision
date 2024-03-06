@@ -69,8 +69,16 @@ depth = 9  # depth parameter used by Open3D to mesh the point cloud
 [CurveSkeleton]
 upstream_task = "TriangleMesh"  # task to get the triangle mesh from
 
-[TreeGraph]
+[RefineSkeleton]
 upstream_task = "CurveSkeleton"  # task to get the skeleton from
+upstream_pcd = "PointCloud"  # task to get the point cloud from
+alpha = 2.0
+beta = 2.0
+max_iterations = 100  # max number of iterations
+tolerance = 0.001
+
+[TreeGraph]
+upstream_task = "RefineSkeleton"  # task to get the skeleton from
 z_axis = 2  # axis to use for stem orientation to get the root node
 stem_axis_inverted = false  # direction of the stem along the specified axis
 
