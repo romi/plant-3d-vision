@@ -22,14 +22,15 @@ usage() {
 
   echo -e "$(bold DESCRIPTION):"
   echo "  Build a docker image named 'roboticsmicrofarms/plant-3d-vision' using 'Dockerfile' in the same location.
+
   It must be run from the 'plant-3d-vision' repository root folder as it is the build context and it will be copied during at image build time!
   Do not forget to initialize or update the sub-modules if necessary!"
   echo ""
 
   echo -e "$(bold OPTIONS):"
   echo "  -t, --tag
-    Image tag to use.
-    By default, use the '${vtag}' tag."
+    Image tag to use." \
+    "By default, use the '${vtag}' tag."
   # -- Docker options:
   echo "  --no-cache
     Do not use cache when building the image, (re)start from scratch."
@@ -75,7 +76,7 @@ start_time=$(date +%s)
 docker build \
   -t roboticsmicrofarms/plant-3d-vision:${vtag} ${docker_opts} \
   -f docker/Dockerfile .
-# Get docker build status:
+# Get docker build exit code:
 docker_build_status=$?
 # Get elapsed time:
 elapsed_time=$(expr $(date +%s) - ${start_time})

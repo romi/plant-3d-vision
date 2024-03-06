@@ -5,10 +5,10 @@ RED="\033[0;31m"
 GREEN="\033[0;32m"
 YELLOW="\033[0;33m"
 NC="\033[0m" # No Color
-bold() { echo -e "\e[1m$*\e[0m"; }
 INFO="${GREEN}INFO${NC}    "
 WARNING="${YELLOW}WARNING${NC} "
-ERROR="${RED}$(bold ERROR)${NC}   "
+ERROR="${RED}ERROR${NC}   "
+bold() { echo -e "\e[1m$*\e[0m"; }
 
 # - Default variables
 # Default group id to use when starting the container:
@@ -19,13 +19,6 @@ vtag="latest"
 cmd=''
 # Volume mounting options:
 mount_option=""
-# If the `ROMI_DB` variable is set, use it as default database location, else set it to empty:
-if [ -z ${ROMI_DB+x} ]; then
-  host_db=''
-else
-  host_db=${ROMI_DB}
-fi
-
 # - Test commands:
 unittest_cmd="python -m unittest discover -s plant-3d-vision/tests/unit/"
 integration_test_cmd="python -m unittest discover -s plant-3d-vision/tests/integration/"
@@ -33,6 +26,14 @@ pipeline_cmd="cd plant-3d-vision/ && ./tests/check_pipe.sh"
 geom_pipeline_cmd="cd plant-3d-vision/ && ./tests/check_geom_pipe.sh"
 ml_pipeline_cmd="cd plant-3d-vision/ && ./tests/check_ml_pipe.sh"
 gpu_cmd="nvidia-smi"
+
+# If the `ROMI_DB` variable is set, use it as default database location, else set it to empty:
+if [ -z ${ROMI_DB+x} ]; then
+  echo -e "${WARNING}Environment variable 'ROMI_DB' is not defined, set it to use as default database location!"
+  host_db=''
+else
+  host_db=${ROMI_DB}
+fi
 
 usage() {
   echo -e "$(bold USAGE):"
@@ -79,6 +80,10 @@ usage() {
     "Test dataset are located under 'tests/testdata'."
   echo "  --gpu_test
     Test correct access to NVIDIA GPU resources from docker container."
+}
+
+bind_mount_options() {
+  mount_option="${mount_option} -v ${host_db}:/myapp/db"
 }
 
 docker_option=""
@@ -155,7 +160,7 @@ fi
 
 # Use local database path `$host_db` to create a bind mount to '/myapp/db':
 if [ "${host_db}" != "" ]; then
-  mount_option="${mount_option} -v ${host_db}:/myapp/db"
+  bind_mount_options
   echo -e "${INFO}Automatic bind mount of '${host_db}' (host) to '/myapp/db' (container)!"
 else
   # Only raise next ERROR message if not a SELF-TEST:
@@ -180,7 +185,7 @@ fi
 
 # Check if we have a TTY or not
 if [ -t 1 ]; then
-  USE_TTY="-it"
+  USE_TTY="-t"
 else
   USE_TTY=""
 fi
@@ -190,30 +195,37 @@ if [ "${docker_option}" != "" ]; then
 fi
 
 if [ "${cmd}" = "" ]; then
-  # Start in interactive mode. ~/.bashrc will be loaded.
+  # Start in interactive mode, `~/.bashrc` will be loaded.
   docker run --rm --gpus all ${mount_option} \
     --user romi:${gid} \
     --env PYOPENCL_CTX='0' \
     ${docker_option} \
-    ${USE_TTY} roboticsmicrofarms/plant-3d-vision:${vtag} \
+    -i ${USE_TTY} \
+    roboticsmicrofarms/plant-3d-vision:${vtag} \
     bash
 else
+  echo -e "${INFO}Running: '${cmd}'."
+  echo -e "${INFO}Bind mount: '${mount_option}'."
   # Get the date to estimate command execution time:
   start_time=$(date +%s)
-  # Start in non-interactive mode (run the command):
+  # Start in non-interactive mode (run the command).
+  # Use the `-i` flag to load `~/.bashrc` (defining the right `umask`).
   docker run --rm --gpus all ${mount_option} \
     --user romi:${gid} \
     --env PYOPENCL_CTX='0' \
     ${docker_option} \
-    ${USE_TTY} roboticsmicrofarms/plant-3d-vision:${vtag} \
-    bash -c "${cmd}"
+    ${USE_TTY} \
+    roboticsmicrofarms/plant-3d-vision:${vtag} \
+    bash -ic "${cmd}"
   # Get command exit code:
   cmd_status=$?
-  # Print build time if successful (code 0), else print command exit code
+
+  # Print elapsed time if successful (code 0), else print command exit code
+  elapsed_time=$(expr $(date +%s) - ${start_time})
   if [ ${cmd_status} == 0 ]; then
-    echo -e "\n${INFO}Command SUCCEEDED in $(expr $(date +%s) - ${start_time})s!"
+    echo -e "\n${INFO}Command SUCCEEDED in ${elapsed_time}s!"
   else
-    echo -e "\n${ERROR}Command FAILED after $(expr $(date +%s) - ${start_time})s with code ${cmd_status}!"
+    echo -e "\n${ERROR}Command FAILED after ${elapsed_time}s with code ${cmd_status}!"
   fi
   # Exit with status code:
   exit ${cmd_status}
