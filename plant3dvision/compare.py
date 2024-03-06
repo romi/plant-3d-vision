@@ -201,7 +201,7 @@ def _get_task_fileset(scan_dataset, task_name):
         task_filesets = scan_dataset.get_fileset("camera_model")
         task_filesets = [task_filesets] if task_filesets is not None else []
     else:
-        task_filesets = [fs for fs in scan_dataset.filesets if fs.id.startswith(task_name)]
+        task_filesets = [fs for fs in scan_dataset.get_filesets() if fs.id.startswith(task_name)]
 
     # - Assert fileset unicity:
     try:
@@ -269,6 +269,17 @@ def compare_intrinsic_params(db, task_name, scans_list):
     References
     ----------
     https://docs.opencv.org/4.x/dc/dbb/tutorial_py_calibration.html
+
+    Examples
+    --------
+    >>> from plant3dvision.compare import compare_intrinsic_params
+    >>> from plantdb import FSDB
+    >>> db = FSDB('/data/ROMI/intrinsic_calib_experiments/2024.02.08_00.07_Eval_Colmap_auto_opencv/')
+    >>> task_name = 'Colmap'
+    >>> db.connect()
+    >>> scans_list = db.get_scans()
+    >>> compare_intrinsic_params(db, task_name, scans_list)
+    >>> db.disconnect()
 
     """
     from plantdb import io
@@ -582,13 +593,27 @@ def compare_to_calibrated_poses(db, task_name, scans_list):
     scans_list : list of plantdb.fsdb.Scan
         List of ``Scan`` instances to compare.
 
+    Examples
+    --------
+    >>> from plant3dvision.compare import compare_to_calibrated_poses
+    >>> from plantdb import FSDB
+    >>> db = FSDB('/data/ROMI/intrinsic_calib_experiments/2024.02.08_00.07_Eval_Colmap_auto_opencv/')
+    >>> task_name = 'Colmap'
+    >>> db.connect()
+    >>> scans_list = db.get_scans()
+    >>> compare_to_calibrated_poses(db, task_name, scans_list)
+    >>> db.disconnect()
+
     """
     from plant3dvision.calibration import pose_estimation_figure
     from scipy.spatial.distance import euclidean
     logger.info(f"Comparing '{task_name}' outputs for {len(scans_list)} replicated scans!")
 
-    calibrated_poses = get_image_poses(scans_list[0], "calibrated_pose")  # {scan_id: {img_id: [x, y, z]}}
+    # Get the image_id indexed dictionary of calibrated poses:
+    calibrated_poses = get_image_poses(scans_list[0], "calibrated_pose", default=None)  # {scan_id: {img_id: [x, y, z]}}
+    # Exclude entries with a `None` value as poses:
     calibrated_poses = {img_id: pose for img_id, pose in calibrated_poses.items() if pose is not None}
+    # Test if there is any calibrated poses left in the dict, if not exit to avoid crashing:
     if len(calibrated_poses) == 0:
         logger.error(f"Could not find calibrated poses to compare!")
         return

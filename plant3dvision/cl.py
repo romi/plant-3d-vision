@@ -22,6 +22,7 @@ from plant3dvision.proc3d import point2index
 from plantdb import io
 from plantdb.db import Fileset
 from romitask.log import configure_logger
+from skimage.util import img_as_float32
 
 logger = configure_logger(__name__)
 
@@ -201,18 +202,17 @@ class Backprojection(object):
             mask array (or float array if type is averaging)
 
         """
-        if self.dtype == np.float32 and mask.dtype == np.uint8:
-            logger.debug("type is uint8")
-            mask = np.array(mask / 255.).astype(self.dtype)
-        # logger.critical(self.dtype)
+        if self.dtype == np.float32 and mask.dtype != np.float32:
+            mask = img_as_float32(mask)
         if self.log and self.dtype == np.float32:
             mask = np.log(EPS + mask)
 
-        intrinsics_h = np.ascontiguousarray(intrinsics).astype(np.float32)
-        rot_h = np.ascontiguousarray(rot).astype(np.float32)
-        tvec_h = np.ascontiguousarray(tvec).astype(np.float32)
+        intrinsics_h = np.ascontiguousarray(intrinsics)
+        rot_h = np.ascontiguousarray(rot)
+        tvec_h = np.ascontiguousarray(tvec)
+
         logger.debug("mask max: %.2f" % (mask.max()))
-        mask_h = np.ascontiguousarray(mask).astype(self.dtype)
+        mask_h = np.ascontiguousarray(mask, dtype=self.dtype)
 
         mask_d = cl.image_from_array(ctx, mask_h, 1)
 
@@ -285,15 +285,15 @@ class Backprojection(object):
                 continue
             logger.debug("processing file %s" % fi.id)
             # Get camera dictionary from mask metadata
-            cam = fi.get_metadata(camera_metadata)
+            cam = fi.get_metadata(camera_metadata, default=None)
             if cam is None:
                 logger.warning(f"Could not get camera params from '{camera_metadata}' for {fi.id}, skipping...")
                 continue
             # Load camera intrinsic parameters:
-            intrinsics = cam["camera_model"]['params'][0:4]
+            intrinsics = np.array(cam["camera_model"]['params'][0:4], dtype=np.float32)
             # Load camera poses as rotation matrix and translation vector:
-            rot = sum(cam['rotmat'], [])
-            tvec = cam['tvec']
+            rot = np.array(sum(cam['rotmat'], []), dtype=np.float32)
+            tvec = np.array(cam['tvec'], dtype=np.float32)
             # Load mask image:
             mask = io.read_image(fi)
             # Invert mask if required:

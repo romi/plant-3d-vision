@@ -86,7 +86,7 @@ def get_cnc_poses(scan_dataset, axes='xyzpt'):
     return cnc_poses
 
 
-def get_image_poses(scan_dataset, md="calibrated_pose"):
+def get_image_poses(scan_dataset, md="calibrated_pose", default=None):
     """Get the calibrated camera poses, estimated by colmap, from the 'images' fileset using "calibrated_pose" metadata.
 
     Parameters
@@ -116,7 +116,7 @@ def get_image_poses(scan_dataset, md="calibrated_pose"):
 
     """
     images_fileset = scan_dataset.get_fileset('images')
-    return {im.id: im.get_metadata(md) for im in images_fileset.get_files()}
+    return {im.id: im.get_metadata(md, default) for im in images_fileset.get_files()}
 
 
 def compute_colmap_poses_from_metadata(scan_dataset):
