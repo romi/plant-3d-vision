@@ -526,6 +526,8 @@ class Colmap(RomiTask):
     .. [#] `COLMAP official tutorial. <https://colmap.github.io/tutorial.html>`_
 
     """
+    retry_count = luigi.IntParameter(default=10)
+    retry = 0
     upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)  # override default attribute from ``RomiTask``
     query = luigi.DictParameter(default={})
     matcher = luigi.Parameter(default="exhaustive")
@@ -785,11 +787,27 @@ class Colmap(RomiTask):
 
         # - If a distance threshold is given, add a "pose_estimation" metadata:
         if self.distance_threshold > 0.:
-            for im in image_files:
+            wrong_pose = 0  # number of wrongly estimated pose
+            wrong_pose_idx = []  # index of images with a wrong pose
+            for im_idx, im in enumerate(image_files):
                 if euclidean_distances[im.id] >= self.distance_threshold:
                     im.set_metadata("pose_estimation", "incorrect")
                     logger.warning(f"Image {im.id} pose has been incorrectly estimated by COLMAP!")
+                    wrong_pose += 1
+                    wrong_pose_idx.append(im_idx)
                 else:
                     im.set_metadata("pose_estimation", "correct")
+            # Warn if some images have wrongly estimated pose
+            if wrong_pose != 0:
+                logger.warning(f"Colmap failed to estimate the pose of {wrong_pose} images within a {self.distance_threshold}mm distance to CNC pose!")
+                logger.warning(f"The following image indexes failed: {wrong_pose_idx}.")
+
+            # Check the number of consecutive wrong pose:
+            consecutive_wrong = np.split(wrong_pose_idx, np.where(np.diff(wrong_pose_idx) != 1)[0] + 1)
+            max_wrong_size = len(consecutive_wrong[np.argmax(len(consecutive_wrong))])
+            max_wrong_pc = round(max_wrong_size/float(len(image_files)) * 100, 1)
+            # Raise an exception if percentage of consecutive wrong pose is greater than 5%:
+            if max_wrong_pc > 5.:
+                raise Exception(f"Attempt #{self.retry} - Colmap failed to estimate the pose of {max_wrong_size} consecutive images ({max_wrong_pc}%) within a {self.distance_threshold}mm distance to CNC pose!")
 
         return
