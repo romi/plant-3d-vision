@@ -1,6 +1,7 @@
 [Colmap]
 upstream_task = "ImagesFilesetExists"
 matcher = "exhaustive"
+camera_model = "SIMPLE_RADIAL"
 intrinsic_calibration_scan_id = ""  # use a dataset with calibrated intrinsic camera poses
 extrinsic_calibration_scan_id = ""  # use a dataset with calibrated extrinsic camera poses
 compute_dense = false
@@ -29,6 +30,7 @@ threshold = 0.15
 [Voxels]
 upstream_mask = "Masks"
 upstream_colmap = "Colmap"
+camera_metadata = "colmap_camera"
 voxel_size = 0.5
 type = "carving"
 [Voxels.bounding_box]  # default to None
@@ -38,7 +40,7 @@ z = [-175, 100]
 
 [PointCloud]
 upstream_task = "Voxels"
-level_set_value = 0.0
+level_set_value = 1.0
 
 [TriangleMesh]
 upstream_task = "PointCloud"
