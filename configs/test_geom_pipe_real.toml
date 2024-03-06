@@ -2,16 +2,18 @@
 upstream_task = "ImagesFilesetExists"
 matcher = "exhaustive"
 camera_model = "SIMPLE_RADIAL"
+intrinsic_calibration_scan_id = ""  # use a dataset with calibrated intrinsic camera poses
+extrinsic_calibration_scan_id = ""  # use a dataset with calibrated extrinsic camera poses
 compute_dense = false
 align_pcd = true
 use_gpu = true
 single_camera = true
 alignment_max_error = 10
-intrinsic_calibration_scan_id = ""  # use a dataset with calibrated intrinsic camera poses
-extrinsic_calibration_scan_id = ""  # use a dataset with calibrated extrinsic camera poses
+distance_threshold = 6  # maximum allowed Euclidean distance from CNC pose
 
 [Undistorted]
 upstream_task = "ImagesFilesetExists"
+query = "{\"channel\":\"rgb\", \"pose_estimation\":\"correct\"}"  # RGB images with a valid COLMAP pose
 
 [Masks]
 upstream_task = "Undistorted"

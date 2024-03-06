@@ -690,8 +690,6 @@ def main():
     else:
         sys.exit(f"Error with input dataset path for '{args.task}' module!")
 
-    print(f"Found {len(folders)} folders!")
-
     for folder in folders:
         args.dataset_path = folder
         print("\n")  # to facilitate the search in the console by separating the datasets

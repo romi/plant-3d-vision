@@ -106,7 +106,6 @@ fi
 # Install `plantdb` sources:
 echo -e "\n\n${INFO}# - Installing 'plantdb' sources..."
 start_time=$(date +%s)
-python3 -m pip install -r plantdb/requirements.txt
 python3 -m pip install ${pip_opt} plantdb/
 build_status=$?
 if [ ${build_status} == 0 ]; then
@@ -119,7 +118,6 @@ fi
 # Install `romitask` sources:
 echo -e "\n\n${INFO}# - Installing 'romitask' sources..."
 start_time=$(date +%s)
-python3 -m pip install -r romitask/requirements.txt
 python3 -m pip install ${pip_opt} romitask/
 build_status=$?
 if [ ${build_status} == 0 ]; then
