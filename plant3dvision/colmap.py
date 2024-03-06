@@ -942,35 +942,36 @@ class ColmapRunner(object):
         _ = self._colmap_cmd('feature_extractor', args, cli_args)
         return
 
-    def matcher(self):
+    def matcher(self, matcher_method=None, **cli_args):
         """Perform feature matching after performing feature extraction."""
+        # If matcher method is not manually defined, use attribute method and cli arguments:
+        if matcher_method is None:
+            matcher_method = self.matcher_method
+            cli_args.update(**self.all_cli_args.get(f"{matcher_method}_matcher", {}))
+
         args = ['--database_path', f'{self.colmap_workdir}/database.db']
         # - Check if GPU is available:
         if _has_nvidia_gpu():
             use_gpu_opt = {"--SiftMatching.use_gpu": '1'}
         else:
             use_gpu_opt = {"--SiftMatching.use_gpu": '0'}
-        if self.matcher_method == 'exhaustive':
-            cli_args = self.all_cli_args.get('exhaustive_matcher', use_gpu_opt)
-            logger.info("Running colmap 'exhaustive_matcher'...")
-            logger.debug(f"args: {args}")
-            logger.debug(f"cli_args: {cli_args}")
+        cli_args.update(**use_gpu_opt)
+
+        logger.info(f"Running colmap '{matcher_method}_matcher'...")
+        logger.debug(f"args: {args}")
+        logger.debug(f"cli_args: {cli_args}")
+
+        if matcher_method == 'exhaustive':
             _ = self._colmap_cmd('exhaustive_matcher', args, cli_args)
-        elif self.matcher_method == 'sequential':
-            cli_args = self.all_cli_args.get('sequential_matcher', use_gpu_opt)
-            logger.info("Running colmap 'sequential_matcher'...")
-            logger.debug(f"args: {args}")
-            logger.debug(f"cli_args: {cli_args}")
+        elif matcher_method == 'sequential':
             _ = self._colmap_cmd('sequential_matcher', args, cli_args)
-        elif self.matcher_method == 'spatial':
-            cli_args = self.all_cli_args.get('spatial_matcher', use_gpu_opt)
+        elif matcher_method == 'spatial':
             cli_args["--SpatialMatching.is_gps"] = "0"
-            logger.info("Running colmap 'spatial_matcher'...")
-            logger.debug(f"args: {args}")
-            logger.debug(f"cli_args: {cli_args}")
             _ = self._colmap_cmd('spatial_matcher', args, cli_args)
+        elif matcher_method == 'transitive':
+            _ = self._colmap_cmd('transitive_matcher', args, cli_args)
         else:
-            raise ValueError(f"Unknown matcher '{self.matcher_method}!")
+            raise ValueError(f"Unknown matcher '{matcher_method}'!")
         return
 
     def mapper(self):
