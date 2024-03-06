@@ -13,3 +13,6 @@
 [submodule "dtw"]
 	path = dtw
 	url = https://github.com/romi/dtw.git
+[submodule "skeleton_refinement"]
+	path = skeleton_refinement
+	url = https://github.com/romi/skeleton_refinement.git
