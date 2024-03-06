@@ -127,6 +127,18 @@ else
   exit ${build_status}
 fi
 
+# Install `skeleton_refinement` sources:
+echo -e "\n\n${INFO}# - Installing 'skeleton_refinement' sources..."
+start_time=$(date +%s)
+python3 -m pip install ${pip_opt} skeleton_refinement/
+build_status=$?
+if [ ${build_status} == 0 ]; then
+  echo -e "${INFO}'skeleton_refinement' sources installed in $(expr $(date +%s) - ${start_time}) s."
+else
+  echo -e "${ERROR}'skeleton_refinement' sources install failed with code '${build_status}'!"
+  exit ${build_status}
+fi
+
 # Install `romiseg` sources:
 echo -e "\n\n${INFO}# - Installing 'romiseg' sources..."
 start_time=$(date +%s)
