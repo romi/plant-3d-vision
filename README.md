@@ -251,6 +251,7 @@ EOF
     python3 -m pip install -e ./plantdb/.
     python3 -m pip install -r ./romitask/requirements.txt
     python3 -m pip install -e ./romitask/.
+    python3 -m pip install -e ./skeleton_refinement/.
     python3 -m pip install -e ./romiseg/.
     conda install -c conda-forge libstdcxx-ng  # required to use `open3d.visualization.draw`
     python3 -m pip install -e ./romicgal/.
