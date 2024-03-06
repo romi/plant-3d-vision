@@ -552,7 +552,7 @@ class CurveSkeleton(RomiTask):
             out = proc3d.skeletonize(mesh)
         else:
             logger.error(f"No implementation to compute `{task_name}` from `{uptask_name}`.")
-            logger.info(f"Select `upstream_task` among: `TriangleMesh`.")
+            logger.info(f"Select `upstream_task` among: 'TriangleMesh'.")
             raise NotImplementedError(f"No implementation to compute `{task_name}` from `{task_name}`.")
         io.write_json(self.output_file(), out)
 
@@ -583,17 +583,23 @@ class RefineSkeleton(RomiTask):
     """
     upstream_task = luigi.TaskParameter(default=CurveSkeleton)  # override default attribute from ``RomiTask``
     upstream_pcd = luigi.TaskParameter(default=PointCloud)
+    alpha = luigi.FloatParameter(default=2.)
+    beta = luigi.FloatParameter(default=2.)
+    max_iterations = luigi.IntParameter(default=100)
+    tolerance = luigi.FloatParameter(default=0.001)
 
     def requires(self):
         return {"skeleton": self.upstream_task(), "pcd": self.upstream_pcd()}
 
     def run(self):
         from skeleton_refinement.stochastic_registration import perform_registration
-        skel = io.read_triangle_mesh(self.input()["skeleton"].get().get_files()[0])
+        skel = io.read_json(self.input()["skeleton"].get().get_files()[0])
         pcd = io.read_point_cloud(self.input()["pcd"].get().get_files()[0])
-        refined_skel = perform_registration(pcd, skel)
-        refined_skel = {"points": refined_skel, "lines": skel['lines']}
+        refined_skel = perform_registration(np.asarray(pcd.points), np.array(skel["points"]),
+                                            alpha=self.alpha, beta=self.beta, max_iterations=self.max_iterations)
+        refined_skel = {"points": refined_skel.tolist(), "lines": skel['lines']}
         io.write_json(self.output_file(), refined_skel)
+
 
 class VoxelsWithPrior(RomiTask):
     """Assign class to voxel adjusting for the possibility that projection can be wrongly labeled.
