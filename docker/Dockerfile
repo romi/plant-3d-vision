@@ -58,6 +58,8 @@ RUN cd plant-3d-vision/ && \
     python3 -m pip install --user plantdb/ && \
     # Install `romitask` dependencies and sources:
     python3 -m pip install --user romitask/ && \
+    # Install `skeleton_refinement` dependencies and sources:
+    python3 -m pip install --user skeleton_refinement/ && \
     # Install `romiseg` dependencies and sources:
     python3 -m pip install --user torch==1.12.1+cu102 torchvision==0.13.1+cu102 --extra-index-url https://download.pytorch.org/whl/cu102 && \
     python3 -m pip install --user romiseg/ && \
