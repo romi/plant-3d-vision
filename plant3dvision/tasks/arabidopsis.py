@@ -49,13 +49,13 @@ class TreeGraph(RomiTask):
         task_name = self.get_task_family()
         uptask_name = self.upstream_task.get_task_family()
 
-        if uptask_name == "CurveSkeleton":
+        if uptask_name in ["CurveSkeleton", "RefineSkeleton"]:
             from plant3dvision import arabidopsis
             f = io.read_json(self.input_file())
             t = arabidopsis.compute_tree_graph(f["points"], f["lines"], self.z_axis, self.stem_axis_inverted)
         else:
             logger.error(f"No implementation to compute `{task_name}` from `{uptask_name}`.")
-            logger.info(f"Select `upstream_task` among: [`CurveSkeleton`].")
+            logger.info(f"Select `upstream_task` among: 'CurveSkeleton' or 'RefineSkeleton'.")
             raise NotImplementedError(f"No implementation to compute `{task_name}` from `{uptask_name}`.")
 
         io.write_graph(self.output_file(), t)
