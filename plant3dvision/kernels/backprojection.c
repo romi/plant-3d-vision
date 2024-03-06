@@ -34,13 +34,15 @@ bool backproject_point(float3 pt, __global float *intrinsics,
 }
 
 __kernel void average(__read_only image2d_t mask, __global float *value,
-                             __global float *intrinsics, __global float *rot,
-                             __global float *tvec, __global float *volinfo,
-                             __global int *shape) {
+                      __global float *intrinsics, __global float *rot,
+                      __global float *tvec, __global float *volinfo,
+                      __global int *shape) {
     const sampler_t samplerA =
         CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_NONE | CLK_FILTER_LINEAR;
+
     int idx = get_global_id(0);
     int3 ijk = unravel_index(idx, shape);
+
     float3 pt = {volinfo[0] + ijk.x * volinfo[3],
                  volinfo[1] + ijk.y * volinfo[3],
                  volinfo[2] + ijk.z * volinfo[3]};
