@@ -72,10 +72,14 @@ upstream_task = "TriangleMesh"  # task to get the triangle mesh from
 [RefineSkeleton]
 upstream_task = "CurveSkeleton"  # task to get the skeleton from
 upstream_pcd = "PointCloud"  # task to get the point cloud from
-alpha = 2.0
-beta = 2.0
+alpha = 5.0
+beta = 5.0
 max_iterations = 100  # max number of iterations
-tolerance = 0.001
+tolerance = 0.001  # tolerance to use to stop the iterations of the EM algorithm
+knn_mst = true  # to update the tree structure with minimum spanning tree on knn-graph
+n_neighbors = 5  # number of neighbors to search for in `skeleton_points`
+knn_algorithm = 'kd_tree'  # algorithm to use for computing the kNN distance
+mst_algorithm = 'kruskal'  # algorithm to use for computing the minimum spanning tree
 
 [TreeGraph]
 upstream_task = "RefineSkeleton"  # task to get the skeleton from

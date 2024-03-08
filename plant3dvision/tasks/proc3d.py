@@ -13,6 +13,7 @@ from plant3dvision.tasks.proc2d import Segmentation2D
 from plantdb import io
 from romitask import RomiTask
 from romitask.log import configure_logger
+from skeleton_refinement.stochastic_registration import knn_mst
 
 logger = configure_logger(__name__)
 
@@ -560,18 +561,41 @@ class CurveSkeleton(RomiTask):
 class RefineSkeleton(RomiTask):
     """Refine a 3D curve skeleton using stochastic deformation registration.
 
-
     Attributes
     ----------
     upstream_task : luigi.TaskParameter
         The task upstream to this one, should provide a triangular mesh.
         Defaults to ``CurveSkeleton``.
-    upstream_task : luigi.TaskParameter
+    upstream_pcd : luigi.TaskParameter
         The task providing the point cloud to refine the skeleton from.
         Defaults to ``PointCloud``.
     scan_id : luigi.Parameter, optional
         The dataset id (scan name) to use to create the ``FilesetTarget``.
         If unspecified (default), the current active scan will be used.
+    alpha : luigi.FloatParameter, optional
+        The alpha value to use for skeleton refinement.
+        Defaults to `5.`.
+    beta : luigi.FloatParameter, optional
+        The beta value to use for skeleton refinement.
+        Defaults to `5.`.
+    max_iterations : luigi.IntParameter, optional
+        Maximum number of iterations of the EM algorithm to perform.
+        Defaults to `100`.
+    tolerance : luigi.FloatParameter, optional
+        Tolerance to use to stop the iterations of the EM algorithm.
+        Defaults to `0.0001`.
+    knn_mst : luigi.BoolParameter, optional
+        Wheter to perform an update of the skeleton using the minimum spanning tree on knn-graph.
+        Defaults to `True`.
+    n_neighbors : luigi.IntParameter, optional
+        The number of neighbors to search for in `skeleton_points`.
+        Defaults to `5`.
+    knn_algorithm : luigi.Parameter, optional
+        The algorithm to use for computing the kNN distance.
+        Defaults to `kd_tree`, valid choices are in 'auto', 'ball_tree', 'kd_tree' or 'brute'.
+    mst_algorithm : luigi.Parameter, optional
+        The algorithm to use for computing the minimum spanning tree.
+        Defaults to `kruskal`, valid choices are in 'kruskal', 'prim' or 'boruvka'.
 
     See Also
     --------
@@ -583,10 +607,14 @@ class RefineSkeleton(RomiTask):
     """
     upstream_task = luigi.TaskParameter(default=CurveSkeleton)  # override default attribute from ``RomiTask``
     upstream_pcd = luigi.TaskParameter(default=PointCloud)
-    alpha = luigi.FloatParameter(default=2.)
-    beta = luigi.FloatParameter(default=2.)
+    alpha = luigi.FloatParameter(default=5.)
+    beta = luigi.FloatParameter(default=5.)
     max_iterations = luigi.IntParameter(default=100)
-    tolerance = luigi.FloatParameter(default=0.001)
+    tolerance = luigi.FloatParameter(default=0.0001)
+    knn_mst = luigi.BoolParameter(default=True)
+    n_neighbors = luigi.IntParameter(default=5)
+    knn_algorithm = luigi.Parameter(default='kd_tree')  # 'auto', 'ball_tree', 'kd_tree' or 'brute'.
+    mst_algorithm = luigi.Parameter(default='kruskal')  # 'kruskal', 'prim' or 'boruvka'.
 
     def requires(self):
         return {"skeleton": self.upstream_task(), "pcd": self.upstream_pcd()}
@@ -596,8 +624,18 @@ class RefineSkeleton(RomiTask):
         skel = io.read_json(self.input()["skeleton"].get().get_files()[0])
         pcd = io.read_point_cloud(self.input()["pcd"].get().get_files()[0])
         refined_skel = perform_registration(np.asarray(pcd.points), np.array(skel["points"]),
-                                            alpha=self.alpha, beta=self.beta, max_iterations=self.max_iterations)
-        refined_skel = {"points": refined_skel.tolist(), "lines": skel['lines']}
+                                            alpha=self.alpha, beta=self.beta, max_iterations=self.max_iterations,
+                                            tolerance=self.tolerance)
+        if self.knn_mst:
+            skel_tree = knn_mst(refined_skel, n_neighbors=int(self.n_neighbors), knn_algorithm=str(self.knn_algorithm),
+                                   mst_algorithm=str(self.mst_algorithm))
+
+            refined_skel = {
+                "points": [skel_tree.nodes[node]['position'].tolist() for node in skel_tree.nodes],
+                "lines": list(skel_tree.edges),
+            }
+        else:
+            refined_skel = {"points": refined_skel.tolist(), "lines": skel['lines']}
         io.write_json(self.output_file(), refined_skel)
 
 

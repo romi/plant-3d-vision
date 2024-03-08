@@ -23,10 +23,9 @@ upstream_task = "TriangleMesh"
 [RefineSkeleton]
 upstream_task = "CurveSkeleton"
 upstream_pcd = "PointCloud"
-alpha = 2.0
-beta = 2.0
-max_iterations = 100  # max number of iterations
-tolerance = 0.001
+alpha = 5.0
+beta = 5.0
+knn_mst = true
 
 [TreeGraph]
 upstream_task = "RefineSkeleton"
