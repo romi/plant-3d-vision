@@ -543,6 +543,7 @@ class Colmap(RomiTask):
     bounding_box = luigi.DictParameter(default=None)
     cli_args = luigi.DictParameter(default={})
     distance_threshold = luigi.FloatParameter(default=0)
+    max_blind_angle = luigi.FloatParameter(default=20)
 
     def _workspace_as_bounding_box(self):
         """Use the scanner workspace as bounding-box.
@@ -770,9 +771,9 @@ class Colmap(RomiTask):
             logger.info("No hardware information will be available in COLMAP's poses estimation figure!")
             hardware_str = ""
         # - Generate the pose estimation figure with CNC & COLMAP poses:
-        pose_estimation_figure(cnc_poses, colmap_poses, pred_scan_id=current_scan.id, ref_scan_id="",
-                               path=self.output().get().path(), vignette=hardware_str + "\n" + camera_str,
-                               suffix="_estimated")
+        fig_path = pose_estimation_figure(cnc_poses, colmap_poses, pred_scan_id=current_scan.id, ref_scan_id="",
+                                          path=self.output().get().path(), vignette=hardware_str + "\n" + camera_str,
+                                          suffix="_estimated")
 
         # - Compute the Euclidean distances between CNC & COLMAP poses & export it to a file:
         euclidean_distances = {}
@@ -799,15 +800,30 @@ class Colmap(RomiTask):
                     im.set_metadata("pose_estimation", "correct")
             # Warn if some images have wrongly estimated pose
             if wrong_pose != 0:
-                logger.warning(f"Colmap failed to estimate the pose of {wrong_pose} images within a {self.distance_threshold}mm distance to CNC pose!")
+                logger.warning(
+                    f"Colmap failed to estimate the pose of {wrong_pose} images within a {self.distance_threshold}mm distance to CNC pose!")
                 logger.warning(f"The following image indexes failed: {wrong_pose_idx}.")
 
             # Check the number of consecutive wrong pose:
+            n_imgs = len(image_files)
+            angle_between_img = 360 / float(n_imgs)
+            if self.max_blind_angle < angle_between_img:
+                logger.warning(f"The allowed max blind angle ({self.max_blind_angle}°) is inferior to the angle between two images ({angle_between_img}°)!")
+                self.max_blind_angle = angle_between_img
+                logger.info(f"Changed the allowed max blind angle to {self.max_blind_angle}°.")
+
             consecutive_wrong = np.split(wrong_pose_idx, np.where(np.diff(wrong_pose_idx) != 1)[0] + 1)
             max_wrong_size = len(consecutive_wrong[np.argmax(len(consecutive_wrong))])
-            max_wrong_pc = round(max_wrong_size/float(len(image_files)) * 100, 1)
+            blind_angle = angle_between_img * max_wrong_size
             # Raise an exception if percentage of consecutive wrong pose is greater than 5%:
-            if max_wrong_pc > 5.:
-                raise Exception(f"Attempt #{self.retry} - Colmap failed to estimate the pose of {max_wrong_size} consecutive images ({max_wrong_pc}%) within a {self.distance_threshold}mm distance to CNC pose!")
+            if blind_angle > float(self.max_blind_angle):
+                logger.error(f"Colmap failed to estimate the pose of {max_wrong_size} consecutive images generating a blind angle of {blind_angle}°!")
+                logger.critical(f"This is above the allowed {self.max_blind_angle}° blind angle!")
+                fig_path = Path(fig_path)
+                ext = fig_path.suffix
+                suffix = f"_try_{self.retry}{ext}"
+                fig_path.rename(str(fig_path).replace(ext, suffix))
+                raise Exception(
+                    f"Attempt #{self.retry} - Failed to estimate {max_wrong_size} poses within a {self.distance_threshold}mm distance to CNC pose!")
 
         return

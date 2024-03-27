@@ -550,8 +550,9 @@ def pose_estimation_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_
         from os.path import join
         prefix = kwargs.get('prefix', "")
         suffix = kwargs.get('suffix', "")
-        plt.savefig(join(path, f"{prefix}{ref_label.lower()}_vs_{pred_label.lower()}_poses{suffix}.png"))
+        path = join(path, f"{prefix}{ref_label.lower()}_vs_{pred_label.lower()}_poses{suffix}.png")
+        plt.savefig(path)
         plt.close()
     else:
         plt.show()
-    return None
+    return path
