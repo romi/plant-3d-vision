@@ -1,14 +1,14 @@
 ARG UBUNTU_VERSION=22.04
-ARG NVIDIA_CUDA_VERSION=11.7.1
+ARG NVIDIA_CUDA_VERSION=11.8.0
 # -----------------------------------------------------------------------------
 # Docker builder stage.
 # -----------------------------------------------------------------------------
 FROM nvidia/cuda:${NVIDIA_CUDA_VERSION}-devel-ubuntu${UBUNTU_VERSION} as builder
 
-ARG COLMAP_VERSION=3.8
-# Colmap3.8 has been released on commit 43de802
 ARG CUDA_ARCHITECTURES=75
 
+# Colmap3.8 has been released on commit 43de802
+ENV COLMAP_VERSION=3.8
 # Prevent stop building ubuntu at time zone selection.
 ENV DEBIAN_FRONTEND=noninteractive
 
