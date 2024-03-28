@@ -359,41 +359,32 @@ def pose_estimation_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_
     # -------------------------------------------------------------------------
     #  XY poses scatter plot
     # -------------------------------------------------------------------------
-    # - Plot REFERENCE XY poses coordinates as a red 'x' marker:
-    # Get X & Y coordinates:
+    # Get X, Y, Z coordinates of reference points:
     try:
         x, y, z, _, _ = np.array([pose if pose is not None else [np.nan] * 5 for im_id, pose in ref_poses.items()]).T
     except:
         x, y, z = np.array([pose if pose is not None else [np.nan] * 3 for im_id, pose in ref_poses.items()]).T
-    # Add a red 'x' marker to every non-null coordinates:
-    cnc_scatter = xyax.scatter(x, y, marker="x", c="red")
-    cnc_scatter.set_label(ref_label)
-    # Add a black "x" at the center of the CNC coordinates
-    x_c, y_c = np.mean(x), np.mean(y)
-    # _ = xyax.scatter(x_c, y_c, marker="x", c="black")
-
-    # - Plot PREDICTED XY poses coordinates as a blue '+' marker:
-    # Get X & Y coordinates:
+    x_c, y_c = np.mean(x), np.mean(y)  # 2D center point
+    # Get X, Y, Z coordinates of predicted points:
     X, Y, Z = np.array([pose if pose is not None else [np.nan] * 3 for im_id, pose in pred_poses.items()]).T
-    # Add a blue '+' marker to every non-null coordinates:
-    colmap_scatter = xyax.scatter(X, Y, marker="+", c="blue")
-    colmap_scatter.set_label(pred_label)
 
-    # - Plot the REFERENCE/PREDICTED "mapping" as arrows:
-    XX, YY = [], []  # use REFERENCE poses as 'origin' point for arrow
-    U, V = [], []  # arrow components
+    # - Plot REFERENCE XY poses coordinates as a black '+' marker:
+    # Add a black '+' marker to every non-null coordinates:
+    cnc_scatter = xyax.scatter(x, y, marker="+", c="black")
+    cnc_scatter.set_label(ref_label)
+    # Add a black "+" at the center of the CNC coordinates
+    # _ = xyax.scatter(x_c, y_c, marker="+", c="black")
+
+    common_im_ids = sorted(set(ref_poses.keys()) & set(pred_poses.keys()))
+    n_imgs = len(common_im_ids)
+    # - Compute the Euclidean distances between reference and predicted poses:
     err_3d = []  # euclidian distance between REFERENCE & PREDICTED => positioning error in 3D
     err_XY = []  # euclidian distance between REFERENCE & PREDICTED in XY
     err_Z = []  # euclidian distance between REFERENCE & PREDICTED in XY
     incorrect_poses = []
     incorrect_poses_idx = []
-    common_im_ids = sorted(set(ref_poses.keys()) & set(pred_poses.keys()))
     for i, im_id in enumerate(common_im_ids):
         if ref_poses[im_id] is not None and pred_poses[im_id] is not None:
-            XX.append(ref_poses[im_id][0])
-            YY.append(ref_poses[im_id][1])
-            U.append(pred_poses[im_id][0] - ref_poses[im_id][0])
-            V.append(pred_poses[im_id][1] - ref_poses[im_id][1])
             err_3d.append(distance.euclidean(ref_poses[im_id][0:3], pred_poses[im_id][0:3]))
             err_XY.append(distance.euclidean(ref_poses[im_id][0:2], pred_poses[im_id][0:2]))
             err_Z.append(abs(ref_poses[im_id][2] - pred_poses[im_id][2]))
@@ -401,7 +392,32 @@ def pose_estimation_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_
                 incorrect_poses.append(pred_poses[im_id][0:2])
                 incorrect_poses_idx.append(i)
 
-    # Show the mapping with arrows:
+    # - Plot correctly PREDICTED XY poses coordinates as a blue 'x' marker:
+    # Get X & Y coordinates:
+    Xg = [Xi for i, Xi in enumerate(X) if i not in incorrect_poses_idx]
+    Yg = [Yi for i, Yi in enumerate(Y) if i not in incorrect_poses_idx]
+    # Add a blue 'x' marker to every coordinate of a correctly estimated pose:
+    colmap_scatter_g = xyax.scatter(Xg, Yg, marker="x", c='blue')
+    colmap_scatter_g.set_label(pred_label + " (good)")
+
+    # - Plot incorrectly PREDICTED XY poses coordinates as a blue 'x' marker:
+    # Get X & Y coordinates:
+    Xw = [Xi for i, Xi in enumerate(X) if i in incorrect_poses_idx]
+    Yw = [Yi for i, Yi in enumerate(Y) if i in incorrect_poses_idx]
+    # Add a red 'x' marker to every coordinate of an incorrectly estimated pose:
+    colmap_scatter_w = xyax.scatter(Xw, Yw, marker="x", c="red")
+    colmap_scatter_w.set_label(pred_label + " (bad)")
+
+    # # - Plot the REFERENCE/PREDICTED "mapping" as arrows:
+    # XX, YY = [], []  # use REFERENCE poses as 'origin' point for arrow
+    # U, V = [], []  # arrow components
+    # for i, im_id in enumerate(common_im_ids):
+    #     if ref_poses[im_id] is not None and pred_poses[im_id] is not None:
+    #         XX.append(ref_poses[im_id][0])
+    #         YY.append(ref_poses[im_id][1])
+    #         U.append(pred_poses[im_id][0] - ref_poses[im_id][0])
+    #         V.append(pred_poses[im_id][1] - ref_poses[im_id][1])
+    # # Show the mapping with arrows:
     # q = xyax.quiver(XX, YY, U, V, scale_units='xy', scale=1., width=0.003)
 
     # Show the incorrect poses with arrows:
@@ -422,8 +438,15 @@ def pose_estimation_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_
         im_ids = list(range(len(im_ids)))
     # Add image or point ids as text:
     for i, im_id in enumerate(im_ids):
-        xyax.text(x[i], y[i], f" {im_id}", ha='left', va='center', fontfamily='monospace',
-                  color='red' if i in incorrect_poses_idx else 'black')
+        wrong = i in incorrect_poses_idx
+        x_off = 0.05 * np.diff(sorted([x[i], x_c]))
+        y_off = 0.05 * np.diff(sorted([y[i], y_c]))
+        xt = x[i] - x_off if x[i] < x_c else x[i] + x_off
+        yt = y[i] - y_off if y[i] < y_c else y[i] + y_off
+        xyax.text(xt, yt, f"{im_id}",
+                  ha='center', va='center', fontfamily='monospace',
+                  # color='red' if wrong else 'black', fontweight="bold" if wrong else 'normal'
+                  )
 
     # - Add hardware CNC limits as dashed blue lines:
     xlims = kwargs.get('xlims', None)
@@ -472,10 +495,14 @@ def pose_estimation_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_
     # -------------------------------------------------------------------------
     # Z coordinates plot
     # -------------------------------------------------------------------------
-    # - Plot REFERENCE Z poses coordinates as a red 'x' marker:
-    _ = zax.plot(z, marker='x', c="red", label=ref_label)
-    # - Plot PREDICTED Z poses coordinates as a blue '+' marker:
-    _ = zax.plot(Z, marker="+", c="blue", label=pred_label)
+    # - Plot REFERENCE Z poses coordinates as a '+' marker:
+    _ = zax.scatter(range(n_imgs), z, marker='+', c="black", label=ref_label)
+    # - Plot PREDICTED Z poses coordinates as a blue 'x' marker:
+    Zg = [Zi for i, Zi in enumerate(Z) if i not in incorrect_poses_idx]
+    Zw = [Zi for i, Zi in enumerate(Z) if i in incorrect_poses_idx]
+    correct_poses_idx = list(set(list(range(n_imgs))) - set(incorrect_poses_idx))
+    _ = zax.scatter(correct_poses_idx, Zg, marker="x", c='blue', label=pred_label + " (good)")
+    _ = zax.scatter(incorrect_poses_idx, Zw, marker="x", c='red', label=pred_label + " (bad)")
     zax.set_xlabel('Image index')
     zax.set_ylabel('Z-axis (mm)')
     zax.grid(True, which='major', axis='both', linestyle='dotted')
@@ -485,7 +512,7 @@ def pose_estimation_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_
     # -------------------------------------------------------------------------
     # Euclidean distance boxplot
     # -------------------------------------------------------------------------
-    # - Add a boxplot visu of the euclidean distances (errors)
+    # - Add a boxplot visu of the Euclidean distances (errors)
     if scan_path_kwargs != {}:
         data = [err_3d, err_XY, err_Z, err_3d[:n_points]]
         xticks = ["3D", "XY", "Z", f"{scan_path} path"]
@@ -493,7 +520,7 @@ def pose_estimation_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_
         data = [err_3d, err_XY, err_Z]
         xticks = ["3D", "XY", "Z"]
 
-    _ = bxp.boxplot(data, flierprops={"marker": '+', 'markeredgecolor': 'red'})
+    _ = bxp.boxplot(data, flierprops={"marker": 'x', 'markeredgecolor': 'red'})
     bxp.set_title("Deviation from CNC", fontdict={'family': 'monospace', 'size': 'medium'})
     bxp.set_ylabel("Euclidean distance (in mm)")
     bxp.set_xticklabels(xticks)
