@@ -771,9 +771,12 @@ class Colmap(RomiTask):
             logger.info("No hardware information will be available in COLMAP's poses estimation figure!")
             hardware_str = ""
         # - Generate the pose estimation figure with CNC & COLMAP poses:
-        fig_path = pose_estimation_figure(cnc_poses, colmap_poses, pred_scan_id=current_scan.id, ref_scan_id="",
-                                          path=self.output().get().path(), vignette=hardware_str + "\n" + camera_str,
-                                          suffix="_estimated")
+        fig_path = pose_estimation_figure(cnc_poses, colmap_poses,
+                                          ref_scan_id="", pred_scan_id=current_scan.id,
+                                          ref_label="CNC", pred_label="COLMAP",
+                                          distance_threshold=self.distance_threshold,
+                                          vignette=hardware_str + "\n" + camera_str,
+                                          path=self.output().get().path(), suffix="_estimated")
 
         # - Compute the Euclidean distances between CNC & COLMAP poses & export it to a file:
         euclidean_distances = {}
@@ -808,7 +811,8 @@ class Colmap(RomiTask):
             n_imgs = len(image_files)
             angle_between_img = 360 / float(n_imgs)
             if self.max_blind_angle < angle_between_img:
-                logger.warning(f"The allowed max blind angle ({self.max_blind_angle}°) is inferior to the angle between two images ({angle_between_img}°)!")
+                logger.warning(
+                    f"The allowed max blind angle ({self.max_blind_angle}°) is inferior to the angle between two images ({angle_between_img}°)!")
                 self.max_blind_angle = angle_between_img
                 logger.info(f"Changed the allowed max blind angle to {self.max_blind_angle}°.")
 
@@ -817,7 +821,8 @@ class Colmap(RomiTask):
             blind_angle = angle_between_img * max_wrong_size
             # Raise an exception if percentage of consecutive wrong pose is greater than 5%:
             if blind_angle > float(self.max_blind_angle):
-                logger.error(f"Colmap failed to estimate the pose of {max_wrong_size} consecutive images generating a blind angle of {blind_angle}°!")
+                logger.error(
+                    f"Colmap failed to estimate the pose of {max_wrong_size} consecutive images generating a blind angle of {blind_angle}°!")
                 logger.critical(f"This is above the allowed {self.max_blind_angle}° blind angle!")
                 fig_path = Path(fig_path)
                 ext = fig_path.suffix
@@ -825,5 +830,7 @@ class Colmap(RomiTask):
                 fig_path.rename(str(fig_path).replace(ext, suffix))
                 raise Exception(
                     f"Attempt #{self.retry} - Failed to estimate {max_wrong_size} poses within a {self.distance_threshold}mm distance to CNC pose!")
+            else:
+                logger.info(f"The blind angle {blind_angle} is below the threshold {self.max_blind_angle}.")
 
         return

@@ -315,60 +315,26 @@ def pose_estimation_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_
 
     Examples
     --------
-    >>> import os
-    >>> from plantdb.fsdb import FSDB
+    >>> from plantdb.test_database import test_database
     >>> from plant3dvision.tasks.colmap import get_cnc_poses
     >>> from plant3dvision.tasks.colmap import compute_colmap_poses_from_metadata
     >>> from plant3dvision.tasks.colmap import pose_estimation_figure
     >>> from plant3dvision.tasks.colmap import use_precalibrated_poses
-    >>> db = FSDB(os.environ.get('ROMI_DB', '/Data/ROMI/DB'))
     >>> # Example 1 - Get the CNC & COLMAP poses and compare them:
+    >>> db = test_database()
     >>> db.connect()
-    >>> db.list_scans()
-    >>> scan_id = "voronoi_texture_72"
+    >>> print(db.list_scans())
+    ['real_plant_analyzed']
+    >>> scan_id = "real_plant_analyzed"
     >>> scan = db.get_scan(scan_id)
     >>> images_fileset = scan.get_fileset('images')
     >>> cnc_poses = get_cnc_poses(scan)
-    >>> len(cnc_poses)
+    >>> print(len(cnc_poses))
+    60
     >>> colmap_poses = {im.id: im.get_metadata("estimated_pose") for im in images_fileset.get_files()}
-    >>> len(colmap_poses)
-    >>> pose_estimation_figure(cnc_poses,colmap_poses,pred_scan_id=scan_id)
-    >>> db.disconnect()
-    >>> # Example 2 - Compute & use the calibrated poses from/on a scan:
-    >>> db.connect()
-    >>> db.list_scans()
-    >>> scan_id = calib_scan_id = "test_sgk"
-    >>> scan = db.get_scan(pred_scan_id)
-    >>> calib_scan = db.get_scan(ref_scan_id)
-    >>> cnc_poses = get_cnc_poses(scan)
-    >>> colmap_poses = compute_colmap_poses_from_camera_json(calib_scan)
-    >>> pose_estimation_figure(cnc_poses,colmap_poses,pred_scan_id=scan_id,ref_scan_id=calib_scan_id)
-    >>> db.disconnect()
-    >>> # Example 3 - Compute the calibrated poses with a calibration scan & use it on a scan:
-    >>> db.connect()
-    >>> db.list_scans()
-    >>> scan_id = "sgk3"
-    >>> calib_scan_id = "calibration_350_40_36"
-    >>> scan = db.get_scan(pred_scan_id)
-    >>> calib_scan = db.get_scan(ref_scan_id)
-    >>> images_fileset = scan.get_fileset('images')
-    >>> images_fileset = use_precalibrated_poses(images_fileset,calib_scan)
-    >>> cnc_poses = {im.id: im.get_metadata("approximate_pose") for im in images_fileset.get_files()}
-    >>> colmap_poses = {im.id: im.get_metadata("calibrated_pose") for im in images_fileset.get_files()}
-    >>> pose_estimation_figure(cnc_poses,colmap_poses,pred_scan_id=scan_id,ref_scan_id=calib_scan_id)
-    >>> db.disconnect()
-    >>> # Example 3 - Compute the calibrated poses with a calibration scan & use it on a scan:
-    >>> db.connect()
-    >>> db.list_scans()
-    >>> scan_id = "Sangoku_90_300_36_1_calib"
-    >>> calib_scan_id = "Sangoku_90_300_36_1_calib"
-    >>> scan = db.get_scan(pred_scan_id)
-    >>> calib_scan = db.get_scan(ref_scan_id)
-    >>> images_fileset = scan.get_fileset('images')
-    >>> images_fileset = use_precalibrated_poses(images_fileset,calib_scan)
-    >>> cnc_poses = {im.id: im.get_metadata("approximate_pose") for im in images_fileset.get_files()}
-    >>> colmap_poses = {im.id: im.get_metadata("calibrated_pose") for im in images_fileset.get_files()}
-    >>> pose_estimation_figure(cnc_poses,colmap_poses,pred_scan_id=scan_id,ref_scan_id=calib_scan_id)
+    >>> print(len(colmap_poses))
+    60
+    >>> path = pose_estimation_figure(cnc_poses,colmap_poses,pred_scan_id=scan_id, distance_threshold=2)
     >>> db.disconnect()
 
     """
@@ -378,6 +344,7 @@ def pose_estimation_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_
     from scipy.spatial import distance
     ref_label = kwargs.get("ref_label", "CNC")
     pred_label = kwargs.get("pred_label", "COLMAP")
+    d_th = kwargs.get("distance_threshold", 0.)
 
     gs_kw = dict(height_ratios=[9, 3], width_ratios=[9, 3])
     fig, axd = plt.subplots(nrows=2, ncols=2, figsize=(12, 12), constrained_layout=True, gridspec_kw=gs_kw)
@@ -401,6 +368,9 @@ def pose_estimation_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_
     # Add a red 'x' marker to every non-null coordinates:
     cnc_scatter = xyax.scatter(x, y, marker="x", c="red")
     cnc_scatter.set_label(ref_label)
+    # Add a black "x" at the center of the CNC coordinates
+    x_c, y_c = np.mean(x), np.mean(y)
+    # _ = xyax.scatter(x_c, y_c, marker="x", c="black")
 
     # - Plot PREDICTED XY poses coordinates as a blue '+' marker:
     # Get X & Y coordinates:
@@ -415,8 +385,10 @@ def pose_estimation_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_
     err_3d = []  # euclidian distance between REFERENCE & PREDICTED => positioning error in 3D
     err_XY = []  # euclidian distance between REFERENCE & PREDICTED in XY
     err_Z = []  # euclidian distance between REFERENCE & PREDICTED in XY
+    incorrect_poses = []
+    incorrect_poses_idx = []
     common_im_ids = sorted(set(ref_poses.keys()) & set(pred_poses.keys()))
-    for im_id in common_im_ids:
+    for i, im_id in enumerate(common_im_ids):
         if ref_poses[im_id] is not None and pred_poses[im_id] is not None:
             XX.append(ref_poses[im_id][0])
             YY.append(ref_poses[im_id][1])
@@ -425,9 +397,23 @@ def pose_estimation_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_
             err_3d.append(distance.euclidean(ref_poses[im_id][0:3], pred_poses[im_id][0:3]))
             err_XY.append(distance.euclidean(ref_poses[im_id][0:2], pred_poses[im_id][0:2]))
             err_Z.append(abs(ref_poses[im_id][2] - pred_poses[im_id][2]))
+            if d_th > 0. and err_3d[-1] >= d_th:
+                incorrect_poses.append(pred_poses[im_id][0:2])
+                incorrect_poses_idx.append(i)
 
     # Show the mapping with arrows:
-    q = xyax.quiver(XX, YY, U, V, scale_units='xy', scale=1., width=0.003)
+    # q = xyax.quiver(XX, YY, U, V, scale_units='xy', scale=1., width=0.003)
+
+    # Show the incorrect poses with arrows:
+    # if len(incorrect_poses) > 0:
+    #     XX, YY = [], []
+    #     U, V = [], []
+    #     for (x_w, y_w) in incorrect_poses:
+    #         XX.append(x_w - 0.1 * (x_w - x_c))
+    #         YY.append(y_w - 0.1 * (y_w - y_c))
+    #         U.append(x_w - x_c)
+    #         V.append(y_w - y_c)
+    #     _ = xyax.quiver(XX, YY, U, V, scale_units='xy', scale=10, width=0.003)
 
     # - Plot the image indexes as text next to REFERENCE points:
     # Get images index:
@@ -436,7 +422,8 @@ def pose_estimation_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_
         im_ids = list(range(len(im_ids)))
     # Add image or point ids as text:
     for i, im_id in enumerate(im_ids):
-        xyax.text(x[i], y[i], f" {im_id}", ha='left', va='center', fontfamily='monospace')
+        xyax.text(x[i], y[i], f" {im_id}", ha='left', va='center', fontfamily='monospace',
+                  color='red' if i in incorrect_poses_idx else 'black')
 
     # - Add hardware CNC limits as dashed blue lines:
     xlims = kwargs.get('xlims', None)
@@ -542,7 +529,8 @@ def pose_estimation_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_
     # Add the text to the vignette, if provided:
     vignette_str = kwargs.pop('vignette', "")
     if vignette_str != "":
-        vignette.text(0.5, 0.5, vignette_str, ha='center', va='center', fontdict={'family': 'monospace', 'size': 'medium'})
+        vignette.text(0.5, 0.5, vignette_str, ha='center', va='center',
+                      fontdict={'family': 'monospace', 'size': 'medium'})
     # -------------------------------------------------------------------------
 
     path = kwargs.get("path", None)
