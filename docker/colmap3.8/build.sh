@@ -85,7 +85,7 @@ start_time=$(date +%s)
 docker build \
   -t roboticsmicrofarms/colmap:${vtag} ${docker_opts} \
   --build-arg CUDA_ARCHITECTURES=${CUDA_CC} \
-  -f docker/Dockerfile .
+  -f docker/colmap3.8/Dockerfile .
 # Get docker build exit code:
 docker_build_status=$?
 # Get elapsed time:
