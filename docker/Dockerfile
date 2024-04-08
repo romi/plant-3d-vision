@@ -8,19 +8,23 @@ LABEL repository="https://github.com/romi/plant-3d-vision"
 LABEL license="LGPL-3.0-or-later"
 LABEL description="Plant reconstruction and phenotyping pipeline."
 
+# Set user name and id variables:
+ENV USER_NAME="romi"
+ENV USER_ID=2020
+
+# Variables required by `nvidia-container-runtime`:
+ENV NVIDIA_VISIBLE_DEVICES all
+ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
+# Variables required by Python:
 ENV LANG=C.UTF-8
 ENV PYTHONUNBUFFERED=1
-ENV USER_NAME=romi
-ENV USER_ID=1010
-# Required by `pip`:
-ENV PATH=$PATH:"/home/${USER_NAME}/.local/bin"
+# Variables required by `pip`:
+ENV PATH="${PATH}:/home/${USER_NAME}/.local/bin"
+
 # Required by `romi_run_task`:
 ENV ROMI_DB="/myapp/db"
 ENV COLMAP_EXE='colmap'
 ENV PYOPENCL_CTX='0'
-# Required by `nvidia-container-runtime`:
-ENV NVIDIA_VISIBLE_DEVICES all
-ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
 
 RUN apt-get update && \
     # Install the required dependencies
@@ -77,4 +81,5 @@ RUN cd plant-3d-vision/ && \
     # Download the trained CNN model file:
     ./get_model.sh
 
-CMD ["/bin/bash", "-c", "romi_run_task -h"]
+COPY --chown=${USER_NAME} docker/entrypoint.sh .
+ENTRYPOINT ["./entrypoint.sh"]

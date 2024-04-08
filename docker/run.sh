@@ -195,31 +195,29 @@ if [ "${docker_option}" != "" ]; then
 fi
 
 if [ "${cmd}" = "" ]; then
-  # Start in interactive mode, `~/.bashrc` will be loaded.
+  # Start in interactive mode, using the `-i` flag (load `~/.bashrc`).
   docker run --rm --gpus all ${mount_option} \
     --user romi:${gid} \
     --env PYOPENCL_CTX='0' \
     ${docker_option} \
     -i ${USE_TTY} \
     roboticsmicrofarms/plant-3d-vision:${vtag} \
-    bash
+    "bash"
 else
   echo -e "${INFO}Running: '${cmd}'."
   echo -e "${INFO}Bind mount: '${mount_option}'."
   # Get the date to estimate command execution time:
   start_time=$(date +%s)
-  # Start in non-interactive mode (run the command).
-  # Use the `-i` flag to load `~/.bashrc` (defining the right `umask`).
+  # Start in interactive mode, using the `-i` flag (load `~/.bashrc`).
   docker run --rm --gpus all ${mount_option} \
     --user romi:${gid} \
     --env PYOPENCL_CTX='0' \
     ${docker_option} \
-    ${USE_TTY} \
+    -i ${USE_TTY} \
     roboticsmicrofarms/plant-3d-vision:${vtag} \
-    bash -ic "${cmd}"
+    "${cmd}"
   # Get command exit code:
   cmd_status=$?
-
   # Print elapsed time if successful (code 0), else print command exit code
   elapsed_time=$(expr $(date +%s) - ${start_time})
   if [ ${cmd_status} == 0 ]; then
