@@ -127,8 +127,8 @@ To test if you can run the _machine learning pipeline_:
 ```
 
 ### Enable write access to local database with bind mount
-To avoid running the container app as `root` user, we created a non-root user named `myuser` with an uid of `1000`.
-In turn, when you mount a local `plantdb` database, if the directory does not have an uid of `1000` you will not be able to write.
+To avoid running the container app as `root` user, we created a non-root user named `romi` with an uid of `2020`.
+In turn, when you mount a local `plantdb` database, if the directory does not have an uid of `2020` you will not be able to write.
 
 In the `./docker/run.sh` convenience script, we added a few lines to automatically get the group id of the host database directory.
 To be a bit cleaner and go further in sharing the database with other users, we suggest to:
@@ -137,7 +137,7 @@ To be a bit cleaner and go further in sharing the database with other users, we 
 1. create a group named `romi`,
 2. add all potential users of the docker image to this group
 3. change the group of the local `plantdb` database to the `romi` group
-4. start the docker container with the `-u myuser:$romi_gid` option, where `$romi_gid` is the group id (gid) of the `romi` group
+4. start the docker container with the `--user romi:$romi_gid` option, where `$romi_gid` is the group id (gid) of the `romi` group
 
 This will also allow all users from the `romi` group to access the files within the database, effectively making this a shared database.
 
@@ -148,7 +148,7 @@ Let's start by setting an environment variable named `$ROMI_DB` to the end of ou
 ```shell
 cat << EOF >> /home/$USER/.bashrc
 # ROMI plant-3d-vision - Set the local plantdb database location:
-export ROMI_DB='/Data/ROMI/DB'
+export ROMI_DB='/data/ROMI/DB'
 EOF
 ```
 
@@ -165,7 +165,7 @@ In any case, please avoid doing horrendous things like `chmod -R 777 $ROMI_DB`!
 
 1. Create the `romi` group
    ```shell
-   sudo addgroup romi
+   sudo addgroup romi --gid 2020
    ```
 2. Add the current user to the `romi` group
    ```shell
