@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import argparse
 import sys
+from math import degrees
 from pathlib import Path
 
 import numpy as np
@@ -218,7 +219,7 @@ def get_graph_objects(data):
     if data['PointCloud'] is not None:
         go_data['PointCloud'] = plotly_pointcloud_data(data['PointCloud'], n_pts=9000, showlegend=False)
     if data['TriangleMesh'] is not None:
-        go_data['TriangleMesh'] = plotly_mesh_data(data['TriangleMesh'], showlegend=False)
+        go_data['TriangleMesh'] = plotly_mesh_data(data['TriangleMesh'], mesh_kwargs={"opacity": 0.8}, showlegend=False)
     if data['TreeGraph'] is not None:
         go_data['TreeGraph'] = plotly_treegraph_data(data["TreeGraph"],
                                                      legendgroup='tree', legendgrouptitle={'text': 'TreeGraph'})
@@ -296,30 +297,49 @@ def get_sequences_data(db_path, dataset_name):
     db.connect()
     # Get the `Scan` instance, should exist:
     scan = db.get_scan(dataset_name, create=False)
+
+    # Try to load manual measurements:
+    gt_measures = scan.get_measures()
+    if gt_measures != {}:
+        logger.info(f"Found ground-truth measurements.")
+    if gt_measures != {} and is_radians(gt_measures['angles']):
+    # Convert the GT angles to degrees if in radians:
+        gt_measures['angles'] = list(map(degrees, gt_measures["angles"]))
+        logger.info("Converted ground-truth angles from radians to degrees.")
+
     # Find the fileset corresponding to the task:
     fileset_names = locate_task_filesets(scan, TASKS)
-    # Load the measures fileset:
+    # Load the measurements from the "AnglesAndInternodes" fileset:
     measures_fs = scan.get_fileset(fileset_names['AnglesAndInternodes'])
     measures_file = measures_fs.get_file('AnglesAndInternodes')
-    measures = read_json(measures_file)
+    auto_measures = read_json(measures_file)
     try:
-        assert measures != {}
+        assert auto_measures != {}
     except:
-        measures = {"angles": [np.nan], "internodes": [np.nan]}
+        auto_measures = {"angles": [np.nan], "internodes": [np.nan]}
         logger.warning(f"No AnglesAndInternodes sequences found!")
     else:
-        angles = measures["angles"]
-        internodes = measures["internodes"]
+        angles = auto_measures["angles"]
+        internodes = auto_measures["internodes"]
         logger.info(f"Found a sequence of {len(angles)} angles.")
         logger.info(f"Found a sequence of {len(internodes)} internodes.")
         # Convert angles if in radians
-        if is_radians(measures["angles"]):
-            from math import degrees
-            measures["angles"] = list(map(degrees, measures["angles"]))
+        if is_radians(auto_measures["angles"]):
+            auto_measures["angles"] = list(map(degrees, auto_measures["angles"]))
             logger.info("Converted estimated angles from radians to degrees.")
 
     db.disconnect()  # disconnect from the database
-    return {'angles': measures["angles"], 'internodes': measures["internodes"]}
+
+    measures = {
+        'angles': auto_measures["angles"],
+        'internodes': auto_measures["internodes"]
+    }
+    # Add the ground-truth measures, if any:
+    if gt_measures != {}:
+        measures['gt_angles'] = gt_measures["angles"]
+        measures['gt_internodes'] = gt_measures["internodes"]
+
+    return measures
 
 
 def dash_app(data, measures):
@@ -518,7 +538,7 @@ if __name__ == '__main__':
     data = get_3d_data(db_path, dataset_name)
     mini, maxi = get_global_range(data["PointCloud"], data["TriangleMesh"])
     axes_ratio = get_axes_ratio(mini, maxi)
-    # - Load the sequences:
+    # - Load the predicted sequences:
     measures = get_sequences_data(db_path, dataset_name)
 
     # - Start the Dash app:

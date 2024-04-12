@@ -915,6 +915,7 @@ def plotly_vert_sequences(sequences, y_axis=None, y_axis_label=None, line_kwargs
     ----------
     sequences : dict
         The sequences dictionary to plot, usually contains "angles" and "internodes" entries.
+        May also contains "gt_angles" and "gt_internodes".
 
     Returns
     -------
@@ -933,11 +934,11 @@ def plotly_vert_sequences(sequences, y_axis=None, y_axis_label=None, line_kwargs
     """
     from plotly.subplots import make_subplots
 
-    n_figs = len(sequences)
+    n_figs = 2
     names = list(sequences.keys())
-    idx = np.array(range(len(sequences[names[0]])))
+    n_idx = max([len(sequences[name]) for name in names])
 
-    line_style = {'color': 'firebrick', 'width': 2, 'dash': 'dash'}
+    line_style = {'width': 2, 'dash': 'dash'}
     if isinstance(line_kwargs, dict):
         line_style.update(line_kwargs)
 
@@ -945,34 +946,40 @@ def plotly_vert_sequences(sequences, y_axis=None, y_axis_label=None, line_kwargs
     if isinstance(marker_kwargs, dict):
         marker_style.update(marker_kwargs)
 
-    y_values = idx
-    if y_axis is not None and len(y_axis) == len(idx):
+    y_values = list(range(n_idx))
+    if y_axis is not None and len(y_axis) == n_idx:
         y_values = list(y_axis)
     if y_axis_label is None:
         y_axis_label = "Interval index"
 
     fig = make_subplots(rows=1, cols=n_figs, horizontal_spacing=0.02, shared_yaxes=True)
-    for i in range(n_figs):
-        name = names[i]
-        # Create the hover template & x-axis label:
-        if name == "angles":
-            ht = ["Angle: %{x:.2f}°<br>" + f"Fruits: {organ} - {organ + 1}" for organ in idx]
-            xaxis_label = "Angle (degrees)"
+    for name in names:
+        fig_idx = 0 if "angles" in name else 1
+        if 'gt' in name:
+            suffix="GT "
+            line_style['color'] = 'blue'
         else:
-            ht = ["Distance: %{x:.2f}mm<br>" + f"Fruits: {organ} - {organ + 1}" for organ in idx]
-            xaxis_label = "Distance (mm)"
+            suffix=""
+            line_style['color'] = 'firebrick'
+        # Create the hover template & x-axis label:
+        if "angles" in name:
+            ht = [suffix+"Angle: %{x:.2f}°<br>" + f"Fruits: {organ} - {organ + 1}" for organ in range(n_idx)]
+            xaxis_label = suffix+"Angle (degrees)"
+        else:
+            ht = [suffix+"Distance: %{x:.2f}mm<br>" + f"Fruits: {organ} - {organ + 1}" for organ in range(n_idx)]
+            xaxis_label = suffix+"Distance (mm)"
         sc = go.Scatter(x=sequences[name], y=y_values, name="",
                         mode='lines+markers', line=line_style, marker=marker_style, hovertemplate=ht)
-        fig.add_trace(sc, row=1, col=i + 1)
+        fig.add_trace(sc, row=1, col=fig_idx + 1)
         if name == 'angles':
             # Add a "reference line" at 137.5:
             fig.add_trace(go.Scatter(x=[137.5, 137.5], y=[0, max(y_values)], mode="lines",
                                      line={'color': 'blue', 'width': 1, 'dash': 'dashdot'}))
         # Add the name of the sequence as X-axis label:
-        fig.update_xaxes(title_text=xaxis_label, row=1, col=i + 1)
+        fig.update_xaxes(title_text=xaxis_label, row=1, col=fig_idx + 1)
         # Add the Y-axis label for the first subplot:
-        if i == 0:
-            fig.update_yaxes(title_text=y_axis_label, row=1, col=i + 1)
+        if fig_idx == 0:
+            fig.update_yaxes(title_text=y_axis_label, row=1, col=fig_idx + 1)
         fig.update_yaxes(showspikes=True, spikemode="across", spikecolor="black", spikethickness=1)
         fig.update_traces(textposition='top center')
 
