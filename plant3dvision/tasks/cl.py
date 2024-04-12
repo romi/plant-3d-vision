@@ -63,6 +63,10 @@ class Voxels(RomiTask):
         By default, it uses the scanner workspace defined in the 'images' fileset.
         Defined as `{'x': [int, int], 'y': [int, int], 'z': [int, int]}`.
         Defaults to NO bounding-box.
+    bounding_box_edit : luigi.DictParameter, optional
+        Edit the bounding box dictionary.
+        Useful with VirtualPlants where the `bounding_box` is known, but we would like to edit it.
+        Defaults to NO bounding-box editing.
 
     See Also
     --------
@@ -89,6 +93,7 @@ class Voxels(RomiTask):
     invert = luigi.BoolParameter(default=False)
     labels = luigi.ListParameter(default=[])
     bounding_box = luigi.DictParameter(default=None)
+    bounding_box_edit = luigi.DictParameter(default=None)
 
     def requires(self):
         if self.upstream_colmap.get_task_family() == 'Colmap':
@@ -120,8 +125,16 @@ class Voxels(RomiTask):
         if self.bounding_box is None:
             logger.critical(f"Could not obtain valid bounding-box for {self.scan_id}!")
             sys.exit("Error with bounding-box definition!")
-        else:
-            logger.info(f"Bounding-box to use: {self.bounding_box}")
+
+        # Edit the bounding-box
+        if self.bounding_box_edit is not None:
+            for axis in ['x', 'y', 'z']:
+                edit = self.bounding_box_edit.get(axis, [0., 0.])
+                self.bounding_box[axis][0] += edit[0]
+                self.bounding_box[axis][1] += edit[1]
+
+        # Print the bounding-box values:
+        logger.info(f"Bounding-box to use: {self.bounding_box}")
 
         # - Check if any displacement exists, and use it to modify the shape of the voxel array (to create):
         x_min, x_max = self.bounding_box["x"]
