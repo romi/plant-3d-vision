@@ -25,16 +25,16 @@ def get_main_stem_and_nodes(G, root_node):
 
     Parameters
     ----------
-    G : networkx.graph
+    G : networkx.Graph
         The tree graph to analyze.
     root_node : int
         The index of the root node.
 
     Returns
     -------
-    numpy.array
+    numpy.ndarray
         The ordered list of node ids defining the main stem.
-    numpy.array
+    numpy.ndarray
         The ordered list of node ids defining the branching points.
     """
     # Get main stem as shortest path to point furthest from root

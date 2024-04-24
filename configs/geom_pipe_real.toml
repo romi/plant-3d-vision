@@ -9,7 +9,7 @@ align_pcd = true
 use_gpu = true
 single_camera = true
 alignment_max_error = 10
-distance_threshold = 5  # maximum allowed Euclidean distance from CNC pose
+distance_threshold = 4  # maximum allowed Euclidean distance from CNC pose
 # [Colmap.bounding_box]  # default to None
 # x = [150, 650]
 # y = [150, 650]
@@ -22,7 +22,7 @@ query = "{\"channel\":\"rgb\", \"pose_estimation\":\"correct\"}"  # RGB images w
 [Masks]
 upstream_task = "Undistorted"
 type = "linear"
-parameters = "[0, 1, 0]"
+parameters = "[0.2, 1, 0.1]"
 dilation = 3 # default to 0
 binarize = true
 threshold = 0.15
