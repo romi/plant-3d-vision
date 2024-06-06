@@ -818,7 +818,7 @@ class Colmap(RomiTask):
                 logger.info(f"Changed the allowed max blind angle to {self.max_blind_angle}°.")
 
             consecutive_wrong = np.split(wrong_pose_idx, np.where(np.diff(wrong_pose_idx) != 1)[0] + 1)
-            max_wrong_size = len(consecutive_wrong[np.argmax(len(consecutive_wrong))])
+            max_wrong_size = len(consecutive_wrong[np.argmax([len(cw_i) for cw_i in consecutive_wrong])])
             blind_angle = angle_between_img * max_wrong_size
             # Raise an exception if percentage of consecutive wrong pose is greater than 5%:
             if blind_angle > float(self.max_blind_angle):
