@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import json
+import shutil
 import sys
 from os.path import join
 from os.path import splitext
@@ -833,4 +834,6 @@ class Colmap(RomiTask):
             else:
                 logger.info(f"The blind angle {blind_angle} is below the threshold {self.max_blind_angle}.")
 
+        # Clean-up the temporary working directory created by the ColmapRunner instance:
+        shutil.rmtree(colmap_runner.colmap_workdir, ignore_errors=True)
         return

@@ -574,7 +574,7 @@ class ColmapRunner(object):
         self.bounding_box = bounding_box
         # -- Initialize COLMAP directories, poses file & log file:
         # - Get / create a temporary COLMAP working directory
-        self.colmap_workdir = Path(os.environ.get("COLMAP_WD", tempfile.mkdtemp()))
+        self.colmap_workdir = Path(os.environ.get("COLMAP_WD", tempfile.mkdtemp(prefix='colmap_')))
         self.imgs_dir = self.colmap_workdir / 'images'  # COLMAP's 'images' directory
         self.sparse_dir = self.colmap_workdir / 'sparse'  # COLMAP's 'sparse reconstruction' directory
         self.dense_dir = self.colmap_workdir / 'dense'  # COLMAP's 'dense reconstruction' directory
