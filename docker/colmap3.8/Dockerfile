@@ -3,7 +3,7 @@ ARG NVIDIA_CUDA_VERSION=11.8.0
 # -----------------------------------------------------------------------------
 # Docker builder stage.
 # -----------------------------------------------------------------------------
-FROM nvidia/cuda:${NVIDIA_CUDA_VERSION}-devel-ubuntu${UBUNTU_VERSION} as builder
+FROM nvidia/cuda:${NVIDIA_CUDA_VERSION}-devel-ubuntu${UBUNTU_VERSION} AS builder
 
 ARG CUDA_ARCHITECTURES=75
 
@@ -52,7 +52,7 @@ RUN git clone https://github.com/colmap/colmap.git && \
 # -----------------------------------------------------------------------------
 # Docker runtime stage.
 # -----------------------------------------------------------------------------
-FROM nvidia/cuda:${NVIDIA_CUDA_VERSION}-runtime-ubuntu${UBUNTU_VERSION} as runtime
+FROM nvidia/cuda:${NVIDIA_CUDA_VERSION}-runtime-ubuntu${UBUNTU_VERSION} AS runtime
 
 # Minimal dependencies to run COLMAP binary compiled in the builder stage.
 # Note: this reduces the size of the final image considerably, since all the

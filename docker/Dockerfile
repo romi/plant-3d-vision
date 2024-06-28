@@ -1,4 +1,7 @@
-FROM roboticsmicrofarms/colmap:3.8
+ARG COLMAP_VERSION="3.8"
+ARG CUDA_CC="75"
+
+FROM roboticsmicrofarms/colmap:${COLMAP_VERSION}-cuda_cc${CUDA_CC}
 
 LABEL maintainer="Jonathan LEGRAND <jonathan.legrand@ens-lyon.fr>"
 LABEL corresponding_author="Peter Hanappe <peter@romi-project.eu>"
@@ -13,8 +16,8 @@ ENV USER_NAME="romi"
 ENV USER_ID=2020
 
 # Variables required by `nvidia-container-runtime`:
-ENV NVIDIA_VISIBLE_DEVICES all
-ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
 # Variables required by Python:
 ENV LANG=C.UTF-8
 ENV PYTHONUNBUFFERED=1

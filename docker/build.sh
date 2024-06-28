@@ -14,6 +14,10 @@ bold() { echo -e "\e[1m$*\e[0m"; }
 vtag="latest"
 # String aggregating the docker build options to use:
 docker_opts=""
+# Default Colmap version to use:
+COLMAP_VERSION="3.8"
+# Default CUDA Compute Capability is empty (to enable automatic search):
+CUDA_CC=""
 
 usage() {
   echo -e "$(bold USAGE):"
@@ -31,6 +35,12 @@ usage() {
   echo "  -t, --tag
     Image tag to use." \
     "By default, use the '${vtag}' tag."
+  echo "  --colmap
+    The version of Colmap to use." \
+    "By default, use '${COLMAP_VERSION}'."
+  echo "  --cuda-cc
+    The CUDA Compute Capability value to use." \
+    "By default, try to gess it from the system."
   # -- Docker options:
   echo "  --no-cache
     Do not use cache when building the image, (re)start from scratch."
@@ -48,6 +58,14 @@ while [ "$1" != "" ]; do
   -t | --tag)
     shift
     vtag=$1
+    ;;
+  --colmap)
+    shift
+    COLMAP_VERSION=$1
+    ;;
+  --cuda-cc)
+    shift
+    CUDA_CC=$1
     ;;
   --no-cache)
     docker_opts="${docker_opts} --no-cache"
@@ -70,11 +88,27 @@ while [ "$1" != "" ]; do
   shift
 done
 
+# If not defined manually, try to get CUDA GPU Compute Capability:
+if [ ${CUDA_CC} == "" ]; then
+  # Get the CUDA GPU Compute Capability:
+  CUDA_CC=$(nvidia-smi --query-gpu=compute_cap --format=csv  | awk 'NR==2' | sed -e 's/\.//g')
+  if [ ${CUDA_CC} != "" ]; then
+    echo -e "\n${INFO}Found CUDA GPU Compute Capability: ${CUDA_CC}"
+  else
+    echo -e "\n${ERROR}Could not find CUDA GPU Compute Capability value!"
+    exit 1
+  fi
+else
+  echo -e "\n${INFO}Got a CUDA GPU Compute Capability value: ${CUDA_CC}"
+fi
+
 # Get the date to estimate docker image build time:
 start_time=$(date +%s)
 # Start the docker image build:
 docker build \
-  -t roboticsmicrofarms/plant-3d-vision:${vtag} ${docker_opts} \
+  --build-arg COLMAP_VERSION=${COLMAP_VERSION} \
+  --build-arg CUDA_CC=${CUDA_CC} \
+  -t roboticsmicrofarms/plant-3d-vision:${vtag}-cuda_cc${CUDA_CC} ${docker_opts} \
   -f docker/Dockerfile .
 # Get docker build exit code:
 docker_build_status=$?

@@ -14,6 +14,8 @@ bold() { echo -e "\e[1m$*\e[0m"; }
 vtag="3.8"
 # String aggregating the docker build options to use:
 docker_opts=""
+# Default CUDA Compute Capability is empty (to enable automatic search):
+CUDA_CC=""
 
 usage() {
   echo -e "$(bold USAGE):"
@@ -29,8 +31,11 @@ usage() {
 
   echo -e "$(bold OPTIONS):"
   echo "  -t, --tag
-    Image tag to use." \
+    Image tag to use. Note that a '-cuda_cc\${CUDA_CC}' suffix will be added." \
     "By default, use the '${vtag}' tag."
+  echo "  --cuda-cc
+    The CUDA Compute Capability value to use to build Colmap." \
+    "By default, try to gess it from the system."
   # -- Docker options:
   echo "  --no-cache
     Do not use cache when building the image, (re)start from scratch."
@@ -48,6 +53,10 @@ while [ "$1" != "" ]; do
   -t | --tag)
     shift
     vtag=$1
+    ;;
+  --cuda-cc)
+    shift
+    CUDA_CC=$1
     ;;
   --no-cache)
     docker_opts="${docker_opts} --no-cache"
@@ -70,21 +79,26 @@ while [ "$1" != "" ]; do
   shift
 done
 
-# Get the CUDA GPU Compute Capability:
-CUDA_CC=$(nvidia-smi --query-gpu=compute_cap --format=csv  | awk 'NR==2' | sed -e 's/\.//g')
-if [ ${CUDA_CC} != "" ]; then
-  echo -e "\n${INFO}Found CUDA GPU Compute Capability: ${CUDA_CC}"
+# If not defined manually, try to get CUDA GPU Compute Capability:
+if [ ${CUDA_CC} == "" ]; then
+  # Get the CUDA GPU Compute Capability:
+  CUDA_CC=$(nvidia-smi --query-gpu=compute_cap --format=csv  | awk 'NR==2' | sed -e 's/\.//g')
+  if [ ${CUDA_CC} != "" ]; then
+    echo -e "\n${INFO}Found CUDA GPU Compute Capability: ${CUDA_CC}"
+  else
+    echo -e "\n${ERROR}Could not find CUDA GPU Compute Capability value!"
+    exit 1
+  fi
 else
-  echo -e "\n${ERROR}Could not find CUDA GPU Compute Capability value!"
-  exit 1
+  echo -e "\n${INFO}Got a CUDA GPU Compute Capability value: ${CUDA_CC}"
 fi
 
 # Get the date to estimate docker image build time:
 start_time=$(date +%s)
 # Start the docker image build:
 docker build \
-  -t roboticsmicrofarms/colmap:${vtag} ${docker_opts} \
   --build-arg CUDA_ARCHITECTURES=${CUDA_CC} \
+  -t roboticsmicrofarms/colmap:${vtag}-cuda_cc${CUDA_CC} ${docker_opts} \
   -f docker/colmap3.8/Dockerfile .
 # Get docker build exit code:
 docker_build_status=$?
