@@ -671,7 +671,11 @@ def compute_angles_and_internodes(T, n_nodes_fruit=5, n_nodes_stem=5):
         angles.append(angle)
         internodes.append(np.linalg.norm(p2 - p1))
 
-    # complement angles if needed
+    # - Complement angles if the median value of angles is greater than Pi/180°
+    # --- Biological explanation ---
+    # 50% of the plants have a clockwise phyllotaxis, the other 50% are counter-clockwise.
+    # Complementing the angle values allows to "follow" the direction of the phyllotaxis.
+    # ------------------------------
     if np.median(angles) > np.pi:
         angles = 2 * np.pi - np.array(angles)
         angles = angles.tolist()
@@ -949,9 +953,13 @@ def compute_angles_and_internodes_from_directions(fruit_dirs, stem_dirs, bp_coor
         angles.append(angle)
         internodes.append(internode_dist)
 
-    # # - Complement angles if needed
-    # if np.median(angles) > np.pi:
-    #     angles = 2 * np.pi - np.array(angles)
-    #     angles = angles.tolist()
+    # - Complement angles if the median value of angles is greater than Pi/180°
+    # --- Biological explanation ---
+    # 50% of the plants have a clockwise phyllotaxis, the other 50% are counter-clockwise.
+    # Complementing the angle values allows to "follow" the direction of the phyllotaxis.
+    # ------------------------------
+    if np.median(angles) > np.pi:
+        angles = 2 * np.pi - np.array(angles)
+        angles = angles.tolist()
 
     return {"angles": list(map(degrees, angles)), "internodes": internodes}
