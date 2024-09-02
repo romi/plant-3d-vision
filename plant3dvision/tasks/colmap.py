@@ -829,8 +829,12 @@ class Colmap(RomiTask):
                 ext = fig_path.suffix
                 suffix = f"_try_{self.retry}{ext}"
                 fig_path.rename(str(fig_path).replace(ext, suffix))
-                raise Exception(
-                    f"Attempt #{self.retry} - Failed to estimate {max_wrong_size} poses within a {self.distance_threshold}mm distance to CNC pose!")
+                if self.retry_count > 0:
+                    self.retry += 1
+                    # Clean-up the temporary working directory created by the ColmapRunner instance:
+                    shutil.rmtree(colmap_runner.colmap_workdir, ignore_errors=True)
+                    raise Exception(
+                        f"Attempt #{self.retry-1} - Failed to estimate {max_wrong_size} poses within a {self.distance_threshold}mm distance to CNC pose!")
             else:
                 logger.info(f"The blind angle {blind_angle} is below the threshold {self.max_blind_angle}.")
 
