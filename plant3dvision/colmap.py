@@ -30,7 +30,7 @@ from romitask.log import configure_logger
 logger = configure_logger(__name__)
 
 #: Default colmap executable:
-DEFAULT_COLMAP = 'colmap'
+DEFAULT_COLMAP = 'roboticsmicrofarms/colmap'
 #: List of valid colmap executable values:
 COLMAP_DOCKER = ['geki/colmap', 'colmap/colmap', 'roboticsmicrofarms/colmap']
 # - Try to get colmap executable to use from '$COLMAP_EXE' environment variable, or set it to use docker container by default:
