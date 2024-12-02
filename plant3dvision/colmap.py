@@ -10,7 +10,6 @@ You can use multiple sources of colmap executable by setting the ``COLMAP_EXE`` 
 
 Using docker image requires the docker engine to be available on your system and the docker SDK.
 """
-
 import os
 import subprocess
 import sys
@@ -282,12 +281,12 @@ def cameras_model_to_opencv_model(cameras):
     return cameras
 
 
-def compute_estimated_pose(rotmat, tvec):
-    """Compute the estimated pose from COLMAP.
+def estimate_camera_pose(rot_matrix, tvec):
+    """Estimate camera pose (position & orientation) from COLMAP rotation and translation matrix.
 
     Parameters
     ----------
-    rotmat : numpy.ndarray
+    rot_matrix : numpy.ndarray
         Rotation matrix, should be of shape `(3, 3)`.
     tvec : numpy.ndarray
         Translation vector, should be of shape `(3,)`.
@@ -295,11 +294,36 @@ def compute_estimated_pose(rotmat, tvec):
     Returns
     -------
     list
-        Calibrated pose, that is the estimated XYZ coordinate of the camera by colmap.
+        Estimated camera pose (position & orientation) by colmap.
+        That is the X, Y & Z coordinates as well as the pan, tilt & roll angles.
 
+    References
+    ----------
+    https://eecs.qmul.ac.uk/~gslabaugh/publications/euler.pdf
+    https://en.wikipedia.org/wiki/Euler_angles#Definition_by_intrinsic_rotations
+    https://docs.opencv.org/4.x/d9/d0c/group__calib3d.html
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from plant3dvision.colmap import estimate_camera_pose
+    >>> # Sample rotation matrix (3x3) and translation vector (3x1)
+    >>> rot_matrix = np.array([[0.04537058362671326, -0.998725595306853, 0.022106456530704977], [-0.5123537456733758, -0.042261105904542295, -0.8577340136791751], [0.8575751567272887, 0.027589566990035286, -0.5136182106949377]])
+    >>> tvec = np.array([370.51956102391097, 121.97435769625103, 24.928062162932385])
+    >>> x, y, z, pan, tilt, roll = estimate_camera_pose(rot_matrix, tvec)
+    >>> print([x, y, z])
+    [24.305643496725597, 374.51438596370315, 109.2341875074113]
+    >>> print(pan, tilt)
+    265.2846760236354 59.063102235084784
     """
-    pose = np.dot(-rotmat.transpose(), (tvec.transpose()))
-    return np.array(pose).flatten().tolist()
+    from scipy.spatial.transform import Rotation as R
+    # Compute the camera position in world coordinates
+    camera_position = -np.transpose(rot_matrix) @ tvec
+    # Extract Euler angles (ZXY) from rotation matrix
+    rotation = R.from_matrix(rot_matrix)
+    pan, tilt, roll = rotation.as_euler('zxy', degrees=True)
+    pan = (180 - pan) % 360  # change rotation orientation and range from [-180, 180] to [0, 360]
+    return list(camera_position) + [pan, tilt, roll]
 
 
 def export_camera_parameters(image_files, intrinsics, extrinsics):
@@ -364,9 +388,9 @@ def export_camera_parameters(image_files, intrinsics, extrinsics):
             }
             # - Add a 'colmap_camera' entry to the file metadata:
             fi.set_metadata("colmap_camera", camera)
-            # - Add an 'estimated_pose' entry to the file metadata:
-            estimated_pose = compute_estimated_pose(np.array(extrinsics[fi.filename]["rotmat"]),
-                                                    np.array(extrinsics[fi.filename]["tvec"]))
+            # - Add an 'estimated_pose' [x, y, z, pan, tilt, roll] entry to the file metadata:
+            estimated_pose = estimate_camera_pose(np.array(extrinsics[fi.filename]["rotmat"]),
+                                                  np.array(extrinsics[fi.filename]["tvec"]))
             fi.set_metadata("estimated_pose", estimated_pose)
 
     return image_files

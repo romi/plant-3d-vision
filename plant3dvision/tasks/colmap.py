@@ -15,7 +15,7 @@ from plant3dvision.calibration import pose_estimation_figure
 from plant3dvision.camera import format_camera_params
 from plant3dvision.camera import get_colmap_cameras_from_calib_scan
 from plant3dvision.colmap import ColmapRunner
-from plant3dvision.colmap import compute_estimated_pose
+from plant3dvision.colmap import estimate_camera_pose
 from plant3dvision.filenames import COLMAP_CAMERAS_ID
 from plant3dvision.filenames import COLMAP_DENSE_ID
 from plant3dvision.filenames import COLMAP_IMAGES_ID
@@ -120,7 +120,7 @@ def get_image_poses(scan_dataset, md="calibrated_pose", default=None):
     return {im.id: im.get_metadata(md, default) for im in images_fileset.get_files()}
 
 
-def compute_colmap_poses_from_metadata(scan_dataset):
+def compute_camera_poses_from_colmap(scan_dataset):
     """Get the camera poses estimated by colmap from a 'Colmap*' fileset using "rotmat" & "tvec" metadata.
 
     Parameters
@@ -156,8 +156,8 @@ def compute_colmap_poses_from_metadata(scan_dataset):
         md_i = fi.get_metadata()
         rotmat = md_i['colmap_camera']['rotmat']
         tvec = md_i['colmap_camera']['tvec']
-        # - Compute the 'calibrated_pose' estimated by COLMAP:
-        colmap_poses[fi.id] = compute_estimated_pose(np.array(rotmat), np.array(tvec))
+        # - Compute the 'calibrated_pose' from COLMAP's rotation and translation matrix:
+        colmap_poses[fi.id] = estimate_camera_pose(np.array(rotmat), np.array(tvec))
 
     return colmap_poses
 
@@ -226,8 +226,8 @@ def compute_colmap_poses_from_camera_json(scan_dataset):
         if key is None:
             logger.error(f"Missing camera pose of image '{fi.id}' in scan '{scan_name}'!")
         else:
-            # - Compute the 'calibrated_pose':
-            colmap_poses[fi.id] = compute_estimated_pose(np.array(poses[key]['rotmat']), np.array(poses[key]['tvec']))
+            # - Compute the 'calibrated_pose' from COLMAP's rotation and translation matrix:
+            colmap_poses[fi.id] = estimate_camera_pose(np.array(poses[key]['rotmat']), np.array(poses[key]['tvec']))
 
     return colmap_poses
 

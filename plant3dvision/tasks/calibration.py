@@ -10,7 +10,7 @@ from plant3dvision.calibration import calibrate_opencv_camera
 from plant3dvision.calibration import calibrate_radial_camera
 from plant3dvision.calibration import calibrate_simple_radial_camera
 from plant3dvision.colmap import ColmapRunner
-from plant3dvision.colmap import compute_estimated_pose
+from plant3dvision.colmap import estimate_camera_pose
 from romitask import DatabaseConfig
 from romitask import FilesetTarget
 from romitask import RomiTask
@@ -515,8 +515,8 @@ class ExtrinsicCalibration(RomiTask):
             # Get the rotation and translation matrices defined in metadata by `colmap_runner.run()`:
             rotmat = np.array(file.get_metadata("colmap_camera")['rotmat'])
             tvec = np.array(file.get_metadata("colmap_camera")['tvec'])
-            # Compute the XYZ pose:
-            colmap_pose = compute_estimated_pose(rotmat, tvec)
+            # Compute the camera pose (x, y, z, pan, tilt, roll):
+            colmap_pose = estimate_camera_pose(rotmat, tvec)
             # Export the estimated pose to the image metadata:
             file.set_metadata("calibrated_pose", colmap_pose)
             return colmap_pose
