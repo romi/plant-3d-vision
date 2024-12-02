@@ -317,7 +317,7 @@ def pose_estimation_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_
     --------
     >>> from plantdb.test_database import test_database
     >>> from plant3dvision.tasks.colmap import get_cnc_poses
-    >>> from plant3dvision.tasks.colmap import compute_colmap_poses_from_metadata
+    >>> from plant3dvision.tasks.colmap import compute_camera_poses_from_colmap
     >>> from plant3dvision.tasks.colmap import pose_estimation_figure
     >>> from plant3dvision.tasks.colmap import use_precalibrated_poses
     >>> # Example 1 - Get the CNC & COLMAP poses and compare them:
@@ -365,8 +365,9 @@ def pose_estimation_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_
     except:
         x, y, z = np.array([pose if pose is not None else [np.nan] * 3 for im_id, pose in ref_poses.items()]).T
     x_c, y_c = np.mean(x), np.mean(y)  # 2D center point
-    # Get X, Y, Z coordinates of predicted points:
-    X, Y, Z = np.array([pose if pose is not None else [np.nan] * 3 for im_id, pose in pred_poses.items()]).T
+
+    # Get predicted camera pose (X, Y, Z, pan, tilt & roll):
+    X, Y, Z, pan, tilt, roll = np.array([pose if pose is not None else [np.nan] * 3 for im_id, pose in pred_poses.items()]).T
 
     # - Plot REFERENCE XY poses coordinates as a black '+' marker:
     # Add a black '+' marker to every non-null coordinates:
@@ -381,6 +382,7 @@ def pose_estimation_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_
     err_3d = []  # euclidian distance between REFERENCE & PREDICTED => positioning error in 3D
     err_XY = []  # euclidian distance between REFERENCE & PREDICTED in XY
     err_Z = []  # euclidian distance between REFERENCE & PREDICTED in XY
+    err_pan = []  # euclidian distance between REFERENCE & PREDICTED in pan angle
     incorrect_poses = []
     incorrect_poses_idx = []
     for i, im_id in enumerate(common_im_ids):
@@ -388,6 +390,7 @@ def pose_estimation_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_
             err_3d.append(distance.euclidean(ref_poses[im_id][0:3], pred_poses[im_id][0:3]))
             err_XY.append(distance.euclidean(ref_poses[im_id][0:2], pred_poses[im_id][0:2]))
             err_Z.append(abs(ref_poses[im_id][2] - pred_poses[im_id][2]))
+            err_pan.append(abs(ref_poses[im_id][3] - pred_poses[im_id][3]))
             if d_th > 0. and err_3d[-1] >= d_th:
                 incorrect_poses.append(pred_poses[im_id][0:2])
                 incorrect_poses_idx.append(i)
@@ -514,11 +517,11 @@ def pose_estimation_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_
     # -------------------------------------------------------------------------
     # - Add a boxplot visu of the Euclidean distances (errors)
     if scan_path_kwargs != {}:
-        data = [err_3d, err_XY, err_Z, err_3d[:n_points]]
-        xticks = ["3D", "XY", "Z", f"{scan_path} path"]
+        data = [err_3d, err_XY, err_Z, err_pan, err_3d[:n_points]]
+        xticks = ["3D", "XY", "Z", "pan", f"{scan_path} path"]
     else:
-        data = [err_3d, err_XY, err_Z]
-        xticks = ["3D", "XY", "Z"]
+        data = [err_3d, err_XY, err_Z, err_pan]
+        xticks = ["3D", "XY", "Z", "pan"]
 
     _ = bxp.boxplot(data, flierprops={"marker": 'x', 'markeredgecolor': 'red'})
     bxp.set_title("Deviation from CNC", fontdict={'family': 'monospace', 'size': 'medium'})
