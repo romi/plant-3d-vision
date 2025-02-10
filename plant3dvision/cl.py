@@ -2,14 +2,17 @@
 # -*- coding: utf-8 -*-
 
 """
-plant3dvision.cl
-___________
+3D Image Processing Module
 
-This module contains all OpenCL accelerated functions.
-The two main functionalities are:
+This module provides tools for backprojection, geodesic computation, and Fast Iterative Method (FIM)
+to facilitate 3D image processing and analysis.
+It is useful for reconstructing volumetric data, computing the shortest paths in volumes, and other
+geometry-intensive tasks.
 
-* Back-projection
-* Geodesics computing
+Key Features:
+- Backprojection capabilities for volumetric data reconstruction
+- Geodesics computation for shortest-path analysis in 3D grids
+- Fast Iterative Method (FIM) for efficiently solving eikonal-like equations
 
 Geodesic computing is still in a very experimental stage.
 """
@@ -17,35 +20,44 @@ import os
 
 import numpy as np
 import pyopencl as cl
+from skimage.util import img_as_float32
 
 from plant3dvision.proc3d import point2index
 from plantdb import io
 from plantdb.db import Fileset
 from romitask.log import configure_logger
-from skimage.util import img_as_float32
 
 logger = configure_logger(__name__)
 
+# A small constant used to prevent numerical operations from dividing by zero
+EPS = 1e-10
+# Create an OpenCL context (e.g., for managing devices and memory)
 ctx = cl.create_some_context()
+# Create a command queue to submit tasks (kernels and memory operations)
 queue = cl.CommandQueue(ctx)
+# Memory flags to manage the behavior of OpenCL buffers (read/write permissions, etc.)
 mf = cl.mem_flags
 
+# Define the directory containing the OpenCL kernel files
 prg_dir = os.path.join(os.path.dirname(__file__), 'kernels')
-
-EPS = 1e-10
-
+# Load and compile the OpenCL program for 'backprojection.c' kernel
 with open(os.path.join(prg_dir, 'backprojection.c')) as f:
-    backprojection_kernels = cl.Program(ctx, f.read()).build(options="-I%s" % prg_dir)
-
+    backprojection_kernels = cl.Program(ctx, f.read()).build(options=f"-I{prg_dir}")
+# Load and compile the OpenCL program for 'geodesics.c' kernel
 with open(os.path.join(prg_dir, 'geodesics.c')) as f:
-    geodesics_kernels = cl.Program(ctx, f.read()).build(options="-I%s" % prg_dir)
-
+    geodesics_kernels = cl.Program(ctx, f.read()).build(options=f"-I{prg_dir}")
+# Load and compile the OpenCL program for 'fim.c' kernel
 with open(os.path.join(prg_dir, 'fim.c')) as f:
-    fim_kernels = cl.Program(ctx, f.read()).build(options="-I%s" % prg_dir)
+    fim_kernels = cl.Program(ctx, f.read()).build(options=f"-I{prg_dir}")
 
 
 class Backprojection(object):
-    """Back-projection onto a voxel volume.
+    """Backprojection using OpenCL to process and construct volumes from multiple input views.
+
+    This class supports two modes of backprojection: 'carving' (integer-based for masking)
+    and 'averaging' (float-based for accumulating data). It initializes OpenCL buffers
+    to handle computations in an optimized manner and allows processing of individual views
+    or entire datasets with optional label handling for machine learning purposes.
 
     Attributes
     ----------
@@ -53,87 +65,58 @@ class Backprojection(object):
         Shape of the voxel volume.
     origin : list
         Location of the origin of the voxel space.
-    voxel_size : float
-        Size of voxels.
+    voxel_size : tuple
+        Size of each voxel in the volume.
     default_value : float
-        Default value when initializing the voxels (defaults to 0).
+        Default voxel data value used during initialization.
     log : bool
-        If ``True``, convert the mask to logarithmic values.
-        Defaults to ``False``.
-    labels : list
-        List of labels to use in case of ML pipeline, can be `None`.
-    dtype : {numpy.int32, numpy.float32}
-        Data type used for the buffer, depends on initialization `type`.
-    kernel : fun
-        Kernel to use for back-projection, depends on initialization `type`.
+        Indicates whether logarithmic transformation is applied to a mask in 'averaging' mode.
+    labels : list, optional
+        List of labels for multi-class processing in machine learning pipelines.
+    dtype : type
+        Data type of the voxel values, determined by the backprojection type ('carving' or 'averaging').
+    kernel : function
+        OpenCL kernel function for backprojection, determined by the type.
     values_h : numpy.ndarray
-        ???
+        Host-side data buffer for voxel values.
     values_d : pyopencl.Buffer
-        ???
+        Device-side data buffer for voxel values.
     intrinsics_d : pyopencl.Buffer
-        [f_x, f_y, c_x, c_y] focal length in x&y and optical center in x&y.
+        Device-side buffer containing camera intrinsic parameters.
     rot_d : pyopencl.Buffer
-        rotation matrix of the camera pose.
+        Device-side buffer containing camera rotation matrix.
     tvec_d : pyopencl.Buffer
-        translation vector of the camera pose.
+        Device-side buffer containing camera translation vector.
     volinfo_d : pyopencl.Buffer
-        ???
+        Device-side buffer containing volume information including origin and voxel size.
     shape_d : pyopencl.Buffer
-        ???
-
-    See Also
-    --------
-    kernel.backprojection.c
-
-    Examples
-    --------
-    >>> import numpy as np
-    >>> from plant3dvision.cl import Backprojection
-    >>> from plantdb.test_database import test_database
-    >>> db = test_database('real_plant_analyzed')
-    >>> db.connect()
-    >>> # - Select the dataset to reconstruct:
-    >>> dataset = db.get_scan('real_plant_analyzed')
-    >>> # - Get the masks fileset & files:
-    >>> masks_fileset = dataset.get_fileset('Masks_1__0__1__0____channel____rgb_5619aa428d')
-    >>> masks_files = masks_fileset.get_files()
-    >>> # - Defines the voxel-size and the bounding box
-    >>> voxel_size = 0.5
-    >>> bbox = {'x': (300, 450), 'y': (300, 450), 'z': (-175, 105)}
-    >>> # - Compute the origin of the voxel array:
-    >>> (x_min, x_max), (y_min, y_max), (z_min, z_max) = bbox['x'], bbox['y'], bbox['z']
-    >>> origin = [x_min, y_min, z_min]
-    >>> # - Compute the shape of the voxel array:
-    >>> nx = int((x_max - x_min) / voxel_size) + 1
-    >>> ny = int((y_max - y_min) / voxel_size) + 1
-    >>> nz = int((z_max - z_min) / voxel_size) + 1
-    >>> shape = [nx, ny, nz]
-    >>> # Perform voxel-carving:
-    >>> bp = Backprojection(shape, origin, voxel_size, type="carving", labels=None)
-    >>> vol = bp.process_label(masks_files, 'colmap_camera')
-    >>> from plant3dvision.visu import plt_volume_slice_viewer
-    >>> zs = plt_volume_slice_viewer(vol[:, :, ::-1], cmap='viridis', dataset=dataset.id)
+        Device-side buffer containing voxel grid shape information.
     """
 
     def __init__(self, shape, origin, voxel_size, type="carving", default_value=0, labels=None, log=False):
-        """
+        """Initializes the class instance.
+
         Parameters
         ----------
-        shape : list
-            Shape of the voxel volume.
-        origin : list
-            Location of the origin of the voxel space.
-        voxel_size : float
-            Size of voxels.
-        type : {'carving', 'averaging'}, optional
-            Method to use for back-projection, defaults to "carving".
-        default_value : float, optional
-            Default value when initializing the voxels (defaults to 0).
+        shape : tuple
+            The shape (dimensions) of the buffer array.
+        origin : tuple
+            The origin or reference point for the volume generation.
+        voxel_size : tuple
+            Individual voxel dimensions within the volume.
+        type : str, optional
+            The type of operation for the kernel, either "carving" or "averaging".
+        default_value : int or float, optional
+            Default value for initializing the buffer, depending on the type.
         labels : list, optional
-            List of labels to use in case of ML pipeline, can be `None`.
+            Optional labels for referencing the data within the volume.
         log : bool, optional
-            If ``True``, convert the mask to logarithmic values.
-            Defaults to ``False``.
+            Flag to enable or suppress logging information.
+
+        Raises
+        ------
+        ValueError
+            If the specified kernel type is not 'carving' or 'averaging'.
         """
         self.shape = shape
         self.origin = origin
@@ -169,7 +152,33 @@ class Backprojection(object):
         self.init_buffers()
 
     def init_buffers(self):
-        """Helper function to initialize OpenCL buffers."""
+        """Initializes OpenCL buffers for storing and processing data.
+
+        This method sets up OpenCL buffers for both host and device memory. It initializes host memory with default
+        values and allocates buffers for device memory to store the related parameters such as intrinsic matrix,
+        rotation matrix, translation vector, volume information, and the shape of the data.
+
+        Attributes
+        ----------
+        values_h : numpy.ndarray
+            Array initialized to `self.default_value` with the given `self.shape` and `self.dtype`.
+            This represents the host-side buffer where data is initially stored.
+        values_d : pyopencl.Buffer
+            OpenCL device buffer for storing `values_h` data, initialized by copying from the host buffer.
+        intrinsics_d : pyopencl.Buffer
+            OpenCL device buffer for a 4-element array representing intrinsic parameters, initialized with zeros.
+        rot_d : pyopencl.Buffer
+            OpenCL device buffer for a 9-element array representing rotation matrix values, initialized with zeros.
+        tvec_d : pyopencl.Buffer
+            OpenCL device buffer for a 3-element array representing translation vector values, initialized with zeros.
+        volinfo_d : pyopencl.Buffer
+            OpenCL device buffer for a 4-element array representing volume information. It includes the origin coordinates and
+            the voxel size, initialized by copying from the corresponding numpy array.
+        shape_d : pyopencl.Buffer
+            OpenCL device buffer for a 3-element integer array representing the shape of the volume. It is
+            initialized by copying from the corresponding numpy array.
+
+        """
         self.values_h = self.default_value * np.ones(self.shape, dtype=self.dtype)
 
         self.values_d = cl.Buffer(ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=self.values_h)
@@ -188,19 +197,25 @@ class Backprojection(object):
         return
 
     def process_view(self, intrinsics, rot, tvec, mask):
-        """Process a new view.
+        """Process a view for a 3D volume reconstruction pipeline.
+
+        Process a view for a 3D volume reconstruction pipeline by preparing and transferring
+        data to the GPU, applying transformations, and executing a kernel for computations.
+        This function supports floating-point precision checks and ensures memory consistency.
 
         Parameters
         ----------
-        intrinsics: list
-            [f_x, f_y, c_x, c_y]
-        rot: list of list
-            rotation matrix of the camera pose
-        tvec: list
-            translation vector of the camera pose
-        mask: numpy.ndarray
-            mask array (or float array if type is averaging)
-
+        intrinsics : numpy.ndarray
+            The camera intrinsic matrix, a 3x3 matrix defining internal camera parameters.
+        rot : numpy.ndarray
+            The rotation matrix, a 3x3 transformation matrix representing the orientation
+            of the camera.
+        tvec : numpy.ndarray
+            The translation vector, a 3-element array describing the camera's position in
+            the world coordinate system.
+        mask : numpy.ndarray
+            A 2D array representing the mask image, which defines specific regions of the
+            image for processing. If the dtype is not `np.float32`, it will be converted.
         """
         if self.dtype == np.float32 and mask.dtype != np.float32:
             mask = img_as_float32(mask)
@@ -312,10 +327,60 @@ class Backprojection(object):
 
 
 class Geodesics():
+    """Class for computing geodesics in a 3D flow field.
+
+    This class provides a method to compute geodesics over a three-dimensional
+    voxel-based grid using a predefined flow field and a set of tip points as origin.
+    Geodesics are calculated iteratively based on input parameters, step sizes, and
+    a maximum number of iterations. This method utilizes OpenCL for parallel computation
+    to improve performance.
+
+    Attributes
+    ----------
+    No specific attributes defined within this class.
+    """
+
     def __init__(self):
         return
 
     def compute_geodesics(self, values, origin, voxel_size, flow, tips, max_iters, step_size):
+        """Compute geodesic distances using vector field and initial seed points.
+
+        This function calculates geodesic distances iteratively based on a
+        provided vector field (flow) and initializes certain points (tips)
+        as seeds. The computation uses OpenCL for GPU acceleration and
+        executes over a specific number of iterations or until convergence is
+        achieved, whichever occurs first.
+
+        Parameters
+        ----------
+        values : ndarray
+            A 3D array representing the initial distance map where geodesic
+            distances will be accumulated.
+        origin : tuple[float, float, float]
+            The coordinates of the origin point of the 3D space.
+        voxel_size : tuple[float, float, float]
+            The size of each voxel in the 3D grid, representing the resolution
+            of the space.
+        flow : ndarray
+            A 4D array representing the flow vector field. Each voxel contains
+            a 3D vector representing the direction and magnitude of the flow.
+        tips : ndarray
+            An array of seed points, represented as 3D coordinates, from which
+            the geodesic metric will propagate.
+        max_iters : int
+            The maximum number of iterations to run the geodesic distance
+            computation.
+        step_size : float
+            The step size used in each iteration for computing geodesic
+            propagation.
+
+        Returns
+        -------
+        ndarray
+            A 3D integer array where each voxel stores the number of geodesic
+            connections that reached it during the computation.
+        """
         shape = values.shape
         tips = point2index(tips, origin, voxel_size)
 
@@ -360,6 +425,62 @@ class Geodesics():
 
 
 class FIM():
+    """
+    Class for computing geodesic distances using Fast Iterative Method (FIM).
+
+    The `FIM` class is designed to compute geodesic distances in a 3D grid. It
+    utilizes operations such as setting seed points, performing iterative
+    distance updates, and retrieving the resulting geodesic distance map and
+    gradient flow. The class handles OpenCL buffer initialization, neighbor
+    calculations, pruning, and solution updates in an efficient manner. This
+    is particularly useful for applications requiring distance calculations
+    within volumetric data like medical imaging or computational fluid dynamics.
+
+    Attributes
+    ----------
+    shape : tuple[int, int, int]
+        Shape of the 3D grid where distances are computed.
+    origin : numpy.ndarray
+        3D coordinates for the origin of the grid.
+    voxel_size : float
+        Size of each voxel in the grid.
+    speed_h : numpy.ndarray
+        Input speed values on the grid as a host buffer.
+    tol : float
+        Tolerance value for convergence in distance computation.
+    kernel_update : function
+        Kernel function to update point distances.
+    kernel_prune_list : function
+        Kernel function to prune the list of active points.
+    kernel_add_neighbours : function
+        Kernel function to add neighbors for geodesic computation.
+    speed : pyopencl.Buffer
+        OpenCL buffer for input speed values.
+    active_pts : pyopencl.Buffer
+        OpenCL buffer for active points in the grid.
+    active_pts_aux : pyopencl.Buffer
+        Auxiliary OpenCL buffer for active points.
+    point_status : pyopencl.Buffer
+        OpenCL buffer indicating the status of each point in the grid.
+    sol : pyopencl.Buffer
+        OpenCL buffer storing the current solution (distance values).
+    shape_d : pyopencl.Buffer
+        OpenCL buffer for grid shape information.
+    n_active : int
+        Number of active points currently in the computation.
+
+    Examples
+    --------
+    >>> seeds = np.zeros((1, 3))
+    >>> shape = (200, 200, 200)
+    >>> origin = np.array([0, 0, 0])
+    >>> voxel_size = 1.0
+    >>> speed = np.ones(shape)
+    >>> fim = FIM(shape, origin, voxel_size, speed)
+    >>> fim.set_seeds(seeds)
+    >>> fim.run()
+    """
+
     def __init__(self, shape, origin, voxel_size, speed, tol=1e-9):
         self.shape = shape
         self.origin = np.array(origin)
@@ -377,6 +498,37 @@ class FIM():
         pass
 
     def init_buffers(self):
+        """Initializes buffers for OpenCL operations.
+
+        Attributes
+        ----------
+        speed : pyopencl.Buffer
+            An OpenCL read-only buffer initialized with the speed data hosted on
+            the `speed_h` array.
+        active_pts : pyopencl.Buffer
+            An OpenCL read-write buffer for storing active points in the computation.
+            Its size is based on the `shape` of the problem.
+        active_pts_aux : pyopencl.Buffer
+            An auxiliary read-write buffer for temporary usage during point
+            activation updates, matching the size of `active_pts`.
+        point_status : pyopencl.Buffer
+            An OpenCL read-write buffer initialized with zeros. This buffer tracks
+            the status of points during computation and has a shape identical to
+            the problem domain.
+        sol : pyopencl.Buffer
+            A floating-point buffer initialized with infinity values, used to store
+            intermediate and final solutions for the problem.
+        shape_d : pyopencl.Buffer
+            An integer buffer that holds the dimensions of the problem `shape`,
+            copied from `shape_h` as host input.
+
+        Notes
+        -----
+        The initialization assumes that the context `ctx` and memory flags `mf`
+        (from `pyopencl`) are globally available. Any subsequent computation using
+        these buffers requires that they remain synchronized to avoid undefined
+        behavior.
+        """
         self.speed = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.speed_h)
         point_status_h = np.zeros(self.shape, dtype=np.int32)
 
@@ -391,6 +543,27 @@ class FIM():
         self.n_active = 0
 
     def set_seeds(self, seeds):
+        """
+        Sets the seed points for voxel-based operations, initializes active voxel
+        tracking, and updates corresponding point status on the GPU.
+
+        The method computes the flat indices for the given seed points relative
+        to the origin and voxel size, prepares associated statuses, and uploads
+        this data to the GPU. It ensures that the voxel solver state for active
+        points is properly reset.
+
+        Parameters
+        ----------
+        seeds : np.ndarray
+            Array of seed points representing voxel coordinates. Each entry is a
+            3D point in the form [x, y, z].
+
+        Notes
+        -----
+        The input `seeds` must align with the voxel grid defined by the instance's
+        attributes such as `origin` and `voxel_size`. GPU operations are used to
+        efficiently handle updates for large numbers of points.
+        """
         idx = point2index(seeds, self.origin, self.voxel_size)
 
         flat_idx = idx[:, 0] * self.shape[1] * self.shape[2] + idx[:, 1] * self.shape[2] + idx[:, 2]
@@ -409,6 +582,33 @@ class FIM():
         queue.finish()
 
     def run(self, steps=None):
+        """
+        Executes a simulation process iterating over active points and updating their
+        statuses based on specified conditions. The simulation continues until either
+        a maximum number of iterations (`steps`) is reached or no active points remain.
+
+        Parameters
+        ----------
+        steps : int or None, optional
+            The maximum number of iterations to perform. If None, the simulation will
+            continue indefinitely until there are no active points.
+
+        Notes
+        -----
+        The function utilizes OpenCL for parallel computation on GPU-like devices.
+        It makes use of several OpenCL kernels for adding neighbors, pruning lists,
+        and updating solution values. The primary stopping conditions involve having
+        no active points or exceeding the maximum iteration count (`steps`).
+
+        The simulation consists of the following main steps:
+        - Adding neighbors to active points.
+        - Pruning active points lists based on certain criteria.
+        - Iterative solution updates until convergence.
+
+        The derived variables and states (`n_active`, `active_pts`, etc.) are updated
+        throughout the simulation process. The function ensures synchronization with
+        the OpenCL queue after each operation to maintain data consistency.
+        """
         n_iter = 0
         cnt_h = np.zeros(1, dtype=np.int32)
         cnt_d = cl.Buffer(ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=cnt_h)
@@ -456,12 +656,37 @@ class FIM():
             n_iter += 1
 
     def get_distance_map(self):
+        """Computes and retrieves the distance map as a NumPy array.
+
+        The distance map is calculated on the GPU and then transferred back to the host for further use.
+        This function ensures synchronization of the GPU and host by waiting for all
+        queued operations to finish before returning the resulting NumPy array.
+
+        Returns
+        -------
+        numpy.ndarray
+            A NumPy array of shape `self.shape` and dtype `numpy.float32` containing the
+            computed distance map.
+        """
         x = np.zeros(self.shape, dtype=np.float32)
         cl.enqueue_copy(queue, x, self.sol)
         queue.finish()
         return x
 
     def get_gradient_flow(self):
+        """Computes the normalized gradient flow of a 3D array.
+
+        This method calculates the gradient flow of a 3D array using the numpy
+        `gradient` function along the x, y, and z axes. The gradients are normalized
+        using the Euclidean norm of the gradient components to ensure unit length
+        of the gradients.
+
+        Returns
+        -------
+        tuple of np.ndarray
+            A tuple containing three 3D numpy arrays corresponding to the normalized
+            gradients along the x, y, and z axes, respectively.
+        """
         fs = np.array([1, 2, 1], dtype=np.float32)
         fd = np.array([-1, 0, 1], dtype=np.float32)
         x = np.zeros(self.shape, dtype=np.float32)
