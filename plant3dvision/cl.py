@@ -65,7 +65,7 @@ class Backprojection(object):
         Shape of the voxel volume.
     origin : list
         Location of the origin of the voxel space.
-    voxel_size : tuple
+    voxel_size : float
         Size of each voxel in the volume.
     default_value : float
         Default voxel data value used during initialization.
@@ -91,6 +91,60 @@ class Backprojection(object):
         Device-side buffer containing volume information including origin and voxel size.
     shape_d : pyopencl.Buffer
         Device-side buffer containing voxel grid shape information.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from plantdb.fsdb import FSDB
+    >>> from plantdb.rest_api import compute_fileset_matches
+    >>> from plant3dvision.cl import Backprojection
+    >>> from plant3dvision.visu import plt_volume_slice_viewer
+    >>> db = FSDB('/data/ROMI/test_owner')
+    >>> db.connect(unsafe=True)
+    >>> scan = db.get_scan("Col-0_E1_1")
+    >>> mask_fs_id = compute_fileset_matches(scan)["Masks"]
+    >>> mask_fs = scan.get_fileset(mask_fs_id)
+    >>> # List of input mask files (2D images) to process
+    >>> mask_files = mask_fs.get_files(query={"channel": "rgb"})
+    >>> # Example setup: define a bounding box and voxel configuration
+    >>> bounding_box = {"x": [300, 435], "y": [300, 435], "z": [-300, 60]}
+    >>> voxel_size = 0.6
+    >>> # Calculate the shape of the voxel array
+    >>> (x_min, x_max) = bounding_box["x"]
+    >>> (y_min, y_max) = bounding_box["y"]
+    >>> (z_min, z_max) = bounding_box["z"]
+    >>> nx = int((x_max - x_min) / voxel_size) + 1
+    >>> ny = int((y_max - y_min) / voxel_size) + 1
+    >>> nz = int((z_max - z_min) / voxel_size) + 1
+    >>> shape = (nx, ny, nz)
+    >>> origin = (x_min, y_min, z_min)
+    >>> camera_md = "colmap_camera"  # The camera metadata key in the fileset that provides intrinsic & pose data
+    >>> invert_masks = False  # Whether to invert the mask values
+
+    >>> # EXAMPLE 1 - Carving mode
+    >>> backproj = Backprojection(shape, origin, voxel_size, type="carving", labels=None)
+    >>> volume = backproj.process_fileset(mask_files, camera_md, invert_masks)
+    >>> # 'volume' is now a NumPy array holding the 3D backprojected binary data
+    >>> plt_volume_slice_viewer(volume, cmap="viridis")
+
+    >>> # EXAMPLE 2 - Averaging mode
+    >>> backproj = Backprojection(shape, origin, voxel_size, type="averaging", labels=None, log=True)
+    >>> volume = backproj.process_fileset(mask_files, camera_md, invert_masks)
+    >>> # 'volume' is now a NumPy array holding the 3D backprojected data
+    >>> vol_values = np.unique(volume)
+    >>> print(f"Unique values in the volume: {vol_values}")
+    >>> # Map the volume values to the number of missing images for each mask
+    >>> dict(zip(range(len(mask_files)+1), vol_values[::-1]))
+    >>> # Show the histogram of the volume values
+    >>> import matplotlib.pyplot as plt
+    >>> plt.hist(volume.flatten(), bins=len(mask_files)+1)
+    >>> plt.show()
+    >>> # Show the volume slice viewer
+    >>> plt_volume_slice_viewer(volume, cmap="viridis")
+    >>> # Threshold the volume & show the result
+    >>> vol = volume > -100.
+    >>> plt_volume_slice_viewer(vol, cmap="viridis")
+
     """
 
     def __init__(self, shape, origin, voxel_size, type="carving", default_value=0, labels=None, log=False):
@@ -102,7 +156,7 @@ class Backprojection(object):
             The shape (dimensions) of the buffer array.
         origin : tuple
             The origin or reference point for the volume generation.
-        voxel_size : tuple
+        voxel_size : float
             Individual voxel dimensions within the volume.
         type : str, optional
             The type of operation for the kernel, either "carving" or "averaging".
