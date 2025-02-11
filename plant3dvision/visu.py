@@ -156,7 +156,7 @@ def _slider(label, mini, maxi, init, step=1, fmt="%1.0f"):
     return zs
 
 
-def _volume_slice_view(ax, arr, **kwargs):
+def _volume_slice_view(ax, arr, vmin, vmax, **kwargs):
     """View a slice of the volume array.
 
     Parameters
@@ -165,6 +165,10 @@ def _volume_slice_view(ax, arr, **kwargs):
         The `Axes` instance to update.
     arr : numpy.ndarray
         A 2D array to show.
+    vmin : float, optional
+        Global minimum value for colormap normalization.
+    vmax : float, optional
+        Global maximum value for colormap normalization.
 
     Returns
     -------
@@ -174,7 +178,7 @@ def _volume_slice_view(ax, arr, **kwargs):
         The `AxesImage` instance.
 
     """
-    fig_img = ax.imshow(arr, interpolation='none', origin='upper', **kwargs)
+    fig_img = ax.imshow(arr, interpolation='none', origin='upper', vmin=vmin, vmax=vmax, **kwargs)
     ax.xaxis.tick_top()  # move the x-axis to the top
     return ax, fig_img
 
@@ -198,23 +202,25 @@ def plt_volume_slice_viewer(array, cmap="viridis", **kwargs):
     fig, ax = plt.subplots()
     plt.subplots_adjust(bottom=0.25)  # save some space for the slider
 
+    # Compute the global min/max for the entire volume.
+    vmin, vmax = array.min(), array.max()
     init_slice = kwargs.get('init_slice', 0)
-
-    ax, l = _volume_slice_view(ax, array[:, :, init_slice], cmap=cmap)
     dataset = kwargs.get('dataset', "")
+
+    ax, img_obj = _volume_slice_view(ax, array[:, :, init_slice], vmin, vmax, cmap=cmap)
     if dataset != "":
         plt.title(f"Volume viewer for '{dataset}'.")
     else:
         plt.title("Volume viewer.")
 
-    fig.colorbar(l, ax=ax)
+    fig.colorbar(img_obj, ax=ax)
 
     max_slice = array.shape[-1] - 1
     zs = _slider(label='z-slice', mini=0, maxi=max_slice, init=init_slice, step=1)
 
     def update(val):
         slice_id = int(zs.val)
-        l.set_data(array[:, :, slice_id])
+        img_obj.set_data(array[:, :, slice_id])
         fig.canvas.draw_idle()
 
     zs.on_changed(update)
@@ -261,8 +267,17 @@ def plotly_volume_slicer(array, cmap="viridis", height=900, width=900, title="Vo
     if isinstance(layout_kwargs, dict):
         layout_style.update(layout_kwargs)
 
-    fig = px.imshow(array.transpose(2, 0, 1), animation_frame=0, binary_string=True, color_continuous_scale=cmap,
-                    labels=dict(animation_frame="slice"))
+    fig = px.imshow(
+        array.transpose(2, 0, 1),
+        animation_frame=0,
+        color_continuous_scale=cmap,
+        labels=dict(animation_frame="slice", color="Value")
+    )
+    # Show the colorbar
+    fig.update_layout(coloraxis_colorbar=dict(title="Value"))
+    # Display the value in the hover tooltip
+    fig.update_traces(hovertemplate="x: %{x}, y: %{y}<br>Value: %{z}<extra></extra>")
+
     fig.update_layout(**layout_style)
     fig.update_scenes(aspectmode='data')
 
