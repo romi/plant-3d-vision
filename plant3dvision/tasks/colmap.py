@@ -24,11 +24,11 @@ from plant3dvision.filenames import COLMAP_SPARSE_ID
 from plantdb import io
 from romitask import DatabaseConfig
 from romitask import SCAN_TOML
-from romitask.log import configure_logger
+from romitask.log import get_logger
 from romitask.task import ImagesFilesetExists
 from romitask.task import RomiTask
 
-logger = configure_logger(__name__)
+logger = get_logger(__name__)
 
 
 def get_cnc_poses(scan_dataset, axes='xyzpt'):

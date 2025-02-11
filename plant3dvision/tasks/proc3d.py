@@ -12,10 +12,10 @@ from plant3dvision.tasks.colmap import Colmap
 from plant3dvision.tasks.proc2d import Segmentation2D
 from plantdb import io
 from romitask import RomiTask
-from romitask.log import configure_logger
+from romitask.log import get_logger
 from skeleton_refinement.stochastic_registration import knn_mst
 
-logger = configure_logger(__name__)
+logger = get_logger(__name__)
 
 
 class PointCloud(RomiTask):

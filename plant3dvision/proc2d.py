@@ -15,9 +15,9 @@ from skimage.exposure import rescale_intensity
 from skimage.morphology import binary_dilation
 from skimage.morphology import disk
 
-from romitask.log import configure_logger
+from romitask.log import get_logger
 
-logger = configure_logger(__name__)
+logger = get_logger(__name__)
 
 EPS = 1e-9
 

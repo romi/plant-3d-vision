@@ -23,9 +23,9 @@ from plantdb.io import read_json
 from plantdb.io import read_npz
 from plantdb.io import read_point_cloud
 from plantdb.io import read_triangle_mesh
-from romitask.log import configure_logger
+from romitask.log import get_logger
 
-logger = configure_logger(__name__)
+logger = get_logger(__name__)
 
 
 def jsonify_tuple_keys(json_dict: dict) -> dict:

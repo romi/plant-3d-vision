@@ -14,12 +14,12 @@ from plant3dvision.colmap import estimate_camera_pose
 from romitask import DatabaseConfig
 from romitask import FilesetTarget
 from romitask import RomiTask
-from romitask.log import configure_logger
+from romitask.log import get_logger
 from romitask.task import DatasetExists
 from romitask.task import FileByFileTask
 from romitask.task import ImagesFilesetExists
 
-logger = configure_logger(__name__)
+logger = get_logger(__name__)
 
 
 class CreateCharucoBoard(RomiTask):

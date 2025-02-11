@@ -24,9 +24,9 @@ from packaging import version
 from plant3dvision import proc3d
 from plant3dvision.thirdparty import read_model
 from plantdb import io
-from romitask.log import configure_logger
+from romitask.log import get_logger
 
-logger = configure_logger(__name__)
+logger = get_logger(__name__)
 
 #: Default colmap executable:
 DEFAULT_COLMAP = 'roboticsmicrofarms/colmap'

@@ -25,9 +25,9 @@ from skimage.util import img_as_float32
 from plant3dvision.proc3d import point2index
 from plantdb import io
 from plantdb.db import Fileset
-from romitask.log import configure_logger
+from romitask.log import get_logger
 
-logger = configure_logger(__name__)
+logger = get_logger(__name__)
 
 # A small constant used to prevent numerical operations from dividing by zero
 EPS = 1e-10

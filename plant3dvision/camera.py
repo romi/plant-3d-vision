@@ -3,9 +3,9 @@
 import numpy as np
 
 from plantdb import io
-from romitask.log import configure_logger
+from romitask.log import get_logger
 
-logger = configure_logger(__name__)
+logger = get_logger(__name__)
 
 #: The list of valid camera models.
 VALID_MODELS = ["OPENCV", "RADIAL", "SIMPLE_RADIAL"]

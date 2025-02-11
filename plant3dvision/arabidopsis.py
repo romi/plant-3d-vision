@@ -15,9 +15,9 @@ import sys
 import networkx as nx
 import numpy as np
 
-from romitask.log import configure_logger
+from romitask.log import get_logger
 
-logger = configure_logger(__name__)
+logger = get_logger(__name__)
 
 
 def get_main_stem_and_nodes(G, root_node):

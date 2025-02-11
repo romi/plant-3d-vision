@@ -5,9 +5,9 @@ import cv2
 import cv2.aruco as aruco  # requires `opencv-contrib-python`, to get it: `python -m pip install opencv-contrib-python`
 import numpy as np
 
-from romitask.log import configure_logger
+from romitask.log import get_logger
 
-logger = configure_logger(__name__)
+logger = get_logger(__name__)
 
 IMAGES_FORMAT = 'jpg'
 N_SQUARES_X = 14  # Number of chessboard squares in X direction.
