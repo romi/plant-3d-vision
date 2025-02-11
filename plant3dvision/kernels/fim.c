@@ -3,8 +3,6 @@
  * @brief Fast Iterative Method (FIM) core update routines and helper functions.
  */
 
-#include <float.h>    // For FLT_MAX
-#include <math.h>     // For sqrt
 #include "common.h"   // Required for ravel_index, unravel_index, etc.
 
 #define LOCAL_SIZE 4

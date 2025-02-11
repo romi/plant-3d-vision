@@ -6,12 +6,6 @@
  * where a single 'idx' refers to a location within a three-dimensional volume.
  */
 
-typedef struct {
-    int x;
-    int y;
-    int z;
-} int3;
-
 /**
  * @brief Converts a linear index into 3D coordinates.
  *
