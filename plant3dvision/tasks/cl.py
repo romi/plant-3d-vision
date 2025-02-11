@@ -95,7 +95,7 @@ class Voxels(RomiTask):
 
     def requires(self):
         """Determines the dependencies required for the task execution."""
-        tasks = {"mask": self.upstream_task()}
+        tasks = {"masks": self.upstream_task()}
         if str(self.camera_metadata).lower() == 'colmap_camera':
             tasks.update({"colmap": Colmap()})
 
