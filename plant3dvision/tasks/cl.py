@@ -52,6 +52,8 @@ class Voxels(RomiTask):
     log : luigi.BoolParameter, optional
         If ``True``, convert the mask images to logarithmic values for 'averaging' `type` prior to back-projection.
         Defaults to ``True``.
+    threshold : luigi.FloatParameter, optional
+        The threshold value to use for 'averaging' `type` conversion to logarithmic values.
     invert : luigi.BoolParameter, optional
         If ``True``, invert the values of the mask.
         Defaults to ``False``.
@@ -87,21 +89,51 @@ class Voxels(RomiTask):
     query = luigi.DictParameter(default={})
     camera_metadata = luigi.Parameter(default='colmap_camera')  # camera definition (intrinsic & poses) in metadata
     voxel_size = luigi.FloatParameter(default=1.0)
-    type = luigi.Parameter(default="carving")
+    type = luigi.Parameter(default="averaging")
     log = luigi.BoolParameter(default=True)
+    threshold = luigi.FloatParameter(default=-100.)
 
     invert = luigi.BoolParameter(default=False)
     labels = luigi.ListParameter(default=[])
     bounding_box = luigi.DictParameter(default=None)
     bounding_box_edit = luigi.DictParameter(default=None)
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(args, kwargs)
+
     def requires(self):
+        """Determines the dependencies required for the task execution."""
         if self.upstream_colmap.get_task_family() == 'Colmap':
             return {'masks': self.upstream_mask(), 'colmap': self.upstream_colmap()}
         else:
             return {'masks': self.upstream_mask()}
 
     def run(self):
+        """Main processing workflow to generate a voxel volume from input mask files.
+
+        The function retrieves bounding box metadata, computes any necessary displacements,
+        configures voxel array parameters, and utilizes the `Backprojection` class to process
+        the mask fileset into a voxel representation.
+
+        The resulting volume is saved, either labeled or unlabeled, based on metadata or user input.
+
+        Raises
+        ------
+        SystemExit
+            If a valid bounding box cannot be obtained from metadata or other sources.
+        TypeError
+            If the bounding box or labels contain unexpected types that cannot be
+            processed safely.
+        ValueError
+            If the voxel size results in invalid dimensions or if invalid metadata
+            is retrieved from the input fileset.
+
+        Warnings
+        --------
+        UserWarning
+            If no displacement is found or improperly formatted metadata is detected.
+
+        """
         from plant3dvision.cl import Backprojection
         masks_fileset = self.input()['masks'].get()
         masks_files = masks_fileset.get_files(query=self.query)
@@ -181,10 +213,9 @@ class Voxels(RomiTask):
         if len(np.unique(vol)) == 1:
             logger.warning("There is something WRONG with the volume!")
 
-        # If conversion to log was requested, convert back applying `np.exp`
+        # If conversion to log was requested, apply thresholding:
         if self.log and self.type == "averaging":
-            vol = np.exp(vol)
-            vol[vol > 1] = 1.0
+            vol = vol > self.threshold
 
         outfile = self.output_file()
         if labels is not None:
