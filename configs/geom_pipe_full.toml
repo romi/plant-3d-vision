@@ -38,8 +38,7 @@ binarize = true  # binarize after threshold
 dilation = 1  # amount of dilation to apply to binarized image
 
 [Voxels]
-upstream_mask = "Masks"  # task to get the masked images from
-upstream_colmap = "Colmap"  # task to get the camera poses from
+upstream_task = "Masks"  # task to get the masked images from
 camera_metadata = 'colmap_camera'  # metadata entry to use to access camera poses
 voxel_size = 1.0  # size of the voxel to reconstruct, defines the total size of the array with `bounding_box`
 type = "carving"  # type of backprojection algorithm to use, in {"carving", "averaging"}
