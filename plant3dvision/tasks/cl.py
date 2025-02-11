@@ -20,17 +20,13 @@ class Voxels(RomiTask):
 
     Attributes
     ----------
-    upstream_task : None
-        No upstream task is required.
+    upstream_task : luigi.TaskParameter, optional
+        Upstream task that generate the masks.
+        Defaults to ``Masks``.
     scan_id : luigi.Parameter, optional
         The dataset id (scan name) to use to create the ``FilesetTarget``.
         If unspecified (default), the current active scan will be used.
-    upstream_mask : luigi.TaskParameter, optional
-        Upstream task that generate the masks.
-        Defaults to ``Masks``.
     upstream_colmap : luigi.TaskParameter, optional
-        Upstream task that generate the camera intrinsics (fx, fy, cx, cy) & poses ('rotmat', 'tvec').
-        Defaults to ``Colmap``.
     query : luigi.DictParameter, optional
         A filtering dictionary to apply on input ```Fileset`` metadata.
         Key(s) and value(s) must be found in metadata to select the ``File``.
@@ -76,15 +72,11 @@ class Voxels(RomiTask):
 
     Notes
     -----
-    Upstream task format:
-        - upstream_mask: `Fileset` with grayscale images
-        - upstream_colmap: Output of Colmap task
+    Upstream task format: `Fileset` with grayscale images ('Masks') and intrinsics & extrinsics camera parameters ('Colmap', ...)
     Output fileset format: NPZ file with as many arrays as `self.labels`
 
     """
-    upstream_task = None  # override default attribute from ``RomiTask``
-    upstream_mask = luigi.TaskParameter(default=Masks)
-    upstream_colmap = luigi.TaskParameter(default=Colmap)
+    upstream_task = luigi.TaskParameter(default=Masks)  # override default attribute from ``RomiTask``
 
     query = luigi.DictParameter(default={})
     camera_metadata = luigi.Parameter(default='colmap_camera')  # camera definition (intrinsic & poses) in metadata
@@ -99,14 +91,15 @@ class Voxels(RomiTask):
     bounding_box_edit = luigi.DictParameter(default=None)
 
     def __init__(self, *args, **kwargs):
-        super().__init__(args, kwargs)
+        super().__init__(*args, **kwargs)
 
     def requires(self):
         """Determines the dependencies required for the task execution."""
-        if self.upstream_colmap.get_task_family() == 'Colmap':
-            return {'masks': self.upstream_mask(), 'colmap': self.upstream_colmap()}
-        else:
-            return {'masks': self.upstream_mask()}
+        tasks = {"mask": self.upstream_task()}
+        if str(self.camera_metadata).lower() == 'colmap_camera':
+            tasks.update({"colmap": Colmap()})
+
+        return tasks
 
     def run(self):
         """Main processing workflow to generate a voxel volume from input mask files.
@@ -132,7 +125,6 @@ class Voxels(RomiTask):
         --------
         UserWarning
             If no displacement is found or improperly formatted metadata is detected.
-
         """
         from plant3dvision.cl import Backprojection
         masks_fileset = self.input()['masks'].get()
@@ -145,7 +137,7 @@ class Voxels(RomiTask):
             self.bounding_box = self.output().get().scan.get_metadata("bounding_box", default=None)
             logger.debug(f"Bounding-box from scan metadata: {self.bounding_box}")
         # Get it from Colmap if required:
-        if self.bounding_box is None and self.upstream_colmap.get_task_family() == 'Colmap':
+        if self.bounding_box is None and str(self.camera_metadata).lower() == 'colmap_camera':
             colmap_fileset = self.input()['colmap'].get()
             if self.bounding_box is None:
                 self.bounding_box = colmap_fileset.get_metadata("bounding_box", default=None)
