@@ -18,11 +18,11 @@ from plant3dvision.tasks.proc3d import PointCloud
 from plant3dvision.tasks.proc3d import TriangleMesh
 from plantdb import io
 from romitask import RomiTask
-from romitask.log import configure_logger
+from romitask.log import get_logger
 from romitask.task import ImagesFilesetExists
 from romitask.task import VirtualPlantObj
 
-logger = configure_logger(__name__)
+logger = get_logger(__name__)
 
 
 class Visualization(RomiTask):

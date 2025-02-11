@@ -8,9 +8,9 @@ import numpy as np
 import open3d as o3d
 
 from plantdb import io
-from romitask.log import configure_logger
+from romitask.log import get_logger
 
-logger = configure_logger(__name__)
+logger = get_logger(__name__)
 
 
 def chamfer_distance(ref_pcd, flo_pcd):

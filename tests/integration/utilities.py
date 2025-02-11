@@ -1,9 +1,9 @@
 import os
 import subprocess
 
-from plantdb.log import configure_logger
+from plantdb.log import get_logger
 
-logger = configure_logger(__name__)
+logger = get_logger(__name__)
 
 def run_task(task, dataset, config=""):
     """Python wrapper to `romi_run_task` using subprocess.

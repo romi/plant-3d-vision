@@ -26,7 +26,7 @@ from plantdb.io import write_json
 from plantdb.io import write_npz
 from plantdb.io import write_point_cloud
 from plantdb.io import write_triangle_mesh
-from romitask.log import configure_logger
+from romitask.log import get_logger
 from romitask.task import DatabaseConfig
 from romitask.task import FilesetTarget
 from romitask.task import ImagesFilesetExists
@@ -34,7 +34,7 @@ from romitask.task import RomiTask
 from romitask.task import Segmentation2DGroundTruthFilesetExists
 from romitask.task import VirtualPlantObj
 
-logger = configure_logger(__name__)
+logger = get_logger(__name__)
 
 
 class EvaluationTask(RomiTask):

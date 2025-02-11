@@ -9,10 +9,10 @@ from plant3dvision.tasks.colmap import Colmap
 from plant3dvision.tasks.proc2d import Masks
 from plantdb import io
 from romitask import RomiTask
-from romitask.log import configure_logger
+from romitask.log import get_logger
 from romitask.task import ImagesFilesetExists
 
-logger = configure_logger(__name__)
+logger = get_logger(__name__)
 
 
 class Voxels(RomiTask):

@@ -7,9 +7,9 @@ import open3d as o3d
 from plant3dvision.tasks.proc3d import CurveSkeleton
 from plantdb import io
 from romitask import RomiTask
-from romitask.log import configure_logger
+from romitask.log import get_logger
 
-logger = configure_logger(__name__)
+logger = get_logger(__name__)
 
 
 class TreeGraph(RomiTask):
