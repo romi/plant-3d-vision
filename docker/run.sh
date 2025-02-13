@@ -20,20 +20,22 @@ cmd=''
 # Volume mounting options:
 mount_option=""
 # - Test commands:
-unittest_cmd="python -m unittest discover -s plant-3d-vision/tests/unit/"
-integration_test_cmd="python -m unittest discover -s plant-3d-vision/tests/integration/"
+unittest_cmd="python3 -m unittest discover -s plant-3d-vision/tests/unit/"
+integration_test_cmd="python3 -m unittest discover -s plant-3d-vision/tests/integration/"
 pipeline_cmd="cd plant-3d-vision/ && ./tests/check_pipe.sh"
 geom_pipeline_cmd="cd plant-3d-vision/ && ./tests/check_geom_pipe.sh"
 ml_pipeline_cmd="cd plant-3d-vision/ && ./tests/check_ml_pipe.sh"
 gpu_cmd="nvidia-smi"
 
-# If the `ROMI_DB` variable is set, use it as default database location, else set it to empty:
-if [ -z ${ROMI_DB+x} ]; then
-  echo -e "${WARNING}Environment variable 'ROMI_DB' is not defined, set it to use as default database location!"
+# If the `ROMI_DB` variable is set, use it as the default database location; else set it to empty:
+: "${ROMI_DB:=''}" # Safely default ROMI_DB to an empty string if undefined
+if [ -z "${ROMI_DB}" ]; then
+  echo -e "${WARNING}Environment variable 'ROMI_DB' is not defined. Set it to use as the default database location!"
   host_db=''
 else
-  host_db=${ROMI_DB}
+  host_db="${ROMI_DB}"
 fi
+
 
 usage() {
   echo -e "$(bold USAGE):"
@@ -83,7 +85,9 @@ usage() {
 }
 
 bind_mount_options() {
-  mount_option="${mount_option} -v ${host_db}:/myapp/db"
+  if [ -n "${host_db}" ]; then
+    mount_option="${mount_option} -v ${host_db}:/myapp/db"
+  fi
 }
 
 docker_option=""
@@ -134,10 +138,10 @@ while [ "$1" != "" ]; do
     ;;
   -v | --volume)
     shift
-    if [ "${mount_option}" == "" ]; then
+    if [ -z "${mount_option}" ]; then
       mount_option="-v $1"
     else
-      mount_option="${mount_option} -v $1" # append
+      mount_option="${mount_option} -v $1"
     fi
     ;;
   -h | --help)
@@ -145,9 +149,7 @@ while [ "$1" != "" ]; do
     exit
     ;;
   *)
-    docker_option="${docker_option} $1" # append
-    shift
-    docker_option="${docker_option} $1" # append
+    docker_option="${docker_option} $1"
     ;;
   esac
   shift
@@ -159,7 +161,7 @@ if [ -z ${ROMI_DB+x} ] && [ ${self_test} == 0 ]; then
 fi
 
 # Use local database path `$host_db` to create a bind mount to '/myapp/db':
-if [ "${host_db}" != "" ]; then
+if [ -z "${host_db}" ]; then
   bind_mount_options
   echo -e "${INFO}Automatic bind mount of '${host_db}' (host) to '/myapp/db' (container)!"
 else
@@ -172,15 +174,19 @@ else
 fi
 
 # If a 'host database path' is provided, get the name of the group and its id to, later used with the `--user` option
-if [ "${host_db}" != "" ]; then
-  group_name=$(stat -c "%G" ${host_db})                              # get the name of the group for the 'host database path'
-  gid=$(getent group ${group_name} | cut --delimiter ':' --fields 3) # get the 'gid' of this group
-  echo -e "${INFO}Automatic group id definition to '$gid'!"
-else
-  # Only raise next WARNING message if not a SELF-TEST:
-  if [ ${self_test} == 0 ]; then
-    echo -e "${WARNING}Using default group id '${gid}'."
+if [ -z "${host_db}" ]; then
+  group_name=$(stat -c "%G" "${host_db}")
+  if [ -n "${group_name}" ]; then
+    gid=$(getent group "${group_name}" | cut --delimiter ':' --fields 3)
+  else
+    # Only raise next ERROR message if not a SELF-TEST:
+    if [ ${self_test} == 0 ]; then
+      echo -e "${ERROR}Group name for host database '${host_db}' could not be retrieved!"
+      exit 1
+    fi
   fi
+else
+  echo -e "${WARNING}Using default group id '${gid}'."
 fi
 
 # Check if we have a TTY or not
@@ -201,7 +207,7 @@ if [ "${cmd}" = "" ]; then
     --env PYOPENCL_CTX='0' \
     ${docker_option} \
     -i ${USE_TTY} \
-    roboticsmicrofarms/plant-3d-vision:${vtag} \
+    "roboticsmicrofarms/plant-3d-vision:${vtag}" \
     "bash"
 else
   echo -e "${INFO}Running: '${cmd}'."
@@ -214,7 +220,7 @@ else
     --env PYOPENCL_CTX='0' \
     ${docker_option} \
     -i ${USE_TTY} \
-    roboticsmicrofarms/plant-3d-vision:${vtag} \
+    "roboticsmicrofarms/plant-3d-vision:${vtag}" \
     "${cmd}"
   # Get command exit code:
   cmd_status=$?
