@@ -1,0 +1,46 @@
+{% set pyproject = load_file_data('../../pyproject.toml', 'toml', from_recipe_dir=True) %}
+{% set project = pyproject.get('project', {}) %}
+{% set deps = project.get('dependencies', {}) %}
+{% set urls = project.get('urls', {}) %}
+# https://docs.conda.io/projects/conda-build/en/latest/resources/define-metadata.html#loading-data-from-other-files
+# Source code for Jinja context: https://github.com/conda/conda-build/blob/main/conda_build/jinja_context.py
+# Then search for the `load_file_data` function.
+
+package:
+  name: {{ project.get('name') }}
+  version: {{ project.get('version') }}
+
+source:
+  path: ../../  # to build from cloned sources
+#  git_url: https://github.com/romi/romitask.git
+#  git_tag: dev
+
+build:
+  string: {{ 'py'+ PY_VER.replace('.','') + '_' + environ.get('GIT_DESCRIBE_HASH', 'latest') }}
+  script: python -m pip install .
+
+requirements:
+  build:
+    - setuptools
+    - python  {{ python }}
+  host:
+    - python  {{ python }}
+  run:
+    - python  {{ python }}
+    - numpy<2  # `romiseg` & `romicgal` both require this!
+    {% for dep in deps %}
+    {% if not dep.startswith('open3d') %}
+    - {{ dep }}
+    {% endif %}
+    {% endfor %}
+
+about:
+  home: {{ urls.get('Homepage') }}
+  license: LGPL-3.0-or-later
+  license_file: LICENSE
+  summary: {{ project.get('description') }}
+  description: |
+    The _3D plant phenotyping platform_ of the ROMI project allows to performs a full 3D analysis of plants.
+    It combines an imaging station with a powerful image processing pipeline, to build a 3D representation of plants.
+    This package act as the main data processing workflow and require other ROMI libraries.
+  dev_url: {{ urls.get('Repository') }}
