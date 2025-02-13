@@ -21,6 +21,24 @@ doc=0
 # Boolean to install notebook requirements:
 notebook=0
 
+# Check if conda is installed & available
+if ! command -v conda &>/dev/null; then
+  echo -e "${ERROR}Conda is not installed or not found in PATH. Please install Conda before running this script."
+  exit 1
+fi
+
+# Function to check numpy version
+check_numpy_version() {
+  numpy_version=$(python3 -c "import numpy; print(numpy.__version__)" 2>/dev/null)
+  if [ $? -eq 0 ]; then
+    echo -e "${INFO}Numpy version installed: ${numpy_version}"
+    echo "Numpy version installed: ${numpy_version}" >> numpy_versions.log
+  else
+    echo -e "${WARNING}Numpy is not installed or could not be detected."
+    echo "Numpy is not installed or could not be detected." >> numpy_versions.log
+  fi
+}
+
 usage() {
   echo -e "$(bold USAGE):"
   echo -e "  ./install.sh [OPTIONS]"
@@ -90,18 +108,28 @@ done
 CONDA_BASE_PATH=$(dirname "$(dirname $CONDA_EXE)")
 CONDA_ENV_PATH=${CONDA_BASE_PATH}/envs/${name}
 
-if [ -d $CONDA_ENV_PATH ]; then
+if [ -d "$CONDA_ENV_PATH" ]; then
   echo -e "${WARNING}# - Using existing '${name}' conda environment..."
   eval "$(conda shell.bash hook)"
   conda activate ${name}
 else
   echo -e "${INFO}# - Creating '${name}' conda environment..."
   start_time=$(date +%s)
-  conda create -n ${name} python=${py_version}
-  echo -e "${INFO}Conda environment creation done in $(expr $(date +%s) - ${start_time}) s."
+  conda create -y -n "${name}" python="${py_version}" "numpy<2"
+  if [ $? -ne 0 ]; then
+    echo -e "${ERROR}Failed to create conda environment '${name}'."
+    exit 1
+  fi
+  echo -e "${INFO}Conda environment creation done in $(($(date +%s) - start_time)) s."
   eval "$(conda shell.bash hook)"
-  conda activate ${name}
+  conda activate "${name}"
+  if [ $? -ne 0 ]; then
+    echo -e "${ERROR}Failed to activate conda environment '${name}'."
+    exit 1
+  fi
 fi
+# Check numpy version after installation.
+check_numpy_version
 
 # Install `plantdb` sources:
 echo -e "\n\n${INFO}# - Installing 'plantdb' sources..."
@@ -109,7 +137,9 @@ start_time=$(date +%s)
 python3 -m pip install ${pip_opt} plantdb/
 build_status=$?
 if [ ${build_status} == 0 ]; then
-  echo -e "${INFO}'plantdb' sources installed in $(expr $(date +%s) - ${start_time}) s."
+  echo -e "${INFO}'plantdb' sources installed in $(($(date +%s) - start_time)) s."
+  # Check numpy version after installation.
+  check_numpy_version
 else
   echo -e "${ERROR}'plantdb' sources install failed with code '${build_status}'!"
   exit ${build_status}
@@ -121,7 +151,9 @@ start_time=$(date +%s)
 python3 -m pip install ${pip_opt} romitask/
 build_status=$?
 if [ ${build_status} == 0 ]; then
-  echo -e "${INFO}'romitask' sources installed in $(expr $(date +%s) - ${start_time}) s."
+  echo -e "${INFO}'romitask' sources installed in $(($(date +%s) - start_time)) s."
+  # Check numpy version after installation.
+  check_numpy_version
 else
   echo -e "${ERROR}'romitask' sources install failed with code '${build_status}'!"
   exit ${build_status}
@@ -133,7 +165,9 @@ start_time=$(date +%s)
 python3 -m pip install ${pip_opt} skeleton_refinement/
 build_status=$?
 if [ ${build_status} == 0 ]; then
-  echo -e "${INFO}'skeleton_refinement' sources installed in $(expr $(date +%s) - ${start_time}) s."
+  echo -e "${INFO}'skeleton_refinement' sources installed in $(($(date +%s) - start_time)) s."
+  # Check numpy version after installation.
+  check_numpy_version
 else
   echo -e "${ERROR}'skeleton_refinement' sources install failed with code '${build_status}'!"
   exit ${build_status}
@@ -146,7 +180,9 @@ python3 -m pip install torch==1.12.1+cu102 torchvision==0.13.1+cu102 --extra-ind
 python3 -m pip install ${pip_opt} romiseg/
 build_status=$?
 if [ ${build_status} == 0 ]; then
-  echo -e "${INFO}'romiseg' sources installed in $(expr $(date +%s) - ${start_time}) s."
+  echo -e "${INFO}'romiseg' sources installed in $(($(date +%s) - start_time)) s."
+  # Check numpy version after installation.
+  check_numpy_version
 else
   echo -e "${ERROR}'romiseg' sources install failed with code '${build_status}'!"
   exit ${build_status}
@@ -156,10 +192,12 @@ fi
 echo -e "\n\n${INFO}# - Installing 'romicgal' sources..."
 start_time=$(date +%s)
 python3 -m pip install pybind11
-python3 -m pip install ${pip_opt} romicgal/
+python3 -m pip install romicgal/
 build_status=$?
 if [ ${build_status} == 0 ]; then
-  echo -e "${INFO}'romicgal' sources installed in $(expr $(date +%s) - ${start_time}) s."
+  echo -e "${INFO}'romicgal' sources installed in $(($(date +%s) - start_time)) s."
+  # Check numpy version after installation.
+  check_numpy_version
 else
   echo -e "${ERROR}'romicgal' sources install failed with code '${build_status}'!"
   exit ${build_status}
@@ -172,7 +210,9 @@ python3 -m pip install -r dtw/requirements.txt
 python3 -m pip install ${pip_opt} dtw/
 build_status=$?
 if [ ${build_status} == 0 ]; then
-  echo -e "${INFO}'dtw' sources installed in $(expr $(date +%s) - ${start_time}) s."
+  echo -e "${INFO}'dtw' sources installed in $(($(date +%s) - start_time)) s."
+  # Check numpy version after installation.
+  check_numpy_version
 else
   echo -e "${ERROR}'dtw' sources install failed with code '${build_status}'!"
   exit ${build_status}
@@ -181,38 +221,39 @@ fi
 # Install `plant-3d-vision` sources:
 echo -e "\n\n${INFO}# - Installing 'plant-3d-vision' sources..."
 start_time=$(date +%s)
-python3 -m pip install -r requirements.txt
-python3 -m pip install ${pip_opt} .
+envpython3 -m pip install ${pip_opt} .
 build_status=$?
 if [ ${build_status} == 0 ]; then
-  echo -e "${INFO}'plant-3d-vision' sources installed in $(expr $(date +%s) - ${start_time}) s."
+  echo -e "${INFO}'plant-3d-vision' sources installed in $(($(date +%s) - start_time)) s."
+  # Check numpy version after installation.
+  check_numpy_version
 else
   echo -e "${ERROR}'plant-3d-vision' sources install failed with code '${build_status}'!"
   exit ${build_status}
 fi
 
-if [ ${doc} != 0 ]; then
+if [ "${doc}" -eq 1 ]; then
   echo -e "\n\n${INFO}# - Installing documentation requirements..."
   start_time=$(date +%s)
   python3 -m pip install -U "Sphinx>5" sphinx-material sphinx-argparse sphinx-copybutton sphinx-panels sphinx-prompt myst-nb myst-parser
 
   build_status=$?
   if [ ${build_status} == 0 ]; then
-    echo -e "${INFO}Documentation requirements installed in $(expr $(date +%s) - ${start_time}) s."
+    echo -e "${INFO}Documentation requirements installed in $(($(date +%s) - start_time)) s."
   else
     echo -e "${ERROR}Documentation requirements install failed with code '${build_status}'!"
     exit ${build_status}
   fi
 fi
 
-if [ ${notebook} != 0 ]; then
+if [ "${notebook}" -eq 1 ]; then
   echo -e "\n\n${INFO}# - Installing notebook requirements..."
   start_time=$(date +%s)
   python3 -m pip install -U jupyter notebook ipywidgets plotly
 
   build_status=$?
   if [ ${build_status} == 0 ]; then
-    echo -e "${INFO}Notebook requirements installed in $(expr $(date +%s) - ${start_time}) s."
+    echo -e "${INFO}Notebook requirements installed in $(($(date +%s) - start_time)) s."
   else
     echo -e "${ERROR}Notebook requirements install failed with code '${build_status}'!"
     exit ${build_status}
