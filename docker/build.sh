@@ -121,7 +121,7 @@ docker build \
 # Get docker build exit code:
 docker_build_status=$?
 # Get elapsed time:
-elapsed_time=$(expr $(date +%s) - ${start_time})
+elapsed_time=$(($(date +%s) - start_time))
 
 # Print build time if successful (code 0), else print exit code
 if [ ${docker_build_status} == 0 ]; then

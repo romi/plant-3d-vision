@@ -225,7 +225,7 @@ else
   # Get command exit code:
   cmd_status=$?
   # Print elapsed time if successful (code 0), else print command exit code
-  elapsed_time=$(expr $(date +%s) - ${start_time})
+  elapsed_time=$(($(date +%s) - start_time))
   if [ ${cmd_status} == 0 ]; then
     echo -e "\n${INFO}Command SUCCEEDED in ${elapsed_time}s!"
   else
