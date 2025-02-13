@@ -62,23 +62,22 @@ COPY --chown=${USER_NAME} ./ plant-3d-vision/
 
 RUN cd plant-3d-vision/ && \
     # Install `plantdb` dependencies and sources:
-    python3 -m pip install --user plantdb/ && \
+    python3 -m pip install --no-cache-dir plantdb/ && \
     # Install `romitask` dependencies and sources:
-    python3 -m pip install --user romitask/ && \
+    python3 -m pip install --no-cache-dir romitask/ && \
     # Install `skeleton_refinement` dependencies and sources:
-    python3 -m pip install --user skeleton_refinement/ && \
+    python3 -m pip install --no-cache-dir skeleton_refinement/ && \
     # Install `romiseg` dependencies and sources:
-    python3 -m pip install --user torch==1.12.1+cu102 torchvision==0.13.1+cu102 --extra-index-url https://download.pytorch.org/whl/cu102 && \
-    python3 -m pip install --user romiseg/ && \
+    python3 -m pip install --no-cache-dir torch==1.12.1+cu102 torchvision==0.13.1+cu102 --extra-index-url https://download.pytorch.org/whl/cu102 && \
+    python3 -m pip install --no-cache-dir romiseg/ && \
     # Install `romicgal` dependencies and sources:
-    python3 -m pip install --user pybind11 && \
-    python3 -m pip install --user romicgal/ && \
+    python3 -m pip install --no-cache-dir pybind11 && \
+    python3 -m pip install --no-cache-dir romicgal/ && \
     # Install `dtw` dependencies and sources:
-    python3 -m pip install --user -r dtw/requirements.txt && \
-    python3 -m pip install --user dtw/ && \
+    python3 -m pip install --no-cache-dir -r dtw/requirements.txt && \
+    python3 -m pip install --no-cache-dir dtw/ && \
     # Install `plant-3d-vision` dependencies and sources:
-    python3 -m pip install --user -r requirements.txt && \
-    python3 -m pip install --user . && \
+    python3 -m pip install --no-cache-dir . && \
     # Clean pip cache:
     python3 -m pip cache purge && \
     # Download the trained CNN model file:
