@@ -4,7 +4,7 @@ import luigi
 from romitask import RomiTask, DatabaseConfig, FilesetTarget
 from plantdb import io
 from romitask.task import FilesetExists, ImagesFilesetExists, FileByFileTask
-from plantdb.testing import DBTestCase
+from plantdb.testing import FSDBTestCase
 from os import rmdir, path
 
 class TouchFileTask(RomiTask):
@@ -44,7 +44,7 @@ class ImageIdentityTask(FileByFileTask):
         return ImagesFilesetExists(fileset_id=self.fileset_id)
 
 
-class TestFilesetTarget(DBTestCase):
+class TestFilesetTarget(FSDBTestCase):
     def test_target(self):
         db = self.get_test_db()
         scan = db.get_scan("myscan_001")
@@ -60,7 +60,7 @@ class TestFilesetTarget(DBTestCase):
         rmdir(path.join(target.scan.db.basedir, target.scan.id, target.fileset_id))
 
 
-class TestRomiTask(DBTestCase):
+class TestRomiTask(FSDBTestCase):
     def test_romi_task(self):
         db = self.get_test_db()
         DatabaseConfig.db = db
@@ -71,7 +71,7 @@ class TestRomiTask(DBTestCase):
         assert (task.complete())
 
 
-class TestFileByFileTask(DBTestCase):
+class TestFileByFileTask(FSDBTestCase):
     def test_romi_task(self):
         db = self.get_test_db()
         DatabaseConfig.db = db

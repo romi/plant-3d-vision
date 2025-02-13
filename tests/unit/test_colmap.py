@@ -5,13 +5,13 @@ from pathlib import Path
 
 from plant3dvision import colmap
 
-from plantdb.testing import DBTestCase
+from plantdb.testing import FSDBTestCase
 
 parent_dir = Path(__file__).resolve().parents[1]
 DATABASE_LOCATION = abspath(join(parent_dir, "testdata"))
 
 
-class TestColmap(DBTestCase):
+class TestColmap(FSDBTestCase):
 
     def test_colmap_gpu(self):
         matcher = "exhaustive"

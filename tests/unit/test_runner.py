@@ -1,10 +1,10 @@
 import unittest
 
 from romitask.runner import DBRunner
-from plantdb.testing import DBTestCase
+from plantdb.testing import FSDBTestCase
 
 
-class TestFSDBRunner(DBTestCase):
+class TestFSDBRunner(FSDBTestCase):
     def test_run_scan(self):
         db = self.get_test_db()
         runner = DBRunner(db, [], {})

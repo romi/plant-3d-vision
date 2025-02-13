@@ -1,7 +1,7 @@
 import os
 import unittest
 
-from plantdb.testing import DBTestCase
+from plantdb.testing import FSDBTestCase
 from romitask.watch import FSDBWatcher
 
 
@@ -14,7 +14,7 @@ from romitask.watch import FSDBWatcher
 #         y.write_text("txt", "hello")
 
 
-class TestFSDBWatcher(DBTestCase):
+class TestFSDBWatcher(FSDBTestCase):
     def test_watch(self):
         db = self.get_test_db()
         watcher = FSDBWatcher(db, [], {})
