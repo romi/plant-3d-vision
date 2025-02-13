@@ -11,11 +11,12 @@ This module contains all functions for processing of 3D data.
 import networkx as nx
 import numpy as np
 import open3d as o3d
-from romitask.log import get_logger
 from scipy.ndimage.filters import gaussian_filter
 from scipy.ndimage.morphology import distance_transform_edt
 from skimage.exposure import rescale_intensity
 from tqdm import tqdm
+
+from romitask.log import get_logger
 
 logger = get_logger(__name__)
 
@@ -77,6 +78,21 @@ def pcd2mesh(pcd):
     -------
     open3d.geometry.TriangleMesh
         The obtained triangular mesh.
+
+    Examples
+    --------
+    >>> from plant3dvision.proc3d import pcd2mesh
+    >>> from plantdb.io import read_point_cloud
+    >>> from plantdb.rest_api import compute_fileset_matches
+    >>> from plantdb.test_database import test_database
+    >>> db = test_database()
+    >>> db.connect()
+    >>> scan = db.get_scan("real_plant_analyzed")
+    >>> pcd_fs_id = compute_fileset_matches(scan)["PointCloud"]
+    >>> pcd_fs = scan.get_fileset(pcd_fs_id)
+    >>> pcd = read_point_cloud(pcd_fs.get_file("PointCloud"))
+    >>> mesh = pcd2mesh(pcd)
+
     """
     assert (pcd.has_normals)
     points, triangles = cgal.poisson_mesh(np.asarray(pcd.points),
@@ -109,6 +125,25 @@ def pcd2vol(pcd, voxel_size, zero_padding=0):
         Every voxel value is equal to the number of points in the corresponding cube.
     list
         The origin of the array.
+
+    Examples
+    --------
+    >>> from plant3dvision.proc3d import pcd2vol
+    >>> from plantdb.io import read_point_cloud
+    >>> from plantdb.rest_api import compute_fileset_matches
+    >>> from plantdb.test_database import test_database
+    >>> db = test_database()
+    >>> db.connect()
+    >>> scan = db.get_scan("real_plant_analyzed")
+    >>> pcd_fs_id = compute_fileset_matches(scan)["PointCloud"]
+    >>> pcd_fs = scan.get_fileset(pcd_fs_id)
+    >>> pcd = read_point_cloud(pcd_fs.get_file("PointCloud"))
+    >>> vol, origin = pcd2vol(pcd, 1.0)
+    >>> print(vol.shape)
+    (80, 60, 277)
+    >>> from plant3dvision.visu import plotly_volume_slicer
+    >>> plotly_volume_slicer(vol)
+
     """
     pcd_points = np.asarray(pcd.points)
     origin = np.min(pcd_points, axis=0) - zero_padding * voxel_size
@@ -142,11 +177,14 @@ def skeletonize(mesh):
     >>> import os
     >>> from plant3dvision.proc3d import skeletonize
     >>> from plantdb.io import read_triangle_mesh
+    >>> from plantdb.rest_api import compute_fileset_matches
     >>> from plantdb.fsdb import FSDB
     >>> db = FSDB(os.environ['ROMI_DB'])  # requires definition of this environment variable!
+    >>> db = FSDB('/data/ROMI/test_owner')
     >>> db.connect()
-    >>> scan = db.get_scan("sgk_45")
-    >>> fs = scan.get_fileset("TriangleMesh_9_most_connected_t_open3d_00e095c359")
+    >>> scan = db.get_scan("Col-0_E1_1")
+    >>> mesh_fs_id = compute_fileset_matches(scan)["TriangleMesh"]
+    >>> fs = scan.get_fileset(mesh_fs_id)
     >>> f = fs.get_file('TriangleMesh')
     >>> tmesh = read_triangle_mesh(f)
     >>> skel = skeletonize(tmesh)
@@ -171,6 +209,23 @@ def knn_graph(pcd, k):
     -------
     networkx.Graph
         The weighted undirected graph with connected points.
+
+    Examples
+    --------
+    >>> from plant3dvision.proc3d import knn_graph
+    >>> from plantdb.io import read_point_cloud
+    >>> from plantdb.rest_api import compute_fileset_matches
+    >>> from plantdb.test_database import test_database
+    >>> db = test_database()
+    >>> db.connect()
+    >>> scan = db.get_scan("real_plant_analyzed")
+    >>> pcd_fs_id = compute_fileset_matches(scan)["PointCloud"]
+    >>> pcd_fs = scan.get_fileset(pcd_fs_id)
+    >>> pcd = read_point_cloud(pcd_fs.get_file("PointCloud"))
+    >>> neighbours_graph = knn_graph(pcd, 5)
+    >>> from plant3dvision.proc3d import draw_pcd_graph
+    >>> draw_pcd_graph(neighbours_graph)
+
     """
     pcd_tree = o3d.geometry.KDTreeFlann(pcd)
     g = nx.Graph()
@@ -197,6 +252,22 @@ def radius_graph(pcd, r):
     -------
     networkx.Graph
         The weighted undirected graph with connected points.
+
+    Examples
+    --------
+    >>> from plant3dvision.proc3d import radius_graph
+    >>> from plantdb.io import read_point_cloud
+    >>> from plantdb.rest_api import compute_fileset_matches
+    >>> from plantdb.test_database import test_database
+    >>> db = test_database()
+    >>> db.connect()
+    >>> scan = db.get_scan("real_plant_analyzed")
+    >>> pcd_fs_id = compute_fileset_matches(scan)["PointCloud"]
+    >>> pcd_fs = scan.get_fileset(pcd_fs_id)
+    >>> pcd = read_point_cloud(pcd_fs.get_file("PointCloud"))
+    >>> neighbours_graph = radius_graph(pcd, 5)
+    >>> from plant3dvision.proc3d import draw_pcd_graph
+    >>> draw_pcd_graph(neighbours_graph)
     """
     pcd_tree = o3d.geometry.KDTreeFlann(pcd)
     g = nx.Graph()
@@ -210,57 +281,99 @@ def radius_graph(pcd, r):
 
 
 def connect_graph(g, pcd, root_index):
-    """Connects the knn graph of the point cloud.
+    """Connects disjoint components of a given graph by adding edges until the graph becomes fully connected.
+
+    This function ensures that each disconnected component of the graph `g` is connected to the
+    component containing the vertex specified by `root_index`. It uses the geometric information
+    from the provided point cloud `pcd` to find the closest points between disconnected components.
+    Edges are added to the graph with weights equivalent to the Euclidean distance between the selected points.
 
     Parameters
     ----------
     g : networkx.Graph
-        knn graph
+        The input graph which may contain disjoint components. It will be updated in place
+        to ensure it is fully connected.
     pcd : open3d.geometry.PointCloud
-        input point cloud
+        The point cloud that provides geometric information about the points corresponding
+        to the nodes of the graph. Used to compute distances between points.
     root_index : int
-        index of root node
+        The index of the node whose connected component will serve as the root for establishing
+        connectivity to other components.
 
-    Notes
-    -----
-    It iteratively connects the closest non-connected point to the connected component.
+    Examples
+    --------
+    >>> from plant3dvision.proc3d import knn_graph, connect_graph
+    >>> from plantdb.io import read_point_cloud
+    >>> from plantdb.rest_api import compute_fileset_matches
+    >>> from plantdb.test_database import test_database
+    >>> db = test_database()
+    >>> db.connect()
+    >>> scan = db.get_scan("real_plant_analyzed")
+    >>> pcd_fs_id = compute_fileset_matches(scan)["PointCloud"]
+    >>> pcd_fs = scan.get_fileset(pcd_fs_id)
+    >>> pcd = read_point_cloud(pcd_fs.get_file("PointCloud"))
+    >>> neighbours_graph = knn_graph(pcd, 5)
+    >>> connect_graph(neighbours_graph, pcd)
     """
     while True:
+        # Get the connected components of the graph as a list
         cc = list(nx.connected_components(g))
         if len(cc) == 1:
+            # Exit loop if the graph is already fully connected
             break
 
-        connected_cc = None
-        non_connected_cc = []
+        # Separate components into connected (contains `root_index`) and non-connected
+        connected_cc = None  # Component that contains the root_index
+        non_connected_cc = []  # Components not connected to the root
 
         for c in cc:
             if root_index in c:
-                connected_cc = list(c)
+                connected_cc = list(c)  # Mark as the connected component
             else:
-                non_connected_cc.append(list(c))
+                non_connected_cc.append(list(c))  # Mark as disconnected components
 
+        # Error if the root_index is not found in any of the components
+        if connected_cc is None:
+            raise ValueError(f"No connected component contains the root_index {root_index}.")
+
+        # Create a sub-point-cloud for points in the connected component
         pcd_root_cc = o3d.geometry.PointCloud()
-        pcd_root_cc.points = o3d.utility.Vector3dVector(np.asarray(pcd.points)[connected_cc, :])
+        pcd_root_cc.points = o3d.utility.Vector3dVector(
+            np.asarray(pcd.points)[connected_cc, :]  # Extract 3D points corresponding to `connected_cc`
+        )
+
+        # Create a KD-tree for fast nearest neighbor searches within the connected component
         pcd_root_tree = o3d.geometry.KDTreeFlann(pcd_root_cc)
 
-        points = np.asarray(pcd.points)
-        minnorm = np.inf
+        # Initialize variables to store the closest pair of points between components
+        minnorm = np.inf  # Smallest distance found so far
+        minidx1 = None  # Node index in the non-connected component
+        minidx2 = None  # Node index in the connected component
 
-        minidx1 = None
-        minidx2 = None
-
+        # Iterate through each disconnected component
         for c in non_connected_cc:
-            for i in c:
+            for i in c:  # For every node in the disconnected component
+                # Find the nearest neighbor in the root-connected component
                 [k_, idx, _] = pcd_root_tree.search_knn_vector_3d(pcd.points[i], 1)
+                if k_ == 0:
+                    # No neighbors found; either handle or raise an error
+                    continue
+
+                # Compute the Euclidean distance between points
                 nnorm = np.linalg.norm(pcd.points[i] - pcd_root_cc.points[idx[0]])
                 if nnorm < minnorm:
+                    # Update minimum distance and indices if a closer pair of points is found
                     minnorm = nnorm
+                    minidx1 = i  # Node in the non-connected component
+                    minidx2 = connected_cc[idx[0]]  # Node in the connected component
 
-                    minidx1 = i
-                    minidx2 = connected_cc[idx[0]]
+        # Check if suitable points were found to form a connection
+        if minidx1 is None or minidx2 is None:
+            raise RuntimeError("Could not find points to connect the graph.")
 
-        g.add_edge(minidx1, minidx2, weight=nnorm)
-        g.add_edge(minidx2, minidx1, weight=nnorm)
+        # Add the edge between the closest pair of points with a weight equal to the distance
+        g.add_edge(minidx1, minidx2, weight=minnorm)
+        g.add_edge(minidx2, minidx1, weight=minnorm)  # Add reverse edge since the graph is undirected
 
 
 def distance_to_root_clusters(g, root_index, pcd, bin_size):
@@ -342,7 +455,7 @@ def draw_pcd_graph(g):
     lines = np.zeros((len(g.edges), 2), dtype=int)
 
     for i in range(len(g.nodes)):
-        pts[i, :] = g.nodes[i]['position']
+        pts[i, :] = g.nodes[i]['center']
 
     for j in range(len(g.edges)):
         lines[j, :] = list(g.edges)[j]
@@ -627,8 +740,31 @@ def crop_point_cloud(point_cloud, bounding_box):
 
 
 def fit_plane_ransac(point_cloud, inliers=0.8, n_iter=100):
-    """
-    Fits a plane to a point cloud using a Ransac algorithm.
+    """Fits a plane to a point cloud using the RANSAC (Random Sample Consensus) algorithm.
+
+    This function identifies the best fitting plane for a given 3D point cloud by iteratively
+    selecting random subsets of points and evaluating the inliers based on the selected subsets.
+    The method minimizes the error related to the smallest singular value of the covariance
+    matrix and outputs the point on the plane and its normal vector.
+
+    Parameters
+    ----------
+    point_cloud : object
+        Input 3D point cloud data containing the `points` property as a NumPy-compatible
+        array of shape (N, 3), where N is the number of points.
+    inliers : float, optional
+        The proportion of points to be considered as inliers for each iteration.
+        Default is 0.8.
+    n_iter : int, optional
+        Number of RANSAC iterations for random subset selection. Default is 100.
+
+    Returns
+    -------
+    numpy.ndarray
+        A NumPy array of shape (3,) representing a point on the best-fit plane.
+    numpy.ndarray
+        A NumPy array of shape (3,) representing the normal vector of the best-fit plane.
+
     """
     min_error = np.inf
     argmin_v = None
@@ -653,6 +789,35 @@ def fit_plane_ransac(point_cloud, inliers=0.8, n_iter=100):
 
 
 def backproject_points(points, K, rot, tvec):
+    """Projects 3D points onto a 2D image plane using camera intrinsics and extrinsics.
+
+    This function performs backprojection of 3D points into the image plane
+    by applying the provided rotation, translation, and intrinsic calibration
+    matrix. It returns the 2D image coordinates corresponding to the projection
+    of input 3D points.
+
+    Parameters
+    ----------
+    points : np.ndarray
+        A 2D array of shape (N, 3), where N is the number of 3D points. Each row
+        corresponds to the (x, y, z) coordinates of a 3D point.
+    K : np.ndarray
+        A 3x3 intrinsic camera calibration matrix that defines the relationship
+        between camera coordinates and pixel coordinates.
+    rot : np.ndarray
+        A 3x3 rotation matrix that defines the orientation of the camera relative
+        to the world coordinates.
+    tvec : np.ndarray
+        A 1D array of length 3 defining the translation vector that specifies the
+        position of the camera in world coordinates.
+
+    Returns
+    -------
+    np.ndarray
+        A 2D array of shape (N, 2), where N is the number of input 3D points.
+        Each row contains the (u, v) pixel coordinates of the projected 2D points
+        in the image plane.
+    """
     x = rot @ points.transpose() + tvec[:, np.newaxis]
     x = K @ x
     x = x / x[2, :][np.newaxis, :]
@@ -661,6 +826,31 @@ def backproject_points(points, K, rot, tvec):
 
 def project_camera_plane(K, rot, tvec, X0, n):
     """
+    Projects the camera plane onto a plane in world coordinates, transformed
+    through the camera's intrinsic properties and the rotation-translation
+    matrix from world frame to camera frame. This involves transforming
+    the given plane in the world frame into the camera frame, projecting
+    specific points of the camera plane onto the defined plane, and then
+    returning the resulting points in the world frame.
+
+    Parameters
+    ----------
+    K : np.matrix
+        Intrinsic matrix of the camera defining the internal parameters.
+    rot : np.matrix
+        Rotation matrix transforming from world frame to camera frame.
+    tvec : np.matrix
+        Translation vector transforming from world frame to camera frame.
+    X0 : np.matrix
+        A point on the plane in the world frame.
+    n : np.matrix
+        The normal vector of the plane in the world frame.
+
+    Returns
+    -------
+    np.ndarray
+        An array of projected points from the camera plane onto the target plane
+        in world coordinates.
     """
 
     rot = np.matrix(rot)
