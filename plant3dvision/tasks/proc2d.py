@@ -326,12 +326,14 @@ class Segmentation2D(Masks):
         }
 
     def run(self):
-        from romiseg.Segmentation2D import segmentation
+        from romiseg.segmentation_2d import fileset_segmentation
         from plant3dvision import proc2d
 
         # Get the 'image' `Fileset` to segment and filter by `query`:
         images_fileset = self.input()["images"].get()
         images_files = images_fileset.get_files(query=self.query)
+        images_path = [im_f.path() for im_f in images_files]
+        images_id = [im_f.id for im_f in images_files]
         # Get the trained model using given `model_id`:
         model_file = self.input()["model"].get().get_file(self.model_id)
         # A trained model is required, abort if none found!
@@ -348,7 +350,7 @@ class Segmentation2D(Masks):
             label_range = range(len(labels))
 
         # Apply trained segmentation model on list of image `File`:
-        images_segmented, id_im = segmentation(self.Sx, self.Sy, images_files, model_file)
+        predicted_label_maps = fileset_segmentation(self.Sx, self.Sy, images_path, model_file)
 
         # Save class prediction as images, one by one, class per class
         logger.debug("Saving the `.astype(np.uint8)` segmented images, takes around 15 s")
@@ -356,34 +358,34 @@ class Segmentation2D(Masks):
         # Get the output `Fileset` used to save predicted label position in (binary) mask files
         output_fileset = self.output().get()
         # For every segmented image...
-        for img_id in range(images_segmented.shape[0]):
+        for img_idx, pred_labels in enumerate(predicted_label_maps):
             # And for each label in the filtered label list...
             for label_id in label_range:
                 # Get the corresponding `File` object to use
-                f = output_fileset.create_file('%03d_%s' % (img_id, labels[label_id]))
+                f = output_fileset.create_file(f"{images_id[img_idx]}_{labels[label_id]}")
                 # Get the image for given label as a numpy array
-                im = images_segmented[img_id, label_id, :, :].cpu().numpy()
+                label_img = pred_labels[label_id, :, :].cpu().numpy()
                 # Invert the prediction map for labels in the `inverted_labels` list
                 if labels[label_id] in self.inverted_labels:
-                    im = 1.0 - im
+                    label_img = 1.0 - label_img
                 # If required, binarize the prediction map to create a binary mask of the predicted label
                 if self.binarize:
-                    im = im > self.threshold
+                    label_img = label_img > self.threshold
                     # If required, dilation of the binary mask is performed
                     if self.dilation > 0:
-                        im = proc2d.dilation(im, self.dilation)
+                        label_img = proc2d.dilation(label_img, self.dilation)
                 # Convert the image to 8bits unsigned integers
-                im = (im * 255).astype(np.uint8)
+                label_img = (label_img * 255).astype(np.uint8)
                 # Invert the binary mask for labels in `inverted_labels` list
                 if labels[label_id] in self.inverted_labels:
-                    im = 255 - im
+                    label_img = 255 - label_img
                 # Save the prediction map or binary mask
-                io.write_image(f, im, 'png')
+                io.write_image(f, label_img, 'png')
                 # Get the original metadata to add them to `File` object metadata
-                orig_metadata = images_fileset[img_id].get_metadata()
+                orig_metadata = images_fileset.get_file(images_id[img_idx]).get_metadata()
                 # Also add used image id & label to `File` object metadata
                 f.set_metadata({
-                    'image_id': id_im[img_id][0],
+                    'image_id': images_id[img_idx],
                     **orig_metadata
                 })
                 f.set_metadata({
