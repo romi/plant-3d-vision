@@ -153,13 +153,20 @@ class PointCloud(RomiTask):
         optional thresholds like contrast and score. Single-class data is directly processed for point
         cloud generation.
         """
+        # Case 1: No labels specified - process default single class volume
         if len(self.labels) == 0:
             ifile = self.input_file()
             self.run_single_class(ifile)
+
+        # Case 2: One label specified - process single class with label suffix
         elif len(self.labels) == 1:
+            # Get input file with label name appended to filename
             ifile = self.input_file(suffix=f"_{self.labels[0]}")
             self.run_single_class(ifile)
+
+        # Case 3: Multiple labels - combine data from multiple classes
         else:
+            # Process multiple class volumes and combine them into single point cloud
             self.run_multiclass(self.labels)
 
 
@@ -471,44 +478,53 @@ class ClusteredMesh(RomiTask):
     depth = luigi.IntParameter(default=9)  # used by open3d library
 
     def run(self):
+        # Read input point cloud file
         x = io.read_point_cloud(self.input_file())
+        # Convert point cloud data to numpy arrays for efficient processing
         all_points = np.asarray(x.points)
         all_normals = np.asarray(x.normals)
         all_colors = np.asarray(x.colors)
 
-        # Get the list of semantic label ('flower', 'fruit', ...) attached to each points of the point cloud
+        # Get semantic labels for each point (e.g., 'flower', 'fruit')
         labels = self.input_file().get_metadata("labels")
         output_fileset = self.output().get()
-        # Loop on the unique set of labels:
+
+        # Process each unique semantic label separately
         for l in set(labels):
             pcd = o3d.geometry.PointCloud()
-            # Get the index of points matching the semantic label
+            # Find indices of points with current label
             idx = [i for i in range(len(labels)) if labels[i] == l]
-            # Select points, normals & colors for those point (to reconstruct a point cloud)
+            # Extract points, normals, and colors for current label
             points = all_points[idx, :]
             normals = all_normals[idx, :]
             colors = all_colors[idx, :]
-            # Skip point cloud reconstruction if no points corresponding to label
+
+            # Skip if no points found for current label
             if len(points) == 0:
                 logger.critical(f"No points found for label: '{l}'")
                 continue
-            # Reconstruct colored point cloud with normals:
+
+            # Create point cloud for current label
             pcd.points = o3d.utility.Vector3dVector(points)
             pcd.normals = o3d.utility.Vector3dVector(normals)
             pcd.colors = o3d.utility.Vector3dVector(colors)
-            # Mesh the point cloud (built with the points corresponding to the label)
+            # Generate mesh using Poisson surface reconstruction
             t, _ = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(pcd, depth=self.depth)
+            # Identify connected components in the mesh
             t.compute_adjacency_list()
             k, cc, _ = t.cluster_connected_triangles()
             k = np.asarray(k)
             tri_np = np.asarray(t.triangles)
+
+            # Create separate mesh for each connected component
             for j in range(len(cc)):
+                # Extract triangles for current component
                 newt = o3d.geometry.TriangleMesh(t.vertices,
                                                  o3d.utility.Vector3iVector(tri_np[k == j, :]))
                 newt.vertex_colors = t.vertex_colors
                 newt.remove_unreferenced_vertices()
-
-                f = output_fileset.create_file("%s_%03d" % (l, j))
+                # Save mesh component to file with label metadata
+                f = output_fileset.create_file(f"{l}_{j:03d}")
                 io.write_triangle_mesh(f, newt)
                 f.set_metadata("label", l)
 
@@ -584,36 +600,46 @@ class OrganSegmentation(RomiTask):
         return pcd.select_by_index(list(idx_mask))
 
     def run(self):
-        # Read the point cloud from the `upstream_task`
+        # Load point cloud data from input file
         labelled_pcd = io.read_point_cloud(self.input_file())
-        # Initialize the output FileSet object.
+        # Get output FileSet for storing results
         output_fileset = self.output().get()
-        # Get the list of semantic label ('flower', 'fruit', ...) attached to each points of the point cloud
+
+        # Get semantic labels for each point in the cloud
         labels = self.input_file().get_metadata("labels")
-        unique_labels = set(labels)
-        # Loop on the unique set of labels:
+        unique_labels = set(labels)  # Get unique organ labels (flower, fruit, etc.)
+
+        # Process each unique organ label separately
         for label in unique_labels:
+            # Extract points corresponding to current label
             label_pcd = self.get_label_pointcloud(labelled_pcd, labels, label)
-            # Exclude stem from clustering
+            # Special handling for stem - no clustering needed
             if label == 'stem':
-                f = output_fileset.create_file("%s_%03d" % (label, 0))
+                f = output_fileset.create_file(f"{label}_000")
                 io.write_point_cloud(f, label_pcd)
                 f.set_metadata("label", label)
                 continue
-            # DBSCAN clustering:
+            # Perform DBSCAN clustering on non-stem organs
             clustered_arr = np.array(
-                label_pcd.cluster_dbscan(eps=self.eps, min_points=self.min_points, print_progress=True))
-
+                label_pcd.cluster_dbscan(
+                    eps=self.eps,  # Max distance between points in a cluster
+                    min_points=self.min_points,  # Min points to form a cluster
+                    print_progress=True
+                )
+            )
+            # Get unique cluster IDs (-1 represents noise points)
             ids = np.unique(clustered_arr)
             n_ids = len(ids)
             print(f"Found {n_ids} clusters in the point cloud!")
-            # For each organ
+            # Process each cluster separately
             for i in ids:
-                # Exclude outliers points (-1) from output point clouds
+                # Skip noise points (cluster ID -1)
                 if i == -1:
                     continue
+                # Extract points for current cluster
                 cluster_pcd = self.get_label_pointcloud(label_pcd, clustered_arr, i)
-                f = output_fileset.create_file("%s_%03d" % (label, i))
+                # Save cluster point cloud to output file
+                f = output_fileset.create_file(f"{label}_{i:03d}")
                 io.write_point_cloud(f, cluster_pcd)
                 f.set_metadata("label", label)
 
@@ -641,17 +667,24 @@ class CurveSkeleton(RomiTask):
     upstream_task = luigi.TaskParameter(default=TriangleMesh)  # override default attribute from ``RomiTask``
 
     def run(self):
+        # Get the task names for current and upstream tasks
         task_name = self.get_task_family()
         uptask_name = self.upstream_task.get_task_family()
 
+        # Check if upstream task is a TriangleMesh task
         if uptask_name == "TriangleMesh":
             from plant3dvision import proc3d
+            # Read the triangular mesh from input file
             mesh = io.read_triangle_mesh(self.input_file())
+            # Generate curve skeleton from mesh
             out = proc3d.skeletonize(mesh)
         else:
+            # Raise error if upstream task is not supported
             logger.error(f"No implementation to compute `{task_name}` from `{uptask_name}`.")
             logger.info(f"Select `upstream_task` among: 'TriangleMesh'.")
             raise NotImplementedError(f"No implementation to compute `{task_name}` from `{task_name}`.")
+
+        # Save the skeleton data (points and lines) as JSON file
         io.write_json(self.output_file(create=True), out)
 
 
@@ -718,21 +751,34 @@ class RefineSkeleton(RomiTask):
 
     def run(self):
         from skeleton_refinement.stochastic_registration import perform_registration
-        skel = io.read_json(self.input()["skeleton"].get().get_files()[0])
-        pcd = io.read_point_cloud(self.input()["pcd"].get().get_files()[0])
-        refined_skel = perform_registration(np.asarray(pcd.points), np.array(skel["points"]),
-                                            alpha=self.alpha, beta=self.beta, max_iterations=self.max_iterations,
-                                            tolerance=self.tolerance)
-        if self.knn_mst:
-            skel_tree = knn_mst(refined_skel, n_neighbors=int(self.n_neighbors), knn_algorithm=str(self.knn_algorithm),
-                                mst_algorithm=str(self.mst_algorithm))
+        # Read input skeleton from JSON file (contains points and lines)
+        skel = io.read_json(self.upstream_task().get().get_files()[0])
+        # Read input point cloud data
+        pcd = io.read_point_cloud(self.upstream_pcd().get().get_files()[0])
 
+        # Perform stochastic registration to refine skeleton points
+        # Uses point cloud and skeleton points as input, returns refined points
+        refined_skel = perform_registration(np.asarray(pcd.points), np.array(skel["points"]),
+                                            alpha=self.alpha, beta=self.beta,
+                                            max_iterations=self.max_iterations,
+                                            tolerance=self.tolerance)
+
+        if self.knn_mst:
+            # Create minimum spanning tree from refined skeleton using k-nearest neighbors
+            skel_tree = knn_mst(refined_skel,
+                                n_neighbors=int(self.n_neighbors),
+                                knn_algorithm=str(self.knn_algorithm),
+                                mst_algorithm=str(self.mst_algorithm))
+            # Convert tree to points and lines format
             refined_skel = {
                 "points": [skel_tree.nodes[node]['position'].tolist() for node in skel_tree.nodes],
                 "lines": list(skel_tree.edges),
             }
         else:
+            # Keep original connectivity (lines) with refined points
             refined_skel = {"points": refined_skel.tolist(), "lines": skel['lines']}
+
+        # Write refined skeleton to JSON output file
         io.write_json(self.output_file(create=True), refined_skel)
 
 
@@ -768,11 +814,17 @@ class VoxelsWithPrior(RomiTask):
     n_views = luigi.IntParameter()
 
     def run(self):
+        # Get the first file from upstream task's output (NPZ voxel volume)
         prediction_file = self.upstream_task().output().get().get_files()[0]
+        # Read the NPZ file containing voxel data for different labels
         voxels = io.read_npz(prediction_file)
+
+        # Initialize dictionary to store likelihood ratios for each label
         out = {}
         labels = list(voxels.keys())
+
         for label in labels:
+            # Skip labels not present in both recall and specificity dictionaries
             if label in self.recall:
                 recall = self.recall[label]
             else:
@@ -781,10 +833,18 @@ class VoxelsWithPrior(RomiTask):
                 specificity = self.specificity[label]
             else:
                 continue
+            # Calculate log-likelihood for null hypothesis (H0)
+            # H0: voxel doesn't belong to the class (using specificity)
             l0 = (self.n_views - voxels[label]) * np.log(specificity) + voxels[label] * np.log(1 - specificity)
+            # Calculate log-likelihood for alternative hypothesis (H1)
+            # H1: voxel belongs to the class (using recall)
             l1 = (self.n_views - voxels[label]) * np.log(1 - recall) + voxels[label] * np.log(recall)
-            out[label] = l1 - l0
+            # Store log-likelihood ratio (L1/L0) for this label
+            out[label] = l1 - l0  # FIXME ?
 
+        # Create output file and save results
         outfile = self.output_file(create=True)
         io.write_npz(outfile, out)
+        # Copy metadata from input file to output file
         outfile.set_metadata(prediction_file.get_metadata())
+
