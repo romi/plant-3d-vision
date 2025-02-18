@@ -58,7 +58,7 @@ class TreeGraph(RomiTask):
             logger.info(f"Select `upstream_task` among: 'CurveSkeleton' or 'RefineSkeleton'.")
             raise NotImplementedError(f"No implementation to compute `{task_name}` from `{uptask_name}`.")
 
-        io.write_graph(self.output_file(), t)
+        io.write_graph(self.output_file(create=True), t)
         return
 
 
@@ -215,5 +215,5 @@ class AnglesAndInternodes(RomiTask):
             logger.info(f"Select `upstream_task` among: [`TreeGraph`, `ClusteredMesh`, `OrganSegmentation`].")
             raise NotImplementedError(f"No implementation to compute `{task_name}` from `{uptask_name}`.")
 
-        io.write_json(self.output_file(), measures)
+        io.write_json(self.output_file(create=True), measures)
         return

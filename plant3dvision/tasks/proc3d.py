@@ -342,7 +342,7 @@ class TriangleMesh(RomiTask):
             triangles_to_remove = triangle_clusters != largest_cluster_idx
             out.remove_triangles_by_mask(triangles_to_remove)
 
-        io.write_triangle_mesh(self.output_file(), out)
+        io.write_triangle_mesh(self.output_file(create=True), out)
 
 
 class ClusteredMesh(RomiTask):
@@ -555,7 +555,7 @@ class CurveSkeleton(RomiTask):
             logger.error(f"No implementation to compute `{task_name}` from `{uptask_name}`.")
             logger.info(f"Select `upstream_task` among: 'TriangleMesh'.")
             raise NotImplementedError(f"No implementation to compute `{task_name}` from `{task_name}`.")
-        io.write_json(self.output_file(), out)
+        io.write_json(self.output_file(create=True), out)
 
 
 class RefineSkeleton(RomiTask):
@@ -636,7 +636,7 @@ class RefineSkeleton(RomiTask):
             }
         else:
             refined_skel = {"points": refined_skel.tolist(), "lines": skel['lines']}
-        io.write_json(self.output_file(), refined_skel)
+        io.write_json(self.output_file(create=True), refined_skel)
 
 
 class VoxelsWithPrior(RomiTask):
@@ -688,7 +688,6 @@ class VoxelsWithPrior(RomiTask):
             l1 = (self.n_views - voxels[label]) * np.log(1 - recall) + voxels[label] * np.log(recall)
             out[label] = l1 - l0
 
-        outfs = self.output().get()
-        outfile = self.output_file()
+        outfile = self.output_file(create=True)
         io.write_npz(outfile, out)
         outfile.set_metadata(prediction_file.get_metadata())

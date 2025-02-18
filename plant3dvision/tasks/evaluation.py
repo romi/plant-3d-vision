@@ -65,7 +65,7 @@ class EvaluationTask(RomiTask):
 
     def run(self):
         res = self.evaluate()
-        write_json(self.output_file(), res)
+        write_json(self.output_file(create=True), res)
 
 
 class VoxelsGroundTruth(RomiTask):
@@ -127,7 +127,7 @@ class VoxelsGroundTruth(RomiTask):
             for k in res.keys():
                 bg = np.minimum(bg, 1 - res[k])
             res["background"] = bg
-            write_npz(self.output_file(), res)
+            write_npz(self.output_file(create=True), res)
 
 
 class PointCloudGroundTruth(RomiTask):
@@ -191,8 +191,8 @@ class PointCloudGroundTruth(RomiTask):
                 res = res + pcd
                 point_labels += [class_name] * len(pcd.points)
 
-            write_point_cloud(self.output_file(), res)
-            self.output_file().set_metadata({'labels': point_labels})
+            write_point_cloud(self.output_file(create=True), res)
+            self.output_file(create=True).set_metadata({'labels': point_labels})
 
 
 class ClusteredMeshGroundTruth(RomiTask):
@@ -533,7 +533,7 @@ class CylinderRadiusGroundTruth(RomiTask):
         # - Visualization:
         # o3d.visualization.draw_geometries([gt_cyl])
         # - Write the PLY & metadata:
-        write_point_cloud(self.output_file(), gt_cyl)
+        write_point_cloud(self.output_file(create=True), gt_cyl)
         cylinder_md = {
             'radius': self.radius,
             'height': self.height,
@@ -594,7 +594,7 @@ class CylinderRadiusEstimation(RomiTask):
             output["gt_radius"] = gt_radius
             output["err (%)"] = err
         # - Write results to JSON:
-        write_json(self.output_file(), output)
+        write_json(self.output_file(create=True), output)
 
 
 class AnglesAndInternodesEvaluation(EvaluationTask):
@@ -730,4 +730,4 @@ class AnglesAndInternodesEvaluation(EvaluationTask):
         json_results = {}
         json_results.update(jsonify(summary))
         json_results.update(jsonify(results))
-        write_json(self.output_file(), json_results)
+        write_json(self.output_file(create=True), json_results)

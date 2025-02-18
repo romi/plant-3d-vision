@@ -726,20 +726,20 @@ class Colmap(RomiTask):
         # -- Export results of Colmap reconstruction to DB:
         # Note that file names are defined in plant3dvision.filenames
         # - Save colmap points dictionary in JSON file:
-        outfile = self.output_file(COLMAP_POINTS_ID)
+        outfile = self.output_file(COLMAP_POINTS_ID, create=True)
         io.write_json(outfile, points)
         # - Save colmap images dictionary in JSON file:
-        outfile = self.output_file(COLMAP_IMAGES_ID)
+        outfile = self.output_file(COLMAP_IMAGES_ID, create=True)
         io.write_json(outfile, images)
         # - Save colmap camera(s) model(s) & parameters in JSON file:
-        outfile = self.output_file(COLMAP_CAMERAS_ID)
+        outfile = self.output_file(COLMAP_CAMERAS_ID, create=True)
         io.write_json(outfile, cameras)
         # - Save sparse reconstruction if not empty:
-        outfile = self.output_file(COLMAP_SPARSE_ID)
+        outfile = self.output_file(COLMAP_SPARSE_ID, create=True)
         io.write_point_cloud(outfile, sparse)
         # - Save dense reconstruction if not empty:
         if dense is not None:
-            outfile = self.output_file(COLMAP_DENSE_ID)
+            outfile = self.output_file(COLMAP_DENSE_ID, create=True)
             io.write_point_cloud(outfile, dense)
         # - Save the point cloud bounding-box in task metadata
         self.output().get().set_metadata("bounding_box", bounding_box)

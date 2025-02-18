@@ -496,7 +496,7 @@ class ExtrinsicCalibration(RomiTask):
         logger.info("Start a Colmap reconstruction...")
         _, _, cameras, _, _, _ = colmap_runner.run()
         # - Save colmap camera(s) model(s) & parameters in JSON file:
-        outfile = self.output_file(COLMAP_CAMERAS_ID)
+        outfile = self.output_file(COLMAP_CAMERAS_ID, create=True)
         io.write_json(outfile, cameras)
 
         def _set_calibrated_pose(file):
