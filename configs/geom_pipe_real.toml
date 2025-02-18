@@ -70,18 +70,6 @@ organ_type = "fruit"
 node_sampling_dist = 10  # path distance from branching point in millimeters
 min_fruit_size = 8  # path distance from branching point in millimeters
 
-[Visualization]
-upstream_images = "ImagesFilesetExists"
-upstream_colmap = "Colmap"
-upstream_point_cloud = "PointCloud"
-upstream_mesh = "TriangleMesh"
-upstream_skeleton = "CurveSkeleton"
-upstream_angles = "AnglesAndInternodes"
-max_image_size = 1500
-max_point_cloud_size = 10000000
-thumbnail_size = 150
-use_colmap_poses = true
-
 # --------------- Evaluation --------------- #
 [AnglesAndInternodesEvaluation]
 upstream_task = "AnglesAndInternodes"

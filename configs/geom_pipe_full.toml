@@ -95,25 +95,5 @@ stem_axis_inverted = false  # whether the stem is inverted
 min_elongation_ratio = 2.0  # minimum elongation ratio for the organ to be considered
 min_fruit_size = 6  # minimum fruit size
 
-[Visualization]
-upstream_images = "ImagesFilesetExists"  # name of the task that contains the images
-upstream_colmap = "Colmap"  # name of the task that generated the poses
-upstream_point_cloud = "PointCloud"  # name of the task that generated the point cloud
-upstream_mesh = "TriangleMesh"  # name of the task that generated the mesh
-upstream_skeleton = "CurveSkeleton"  # name of the task that generated the skeleton
-upstream_angles = "AnglesAndInternodes"  # name of the task that generated the angles and internode values
-# Ground truth tasks:
-upstream_pcd_ground_truth = "PointCloudGroundTruth"  # name of the task that contains the point cloud ground truth, if any
-# Evaluation tasks:
-upstream_pcd_evaluation = "PointCloudEvaluation"  # name of the task that evaluate the "PointCloud" task (with `upstream_pcd_ground_truth`)
-upstream_segmentedpcd_evaluation = "SegmentedPointCloudEvaluation"  # name of the task that evaluate the "SegmentedPointCloud" task
-upstream_segmentation2d_evaluation = "Segmentation2DEvaluation"  # name of the task that evaluate the "Segmentation2D" task
-# Parameters:
-query = "{}"  # query applied on 'images' fileset metadata
-use_colmap_poses = true  # whether the colmap poses should be used to place images
-max_image_size = 1500  # maximum image size to load in viewer
-max_point_cloud_size = 10000000  # maximum number of points in point cloud to load in viewer
-thumbnail_size = 150  # maximum thumbnail size (carousel) to load in viewer
-
 [Clean]
 no_confirm = true  # whether NOT to ask for confirmation prior to dataset cleaning

@@ -1,9 +1,9 @@
-[ModelFileset]
+[ModelFilesetExists]
 scan_id = "models"
 
 [Segmentation2D]
 upstream_task = "ImagesFilesetExists"
-model_fileset = "ModelFileset"
+model_fileset = "ModelFilesetExists"
 model_id = "Resnet_896_896_epoch50"  # no default value
 query = "{\"channel\":\"rgb\"}"  # default is an empty dict '{}'
 Sx = 896
@@ -17,7 +17,7 @@ learning_rate = 0.0001
 threshold = 0.01
 
 [Voxels]
-upstream_mask = "Segmentation2D"
+upstream_task = "Segmentation2D"
 use_colmap_poses = false
 voxel_size = 0.3
 type = "averaging"

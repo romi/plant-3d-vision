@@ -25,7 +25,7 @@ binarize = true
 threshold = 0.2
 
 [Voxels]
-upstream_mask = "Masks"
+upstream_task = "Masks"
 upstream_colmap = "Colmap"
 camera_metadata = "colmap_camera"
 voxel_size = 0.5

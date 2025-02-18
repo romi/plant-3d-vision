@@ -1,7 +1,7 @@
 [accessory]
 calibration_scan_id = "calib_scan_shortpath"
 
-[ModelFileset]
+[ModelFilesetExists]
 scan_id = "models"
 
 [Masks]
@@ -39,7 +39,7 @@ N_vox = 1000000
 coord_file_loc = "volume/"
 
 [Voxels]
-upstream_mask = "Segmentation2D"
+upstream_task = "Segmentation2D"
 multiclass = true
 voxel_size = 0.2
 type = "averaging"

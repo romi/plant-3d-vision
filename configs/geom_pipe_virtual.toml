@@ -1,5 +1,5 @@
 [Voxels]
-upstream_mask = "ImagesFilesetExists"
+upstream_task = "ImagesFilesetExists"
 upstream_colmap = "DummyTask"
 query = "{\"channel\":\"background\"}"  # use the (inverted) background masks
 camera_metadata = "camera"
