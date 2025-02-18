@@ -19,32 +19,26 @@ logger = get_logger(__name__)
 
 
 class PointCloud(RomiTask):
-    """Computes a point cloud from volumetric voxel data (either single or multiclass).
+    """Task for generating a 3D point cloud from volume or voxel data.
+
+    Processes volume or voxel inputs, extracts features, and converts them into a 3D point
+    cloud representation. The task supports handling both single-class and multi-class
+    volumes, applying contrast thresholds and scores to filter data for point cloud
+    generation. Metadata such as origin and voxel size are used in the processing, while
+    results are saved as point cloud files with metadata annotations.
 
     Attributes
     ----------
-    upstream_task : luigi.TaskParameter, optional
-        Upstream task that generate the volume.
-        Restricted to ``'Voxels'`` for now.
-        Defaults to ``'Voxels'``.
-    scan_id : luigi.Parameter, optional
-        The dataset id (scan name) to use to create the ``FilesetTarget``.
-        If unspecified (default), the current active scan will be used.
-    level_set_value : luigi.FloatParameter, optional
-        ???
-        Defaults to ``1.0``.
-    background_prior : luigi.FloatParameter, optional
-        ???
-        Used only if `labels` were defined in upstream tasks (multiclass).
-        Defaults to ``1.0``.
-    min_contrast : luigi.FloatParameter, optional
-        ???
-        Used only if `labels` were defined in upstream tasks (multiclass).
-        Defaults to ``10.0``.
-    min_score : luigi.FloatParameter, optional
-        ???
-        Used only if `labels` were defined in upstream tasks (multiclass).
-        Defaults to ``0.2``.
+    upstream_task : luigi.TaskParameter
+        The upstream task providing the input data for this task. Defaults to `Voxels`.
+    level_set_value : luigi.FloatParameter
+        Value used to define the level set for point cloud generation.
+    background_prior : luigi.FloatParameter
+        Prior weight applied to the background class when processing multi-class volumes.
+    min_contrast : luigi.FloatParameter
+        Minimum contrast ratio to consider for class predictions in a multi-class volume.
+    min_score : luigi.FloatParameter
+        Minimum score threshold for class predictions in a multi-class volume.
 
     See Also
     --------
@@ -54,86 +48,119 @@ class PointCloud(RomiTask):
     -----
     Task output is a single PLY file with the point cloud.
 
-    Metadata may include label name if multiclass.
+    Metadata may include label names if multiclass.
     """
     upstream_task = luigi.TaskParameter(default=Voxels)  # override default attribute from ``RomiTask``
     level_set_value = luigi.FloatParameter(default=1.0)
 
+    labels = luigi.ListParameter(default=[])
     background_prior = luigi.FloatParameter(default=1.0)  # only used if labels were defined (multiclass)
     min_contrast = luigi.FloatParameter(default=10.0)  # only used if labels were defined (multiclass)
     min_score = luigi.FloatParameter(default=0.2)  # only used if labels were defined (multiclass)
 
-    def run(self):
-        ifile = self.input_file()
-        # Guess if it's a labelled volume:
-        try:
-            voxels = io.read_npz(ifile)
-            if (len(voxels.keys()) == 1):
-                multiclass = False
-                voxels = voxels[list(voxels.keys())[0]]
-            else:
-                multiclass = True
-        except:
+    def run_multiclass(self, labels):
+        for label in labels:
+            ifile = self.input_file(suffix=label)
             voxels = io.read_volume(ifile)
-            multiclass = False
-
-        if multiclass:
-            l = list(voxels.keys())
-            # background_idx = l.index("background")
-            # l.remove("background")
-            res = np.zeros((*voxels[l[0]].shape, len(l)))
-            for i in range(len(l)):
-                res[:, :, :, i] = voxels[l[i]]
-            for i in range(len(l)):
-                if l[i] == 'background':
+            # Collect the names of all classes
+            label = list(voxels.keys())
+            # Prepare an array to aggregate voxel data from all classes
+            res = np.zeros((*voxels[label[0]].shape, len(label)))
+            # Stack each class in a new dimension
+            for i in range(len(label)):
+                res[:, :, :, i] = voxels[label[i]]
+            # Apply background prior if class is 'background'
+            for i in range(len(label)):
+                if label[i] == 'background':
                     res[:, :, :, i] *= self.background_prior
-
-            # bg = voxels["background"] > voxels["background"].max() - 10
-
+            # Determine the index of the class with the highest value per voxel
             res_idx = np.argmax(res, axis=3)
-            # res_value = np.amax(res, axis=3)
-
-            # threshold= np.quantile(res_value.flatten(), 0.99)
-            # res_idx[res_value < threshold] = background_idx # low scores belong to background
-
+            # Prepare an Open3D point cloud object for aggregation
             pcd = o3d.geometry.PointCloud()
+            # Fetch metadata for origin and voxel size
             origin = np.array(ifile.get_metadata('origin'))
-
             voxel_size = float(ifile.get_metadata('voxel_size'))
+            # List to keep track of assigned labels for each point
             point_labels = []
+            # Predefined color dictionary for known labels
             colors = config.PointCloudColorConfig().colors
+            # Iterate over all labels to generate point clouds
+            for i in range(len(label)):
+                logger.debug(f"label = {label[i]}")
+                # Skip background in point cloud generation
+                if label[i] == 'background':
+                    continue
+                # Compute the maximum values across all other classes
+                pred_no_c = np.max(np.delete(res, i, axis=3), axis=3)
+                # Identify voxels belonging to the current class
+                pred_c = (res_idx == i)
+                # Apply contrast threshold if min_contrast > 1.0
+                if self.min_contrast > 1.0:
+                    pred_c *= (pred_c > (self.min_contrast * pred_no_c))
+                # Apply minimum score threshold
+                pred_c *= (pred_c > self.min_score)
+                # Convert filtered volume to a partial point cloud
+                out = proc3d.vol2pcd(pred_c, origin, voxel_size, self.level_set_value)
+                # Assign a color to all points in this partial cloud
+                color = np.zeros((len(out.points), 3))
+                if label[i] in colors:
+                    color[:] = np.asarray(colors[label[i]])
+                else:
+                    # Generate a random color if none is predefined
+                    color[:] = np.random.rand(3)
+                # Set point colors and add to the final point cloud
+                color = o3d.utility.Vector3dVector(color)
+                out.colors = color
+                pcd = pcd + out
+                # Collect label info for this subset of points
+                point_labels = point_labels + [label[i]] * len(out.points)
+        # Save the combined point cloud and label information
+        io.write_point_cloud(self.output_file(create=True), pcd)
+        self.output_file(create=True).set_metadata({'labels': point_labels})
 
-            for i in range(len(l)):
-                logger.debug(f"label = {l[i]}")
-                if l[i] != 'background':
-                    pred_no_c = np.copy(res)
-                    pred_no_c = np.max(np.delete(res, i, axis=3), axis=3)
-                    pred_c = res[:, :, :, i]
-                    pred_c = (res_idx == i)
-                    if self.min_contrast > 1.0:
-                        pred_c *= (pred_c > (self.min_contrast * pred_no_c))
-                    pred_c *= (pred_c > self.min_score)
+    def run_single_class(self, ifile):
+        """Processes a binary volume to generate a point cloud.
 
-                    out = proc3d.vol2pcd(pred_c, origin, voxel_size, self.level_set_value)
-                    color = np.zeros((len(out.points), 3))
-                    if l[i] in colors:
-                        color[:] = np.asarray(colors[l[i]])
-                    else:
-                        color[:] = np.random.rand(3)
-                    color = o3d.utility.Vector3dVector(color)
-                    out.colors = color
-                    pcd = pcd + out
-                    point_labels = point_labels + [l[i]] * len(out.points)
+        This method handles a single-class volumetric dataset by converting it into
+        a point cloud, derived from the specified isosurface level set value. The
+        resulting point cloud is saved to a file in addition to attaching metadata
+        such as voxel size. Metadata like 'origin' and 'voxel_size' are extracted
+        directly from the input file.
 
-            io.write_point_cloud(self.output_file(), pcd)
-            self.output_file().set_metadata({'labels': point_labels})
+        Parameters
+        ----------
+        ifile : File
+            The input file containing volumetric data and related metadata.
+        """
+        voxels = io.read_volume(ifile)
+        # For single-class data, fetch origin and voxel size as usual
+        origin = np.array(ifile.get_metadata('origin'))
+        voxel_size = float(ifile.get_metadata('voxel_size'))
+        # Directly create a point cloud from the single volume
+        out = proc3d.vol2pcd(voxels, origin, voxel_size, self.level_set_value)
+        # Write the point cloud to file and attach metadata
+        io.write_point_cloud(self.output_file(create=True), out)
+        self.output_file(create=True).set_metadata({'voxel_size': voxel_size})
 
+    def run(self):
+        """Process a volumetric data file into a point cloud representation.
+
+        Notes
+        ----
+        The resulting point cloud is written to an output file with metadata.
+
+        If the input is multi-class, the method combines voxel data from multiple classes while applying
+        optional thresholds like contrast and score. Single-class data is directly processed for point
+        cloud generation.
+        """
+        if len(self.labels) == 0:
+            ifile = self.input_file()
+            self.run_single_class(ifile)
+        elif len(self.labels) == 1:
+            ifile = self.input_file(suffix=f"_{self.labels[0]}")
+            self.run_single_class(ifile)
         else:
-            origin = np.array(ifile.get_metadata('origin'))
-            voxel_size = float(ifile.get_metadata('voxel_size'))
-            out = proc3d.vol2pcd(voxels, origin, voxel_size, self.level_set_value)
-            io.write_point_cloud(self.output_file(), out)
-            self.output_file().set_metadata({'voxel_size': voxel_size})
+            self.run_multiclass(self.labels)
 
 
 class SegmentedPointCloud(RomiTask):
@@ -172,83 +199,153 @@ class SegmentedPointCloud(RomiTask):
         return [self.upstream_task(), self.upstream_segmentation()]
 
     def load_point_cloud(self):
+        """Loads a point cloud from a file generated by the upstream task.
+
+        Returns
+        -------
+        open3d.geometry.PointCloud
+            The loaded point cloud object containing the 3D data points.
+
+        Raises
+        ------
+        FileNotFoundError
+            If the specified file or any files are not found during retrieval.
+        """
         try:
-            x = self.requires()[0].output().get().get_file("dense")
-            return io.read_point_cloud(x)
-        except:
-            x = self.requires()[0].output().get().get_files()[0]
-            return io.read_point_cloud(x)
+            x = self.upstream_task().output().get().get_file("dense")
+        except FileNotFoundError:
+            x = self.upstream_task().output().get().get_files()[0]
+
+        return io.read_point_cloud(x)
 
     def is_in_pict(self, px, shape):
+        """Checks whether a given point (pixel) is within the bounds of an image with a given shape.
+
+        This function evaluates whether a specified pixel coordinate lies inside
+        the valid boundaries of an image defined by its shape (rows and columns).
+        It ensures the pixel's horizontal and vertical coordinates are within the
+        permissible range.
+
+        Parameters
+        ----------
+        px : tuple of int
+            A tuple specifying the (x, y) coordinates of the pixel being checked.
+        shape : tuple of int
+            A tuple defining the shape of the image in terms of
+            (number of rows, number of columns).
+
+        Returns
+        -------
+        bool
+            True if the pixel is within the bounds of the image, False otherwise.
+        """
         return px[0] >= 0 and px[0] < shape[1] and px[1] >= 0 and px[1] < shape[0]
 
     def run(self):
+        """Processes segmented images to assign point labels and colors to a point cloud based on camera poses and image data.
+
+        This function processes camera pose metadata for accurate back-projection of the 3D points to the image space,
+        reads label data from the input files, and computes the label with the highest score for each point.
+        Additionally, the function updates the point cloud's color representation.
+
+        Main steps:
+        - Loads point cloud data and retrieves segmentation files.
+        - Computes scores for associating point labels to each 3D point.
+        - Supports camera poses from COLMAP or an alternate source for back-projection.
+        - Assigns colors to points based on associated labels.
+        - Outputs labeled and colorized point cloud with metadata.
+
+        Raises
+        ------
+        Exceptions may be raised by underlying operations, such as file access, data processing, or library calls, if inputs
+        are invalid or required metadata is incomplete.
+        """
+        # Get segmentation files from upstream task
         fs = self.upstream_segmentation().output().get()
+        # Load and convert point cloud to numpy array
         pcd = self.load_point_cloud()
         pts = np.asarray(pcd.points)
-        ifile = self.input_file()
 
+        # Extract unique labels from segmentation files
         labels = set()
         for fi in fs.get_files():
             label = fi.get_metadata('channel')
             if label is not None:
                 labels.add(label)
         labels = list(labels)
+        # Remove special labels that should not be processed
         labels.remove('background')
         if 'rgb' in labels:
             labels.remove('rgb')
 
+        # Initialize scores matrix (labels × points)
         scores = np.zeros((len(labels), len(pts)))
 
+        # Process each segmentation file
         for fi in fs.get_files():
             label = fi.get_metadata("channel")
             if label not in labels:
                 continue
 
+            # Get camera parameters based on source (COLMAP or alternative)
             if self.use_colmap_poses:
                 camera = fi.get_metadata("colmap_camera")
             else:
                 camera = fi.get_metadata("camera")
-
             if camera is None:
-                logger.warning(
-                    "Could not get camera pose for view, skipping...")
+                logger.warning(f"Could not get camera pose for view, skipping...")
                 continue
 
+            # Extract camera parameters for back-projection
             rotmat = np.array(camera["rotmat"])
             tvec = np.array(camera["tvec"])
-
             intrinsics = camera["camera_model"]["params"]
+            # Construct camera matrix K from intrinsics
             K = np.array([[intrinsics[0], 0, intrinsics[2]],
-                          [0, intrinsics[1], intrinsics[3]], [0, 0, 1]])
-            pixels = np.asarray(proc3d.backproject_points(pts, K, rotmat, tvec) + 0.5, dtype=int)
+                          [0, intrinsics[1], intrinsics[3]],
+                          [0, 0, 1]])
 
+            # Back-project 3D points to 2D image coordinates
+            pixels = np.asarray(proc3d.backproject_points(pts, K, rotmat, tvec) + 0.5, dtype=int)
             label_idx = labels.index(label)
             mask = io.read_image(fi)
+
+            # Accumulate scores for each point based on mask values
             for i, px in enumerate(pixels):
                 if self.is_in_pict(px, mask.shape):
                     scores[label_idx, i] += mask[px[1], px[0]]
 
+        # Determine final label for each point based on highest score
         pts_labels = np.argmax(scores, axis=0).flatten()
         logger.critical(f"Processed following labels: {labels}")
 
+        # Get color mapping from config
         colors = config.PointCloudColorConfig().colors
         logger.critical(f"Associated colors: {colors}")
 
+        # Initialize arrays for point colors and labels
         color_array = np.zeros((len(pts), 3))
         point_labels = [""] * len(pts)
+
+        # Assign colors and labels to points
         for i in range(len(labels)):
             nlab_pts = (pts_labels == i).sum()
             logger.critical(f"Number of points associated to label '{labels[i]}': {nlab_pts}")
+
+            # Use predefined color if available, otherwise random color
             if labels[i] in colors:
                 color_array[pts_labels == i, :] = np.asarray(colors[labels[i]])
             else:
                 color_array[pts_labels == i, :] = np.random.rand(3)
+
+            # Store label names for each point
             l = np.nonzero(pts_labels == i)[0].tolist()
             for u in l:
                 point_labels[u] = labels[i]
+
+        # Update point cloud colors and save results
         pcd.colors = o3d.utility.Vector3dVector(color_array)
-        out = self.output_file()
+        out = self.output_file(create=True)
         io.write_point_cloud(out, pcd)
         out.set_metadata("labels", point_labels)
 
@@ -628,7 +725,7 @@ class RefineSkeleton(RomiTask):
                                             tolerance=self.tolerance)
         if self.knn_mst:
             skel_tree = knn_mst(refined_skel, n_neighbors=int(self.n_neighbors), knn_algorithm=str(self.knn_algorithm),
-                                   mst_algorithm=str(self.mst_algorithm))
+                                mst_algorithm=str(self.mst_algorithm))
 
             refined_skel = {
                 "points": [skel_tree.nodes[node]['position'].tolist() for node in skel_tree.nodes],
