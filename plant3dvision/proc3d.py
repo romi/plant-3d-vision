@@ -21,7 +21,7 @@ from romitask.log import get_logger
 logger = get_logger(__name__)
 
 try:
-    import romicgal as cgal
+    import romicgal
 except:
     logger.warning("Could not load CGAL bindings, some methods will be unavailable")
 
@@ -94,14 +94,29 @@ def pcd2mesh(pcd):
     >>> mesh = pcd2mesh(pcd)
 
     """
-    assert (pcd.has_normals)
-    points, triangles = cgal.poisson_mesh(np.asarray(pcd.points),
-                                          np.asarray(pcd.normals))
+    from romicgal import poisson_mesh
+    # Verify point cloud has normal vectors, required for reconstruction
+    try:
+        assert (pcd.has_normals)
+    except AssertionError:
+        # Log error if normals are missing
+        logger.error(f"Input point cloud does not have normals!")
+        logger.info(f"Computing normals...")
+        pcd.compute_normals()
 
+    # Apply Poisson surface reconstruction
+    # Returns vertices (points) and face indices (triangles)
+    points, triangles = poisson_mesh(
+        np.asarray(pcd.points),  # Convert point coordinates to numpy array
+        np.asarray(pcd.normals)  # Convert normal vectors to numpy array
+    )
+
+    # Create empty triangle mesh object
     mesh = o3d.geometry.TriangleMesh()
+    # Assign vertex coordinates using Open3D's Vector3dVector format
     mesh.vertices = o3d.utility.Vector3dVector(points)
+    # Assign triangle face indices using Open3D's Vector3iVector format
     mesh.triangles = o3d.utility.Vector3iVector(triangles)
-
     return mesh
 
 
@@ -143,16 +158,22 @@ def pcd2vol(pcd, voxel_size, zero_padding=0):
     (80, 60, 277)
     >>> from plant3dvision.visu import plotly_volume_slicer
     >>> plotly_volume_slicer(vol)
+    >>> db.disconnect()
 
     """
+    # Convert point cloud points to numpy array for processing
     pcd_points = np.asarray(pcd.points)
+    # Calculate origin by finding minimum coordinates and adjusting for padding
     origin = np.min(pcd_points, axis=0) - zero_padding * voxel_size
+    # Convert 3D points to voxel grid indices
     indices = point2index(pcd_points, origin, voxel_size)
+    # Get maximum indices to determine volume dimensions
     shape = indices.max(axis=0)
-
+    # Create empty volume with padding, adding 1 for inclusive bounds
     vol = np.zeros(shape + 2 * zero_padding + 1, dtype=float)
+    # Adjust indices to account for zero padding
     indices = indices + zero_padding
-
+    # Count points in each voxel by incrementing voxel values
     for i in range(pcd_points.shape[0]):
         vol[indices[i, 0], indices[i, 1], indices[i, 2]] += 1.
 
@@ -170,7 +191,7 @@ def skeletonize(mesh):
     Returns
     -------
     dict
-        A dictionary of points and lines defining the skeleton of the input mesh.
+        A dictionary of 'points' and 'lines' defining the skeleton of the input mesh.
 
     Example
     -------
@@ -188,10 +209,13 @@ def skeletonize(mesh):
     >>> f = fs.get_file('TriangleMesh')
     >>> tmesh = read_triangle_mesh(f)
     >>> skel = skeletonize(tmesh)
+    >>> print(f"There is {len(skel['points'])} points and {len(skel['lines'])} lines in the skeleton.")
+    >>> db.disconnect()
     >>> draw_skeleton(skel)
 
     """
-    points, lines = cgal.skeletonize_mesh(np.asarray(mesh.vertices), np.asarray(mesh.triangles))
+    from romicgal import skeletonize_mesh
+    points, lines = skeletonize_mesh(np.asarray(mesh.vertices), np.asarray(mesh.triangles))
     return {'points': points.tolist(), 'lines': lines.tolist()}
 
 
@@ -212,7 +236,7 @@ def knn_graph(pcd, k):
 
     Examples
     --------
-    >>> from plant3dvision.proc3d import knn_graph
+    >>> from plant3dvision.visu import draw_pcd_graph    >>> from plant3dvision.proc3d import knn_graph
     >>> from plantdb.io import read_point_cloud
     >>> from plantdb.rest_api import compute_fileset_matches
     >>> from plantdb.test_database import test_database
@@ -223,17 +247,30 @@ def knn_graph(pcd, k):
     >>> pcd_fs = scan.get_fileset(pcd_fs_id)
     >>> pcd = read_point_cloud(pcd_fs.get_file("PointCloud"))
     >>> neighbours_graph = knn_graph(pcd, 5)
-    >>> from plant3dvision.proc3d import draw_pcd_graph
     >>> draw_pcd_graph(neighbours_graph)
+    >>> db.disconnect()
 
     """
+    # Create KD-tree for efficient nearest neighbor search
     pcd_tree = o3d.geometry.KDTreeFlann(pcd)
+    # Initialize empty undirected graph
     g = nx.Graph()
+    # Iterate through each point in the point cloud
     for i in tqdm(range(len(pcd.points)), unit='point'):
+        # Find k nearest neighbors for current point
+        # k_: actual number of neighbors found
+        # idx: indices of neighbors
+        # _: distances (unused)
         [k_, idx, _] = pcd_tree.search_knn_vector_3d(pcd.points[i], k)
+        # Add current point as node with its 3D coordinates
         g.add_node(i, center=pcd.points[i])
+        # Connect point to each of its neighbors
         for j in range(k_):
-            g.add_edge(i, idx[j], weight=np.linalg.norm(pcd.points[i] - pcd.points[idx[j]]))
+            # Edge weight is Euclidean distance between points
+            g.add_edge(i, idx[j],
+                       weight=np.linalg.norm(pcd.points[i] - pcd.points[idx[j]]))
+
+    # Ensure graph is undirected with symmetric edges
     g = g.to_undirected()
     return g
 
@@ -266,16 +303,30 @@ def radius_graph(pcd, r):
     >>> pcd_fs = scan.get_fileset(pcd_fs_id)
     >>> pcd = read_point_cloud(pcd_fs.get_file("PointCloud"))
     >>> neighbours_graph = radius_graph(pcd, 5)
-    >>> from plant3dvision.proc3d import draw_pcd_graph
+    >>> from plant3dvision.visu import draw_pcd_graph
     >>> draw_pcd_graph(neighbours_graph)
+    >>> db.disconnect()
     """
+    # Create KD-tree for efficient nearest neighbor search
     pcd_tree = o3d.geometry.KDTreeFlann(pcd)
+    # Initialize empty undirected graph
     g = nx.Graph()
+    # Iterate through all points in point cloud
     for i in tqdm(range(len(pcd.points))):
+        # Find all points within radius r of current point
+        # k_: actual number of neighbors found
+        # idx: indices of neighbors
+        # _: distances (unused)
         [k_, idx, _] = pcd_tree.search_radius_vector_3d(pcd.points[i], r)
+        # Add current point as node
         g.add_node(i)
+        # Connect current point to all its neighbors
         for j in range(k_):
-            g.add_edge(i, idx[j], weight=np.linalg.norm(pcd.points[i] - pcd.points[idx[j]]))
+            # Edge weight is Euclidean distance between points
+            g.add_edge(i, idx[j],
+                       weight=np.linalg.norm(pcd.points[i] - pcd.points[idx[j]]))
+
+    # Ensure graph is undirected (symmetric edges)
     g = g.to_undirected()
     return g
 
@@ -314,6 +365,7 @@ def connect_graph(g, pcd, root_index):
     >>> pcd = read_point_cloud(pcd_fs.get_file("PointCloud"))
     >>> neighbours_graph = knn_graph(pcd, 5)
     >>> connect_graph(neighbours_graph, pcd)
+    >>> db.disconnect()
     """
     while True:
         # Get the connected components of the graph as a list
@@ -397,45 +449,64 @@ def distance_to_root_clusters(g, root_index, pcd, bin_size):
         corresponding cluster for each node in the original graph
     """
     import bisect
+
+    # Calculate shortest paths and distances from root node to all other nodes
     predecessors, distances_to_root = nx.dijkstra_predecessor_and_distance(g, root_index)
 
+    # Determine number of distance bins based on maximum distance and bin size
     max_dist = max(distances_to_root.values())
     n_bins = int(np.ceil(max_dist / bin_size))
 
+    # Convert distances dictionary to sorted lists for binning
     dist_keys = list(distances_to_root.keys())
     dist_values = list(distances_to_root.values())
+
+    # Calculate indices that divide points into distance bins
     bin_index = [bisect.bisect(dist_values, i * bin_size) - 1 for i in range(n_bins + 1)]
     bin_index[-1] += 1
-    i_cluster = 0
 
-    cluster_values = {}
-    cluster_centers = []
-    cluster_sets = []
+    i_cluster = 0  # Counter for unique cluster IDs
+    cluster_values = {}  # Maps node index to cluster ID
+    cluster_centers = []  # Stores geometric center of each cluster
+    cluster_sets = []  # Stores sets of nodes for each cluster
 
     logger.debug("Computing clusters")
+    # Iterate through distance bins
     for i in range(1, len(bin_index)):
         idx_min = bin_index[i - 1]
         idx_max = bin_index[i]
+        # Get nodes in current distance bin
         cluster_indices = dist_keys[idx_min:idx_max]
+        # Create subgraph of nodes in current bin
         subg = g.subgraph(cluster_indices)
+        # Find connected components in subgraph
         cc = nx.connected_components(subg)
+
+        # Process each connected component as a separate cluster
         for c in cc:
+            # Assign cluster ID to all nodes in component
             for n in c:
                 cluster_values[n] = i_cluster
-            pts_index = [i for i in range(len(pcd.points)) if i in cluster_values and cluster_values[i] == i_cluster]
+
+            # Get point cloud indices for current cluster
+            pts_index = [i for i in range(len(pcd.points))
+                         if i in cluster_values and cluster_values[i] == i_cluster]
             cluster_sets.append(frozenset(pts_index))
+
+            # Calculate geometric center of cluster
             pts = [pcd.points[i] for i in pts_index]
             if len(pts) > 0:
                 center = np.mean(pts, axis=0)
                 cluster_centers.append(center)
                 i_cluster += 1
 
-            n = c[0]
-
     logger.debug("Computing quotient graph")
+    # Create graph where nodes are clusters and edges connect adjacent clusters
     cluster_graph = nx.algorithms.minors.quotient_graph(g, cluster_sets)
+    # Relabel nodes with sequential indices
     cluster_graph = nx.relabel_nodes(cluster_graph, lambda x: cluster_sets.index(x))
 
+    # Add cluster centers as node attributes
     attrs = {i: {"center": cluster_centers[i]} for i in range(len(cluster_centers))}
     nx.set_node_attributes(cluster_graph, attrs)
 
@@ -469,13 +540,25 @@ def skeleton_from_distance_to_root_clusters(pcd, root_index, binsize, k, connect
     ----------
     Xu, Hui et al. "Knowledge and heuristic-based modeling of laser-scanned trees"
     """
+    # Create initial k-nearest neighbors graph from point cloud
     g = knn_graph(pcd, k)
+
+    # Optionally ensure graph is fully connected by adding edges from root
     if connect_all_points:
         connect_graph(g, pcd, root_index)
 
+    # Group points into clusters based on their distance from root node
+    # Returns: cluster graph (nodes=clusters, edges=adjacent clusters)
+    # and mapping of original points to cluster IDs
     cluster_graph, cluster_values = distance_to_root_clusters(g, root_index, pcd, binsize)
+
+    # Convert directed cluster graph to undirected for MST calculation
     cluster_graph = nx.to_undirected(cluster_graph)
+
+    # Extract minimum spanning tree from cluster graph
+    # This forms the skeleton structure
     cluster_graph = nx.minimum_spanning_tree(cluster_graph)
+
     return cluster_graph, cluster_values
 
 
@@ -559,43 +642,56 @@ def vol2pcd(volume, origin, voxel_size, level_set_value=0):
     -------
     open3d.geometry.PointCloud
         Point-cloud with normal vectors.
-
     """
     from joblib import Parallel
     from joblib import delayed
 
     logger.info("Volume binarization...")
-    volume = 1.0 * (volume > 0.5)  # variable level ?
+    # Binarize volume using threshold of 0.5
+    volume = 1.0 * (volume > 0.5)
 
     logger.info("Distance transform...")
+    # Calculate distance transform for volume and its inverse
     dist = distance_transform_edt(volume)
     mdist = distance_transform_edt(1 - volume)
     logger.info(f"Max distance transform: {dist.max()}")
     logger.info(f"Min distance transform: {dist.min()}")
+
+    # Combine distance transforms with offset
     dist = np.where(dist > 0.5, dist - 0.5, -mdist + 0.5)
 
     logger.info("Gradiant computation...")
+    # Calculate spatial gradients in x, y, z directions
     gx, gy, gz = np.gradient(dist)
 
     logger.info("Gradiant Gaussian filtering...")
+    # Apply Gaussian smoothing to gradients
     gx = gaussian_filter(gx, 1)
     gy = gaussian_filter(gy, 1)
     gz = gaussian_filter(gz, 1)
 
     logger.info("Detecting points...")
+    # Find points near the surface using level set threshold
     on_edge = (dist > -level_set_value) * (dist <= -level_set_value + np.sqrt(3))
     x, y, z = np.nonzero(on_edge)
-    logger.debug("Number of points = %d" % len(x))
+    logger.debug(f"Number of points = {len(x)}")
 
     def _compute_normal(i):
+        # Initialize empty point and normal vectors
         p_i, normal_i = np.array([np.nan, np.nan, np.nan]), np.array([np.nan, np.nan, np.nan])
+
+        # Get gradient at current point
         grad = np.array([gx[x[i], y[i], z[i]],
                          gy[x[i], y[i], z[i]],
                          gz[x[i], y[i], z[i]]])
+
         grad_norm = np.linalg.norm(grad)
         if grad_norm > 0:
+            # Normalize gradient vector
             grad_normalized = grad / grad_norm
             val = dist[x[i], y[i], z[i]] + level_set_value - np.sqrt(3) / 2
+
+            # Calculate point position and normal vector
             p_i = np.array([x[i] - grad_normalized[0] * val,
                             y[i] - grad_normalized[1] * val,
                             z[i] - grad_normalized[2] * val])
@@ -604,17 +700,22 @@ def vol2pcd(volume, origin, voxel_size, level_set_value=0):
                                   grad_normalized[2]])
         return p_i, normal_i
 
+    # Parallel computation of point normals
     all_norms = Parallel(n_jobs=-1)(
         delayed(_compute_normal)(i) for i in tqdm(range(len(x)), desc="Computing point normals"))
 
     logger.info("Sorting normals...")
     pts, normals = zip(*all_norms)
-    not_none_idx = np.where(~np.isnan(normals).any(axis=1))[0]  # Detect np.nan (if grad_norm > 0)
-    pts = np.array(pts)[not_none_idx]  # Keep points with a positive gradiant norm
-    normals = np.array(normals)[not_none_idx]  # Keep normals with a positive gradiant norm
+    # Filter out invalid points (those with NaN values)
+    not_none_idx = np.where(~np.isnan(normals).any(axis=1))[0]
+    pts = np.array(pts)[not_none_idx]
+    normals = np.array(normals)[not_none_idx]
 
     logger.info("Creating Open3D PointCloud instance...")
+    # Convert indices to real-world coordinates
     pts = index2point(pts, origin, voxel_size)
+
+    # Create and populate Open3D point cloud object
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(pts)
     pcd.normals = o3d.utility.Vector3dVector(normals)
@@ -706,24 +807,37 @@ def fit_plane_ransac(point_cloud, inliers=0.8, n_iter=100):
         A NumPy array of shape (3,) representing the normal vector of the best-fit plane.
 
     """
+    # Initialize variables to track the best fit
     min_error = np.inf
-    argmin_v = None
-    argmin_g = None
+    argmin_v = None  # Best singular vectors
+    argmin_g = None  # Best centroid
+
+    # Convert point cloud to numpy array
     coords = np.asarray(point_cloud.points)
+
+    # Calculate number of points to use as inliers in each iteration
     n_inliers = int(np.round(inliers * coords.shape[0]))
+
     for i in range(n_iter):
+        # Randomly select subset of points
         inliers = np.random.choice(range(coords.shape[0]), size=n_inliers)
         inliers_coords = coords[inliers, :]
+        # Calculate centroid of selected points
         G = inliers_coords.mean(axis=0)
+        # Perform SVD on centered coordinates
+        # vh contains the right singular vectors
         u, s, vh = np.linalg.svd(inliers_coords - G[np.newaxis, :], full_matrices=False)
+        # Update best fit if current error (smallest singular value) is lower
         if s[2] < min_error:
             argmin_v = vh
             argmin_g = G
             min_error = s[2]
-            logger.debug("error = %.2f" % s[2])
+            logger.debug(f"error = {s[2]:.2f}")
 
-    X0 = argmin_g  # point belonging to the plane
-    n = vh[:, 2]  # normal vector
+    # X0 is a point on the plane (centroid)
+    X0 = argmin_g
+    # Normal vector is the third right singular vector
+    n = vh[:, 2]
 
     return X0, n
 
@@ -758,10 +872,18 @@ def backproject_points(points, K, rot, tvec):
         Each row contains the (u, v) pixel coordinates of the projected 2D points
         in the image plane.
     """
+    # Transform points from world to camera coordinates:
+    # 1. Rotate points using rotation matrix
+    # 2. Add translation vector with broadcasting
     x = rot @ points.transpose() + tvec[:, np.newaxis]
+    # Project 3D points to image plane using camera intrinsic matrix
     x = K @ x
+    # Perform perspective division to get normalized image coordinates
+    # Divide x,y coordinates by z coordinate (homogeneous to Euclidean coordinates)
     x = x / x[2, :][np.newaxis, :]
+    # Return only x,y coordinates (pixel coordinates) and transpose back to (N,2) shape
     return x[:2, :].transpose()
+
 
 
 def project_camera_plane(K, rot, tvec, X0, n):
@@ -775,111 +897,178 @@ def project_camera_plane(K, rot, tvec, X0, n):
 
     Parameters
     ----------
-    K : np.matrix
-        Intrinsic matrix of the camera defining the internal parameters.
-    rot : np.matrix
-        Rotation matrix transforming from world frame to camera frame.
-    tvec : np.matrix
-        Translation vector transforming from world frame to camera frame.
-    X0 : np.matrix
-        A point on the plane in the world frame.
-    n : np.matrix
-        The normal vector of the plane in the world frame.
+    K : array-like, shape (3, 3)
+        Camera intrinsic matrix.
+    rot : array-like, shape (3, 3)
+        Rotation matrix from world to camera frame.
+    tvec : array-like, shape (3,) or (3, 1)
+        Translation vector from world to camera frame.
+    X0 : array-like, shape (3,) or (3, 1)
+        Point on target plane in world coordinates.
+    n : array-like, shape (3,) or (3, 1)
+        Normal vector of target plane in world coordinates.
 
     Returns
     -------
-    np.ndarray
+    numpy.ndarray, shape (4, 3)
+        Projected corner points in world coordinates.
+
+    Returns
+    -------
+    numpy.ndarray
         An array of projected points from the camera plane onto the target plane
         in world coordinates.
     """
+    # Convert inputs to numpy matrix format for consistent operations
+    rot = np.asarray(rot)
+    K = np.asarray(K)
+    tvec = np.asarray(tvec)
 
-    rot = np.matrix(rot)
-    K = np.matrix(K)
+    # Ensure K and rot are 3x3 arrays:
+    if K.shape != (3, 3) or rot.shape != (3, 3):
+        raise ValueError("K and rot must be 3x3 matrices")
 
-    tvec = np.matrix(tvec)
+    # Ensure tvec is a column vector
     if tvec.shape[0] == 1:
         tvec = tvec.transpose()
 
-    X0 = np.matrix(X0)
+    # Ensure X0 (point on plane) is a column vector
+    X0 = np.asarray(X0)
     if X0.shape[0] == 1:
         X0 = X0.transpose()
 
-    n = np.matrix(n)
+    # Ensure plane normal vector is a column vector
+    n = np.asarray(n)
     if n.shape[0] == 1:
         n = n.transpose()
 
-    f = K[0, 0]
-    c_x = K[0, 2]
-    c_y = K[1, 2]
+    # Extract camera intrinsic parameters
+    f = K[0, 0]  # Focal length
+    c_x = K[0, 2]  # Principal point x-coordinate
+    c_y = K[1, 2]  # Principal point y-coordinate
 
-    # Transform plane in camera frame:
-    n_cam, X0_cam = rot * n, rot * X0 + tvec
+    # Transform plane parameters from world to camera frame
+    n_cam = rot * n  # Transform normal vector
+    X0_cam = rot * X0 + tvec  # Transform point on plane
 
-    # Points in camera frame
-    pts = [np.array([-c_x, -c_y, f]), np.array([c_x, -c_y, f]), np.array([-c_x, c_y, f]), np.array([c_x, c_y, f])]
+    # Define corners of camera image plane in camera coordinates
+    pts = [
+        np.array([-c_x, -c_y, f]),  # Top-left corner
+        np.array([c_x, -c_y, f]),  # Top-right corner
+        np.array([-c_x, c_y, f]),  # Bottom-left corner
+        np.array([c_x, c_y, f])  # Bottom-right corner
+    ]
 
-    # Points on target plane in camera frame
+    # Project image plane points onto target plane using line-plane intersection
     pts_plane = [np.dot(X0_cam.transpose(), n_cam) / np.dot(pt, n_cam) * pt for pt in pts]
 
-    # Points on target plane in world frame
+    # Transform projected points back to world coordinate frame
     pts_plane_world = [(rot.transpose() * (pt.transpose() - tvec)).transpose() for pt in pts_plane]
 
-    return np.array(np.vstack(pts_plane_world))
+    # Stack points into a single array and return
+    return np.array(pts_plane_world)
 
 
 def test_cam_planes(pcd, cameras, images, imgdir, X0=None, n=None, scaling=100):
+    """Projects camera planes onto a fitted plane and combines the resulting projections into a composite image.
+
+    This function processes a set of camera parameters, images, and a point cloud to simulate the projection
+    of camera planes onto a defined or fitted plane in 3D space. Randomly sampled camera images are warped
+    onto the composite projection, and the result is returned as a single normalized image. If no plane
+    point and normal are provided, a plane is fitted using RANSAC.
+
+    Parameters
+    ----------
+    pcd : numpy.ndarray
+        A point cloud represented as a 2D array where each row corresponds to a 3D point with coordinates.
+    cameras : dict
+        Dictionary of camera parameters. Each key corresponds to a camera, storing its width, height,
+        intrinsic parameters (`params`), and other metadata.
+    images : dict
+        Dictionary of exported images where each key corresponds to an image. Each image contains
+        associated rotation (`rotmat`), translation (`tvec`) parameters, and the image filename (`name`).
+    imgdir : str
+        Path to the directory containing image files.
+    X0 : numpy.ndarray, optional
+        A 3D point on the target plane. If not provided, the plane is computed from the point cloud.
+        Default is ``None``.
+    n : numpy.ndarray, optional
+        The normal vector of the target plane. If not provided, it is derived from the point cloud.
+        Default is ``None``.
+    scaling : float, optional
+        Scaling factor for projecting triangles onto the target plane. Defaults to ``100``.
+
+    Returns
+    -------
+    numpy.ndarray
+        A combined image generated by projecting camera planes onto the fitted or specified plane and
+        compositing the warped images. The resulting image is normalized in the range `[0, 1]`.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the specified image files are not found in the given directory.
+    ValueError
+        If inconsistent or invalid camera parameters are encountered.
+    """
     import os
     import cv2
     import imageio
 
+    # Get camera intrinsic parameters from first camera
     w = cameras['1']['width']
     h = cameras['1']['height']
+    f, c_x, c_y, _ = cameras['1']['params']  # Focal length and principal point
+    K = [[f, 0, c_x], [0, f, c_y], [0, 0, 1]]  # Camera calibration matrix
 
-    f, c_x, c_y, _ = cameras['1']['params']
-    K = [[f, 0, c_x], [0, f, c_y], [0, 0, 1]]
-
+    # Fit plane if not provided
     if X0 is None:
-        X0, nn = fit_plane_ransac(pcd)
+        X0, nn = fit_plane_ransac(pcd)  # Get plane point and normal
     if n is None:
         n = nn
 
-    rect_lines = [[0, 1], [1, 2], [2, 3], [3, 0]]
-    rectangles = []
-    tri_image = np.array(np.vstack([[0, 0], [w, 0], [0, h]]), dtype=np.float32)
+    # Define image triangle vertices
+    tri_image = np.array([[0, 0], [w, 0], [0, h]], dtype=np.float32)
     tris = {}
+
+    # Project camera planes onto fitted plane
     for k in images.keys():
-        if np.random.rand() < 0.9:
+        if np.random.rand() < 0.9:  # Randomly sample 10% of images
             continue
-        rot = images[k]['rotmat']
-        tvec = images[k]['tvec']
+        rot = images[k]['rotmat']  # Camera rotation matrix
+        tvec = images[k]['tvec']  # Camera translation vector
         rect_pts = project_camera_plane(K, rot, tvec, X0, n)
         tri_target = np.array(rect_pts[0:3, :2], dtype=np.float32)
         tris[k] = scaling * tri_target
 
+    # Calculate bounds of composite image
     xmin = np.min([np.hstack([tri[0, 0], tri[1, 0], tri[2, 0]]) for tri in tris.values()])
     xmax = np.max([np.hstack([tri[0, 0], tri[1, 0], tri[2, 0]]) for tri in tris.values()])
     ymin = np.min([np.hstack([tri[0, 1], tri[1, 1], tri[2, 1]]) for tri in tris.values()])
     ymax = np.max([np.hstack([tri[0, 1], tri[1, 1], tri[2, 1]]) for tri in tris.values()])
 
+    # Initialize result image array
     target_image_shape = (int(np.floor(xmax - xmin)), int(np.floor(ymax - ymin)))
-
     res = np.zeros((target_image_shape[1], target_image_shape[0], 3), dtype=float)
 
+    # Sort images by numeric key
     ks = list(tris.keys())
     ks.sort(key=lambda x: int(x))
 
+    # Warp and combine images
     for i, k in enumerate(ks):
         img = imageio.imread(os.path.join(imgdir, images[k]["name"]))
         img = np.array(img, dtype=float)
-        # img = (img - img.mean()) / img.std()
+
+        # Adjust target triangle coordinates to image bounds
         tri_target = tris[k]
         tri_target[:, 0] -= xmin
         tri_target[:, 1] -= ymin
+
+        # Apply affine transform to warp image
         affine_transform = cv2.getAffineTransform(tri_image, tri_target)
         cv2.warpAffine(img, affine_transform, target_image_shape, dst=res, borderMode=cv2.BORDER_TRANSPARENT)
-        # res = np.where(res == 0, img_warped, res)
 
-    # res = np.ma.masked_array(res, res == 0)
-    # res = np.ma.median(res, axis=3)
+    # Normalize intensity to [0,1] range
     res = rescale_intensity(res, out_range=(0, 1))
     return res
