@@ -289,8 +289,8 @@ class Segmentation2D(Masks):
         Key(s) and value(s) must be found in metadata to select the ``File``.
         By default, no filtering is performed, all inputs are used.
     model_fileset : luigi.TaskParameter, optional
-        Upstream model training task, valid values in {'ModelFileset'}.
-        'ModelFileset' by default.
+        Upstream model training task, valid values in {'ModelFilesetExists'}.
+        'ModelFilesetExists' by default.
     model_id : luigi.Parameter
         Name of the trained model to use from the 'model' `Fileset`.
         This should be the file name without extension.
