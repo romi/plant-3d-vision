@@ -205,18 +205,25 @@ class Voxels(RomiTask):
         if len(np.unique(vol)) == 1:
             logger.warning("There is something WRONG with the volume!")
 
-        # If conversion to log was requested, apply thresholding:
-        if self.log and self.type == "averaging":
+        # If "averaging" method was requested, apply thresholding:
+        if self.type == "averaging":
             vol = vol > self.threshold
 
-        outfile = self.output_file()
         if labels is not None:
-            out = {}
             for i, label in enumerate(labels):
-                out[label] = vol[i, :]
-            logger.debug(f"Writing NPZ volume for label: {labels}")
-            io.write_npz(outfile, out)
+                out = vol[i, :]
+                logger.debug(f"Writing volume file for label: {label}")
+                outfile = self.output_file(suffix=f"_{label}", create=True)
+                io.write_volume(outfile, out)
+                outfile.set_metadata({
+                    'voxel_size': self.voxel_size,
+                    'origin': origin.tolist(),
+                    'label': label,
+                })
         else:
+            outfile = self.output_file(create=True)
             io.write_volume(outfile, vol)
-
-        outfile.set_metadata({'voxel_size': self.voxel_size, 'origin': origin.tolist()})
+            outfile.set_metadata({
+                'voxel_size': self.voxel_size,
+                'origin': origin.tolist()
+            })
