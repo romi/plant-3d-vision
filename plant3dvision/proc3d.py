@@ -852,22 +852,22 @@ def backproject_points(points, K, rot, tvec):
 
     Parameters
     ----------
-    points : np.ndarray
+    points : numpy.ndarray
         A 2D array of shape (N, 3), where N is the number of 3D points. Each row
         corresponds to the (x, y, z) coordinates of a 3D point.
-    K : np.ndarray
+    K : numpy.ndarray
         A 3x3 intrinsic camera calibration matrix that defines the relationship
         between camera coordinates and pixel coordinates.
-    rot : np.ndarray
+    rot : numpy.ndarray
         A 3x3 rotation matrix that defines the orientation of the camera relative
         to the world coordinates.
-    tvec : np.ndarray
+    tvec : numpy.ndarray
         A 1D array of length 3 defining the translation vector that specifies the
         position of the camera in world coordinates.
 
     Returns
     -------
-    np.ndarray
+    numpy.ndarray
         A 2D array of shape (N, 2), where N is the number of input 3D points.
         Each row contains the (u, v) pixel coordinates of the projected 2D points
         in the image plane.

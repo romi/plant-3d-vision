@@ -96,7 +96,14 @@ def point_cloud_registration_fitness(ref_pcd, flo_pcd, max_distance=2):
 
 
 class SetEvaluator(ABC):
+    """Provides an abstract base class for evaluating sets.
 
+    This class defines a structure for creating evaluators that assess
+    the performance of predictions against ground truth references.
+    It enforces the implementation of the `evaluate` method in
+    any subclass, ensuring a standard interface for set evaluation.
+
+    """
     @abstractmethod
     def evaluate(self, groundtruth, prediction):
         pass
@@ -106,15 +113,23 @@ class SetMetrics(ABC):
     """Compare two arrays as sets. Non-binary arrays can be passed as
     argument. Any value equal to zero will be considered as zero, any
     value > 0 will be considered as 1.
-    
-    Parameters
+
+    Attributes
     ----------
-    evaluator: plant3dvision.SetEvaluator
-        The domain specific evaluator (ex. MaskEvaluator.
-    groundtruth : numpy.ndarray
-        The reference binary mask.
-    prediction : numpy.ndarray
-        The binary mask to evaluate.
+    evaluator : object
+        The evaluator instance used to compute the comparison between groundtruth and predictions.
+    tp : int
+        The count of true positive predictions aggregated over evaluations.
+    fn : int
+        The count of false negatives aggregated over evaluations.
+    tn : int
+        The count of true negatives aggregated over evaluations.
+    fp : int
+        The count of false positives aggregated over evaluations.
+    _miou : float
+        The aggregated mean intersection over union across evaluations.
+    _miou_count : int
+        The count of valid mIoU contributions aggregated during the evaluation process.
 
     Examples
     --------
@@ -144,6 +159,21 @@ class SetMetrics(ABC):
     """
 
     def __init__(self, evaluator, groundtruth=None, prediction=None):
+        """Initializes the evaluation object.
+
+        Computes initial comparisons for the given groundtruth and prediction if both are provided.
+        It sets up the evaluator tool along with default values for true positives, false negatives, true negatives,
+        false positives, mean Intersection over Union (mIoU), and mIoU count attributes.
+
+        Parameters
+        ----------
+        evaluator : object
+            The evaluation tool used for comparing groundtruth and predictions.
+        groundtruth : Any, optional
+            The ground-truth data used for comparison (default is None).
+        prediction : Any, optional
+            The prediction data to be compared against the ground-truth (default is None).
+        """
         self.evaluator = evaluator
         self.tp = 0
         self.fn = 0
@@ -155,25 +185,31 @@ class SetMetrics(ABC):
             self._compare(groundtruth, prediction)
 
     def __add__(self, other):
+        # Add metrics from another instance to this one
         self._update_metrics(other.tp, other.fn, other.tn, other.fp)
         return self
 
     def add(self, groundtruth, prediction):
+        # Compare groundtruth and prediction arrays and update metrics
         self._compare(groundtruth, prediction)
 
     def __str__(self):
+        # String representation shows all metrics as a dictionary
         return str(self.as_dict())
 
     def as_dict(self):
+        # Return metrics as a dictionary including tp/fp/tn/fn counts and calculated metrics
         return {'tp': self.tp, 'fn': self.fn, 'tn': self.tn, 'fp': self.fp,
                 'precision': self.precision(), 'recall': self.recall(),
                 'miou': self.miou()}
 
     def _compare(self, groundtruth, prediction):
+        # Evaluate predictions against groundtruth and update metric counts
         tp, fn, tn, fp = self.evaluator.evaluate(groundtruth, prediction)
         self._update_metrics(tp, fn, tn, fp)
 
     def _update_metrics(self, tp, fn, tn, fp):
+        # Update running counts of true/false positives/negatives
         self.tp += tp
         self.fn += fn
         self.tn += tn
@@ -181,23 +217,27 @@ class SetMetrics(ABC):
         self._update_miou(tp, fp, fn)
 
     def _update_miou(self, tp, fp, fn):
+        # Update mean IoU if denominator is non-zero
         if (tp + fp + fn) != 0:
-            self._miou += tp / (tp + fp + fn)
+            self._miou += tp / (tp + fp + fn)  # IoU = TP / (TP + FP + FN)
             self._miou_count += 1
 
     def precision(self):
+        # Calculate precision: TP / (TP + FP)
         value = None
         if (self.tp + self.fp) != 0:
             value = self.tp / (self.tp + self.fp)
         return value
 
     def recall(self):
+        # Calculate recall: TP / (TP + FN)
         value = None
         if (self.tp + self.fn) != 0:
             value = self.tp / (self.tp + self.fn)
         return value
 
     def miou(self):
+        # Return mean IoU across all evaluations
         value = None
         if self._miou_count > 0:
             value = self._miou / self._miou_count
@@ -209,9 +249,9 @@ class CompareMasks(SetMetrics):
     
     Parameters
     ----------
-    groundtruth: np.ndarray
+    groundtruth: numpy.ndarray
         The reference binary mask (image).
-    prediction : np.ndarray
+    prediction : numpy.ndarray
         The binary mask (image) to evaluate.
     dilation_amount : int
         Dilate the zones of white pixels by this many pixels before the comparison.
@@ -234,87 +274,159 @@ class CompareMasks(SetMetrics):
     """
 
     def __init__(self, groundtruth, prediction, dilation_amount=0):
+        """Initializes the evaluation object.
+
+        Parameters
+        ----------
+        groundtruth : numpy.ndarray
+            The binary mask representing the ground truth.
+            Typically, a 2D array.
+        prediction : numpy.ndarray
+            The binary mask representing the predicted values from a model.
+            Typically, a 2D array.
+        dilation_amount : int, optional
+            The amount by which the masks are to be dilated before evaluation.
+            Default is ``0``.
+        """
         super(CompareMasks, self).__init__(MaskEvaluator(dilation_amount),
                                            groundtruth,
                                            prediction)
 
 
 class MaskEvaluator(SetEvaluator):
+    """Evaluates mask predictions against ground truth annotations.
+
+    This class provides tools to compare binary mask predictions to corresponding
+    ground truth masks. It supports optional dilation of the prediction masks
+    to account for tolerance in spatial alignment. Metrics such as true positives,
+    false negatives, false positives, and true negatives are computed as part
+    of the evaluation process.
+
+    Attributes
+    ----------
+    dilation_amount : int
+        Number of pixels to dilate the prediction mask. Default is 0, meaning
+        no dilation is applied.
+    """
+
     def __init__(self, dilation_amount=0):
+        # Controls how many pixels to dilate the prediction mask
         self.dilation_amount = dilation_amount
 
     def evaluate(self, groundtruth, prediction):
+        """Main evaluation method comparing ground truth with prediction masks.
+
+        Parameters
+        ----------
+        groundtruth : ndarray
+            The ground truth binary mask, which serves as the reference for evaluation.
+        prediction : ndarray
+            The predicted binary mask, which is compared against the ground truth.
+
+        Returns
+        -------
+        dict
+            A dictionary containing the computed evaluation metrics derived from the comparison
+            of the ground truth and prediction masks.
+        """
+        # Main evaluation method comparing ground truth with prediction masks
         self._assert_same_size(groundtruth, prediction)
+        # Apply dilation to prediction if specified
         prediction = self._dilate_image(prediction)
         return self._compute_metrics(groundtruth, prediction)
 
     def _assert_same_size(self, groundtruth, prediction):
+        # Verify that ground truth and prediction masks have same dimensions
         if groundtruth.shape != prediction.shape:
-            raise ValueError("The groundtruth and prediction are different in size: %s vs %s" % (
-            str(groundtruth.shape), str(prediction.shape)))
+            raise ValueError(
+                f"The groundtruth and prediction are different in size: {groundtruth.shape} vs {prediction.shape}")
 
     def _dilate_image(self, image):
+        # Dilate binary image by specified number of pixels
         from scipy.ndimage import binary_dilation
         for i in range(self.dilation_amount):
             image = binary_dilation(image > 0)
         return image
 
     def _compute_metrics(self, groundtruth, prediction):
+        # Convert inputs to binary images (0 and 1 values only)
         groundtruth = self._to_binary_image(groundtruth)
         prediction = self._to_binary_image(prediction)
-        tp = int(np.sum(groundtruth * (prediction > 0)))
-        fn = int(np.sum(groundtruth * (prediction == 0)))
-        tn = int(np.sum((groundtruth == 0) * (prediction == 0)))
-        fp = int(np.sum((groundtruth == 0) * (prediction > 0)))
+
+        # Calculate confusion matrix elements:
+        tp = int(np.sum(groundtruth * (prediction > 0)))  # True Positives
+        fn = int(np.sum(groundtruth * (prediction == 0)))  # False Negatives
+        tn = int(np.sum((groundtruth == 0) * (prediction == 0)))  # True Negatives
+        fp = int(np.sum((groundtruth == 0) * (prediction > 0)))  # False Positives
         return tp, fn, tn, fp
 
     def _to_binary_image(self, matrix):
+        # Convert any non-zero values to 1, creating binary mask
         return (matrix != 0).astype(int)
 
 
 class CompareMaskFilesets():
-    """Compare two mask filesets. 
-    
-    Parameters
+    """Compares ground truth datasets with prediction datasets by evaluating binary mask files.
+
+    The class evaluates and compares binary mask files from two datasets, groundtruth and
+    prediction, based on specific labels. It ensures evaluations are performed only for
+    consistent files present in both datasets. The comparisons are made on matching shot
+    IDs and channels (labels). The class provides metrics for each label and stores
+    detailed results.
+
+    Attributes
     ----------
-    groundtruth_fileset: plantdb.db.IFileset
-        The fileset with the reference binary masks.
-    prediction_fileset : plantdb.db.IFileset
-        The fileset with the masks to evaluate.
-    labels: List(str)
-        The list of labels to evaluate.
-    dilation_amount: int
-        Dilate the zones of white pixels by this many pixels before the comparison.
-
-    Examples
-    --------
-    >>> from plantdb import fsdb
-    >>> from plantdb import io
-    >>> from plant3dvision.metrics import CompareMaskFilesets
-    >>> db = fsdb.FSDB('db')
-    >>> db.connect()
-    >>> groundtruths = db.get_scan('test').get_fileset('images')
-    >>> predictions = db.get_scan('test').get_fileset('Segmentation2D')
-    >>> labels = ['flower', 'fruit', 'leaf', 'pedicel', 'stem']
-    >>> metrics = CompareMaskFilesets(groundtruths, predictions, labels)
-    >>> print(metrics.results)
-
+    groundtruth_fileset : Fileset
+        The dataset containing ground truth binary mask files.
+    prediction_fileset : Fileset
+        The dataset containing prediction binary mask files.
+    labels : list of str
+        The list of labels (channels) to be evaluated.
+    dilation_amount : int, optional
+        The pixel dilation amount to apply for mask evaluation.
+    results : dict
+        A dictionary storing evaluation metrics for each label and detailed prediction results.
     """
 
     def __init__(self, groundtruth_fileset, prediction_fileset, labels, dilation_amount=0):
+        """Initializes comparison object.
+
+        Parameters
+        ----------
+        groundtruth_fileset : Any
+            The fileset containing the groundtruth data to compare against.
+        prediction_fileset : Any
+            The fileset containing the predictions to be evaluated.
+        labels : Any
+            The list of labels/categories to be used during evaluation.
+        dilation_amount : int, optional
+            The amount by which prediction masks should be dilated to address
+            potential minor alignment issues, by default 0.
+
+        Notes
+        -----
+        The constructor invokes methods to verify the consistency between images
+        within the provided filesets and perform initial predictions comparison.
+        """
+        # Store input filesets, labels and dilation parameter
         self.groundtruth_fileset = groundtruth_fileset
         self.prediction_fileset = prediction_fileset
         self.labels = labels
         self.dilation_amount = dilation_amount
+        # Initialize results dictionary
         self.results = {'evaluation-results': {}}
+        # Verify input data consistency
         self.assure_matching_images()
+        # Perform comparison
         self.compare_predictions_to_ground_truths()
 
     def assure_matching_images(self):
+        # Verify both predictions and ground truths have matching files
         self.assure_matching_prediction()
         self.assure_matching_groundtruths()
 
     def assure_matching_prediction(self):
+        # Check that each ground truth has a corresponding prediction
         groundtruth_files = self.groundtruth_fileset.get_files()
         for groundtruth_file in groundtruth_files:
             shot_id = groundtruth_file.get_metadata('shot_id')
@@ -327,6 +439,7 @@ class CompareMaskFilesets():
                     raise ValueError("Missing file in predictions")
 
     def assure_matching_groundtruths(self):
+        # Check that each prediction has a corresponding ground truth
         prediction_files = self.prediction_fileset.get_files()
         for prediction_file in prediction_files:
             shot_id = prediction_file.get_metadata('shot_id')
@@ -339,14 +452,18 @@ class CompareMaskFilesets():
                     raise ValueError("Missing file in groundtruth")
 
     def compare_predictions_to_ground_truths(self):
+        # Compare masks for each label and store metrics
         for label in self.labels:
             metrics = self.compare_label(label)
             self.results[label] = metrics.as_dict()
         return self.results
 
     def compare_label(self, label):
+        # Get all prediction files for current label
         prediction_files = self.get_prediction_files(label)
+        # Initialize metrics accumulator
         metrics_label = SetMetrics(MaskEvaluator(self.dilation_amount))
+        # Evaluate each prediction and accumulate metrics
         for prediction_file in prediction_files:
             metrics_file = self.evaluate_prediction(prediction_file, label)
             self.results['evaluation-results'][prediction_file.id] = metrics_file.as_dict()
@@ -354,89 +471,127 @@ class CompareMaskFilesets():
         return metrics_label
 
     def get_prediction_file(self, shot_id, label):
+        # Get prediction file for specific shot_id and label
         return self.prediction_fileset.get_files(query={'channel': label})
 
     def get_prediction_files(self, label):
+        # Get all prediction files for given label
         return self.prediction_fileset.get_files(query={'channel': label})
 
     def evaluate_prediction(self, prediction_file, label):
+        # Load and compare ground truth and prediction images
         groundtruth = self.load_ground_truth_image(label, prediction_file)
         prediction = self.load_prediction_image(prediction_file)
         return SetMetrics(MaskEvaluator(self.dilation_amount), groundtruth, prediction)
 
     def load_ground_truth_image(self, label, prediction_file):
+        # Load corresponding ground truth image
         ground_truth_file = self.get_ground_truth_file(label, prediction_file)
         return self.read_binary_image(ground_truth_file)
 
     def get_ground_truth_file(self, label, prediction_file):
+        # Get ground truth file matching prediction's shot_id and label
         shot_id = prediction_file.get_metadata('shot_id')
         query = {'channel': label, 'shot_id': shot_id}
         files = self.groundtruth_fileset.get_files(query=query)
-        return files[0]  # already checked that there exists only one
+        return files[0]  # Already verified there's exactly one match
 
     def load_prediction_image(self, prediction):
+        # Load prediction image
         return self.read_binary_image(prediction)
 
     def read_binary_image(self, file_obj):
+        # Read image from file object
         return io.read_image(file_obj)
 
 
 class CompareSegmentedPointClouds():
-    """Compare two mask point clouds. The first point cloud is the
-    reference (ground truth). The second point cloud is the predition.
-    
-    Parameters
+    """
+    A class for comparing segmented point clouds and calculating various evaluation metrics.
+
+    This class evaluates the quality of segmentation in point clouds by comparing
+    the input ground truth point clouds and their labels with predicted point clouds
+    and their labels. Key metrics such as precision, recall, intersection over union (IoU),
+    and mean IoU (mIoU) are calculated across all unique labels. The nearest neighbor
+    search is performed using KD-tree for point-wise comparisons.
+
+    Attributes
     ----------
-    groundtruth: open3d.geometry.PointCloud
-        The reference point cloud.
-    groundtruth_labels: List(str)
-        The labels of the points, one per point.
+    groundtruth : open3d.geometry.PointCloud
+        The ground truth point cloud data.
     prediction : open3d.geometry.PointCloud
-        The computed point cloud
-    prediction_labels: List(str)
-        The labels of the predicted points, one per point.
-
-    Examples
-    --------
-
+        The predicted point cloud data.
+    groundtruth_labels : list
+        List of labels corresponding to each point in the ground truth.
+    prediction_labels : list
+        List of labels corresponding to each point in the prediction.
+    unique_labels : set
+        A set of unique labels in the ground truth for evaluation.
+    results : dict
+        Dictionary containing evaluation results including per-label precision, recall,
+        IoU, and mean IoU across ground truth and predictions.
     """
 
     def __init__(self, groundtruth, groundtruth_labels, prediction, prediction_labels):
+        """Initializes the evaluation object.
+
+        Parameters
+        ----------
+        groundtruth : open3d.geometry.PointCloud
+            The groundtruth data for the point cloud being evaluated.
+        groundtruth_labels : list
+            The labels for the groundtruth data points.
+        prediction : open3d.geometry.PointCloud
+            The predicted data corresponding to the groundtruth point cloud.
+        prediction_labels : list
+            The labels for the predicted data points.
+
+        """
+        # Store input point clouds and their labels
         self.groundtruth = groundtruth
         self.prediction = prediction
         self.groundtruth_labels = groundtruth_labels
         self.prediction_labels = prediction_labels
+        # Get unique labels from ground truth for evaluation
         self.unique_labels = set(groundtruth_labels)
         self.results = {}
+        # Verify point clouds and labels have matching sizes
         self._assure_sizes()
+        # Perform evaluation metrics calculation
         self._evaluate()
 
     def _assure_sizes(self):
+        # Verify both point clouds have matching number of points and labels
         self.assure_size(self.groundtruth, self.groundtruth_labels)
         self.assure_size(self.prediction, self.prediction_labels)
 
     def assure_size(self, pointcloud, labels):
+        # Check if number of points matches number of labels
         num_points, _ = np.asarray(pointcloud.points).shape
         if num_points != len(labels):
             raise ValueError(f"The number of points should be the same as the number of "
-                             + "labels (#points({num_points}) != #labels({len(labels)}))")
+                             f"labels (#points({num_points}) != #labels({len(labels)}))")
 
     def _evaluate(self):
+        # Calculate metrics in both directions and compute mean IoU
         self._compare_groundtruth_to_prediction()
         self._compare_prediction_to_groundtruth()
         self._compute_miou()
 
     def _compare_groundtruth_to_prediction(self):
+        # Compare ground truth points against prediction
         res = self._compare(self.groundtruth, self.groundtruth_labels,
                             self.prediction, self.prediction_labels)
         self.results['groundtruth-to-prediction'] = res
 
     def _compare_prediction_to_groundtruth(self):
+        # Compare prediction points against ground truth
         res = self._compare(self.prediction, self.prediction_labels,
                             self.groundtruth, self.groundtruth_labels)
         self.results['prediction-to-groundtruth'] = res
 
     def _compute_miou(self):
+        # Calculate mean IoU for each label from bidirectional comparisons
         self.results['miou'] = {}
         for label in self.unique_labels:
             iou_1 = self.results['groundtruth-to-prediction'][label]['iou']
@@ -447,42 +602,51 @@ class CompareSegmentedPointClouds():
                 self.results['miou'][label] = None
 
     def _compare(self, source, source_labels, target, target_labels):
+        # Initialize metrics dictionary
         results = self._init_results()
+        # Build KD-tree for efficient nearest neighbor search
         search_tree = self._build_search_tree(target)
 
+        # Compare each source point with its nearest target point
         for index, point in enumerate(source.points):
             source_label = source_labels[index]
             target_label = self._get_label_closest_point(search_tree, point, target_labels)
             self._evalulate_labels(results, source_label, target_label)
 
+        # Calculate metrics based on accumulated counts
         self._compute_precision(results)
         self._compute_recall(results)
         self._compute_iou(results)
         return results
 
     def _build_search_tree(self, pcl):
+        # Create KD-tree for efficient nearest neighbor search
         return o3d.geometry.KDTreeFlann(pcl)
 
     def _get_closest_point(self, tree, p):
+        # Find index of nearest neighbor point
         [k, indices, _] = tree.search_knn_vector_3d(p, 1)
         return indices[0]
 
     def _get_label_closest_point(self, tree, p, labels):
+        # Get label of nearest neighbor point
         index = self._get_closest_point(tree, p)
         return labels[index]
 
     def _evalulate_labels(self, results, source_label, target_label):
+        # Update TP, FP, TN, FN counts for each label
         for label in self.unique_labels:
             if source_label == label and target_label == label:
-                results[label]["tp"] += 1
+                results[label]["tp"] += 1  # True Positive
             elif source_label == label and target_label != label:
-                results[label]["fp"] += 1
+                results[label]["fp"] += 1  # False Positive
             elif source_label != label and target_label == label:
-                results[label]["fn"] += 1
+                results[label]["fn"] += 1  # False Negative
             else:
-                results[label]["tn"] += 1
+                results[label]["tn"] += 1  # True Negative
 
     def _init_results(self):
+        # Initialize metrics dictionary for each label
         results = {}
         for label in self.unique_labels:
             results[label] = {"tp": 0, "fp": 0, "tn": 0, "fn": 0,
@@ -490,28 +654,34 @@ class CompareSegmentedPointClouds():
         return results
 
     def _compute_precision(self, results):
+        # Calculate precision for each label
         for label in self.unique_labels:
             self._compute_precision_label(label, results)
 
     def _compute_recall(self, results):
+        # Calculate recall for each label
         for label in self.unique_labels:
             self._compute_recall_label(label, results)
 
     def _compute_iou(self, results):
+        # Calculate IoU for each label
         for label in self.unique_labels:
             self._compute_iou_label(label, results)
 
     def _compute_precision_label(self, label, results):
+        # Precision = TP / (TP + FP)
         denominator = results[label]["tp"] + results[label]["fp"]
         if denominator > 0:
             results[label]["precision"] = results[label]["tp"] / denominator
 
     def _compute_recall_label(self, label, results):
+        # Recall = TP / (TP + FN)
         denominator = results[label]["tp"] + results[label]["fn"]
         if denominator > 0:
             results[label]["recall"] = results[label]["tp"] / denominator
 
     def _compute_iou_label(self, label, results):
+        # IoU = TP / (TP + FN + FP)
         denominator = (results[label]["tp"]
                        + results[label]["fn"]
                        + results[label]["fp"])

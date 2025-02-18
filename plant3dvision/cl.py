@@ -608,7 +608,7 @@ class FIM():
 
         Parameters
         ----------
-        seeds : np.ndarray
+        seeds : numpy.ndarray
             Array of seed points representing voxel coordinates. Each entry is a
             3D point in the form [x, y, z].
 
@@ -737,7 +737,7 @@ class FIM():
 
         Returns
         -------
-        tuple of np.ndarray
+        tuple of numpy.ndarray
             A tuple containing three 3D numpy arrays corresponding to the normalized
             gradients along the x, y, and z axes, respectively.
         """
