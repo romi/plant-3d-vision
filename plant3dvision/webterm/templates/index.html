@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Archive Upload & Terminal</title>
+    <!-- External Dependencies -->
+    <link href="https://cdn.jsdelivr.net/npm/xterm@5.1.0/css/xterm.css" rel="stylesheet">
+    <link href="https://unpkg.com/dropzone@5/dist/min/dropzone.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+    
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.1.0/lib/xterm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.7.0/lib/xterm-addon-fit.js"></script>
+    <script src="https://unpkg.com/dropzone@5/dist/min/dropzone.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+</head>
+<body>
+    <div id="login-container" class="container" {% if authenticated %}style="display: none;"{% endif %}>
+        <h2>Login</h2>
+        <form id="login-form">
+            <input type="text" id="username" placeholder="Username" required>
+            <input type="password" id="password" placeholder="Password" required>
+            <button type="submit">Login</button>
+        </form>
+    </div>
+
+    <div id="main-container" class="container" {% if not authenticated %}style="display: none;"{% endif %}>
+        <div class="header">
+            <h1>Archive Upload & Terminal</h1>
+            <button id="logout-btn">Logout</button>
+        </div>
+
+        <div class="content">
+            <div class="upload-section">
+                <h2>Upload Archive</h2>
+                <form id="upload-form" class="dropzone">
+                    <div class="dz-message" data-dz-message>
+                        <span>Drop ZIP archive here or click to upload</span>
+                    </div>
+                </form>
+            </div>
+
+            <div class="terminal-section">
+                <h2>Terminal</h2>
+                <div id="terminal"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/upload.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/terminal.js') }}"></script>
+</body>
+</html>

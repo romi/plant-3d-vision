@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  rest_api:
+    image:
+      "roboticsmicrofarms/plantdb:latest"
+    ports:
+      - "5000:5000"
+    networks:
+      - app_network
+    volumes:
+      - ./:/app
+
+  webapp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5001:5001"
+    depends_on:
+      - rest_api
+    networks:
+      - app_network
+    volumes:
+      - ./:/app
+      - /var/run/docker.sock:/var/run/docker.sock  # Required for Docker API access
+
+networks:
+  app_network:
+    driver: bridge
