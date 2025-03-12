@@ -2,8 +2,12 @@
 
 A simple web terminal to run reconstructions in docker containers.
 
-
 ## Start with th docker compose service
+
+You need to create an `.env` file that declare:
+
+- romi_db: the path to the database to serve
+- gid: the group id owning the database to serve
 
 ```shell
 docker-compose up --build
@@ -11,6 +15,7 @@ docker-compose up --build
 
 ## Start container individually
 
+Let's first define a few environment variables like the path to the database to serve and the group id owning it:
 ```shell
 ROMI_DB="/data/ROMI/test_owner/"
 
@@ -19,8 +24,10 @@ gid=$(getent group ${group_name} | cut --delimiter ':' --fields 3) # get the 'gi
 ```
 
 ### PlantDB
+[style.css](static/css/style.css)
 To start the `plantdb` container:
-```shell
+
+```shell[app.py](app.py)
 docker run --rm \
  --name plantdb \
  --user romi:${gid} \
@@ -31,7 +38,9 @@ docker run --rm \
 ```
 
 ### Plant 3D Vision
+
 To start the `plant3dvision` container:
+
 ```shell
 docker run --rm \
  --name plant3dvision \
@@ -39,17 +48,20 @@ docker run --rm \
  --gpus all \
  --env PYOPENCL_CTX='0' \
  -it \
- roboticsmicrofarms/plant-3d-vision:latest \
+ roboticsmicrofarms/plant-3d-vision:0.13.1-cuda_cc75 \
  "bash"
 ```
 
 ### WebTerm
-To build the `webterm` container:
+
+To build the `webterm` image, from the `webterm` root folder:
+
 ```shell
-docker build -t webterm -f Dockerfile .
+docker build -t roboticsmicrofarms/webterm:latest .
 ```
 
 To start the `webterm` container:
+
 ```shell
 docker run --rm \
  --name webterm \
@@ -60,9 +72,13 @@ docker run --rm \
 ```
 
 Important notes:
-1. The webapp container needs access to the Docker socket (`/var/run/docker.sock`) to interact with other containers. This is provided through the volume mount in the docker-compose file.
-2. Make sure your target container (`plant3dvision`) is running in the same Docker network or is accessible to the webapp container.
+
+1. The webapp container needs access to the Docker socket (
+   `/var/run/docker.sock`) to interact with other containers. This is provided through the volume mount in the docker-compose file.
+2. Make sure your target container (
+   `plant3dvision`) is running in the same Docker network or is accessible to the webapp container.
 3. To connect the terminal to your target container, you might need to add it to the same network:
+
 ``` bash
 docker network connect project_app_network plant3dvision
 ```
