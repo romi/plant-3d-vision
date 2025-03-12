@@ -4,7 +4,7 @@ ARG CUDA_CC="75"
 FROM roboticsmicrofarms/colmap:${COLMAP_VERSION}-cuda_cc${CUDA_CC}
 
 LABEL maintainer="Jonathan LEGRAND <jonathan.legrand@ens-lyon.fr>"
-LABEL corresponding_author="Peter Hanappe <peter@romi-project.eu>"
+LABEL corresponding_author="Peter HANAPPE <peter@romi-project.eu>"
 LABEL project="Robotics for microfarms"
 LABEL homepage="https://docs.romi-project.eu/documentation/"
 LABEL repository="https://github.com/romi/plant-3d-vision"

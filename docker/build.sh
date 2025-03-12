@@ -127,15 +127,22 @@ else
   echo -e "Done!"
 fi
 
+# Construct the docker build command
+# Construct the docker build command
+docker_cmd="docker build"
+docker_cmd+=" --build-arg COLMAP_VERSION=\"${COLMAP_VERSION}\""
+docker_cmd+=" --build-arg CUDA_CC=\"${CUDA_CC}\""
+docker_cmd+=" -t \"roboticsmicrofarms/plant-3d-vision:${vtag}-cuda_cc${CUDA_CC}\""
+docker_cmd+=" ${docker_opts}"  # Additional options like --no-cache, --pull, etc.
+docker_cmd+=" -f \"docker/Dockerfile\""
+docker_cmd+=" ."  # Build context
 
+# Print the full command that will be executed
+echo -e "${INFO}Executing command: ${docker_cmd}"
 # Get the date to estimate docker image build time:
 start_time=$(date +%s)
-# Start the docker image build:
-docker build \
-  --build-arg COLMAP_VERSION="${COLMAP_VERSION}" \
-  --build-arg CUDA_CC="${CUDA_CC}" \
-  -t "roboticsmicrofarms/plant-3d-vision:${vtag}-cuda_cc${CUDA_CC}" ${docker_opts} \
-  -f "docker/Dockerfile" .
+# Execute the docker build command
+eval ${docker_cmd}
 # Get docker build exit code:
 docker_build_status=$?
 # Get elapsed time:
