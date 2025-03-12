@@ -1,6 +1,28 @@
 # ROMI P3DV WebTerm
 
-A simple web terminal to run reconstructions in docker containers.
+A _Web Terminal Docker Interface_ to run reconstructions in docker containers.
+
+A web-based terminal application that provides secure, browser-accessible terminal sessions running in Docker containers. This solution bridges the gap between traditional command-line interfaces and web applications by offering a modern, accessible terminal experience through any web browser.
+
+## Key Features
+- Interactive web terminal with full terminal emulation
+- Docker container integration for secure, isolated terminal sessions
+- Rich terminal customization including themes, fonts, and cursor styles
+- Built-in clipboard support for copy and paste operations
+- Automatic terminal resizing to fit browser window
+- Secure user authentication system
+- File upload capabilities
+- WebSocket-based real-time communication
+- Terminal session persistence
+- Mobile-friendly responsive design
+- Modern terminal interface with support for:
+    - Custom color themes
+    - Configurable fonts and text styling
+    - Terminal bell notifications
+    - Clickable web links
+    - Mouse selection support
+    - Scrollback buffer
+
 
 ## Start with th docker compose service
 
