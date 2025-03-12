@@ -106,7 +106,7 @@ docker_cmd="docker build"
 docker_cmd+=" --build-arg CUDA_ARCHITECTURES=\"${CUDA_CC}\""
 docker_cmd+=" -t \"roboticsmicrofarms/colmap:${vtag}-cuda_cc${CUDA_CC}\""
 docker_cmd+=" ${docker_opts}"  # Additional options like --no-cache, --pull, etc.
-docker_cmd+=" -f \"docker/Dockerfile\""
+docker_cmd+=" -f \"docker/colmap3.8/Dockerfile\""
 docker_cmd+=" ."  # Build context
 
 # Print the full command that will be executed
