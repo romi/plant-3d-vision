@@ -2,7 +2,8 @@
 
 A _Web Terminal Docker Interface_ to run reconstructions in docker containers.
 
-A web-based terminal application that provides secure, browser-accessible terminal sessions running in Docker containers. This solution bridges the gap between traditional command-line interfaces and web applications by offering a modern, accessible terminal experience through any web browser.
+A web-based terminal application that provides secure, browser-accessible terminal sessions running in Docker containers. 
+This solution bridges the gap between traditional command-line interfaces and web applications by offering a modern, accessible terminal experience through any web browser.
 
 ## Key Features
 - Interactive web terminal with full terminal emulation

@@ -36,17 +36,20 @@ You will need to install:
 ### Getting Started
 Let's first install some useful tools like `git`, `curl`, `wget` & `nano`:
 ```shell
-sudo apt update && sudo apt install -y git curl wget nano
+sudo apt update 
+sudo apt install -y git curl wget nano
 ```
 
 For `matplotlib` in `romiseg` you will need:
 ```shell
-sudo apt update && sudo apt install -y g++ gcc pkg-config libfreetype-dev libpng-dev
+sudo apt update 
+sudo apt install -y g++ gcc pkg-config libfreetype-dev libpng-dev
 ```
 
 For `romicgal` you will need:
 ```shell
-sudo apt update && sudo apt install -y libeigen3-dev libgmp-dev libmpfr-dev libboost-dev
+sudo apt update 
+sudo apt install -y python3-dev python3-pip gcc build-essential libeigen3-dev libcgal-dev
 ```
 
 
@@ -249,7 +252,6 @@ EOF
     ```bash
     conda activate plant3dvision
     python3 -m pip install -e ./plantdb/.
-    python3 -m pip install -r ./romitask/requirements.txt
     python3 -m pip install -e ./romitask/.
     python3 -m pip install -e ./skeleton_refinement/.
     python3 -m pip install -e ./romiseg/.
