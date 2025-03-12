@@ -17,6 +17,12 @@ docker_opts=""
 # Default CUDA Compute Capability is empty (to enable automatic search):
 CUDA_CC=""
 
+# Check for required commands:
+if ! command -v docker >/dev/null 2>&1; then
+  echo -e "${ERROR}Docker is not installed or not found!"
+  exit 1
+fi
+
 usage() {
   echo -e "$(bold USAGE):"
   echo "  ./docker/build.sh [OPTIONS]"
@@ -79,27 +85,29 @@ while [ "$1" != "" ]; do
   shift
 done
 
-# If not defined manually, try to get CUDA GPU Compute Capability:
-if [ ${CUDA_CC} == "" ]; then
-  # Get the CUDA GPU Compute Capability:
-  CUDA_CC=$(nvidia-smi --query-gpu=compute_cap --format=csv  | awk 'NR==2' | sed -e 's/\.//g')
-  if [ ${CUDA_CC} != "" ]; then
-    echo -e "\n${INFO}Found CUDA GPU Compute Capability: ${CUDA_CC}"
-  else
-    echo -e "\n${ERROR}Could not find CUDA GPU Compute Capability value!"
+# If CUDA_CC is not set, attempt to derive it:
+if [ -z "${CUDA_CC}" ]; then
+  if ! command -v nvidia-smi >/dev/null 2>&1; then
+    echo -e "\n${ERROR}nvidia-smi is not installed or not found!"
     exit 1
   fi
+  CUDA_CC=$(nvidia-smi --query-gpu=compute_cap --format=csv | awk 'NR==2' | sed -e 's/\.//g')
+  if [ -z "${CUDA_CC}" ] || ! [[ "${CUDA_CC}" =~ ^[0-9]+$ ]]; then
+    echo -e "\n${ERROR}Failed to determine CUDA GPU Compute Capability!"
+    exit 1
+  fi
+  echo -e "\n${INFO}Found CUDA GPU Compute Capability: ${CUDA_CC}"
 else
-  echo -e "\n${INFO}Got a CUDA GPU Compute Capability value: ${CUDA_CC}"
+  echo -e "\n${INFO}Using provided CUDA GPU Compute Capability: ${CUDA_CC}"
 fi
 
 # Get the date to estimate docker image build time:
 start_time=$(date +%s)
 # Start the docker image build:
 docker build \
-  --build-arg CUDA_ARCHITECTURES=${CUDA_CC} \
-  -t roboticsmicrofarms/colmap:${vtag}-cuda_cc${CUDA_CC} ${docker_opts} \
-  -f docker/colmap3.8/Dockerfile .
+  --build-arg CUDA_ARCHITECTURES="${CUDA_CC}" \
+  -t "roboticsmicrofarms/colmap:${vtag}-cuda_cc${CUDA_CC}" ${docker_opts} \
+  -f "docker/Dockerfile" .
 # Get docker build exit code:
 docker_build_status=$?
 # Get elapsed time:
