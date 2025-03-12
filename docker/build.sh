@@ -112,18 +112,19 @@ fi
 
 # Check if required base image exists or can be pulled
 base_image="roboticsmicrofarms/colmap:${COLMAP_VERSION}-cuda_cc${CUDA_CC}"
-echo -e "${INFO}Checking for base image: ${base_image}"
+echo -e "${INFO}Checking for base image: ${base_image}..."
 
 if ! docker image inspect "${base_image}" >/dev/null 2>&1; then
     echo -e "${WARNING}Base image not found locally, attempting to pull..."
     if ! docker pull "${base_image}" >/dev/null 2>&1; then
         echo -e "${ERROR}Failed to pull required base image: ${base_image}"
         echo -e "${ERROR}Please ensure the image exists and you have internet connectivity."
+        echo -e "${INFO}Alternatively, you can build it from 'colmap${COLMAP_VERSION}/' directory."
         exit 1
     fi
     echo -e "${INFO}Successfully pulled base image"
 else
-  echo -e "${INFO} Image found locally!"
+  echo -e "Done!"
 fi
 
 
