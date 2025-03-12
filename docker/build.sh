@@ -97,22 +97,22 @@ done
 # If CUDA_CC is not set, attempt to derive it:
 if [ -z "${CUDA_CC}" ]; then
   if ! command -v nvidia-smi >/dev/null 2>&1; then
-    echo -e "\n${ERROR}nvidia-smi is not installed or not found!"
+    echo -e "${ERROR}nvidia-smi is not installed or not found!"
     exit 1
   fi
   CUDA_CC=$(nvidia-smi --query-gpu=compute_cap --format=csv | awk 'NR==2' | sed -e 's/\.//g')
   if [ -z "${CUDA_CC}" ] || ! [[ "${CUDA_CC}" =~ ^[0-9]+$ ]]; then
-    echo -e "\n${ERROR}Failed to determine CUDA GPU Compute Capability!"
+    echo -e "${ERROR}Failed to determine CUDA GPU Compute Capability!"
     exit 1
   fi
-  echo -e "\n${INFO}Found CUDA GPU Compute Capability: ${CUDA_CC}"
+  echo -e "${INFO}Found CUDA GPU Compute Capability: ${CUDA_CC}"
 else
-  echo -e "\n${INFO}Using provided CUDA GPU Compute Capability: ${CUDA_CC}"
+  echo -e "${INFO}Using provided CUDA GPU Compute Capability: ${CUDA_CC}"
 fi
 
 # Check if required base image exists or can be pulled
 base_image="roboticsmicrofarms/colmap:${COLMAP_VERSION}-cuda_cc${CUDA_CC}"
-echo -e "\n${INFO}Checking for base image: ${base_image}"
+echo -e "${INFO}Checking for base image: ${base_image}"
 
 if ! docker image inspect "${base_image}" >/dev/null 2>&1; then
     echo -e "${WARNING}Base image not found locally, attempting to pull..."
@@ -122,6 +122,8 @@ if ! docker image inspect "${base_image}" >/dev/null 2>&1; then
         exit 1
     fi
     echo -e "${INFO}Successfully pulled base image"
+else
+  echo -e "${INFO} Image found locally!"
 fi
 
 
