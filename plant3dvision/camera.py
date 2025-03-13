@@ -407,6 +407,62 @@ def get_colmap_cameras_from_calib_scan(calibration_scan):
 
 
 def colmap_params_from_kwargs(**kwargs):
+    """Convert camera parameters to COLMAP format based on camera model.
+
+    Converts camera intrinsic parameters from different model formats (OpenCV, Radial,
+    or Simple Radial) into COLMAP's parameter list format.
+
+    Other Parameters
+    ----------------
+    model : str
+        Camera model type ('opencv', 'radial', or 'simple_radial').
+    fx, fy : float
+        Focal lengths in x and y directions (OpenCV model only).
+    f : float
+        Focal length (Radial and Simple Radial models).
+    cx, cy : float
+        Principal point coordinates.
+    k1, k2 : float
+        Radial distortion coefficients.
+    p1, p2 : float
+        Tangential distortion coefficients (OpenCV model only).
+    k : float
+        Single radial distortion coefficient (Simple Radial model only).
+
+    Returns
+    -------
+    list
+        Camera parameters in COLMAP format with 8 elements:
+        - For OpenCV: [fx, fy, cx, cy, k1, k2, p1, p2]
+        - For Radial: [f, f, cx, cy, k1, k2, 0, 0]
+        - For Simple Radial: [f, f, cx, cy, k, 0, 0, 0]
+
+    Raises
+    ------
+    KeyError
+        If required parameters for the specified model are missing.
+
+    Notes
+    -----
+    The function assumes lowercase model names in comparison.
+    Zero values are used for unused parameters in simpler models.
+
+    Examples
+    --------
+    >>> # OpenCV model
+    >>> params = colmap_params_from_kwargs(
+    ...     model='opencv', fx=1000, fy=1000, cx=500, cy=500,
+    ...     k1=0.1, k2=0.01, p1=0.001, p2=0.001)
+    >>> print(params)
+    [1000, 1000, 500, 500, 0.1, 0.01, 0.001, 0.001]
+
+    >>> # Simple Radial model
+    >>> params = colmap_params_from_kwargs(
+    ...     model='simple_radial', f=1000, cx=500, cy=500, k=0.1)
+    >>> print(params)
+    [1000, 1000, 500, 500, 0.1, 0, 0, 0]
+    """
+
     model = kwargs.get('model')
     if model.lower() == 'opencv':
         return [kwargs['fx'], kwargs['fy'], kwargs['cx'], kwargs['cy'], kwargs['k1'], kwargs['k2'], kwargs['p1'],
