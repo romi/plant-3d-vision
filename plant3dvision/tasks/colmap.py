@@ -554,10 +554,6 @@ class Colmap(RomiTask):
     alignment_max_error : luigi.IntParameter
         Maximum alignment error allowed during ``model_aligner`` COLMAP step.
         Defaults to ``10``.
-    distance_threshold : luigi.FloatParamater
-        A maximum distance (3D) from the CNC poses to consider the COLMAP estimated pose as correct.
-        If non-null, a "pose_estimation" metadata stating "correct" or "incorrect" is added to each image according to this threshold.
-        This can later be used to filter the images with a `query`.
 
     Notes
     -----
@@ -584,8 +580,6 @@ class Colmap(RomiTask):
     .. [#] `COLMAP official tutorial. <https://colmap.github.io/tutorial.html>`_
 
     """
-    retry_count = luigi.IntParameter(default=10)
-    retry = 0
     upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)  # override default attribute from ``RomiTask``
     query = luigi.DictParameter(default={})
     matcher = luigi.Parameter(default="exhaustive")
@@ -600,8 +594,6 @@ class Colmap(RomiTask):
     alignment_max_error = luigi.IntParameter(default=10)
     bounding_box = luigi.DictParameter(default=None)
     cli_args = luigi.DictParameter(default={})
-    distance_threshold = luigi.FloatParameter(default=0)
-    max_blind_angle = luigi.FloatParameter(default=20)
 
     def _workspace_as_bounding_box(self):
         """Use the scanner workspace as bounding-box.
@@ -836,65 +828,6 @@ class Colmap(RomiTask):
                                           vignette=hardware_str + "\n" + camera_str,
                                           path=self.output().get().path(), suffix="_estimated")
 
-        # - Compute the Euclidean distances between CNC & COLMAP poses & export it to a file:
-        euclidean_distances = {}
-        for im in image_files:
-            euclidean_distances[im.id] = euclidean(cnc_poses[im.id][:3], colmap_poses[im.id][:3])
-        with open(join(self.output().get().path(), "euclidean_distances.json"), 'w') as f:
-            f.writelines(json.dumps({
-                "mean_euclidean_distance": np.nanmean(list(euclidean_distances.values())),
-                "std_euclidean_distance": np.nanstd(list(euclidean_distances.values())),
-                "euclidean_distances": euclidean_distances,
-            }, indent=4))
-
-        # - If a distance threshold is given, add a "pose_estimation" metadata:
-        if self.distance_threshold > 0.:
-            wrong_pose = 0  # number of wrongly estimated pose
-            wrong_pose_idx = []  # index of images with a wrong pose
-            for im_idx, im in enumerate(image_files):
-                if euclidean_distances[im.id] >= self.distance_threshold:
-                    im.set_metadata("pose_estimation", "incorrect")
-                    logger.warning(f"Image {im.id} pose has been incorrectly estimated by COLMAP!")
-                    wrong_pose += 1
-                    wrong_pose_idx.append(im_idx)
-                else:
-                    im.set_metadata("pose_estimation", "correct")
-            # Warn if some images have wrongly estimated pose
-            if wrong_pose != 0:
-                logger.warning(
-                    f"Colmap failed to estimate the pose of {wrong_pose} images within a {self.distance_threshold}mm distance to CNC pose!")
-                logger.warning(f"The following image indexes failed: {wrong_pose_idx}.")
-
-            # Check the number of consecutive wrong pose:
-            n_imgs = len(image_files)
-            angle_between_img = 360 / float(n_imgs)
-            if self.max_blind_angle < angle_between_img:
-                logger.warning(
-                    f"The allowed max blind angle ({self.max_blind_angle}°) is inferior to the angle between two images ({angle_between_img}°)!")
-                self.max_blind_angle = angle_between_img
-                logger.info(f"Changed the allowed max blind angle to {self.max_blind_angle}°.")
-
-            consecutive_wrong = np.split(wrong_pose_idx, np.where(np.diff(wrong_pose_idx) != 1)[0] + 1)
-            max_wrong_size = len(consecutive_wrong[np.argmax([len(cw_i) for cw_i in consecutive_wrong])])
-            blind_angle = angle_between_img * max_wrong_size
-            # Raise an exception if percentage of consecutive wrong pose is greater than 5%:
-            if blind_angle > float(self.max_blind_angle):
-                logger.error(
-                    f"Colmap failed to estimate the pose of {max_wrong_size} consecutive images generating a blind angle of {blind_angle}°!")
-                logger.critical(f"This is above the allowed {self.max_blind_angle}° blind angle!")
-                fig_path = Path(fig_path)
-                ext = fig_path.suffix
-                suffix = f"_try_{self.retry}{ext}"
-                fig_path.rename(str(fig_path).replace(ext, suffix))
-                if self.retry_count > 0:
-                    self.retry += 1
-                    # Clean-up the temporary working directory created by the ColmapRunner instance:
-                    shutil.rmtree(colmap_runner.colmap_workdir, ignore_errors=True)
-                    raise Exception(
-                        f"Attempt #{self.retry-1} - Failed to estimate {max_wrong_size} poses within a {self.distance_threshold}mm distance to CNC pose!")
-            else:
-                logger.info(f"The blind angle {blind_angle} is below the threshold {self.max_blind_angle}.")
-
         # Clean-up the temporary working directory created by the ColmapRunner instance:
         shutil.rmtree(colmap_runner.colmap_workdir, ignore_errors=True)
         return
@@ -987,36 +920,33 @@ class CameraPoseQC(RomiTask):
         return hardware_str
 
     def _get_camera_params(self, images_files, calibration_scan_id):
-        """Get the camera parameters from the intrinsic calibration scan."""
+        # Get camera intrinsic parameters from calibration scan or image metadata
         if calibration_scan_id != "":
+            # Use parameters from calibration scan
             db = DatabaseConfig().scan.db
             calibration_scan = db.get_scan(calibration_scan_id)
-            logger.info(f"Use intrinsic parameters from '{calibration_scan_id}' calibration scan.")
             cameras = get_colmap_cameras_from_calib_scan(calibration_scan)
             camera_str = format_camera_params(cameras)
         else:
+            # Try to get parameters from image metadata
             cameras = None
             for img_f in images_files:
                 cameras = get_camera_kwargs_from_images_metadata(img_f)
                 if cameras is not None:
                     break
-            if cameras is None:
-                logger.warning("Could not find any camera model in the 'images' fileset!")
-                camera_str = "Not found!"
-            else:
-                camera_str = format_camera_params(cameras)
+            camera_str = format_camera_params(cameras) if cameras else "Not found!"
 
-        if self.intrinsic_calibration_scan_id != "":
-            camera_str = f"Intrinsic calibration scan:\n{self.intrinsic_calibration_scan_id}\n" + camera_str
-        else:
-            camera_str = "Colmap estimated intrinsics\n" + camera_str
-        return camera_str
+        # Format camera parameters string
+        prefix = "Intrinsic calibration scan:\n" if self.intrinsic_calibration_scan_id else "Colmap estimated intrinsics\n"
+        return prefix + camera_str
 
     def compute_pose_distance(self, cnc_poses, colmap_poses):
-       # - Compute the Euclidean distances between CNC & COLMAP poses & export it to a file:
+        # Calculate Euclidean distances between CNC and COLMAP poses
         euclidean_distances = {}
         for im_id, cnc_pose in cnc_poses.items():
             euclidean_distances[im_id] = euclidean(cnc_pose[:3], colmap_poses[im_id][:3])
+
+        # Save distance metrics to JSON
         with open(join(self.output().get().path(), "euclidean_distances.json"), 'w') as f:
             f.writelines(json.dumps({
                 "mean_euclidean_distance": np.nanmean(list(euclidean_distances.values())),
@@ -1029,26 +959,29 @@ class CameraPoseQC(RomiTask):
         current_scan = DatabaseConfig().scan
         image_files = self.input().get('images').get_files(query=self.query)
 
+        # Get poses and compute distances
         colmap_poses = self._get_colmap_extrinsics(image_files)
         cnc_poses = self._get_cnc_poses(image_files)
-
         euclidean_distances = self.compute_pose_distance(cnc_poses, colmap_poses)
 
+        # Generate visualization
         hardware_str = self._get_hardware_metadata(current_scan)
+        camera_str = self._get_camera_params(image_files, self.intrinsic_calibration_scan_id)
         # - Generate the pose estimation figure with CNC & COLMAP poses:
         fig_path = pose_estimation_figure(cnc_poses, colmap_poses,
                                           ref_scan_id="", pred_scan_id=current_scan.id,
                                           ref_label="CNC", pred_label="COLMAP",
                                           distance_threshold=self.distance_threshold,
-                                          # vignette=hardware_str + "\n" + camera_str,
-                                          vignette=hardware_str,  # FIXME: retore camera params
+                                          vignette=hardware_str + "\n" + camera_str,
                                           path=self.output().get().path(), suffix="_estimated")
 
+        # Skip verification if no threshold set
         if self.distance_threshold <= 0.:
             logger.info("No distance threshold given. No pose verification will be performed.")
             return
 
-        logger.info(f"Check the pose estimation accuracy with a distance threshold of {distance_threshold}mm.")
+        logger.info(f"Check the pose estimation accuracy with a distance threshold of {self.distance_threshold}mm.")
+        # Verify pose estimation accuracy
         wrong_pose = 0  # number of wrongly estimated pose
         wrong_pose_idx = []  # index of images with a wrong pose
         for im_idx, im in enumerate(image_files):
@@ -1065,7 +998,7 @@ class CameraPoseQC(RomiTask):
                 f"Colmap failed to estimate the pose of {wrong_pose} images within a {self.distance_threshold}mm distance to CNC pose!")
             logger.warning(f"The following image indexes failed: {wrong_pose_idx}.")
 
-        # Check the number of consecutive wrong pose:
+        # Check for blind angles due to consecutive failures
         n_imgs = len(image_files)
         angle_between_img = 360 / float(n_imgs)
         if self.max_blind_angle < angle_between_img:
@@ -1092,3 +1025,5 @@ class CameraPoseQC(RomiTask):
                     f"Attempt #{self.retry - 1} - Failed to estimate {max_wrong_size} poses within a {self.distance_threshold}mm distance to CNC pose!")
         else:
             logger.info(f"The blind angle {blind_angle} is below the threshold {self.max_blind_angle}.")
+
+        return
