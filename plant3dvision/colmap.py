@@ -11,6 +11,7 @@ You can use multiple sources of colmap executable by setting the ``COLMAP_EXE`` 
 Using docker image requires the docker engine to be available on your system and the docker SDK.
 """
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -1138,6 +1139,20 @@ class ColmapRunner(object):
         # - Read COLMAP 'points3D' binary and convert to point cloud:
         sparse_pcd = colmap_points_to_pcd(pts_bin)
         return sparse_pcd
+
+    def clean_up(self):
+        """Removes the temporary working directory and its contents."""
+        try:
+            shutil.rmtree(self.colmap_workdir)
+        except PermissionError as e:
+            logger.error(f"Permission denied while removing {self.colmap_workdir}: {e}")
+        except FileNotFoundError as e:
+            logger.warning(f"Directory {self.colmap_workdir} already removed or not found: {e}")
+        except OSError as e:
+            logger.error(f"Failed to remove directory {self.colmap_workdir}: {e}")
+        else:
+            logger.info(f"Removed COLMAP's temporary working directory: `{self.colmap_workdir}`.")
+        return
 
     def run(self):
         """Run a COLMAP SfM (& MVS) reconstruction.

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import json
-import shutil
 import sys
 from os.path import join
 from os.path import splitext
@@ -31,6 +30,7 @@ from romitask.task import ImagesFilesetExists
 from romitask.task import RomiTask
 
 logger = get_logger(__name__)
+
 
 def get_cnc_poses_from_fileset(image_fileset, axes='xyzpt'):
     """Extract CNC machine poses from image fileset metadata.
@@ -89,7 +89,8 @@ def get_cnc_poses_from_fileset(image_fileset, axes='xyzpt'):
     DEF_AXES = 'xyzpt'
     approx_poses = {im.id: im.get_metadata("approximate_pose", default=None) for im in image_fileset.get_files()}
     poses = {im.id: im.get_metadata("pose", default=None) for im in image_fileset.get_files()}
-    cnc_poses = {im.id: poses[im.id] if poses[im.id] is not None else approx_poses[im.id] for im in image_fileset.get_files()}
+    cnc_poses = {im.id: poses[im.id] if poses[im.id] is not None else approx_poses[im.id] for im in
+                 image_fileset.get_files()}
     # Filter-out 'None' pose:
     cnc_poses = {im_id: pose for im_id, pose in cnc_poses.items() if poses is not None}
     # Select axes coordinates to return if non-default:
@@ -102,6 +103,7 @@ def get_cnc_poses_from_fileset(image_fileset, axes='xyzpt'):
     if n_poses != n_imgs:
         logger.warning(f"Number of obtained CNC poses ({n_poses}) and images ({n_imgs}) differs!")
     return cnc_poses
+
 
 def get_cnc_poses(scan_dataset, axes='xyzpt'):
     """Get the CNC poses from the 'images' fileset using "pose" or "approximate_pose" metadata.
@@ -697,23 +699,64 @@ class Colmap(RomiTask):
         self.cli_args["mapper"]["--Mapper.ba_refine_extra_params"] = "0"
 
     def run(self):
+        """Execute COLMAP reconstruction pipeline with specified configuration.
+
+        This method performs a complete COLMAP reconstruction workflow including:
+        - Setting up COLMAP parameters
+        - Handling calibration (intrinsic and extrinsic)
+        - Processing image files
+        - Running sparse (+dense) reconstruction
+        - Saving results and generating visualization
+
+        Raises
+        ------
+        FileNotFoundError
+            If `scan.toml` configuration file is not found.
+        KeyError
+            If required metadata is missing in `scan.toml`.
+
+        Notes
+        -----
+        - Saves multiple output files including:
+            - Points cloud data (sparse and dense)
+            - Camera parameters
+            - Image information
+            - Log files
+        - Creates visualization of camera poses
+        - Cleans up temporary working directory after completion
+        - Uses workspace metadata for bounding box if not manually specified
+
+        See Also
+        --------
+        plant3dvision.colmap.ColmapRunner : Class handling core COLMAP operations
+        plant3dvision.task.colmap.check_colmap_cfg : Function to verify configuration compatibility
+        plant3dvision.task.colmap.use_precalibrated_poses : Function to apply pre-calibrated poses
+
+        """
+        # Unfreeze CLI arguments to allow modification
         from plant3dvision.utils import recursively_unfreeze
-        self.cli_args = recursively_unfreeze(self.cli_args)  # originally an immutable `FrozenOrderedDict`
-        # Set some COLMAP CLI parameters:
+        self.cli_args = recursively_unfreeze(self.cli_args)
+
+        # Configure core COLMAP parameters
         self.set_gpu_use()
         self.set_single_camera()
         self.set_camera_model()
         self.set_alignment_max_error()
 
-        if self.extrinsic_calibration_scan_id != "":
+        # Check if calibration data is available
+        extrinsic_calibration = self.extrinsic_calibration_scan_id != ""
+        intrinsic_calibration = self.intrinsic_calibration_scan_id != ""
+
+        # Handle camera calibration parameters
+        if extrinsic_calibration:
             logger.info(f"Got an extrinsic calibration scan: '{self.extrinsic_calibration_scan_id}'.")
             if self.use_calibration_camera:
                 self.set_camera_params(self.extrinsic_calibration_scan_id, 'extrinsic')
-        elif self.intrinsic_calibration_scan_id != "":
+        elif intrinsic_calibration:
             logger.info(f"Got an intrinsic calibration scan: '{self.intrinsic_calibration_scan_id}'.")
             self.set_camera_params(self.intrinsic_calibration_scan_id, 'intrinsic')
 
-        # - If no manual definition of cropping bounding-box, try to use the 'workspace' metadata
+        # Determine bounding box - either from workspace metadata or manual definition
         if self.bounding_box is None:
             logger.info("Did not get a manually defined cropping bounding-box...")
             bounding_box = self._workspace_as_bounding_box()
@@ -725,40 +768,26 @@ class Colmap(RomiTask):
             bounding_box = dict(self.bounding_box)
             logger.info("Got a manually defined cropping bounding-box.")
 
+        # Get current scan configuration and image files
         current_scan = DatabaseConfig().scan
         image_files = self.input().get().get_files(query=self.query)
         cnc_poses = get_cnc_poses(current_scan)
 
-        # - Defines if colmap should use an extrinsic calibration dataset:
-        use_calibration = self.extrinsic_calibration_scan_id != ""
-        if use_calibration:
+        # Handle extrinsic calibration if available
+        if extrinsic_calibration:
             logger.info(f"Check extrinsic calibration scan compatibility with current scan...")
             # Check we can use this calibration scan with this scan dataset:
             db = current_scan.db
             calibration_scan = db.get_scan(self.extrinsic_calibration_scan_id)
             current_cfg = {'single_camera': self.single_camera, 'camera_model': self.camera_model}
             check_colmap_cfg(current_cfg, current_scan, calibration_scan)
-            # - Get pre-calibrated poses from extrinsic calib scan and set them as "calibrated_pose" metadata in current images fileset
+            # Apply pre-calibrated poses to current imageset by setting "calibrated_pose" metadata
             logger.info(f"Use poses from extrinsic calibration scan: {self.extrinsic_calibration_scan_id}...")
             image_files = use_precalibrated_poses(image_files, calibration_scan)
-            # - Create the calibration figure:
-            colmap_poses = {im.id: im.get_metadata("calibrated_pose") for im in image_files}
-            camera_str = ""
-            if self.use_calibration_camera:
-                cameras = get_colmap_cameras_from_calib_scan(calibration_scan)
-                # Use of try/except strategy to avoid failure of luigi pipeline (destroy all fileset!)
-                try:
-                    camera_str = format_camera_params(cameras)
-                except:
-                    logger.warning("Could not format the camera parameters from COLMAP camera!")
-                    logger.info(f"COLMAP camera: {cameras}")
-            pose_estimation_figure(cnc_poses, colmap_poses, pred_scan_id=current_scan.id,
-                                   ref_scan_id=str(self.extrinsic_calibration_scan_id), path=self.output().get().path(),
-                                   header=camera_str)
         else:
             logger.info("No extrinsic calibration requested!")
 
-        # - Instantiate a ColmapRunner with parsed configuration:
+        # Initialize and run COLMAP reconstruction
         logger.debug("Instantiate a ColmapRunner...")
         colmap_runner = ColmapRunner(
             image_files,
@@ -766,12 +795,14 @@ class Colmap(RomiTask):
             compute_dense=bool(self.compute_dense),
             all_cli_args=self.cli_args,
             align_pcd=bool(self.align_pcd),
-            use_calibration=use_calibration,  # impact the ``poses.txt`` file
+            use_calibration=extrinsic_calibration,  # impact the ``poses.txt`` file: use calibrated instead of cnc poses
             bounding_box=bounding_box
         )
-        # - Run colmap reconstruction:
+
+        # Perform reconstruction and get results
         logger.debug("Start a Colmap reconstruction...")
         points, images, cameras, sparse, dense, bounding_box = colmap_runner.run()
+
         # -- Export results of Colmap reconstruction to DB:
         # Note that file names are defined in plant3dvision.filenames
         # - Save colmap points dictionary in JSON file:
@@ -794,20 +825,21 @@ class Colmap(RomiTask):
         self.output().get().set_metadata("bounding_box", bounding_box)
 
         from pathlib import Path
-        # - Copy all log files from colmap working directory:
+        # - Copy all log files from COLMAP working directory:
         workdir = Path(colmap_runner.colmap_workdir)
         for log_path in workdir.glob('*.log'):
             outfile = self.output_file(log_path.stem)
             outfile.import_file(log_path)
 
-        # - Get estimated camera poses from 'images' fileset metadata:
+        # Extract camera poses and prepare visualization data
         colmap_poses = {im.id: im.get_metadata("estimated_pose") for im in image_files}
         camera_str = format_camera_params(cameras)
-        if self.intrinsic_calibration_scan_id != "":
+        if intrinsic_calibration:
             camera_str = f"Intrinsic calibration scan:\n{self.intrinsic_calibration_scan_id}\n" + camera_str
         else:
             camera_str = "Colmap estimated intrinsics\n" + camera_str
-        # - Get some hardware metadata:
+
+        # Get hardware metadata for visualization
         try:
             scan_cfg = toml.load(join(current_scan.path(), SCAN_TOML))
             hardware = scan_cfg['Scan']['metadata']['hardware']
@@ -820,16 +852,16 @@ class Colmap(RomiTask):
             logger.warning("Missing some metadata in the `scan.toml` file!")
             logger.info("No hardware information will be available in COLMAP's poses estimation figure!")
             hardware_str = ""
-        # - Generate the pose estimation figure with CNC & COLMAP poses:
-        fig_path = pose_estimation_figure(cnc_poses, colmap_poses,
-                                          ref_scan_id="", pred_scan_id=current_scan.id,
-                                          ref_label="CNC", pred_label="COLMAP",
-                                          distance_threshold=self.distance_threshold,
-                                          vignette=hardware_str + "\n" + camera_str,
-                                          path=self.output().get().path(), suffix="_estimated")
+
+        # Generate visualization of camera poses
+        _ = pose_estimation_figure(cnc_poses, colmap_poses,
+                                   ref_scan_id="", pred_scan_id=current_scan.id,
+                                   ref_label="CNC", pred_label="COLMAP",
+                                   vignette=hardware_str + "\n" + camera_str,
+                                   path=self.output().get().path(), suffix="_estimated")
 
         # Clean-up the temporary working directory created by the ColmapRunner instance:
-        shutil.rmtree(colmap_runner.colmap_workdir, ignore_errors=True)
+        colmap_runner.clean_up()
         return
 
 
@@ -856,6 +888,7 @@ class CameraPoseQC(RomiTask):
         If 0, no verification is performed.
     max_blind_angle : luigi.FloatParameter
         Maximum allowed angle (in degrees) between consecutive failed pose estimations (default: 20).
+        This is valid only for circular path scans (`ScanPath` `class_name` is 'Circle' in `scan.toml`).
     retry : int
         Counter for pose estimation retry attempts.
     retry_count : luigi.IntParameter
@@ -900,19 +933,25 @@ class CameraPoseQC(RomiTask):
         return get_cnc_poses_from_fileset(image_files)
 
     def _get_colmap_extrinsics(self, image_files):
-        # - Get estimated camera poses from 'images' fileset metadata:
+        """Get estimated camera poses from 'images' fileset metadata."""
         return {im.id: im.get_metadata("estimated_pose") for im in image_files}
+
+    def _get_scan_config(self, current_scan):
+        """Get the scan configuration from the current scan."""
+        try:
+            scan_cfg = toml.load(join(current_scan.path(), SCAN_TOML))
+        except FileNotFoundError:
+            logger.warning("Could not find the `scan.toml` file!")
+            return {}
+        else:
+            return scan_cfg
 
     def _get_hardware_metadata(self, current_scan):
         """Get the hardware metadata from the image fileset scan."""
+        scan_cfg = self._get_scan_config(current_scan)
         try:
-            scan_cfg = toml.load(join(current_scan.path(), SCAN_TOML))
             hardware = scan_cfg['Scan']['metadata']['hardware']
             hardware_str = f"sensor: {hardware.get('sensor', None)}\n"
-        except FileNotFoundError:
-            logger.warning("Could not find the `scan.toml` file!")
-            logger.info("No hardware information will be available in COLMAP's poses estimation figure!")
-            hardware_str = ""
         except KeyError:
             logger.warning("Missing some metadata in the `scan.toml` file!")
             logger.info("No hardware information will be available in COLMAP's poses estimation figure!")
@@ -920,7 +959,7 @@ class CameraPoseQC(RomiTask):
         return hardware_str
 
     def _get_camera_params(self, images_files, calibration_scan_id):
-        # Get camera intrinsic parameters from calibration scan or image metadata
+        """Get camera intrinsic parameters from calibration scan or image metadata."""
         if calibration_scan_id != "":
             # Use parameters from calibration scan
             db = DatabaseConfig().scan.db
@@ -941,7 +980,7 @@ class CameraPoseQC(RomiTask):
         return prefix + camera_str
 
     def compute_pose_distance(self, cnc_poses, colmap_poses):
-        # Calculate Euclidean distances between CNC and COLMAP poses
+        """Calculate Euclidean distances between CNC and COLMAP poses."""
         euclidean_distances = {}
         for im_id, cnc_pose in cnc_poses.items():
             euclidean_distances[im_id] = euclidean(cnc_pose[:3], colmap_poses[im_id][:3])
@@ -958,6 +997,14 @@ class CameraPoseQC(RomiTask):
     def run(self):
         current_scan = DatabaseConfig().scan
         image_files = self.input().get('images').get_files(query=self.query)
+
+        scan_cfg = self._get_scan_config(current_scan)
+
+        # Verify the type of path when using the max blind angle parameter:
+        path_type = scan_cfg['ScanPath']['class_name']
+        if self.max_blind_angle != 0. and path_type != "Circle":
+            logger.info("Max blind angle is only valid for circular scans.")
+            self.max_blind_angle = np.infty
 
         # Get poses and compute distances
         colmap_poses = self._get_colmap_extrinsics(image_files)
