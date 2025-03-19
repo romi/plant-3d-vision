@@ -23,13 +23,17 @@ from romitask.task import ImagesFilesetExists
 logger = get_logger(__name__)
 
 
-class Undistorted(FileByFileTask):
-    """Fix images distortion using intrinsic camera parameters.
+class Undistort(FileByFileTask):
+    """Image distortion correction using camera intrinsic parameters.
+
+    This class implements a task that corrects image distortion using camera calibration 
+    parameters. It supports multiple sources for camera models including Colmap, 
+    intrinsic calibration, and extrinsic calibration.
 
     Attributes
     ----------
     upstream_task : luigi.TaskParameter, optional
-        The task to use upstream to the `Undistorted` tasks.
+        The task to use upstream to the `Undistort` tasks.
         It should be a tasks that generates a ``Fileset`` of RGB images.
         Defaults to ``'ImagesFilesetExists'``.
     scan_id : luigi.Parameter, optional
@@ -39,14 +43,27 @@ class Undistorted(FileByFileTask):
         A filtering dictionary to apply on input ```Fileset`` metadata.
         Key(s) and value(s) must be found in metadata to select the ``File``.
         By default, no filtering is performed, all inputs are used.
+
     camera_model_src : luigi.Parameter, optional
         Source of the camera model, can be in ['Colmap', 'IntrinsicCalibration', 'ExtrinsicCalibration']
     camera_model : luigi.Parameter, optional
         Name of the camera model to get if `camera_model_src='IntrinsicCalibration'`.
     intrinsic_calib_scan_id : luigi.Parameter, optional
-        Name of the intrinsic calibration scan (dataset) to use. Used only if  `camera_model_src='IntrinsicCalibration'`.
+        Name of the intrinsic calibration scan (dataset) to use. 
+        Used only if  `camera_model_src='IntrinsicCalibration'`.
     extrinsic_calib_scan_id : luigi.Parameter, optional
-        Name of the extrinsic calibration scan (dataset) to use. Used only if  `camera_model_src='ExtrinsicCalibration'`.
+        Name of the extrinsic calibration scan (dataset) to use.
+        Used only if  `camera_model_src='ExtrinsicCalibration'`.
+
+    Returns
+    -------
+    plantdb.db.Fileset
+        Fileset containing undistorted images with preserved metadata.
+    
+    Raises
+    ------
+    SystemExit
+        If using ``IntrinsicCalibration`` without specifying `extrinsic_calib_scan_id`.
 
     See Also
     --------
@@ -70,6 +87,7 @@ class Undistorted(FileByFileTask):
     extrinsic_calib_scan_id = luigi.Parameter(default="")  # ID of scan containing extrinsic calibration
 
     def requires(self):
+        """Determines the dependencies required for the task execution."""
         from plant3dvision.tasks.calibration import ExtrinsicCalibrationExists
         from plant3dvision.tasks.calibration import IntrinsicCalibrationExists
 
@@ -97,6 +115,29 @@ class Undistorted(FileByFileTask):
             return {"camera": Colmap(), "images": self.upstream_task()}
 
     def run(self):
+        """Process images using camera calibration parameters to correct distortion.
+        
+        This method applies camera distortion correction to each image in the input fileset
+        using either intrinsic or extrinsic calibration parameters. It preserves all original
+        image metadata and adds calibration metadata to the processed images.
+
+        Raises
+        ------
+        ImportError
+            If required camera calibration modules cannot be imported.
+        KeyError
+            If required camera calibration data is missing from input.
+    
+        Notes
+        -----
+        The method handles two main calibration sources:
+        - ``IntrinsicCalibration``: Uses camera model parameters directly
+        - ``ExtrinsicCalibration``: Uses camera parameters and pose information
+    
+        The calibration metadata is stored in each output image's metadata under:
+        - 'calibrated_pose': Camera pose information (for extrinsic calibration)
+        - 'colmap_camera': Camera model parameters
+        """
         poses = None
         colmap_camera = None
 
@@ -132,8 +173,36 @@ class Undistorted(FileByFileTask):
                 outm = outfi.get_metadata()
                 outfi.set_metadata({**m, **outm})
 
-    def f(self, fi: plantdb.db.File, outfs: plantdb.db.Fileset) -> plantdb.db.File or None:
-        """Undistort the input image ``File``."""
+    def f(self, fi, outfs):
+        """Undistort an input image using camera calibration parameters.
+
+        This method processes a single image file to remove lens distortion using camera
+        intrinsic parameters stored in the image metadata. The undistorted image is saved
+        to a new file in the output fileset.
+
+        Parameters
+        ----------
+        fi : plantdb.db.File
+            Input image file to be undistorted. Must contain camera calibration parameters
+            in its metadata.
+        outfs : plantdb.db.Fileset
+            Output fileset where the undistorted image will be saved.
+
+        Returns
+        -------
+        plantdb.db.File or None
+            If successful, returns the new File object containing the undistorted image.
+            Returns None if camera parameters cannot be found in the image metadata.
+
+        Notes
+        -----
+        The function expects camera calibration parameters to be present in the input
+        file's metadata. These parameters are used to compute the camera matrix and
+        distortion coefficients needed for undistortion.
+
+        The output file preserves the ID of the input file and includes additional
+        metadata about the processing task and camera model source.
+        """
         from plant3dvision import proc2d
         from plant3dvision.camera import get_camera_kwargs_from_images_metadata
         from plant3dvision.camera import get_camera_arrays_from_params
@@ -169,8 +238,8 @@ class Masks(FileByFileTask):
     upstream_task : luigi.TaskParameter, optional
         The task to use upstream to this task.
         It should be a tasks that generates a ``Fileset`` of RGB images.
-        It can thus be ``ImagesFilesetExists`` or ``Undistorted``.
-        Defaults to `'Undistorted'`.
+        It can thus be ``ImagesFilesetExists`` or ``Undistort``.
+        Defaults to `'Undistort'`.
     scan_id : luigi.Parameter, optional
         The dataset id (scan name) to use to create the ``FilesetTarget``.
         If unspecified (default), the current active scan will be used.
@@ -211,16 +280,16 @@ class Masks(FileByFileTask):
     >>> db.connect()
     >>> from romitask.task import ImagesFilesetExists
     >>> from plant3dvision.tasks.colmap import Colmap
-    >>> from plant3dvision.tasks.proc2d import Masks, Undistorted
+    >>> from plant3dvision.tasks.proc2d import Masks, Undistort
     >>> image_fs = ImagesFilesetExists(scan_id='real_plant')
     >>> colmap_task = Colmap(scan_id='real_plant')
-    >>> undistort_task = Undistorted(scan_id='real_plant')
+    >>> undistort_task = Undistort(scan_id='real_plant')
     >>> mask_task = Masks(scan_id='real_plant', query="{'channel':'rgb'}")
     >>> luigi.build([image_fs, colmap_task, undistort_task, mask_task], local_scheduler=True)
     >>> db.disconnect()
 
     """
-    upstream_task = luigi.TaskParameter(default=Undistorted)  # override default attribute from ``RomiTask``
+    upstream_task = luigi.TaskParameter(default=Undistort)  # override default attribute from ``RomiTask``
     type = luigi.Parameter("linear")
     parameters = luigi.ListParameter(default=[0, 1, 0])
     threshold = luigi.FloatParameter(default=0.3)
@@ -270,7 +339,7 @@ class Segmentation2D(Masks):
 
     Module: plant3dvision.tasks.proc2d
     Description: compute masks using trained deep learning models
-    Default upstream tasks: Undistorted
+    Default upstream tasks: Undistort
     Upstream task format: Fileset with image files
     Output fileset format: Fileset with grayscale image files, each corresponding to a given input image and class
 
@@ -279,8 +348,8 @@ class Segmentation2D(Masks):
     upstream_task : luigi.TaskParameter, optional
         The task to use upstream to this task.
         It should be a tasks that generates a ``Fileset`` of RGB images.
-        It can thus be ``ImagesFilesetExists`` or ``Undistorted``.
-        Defaults to `'Undistorted'`.
+        It can thus be ``ImagesFilesetExists`` or ``Undistort``.
+        Defaults to `'Undistort'`.
     scan_id : luigi.Parameter, optional
         The dataset id (scan name) to use to create the ``FilesetTarget``.
         If unspecified (default), the current active scan will be used.
