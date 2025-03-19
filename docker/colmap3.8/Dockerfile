@@ -79,3 +79,13 @@ RUN apt-get update && \
 # a library. For instance, CMake will be able to find COLMAP easily with the
 # command: find_package(COLMAP REQUIRED).
 COPY --from=builder /colmap_installed/ /usr/local/
+
+RUN groupadd -g 1000 colmap_users && \
+    # Make COLMAP files group-readable and executable
+    chgrp -R colmap_users /usr/local/bin/colmap && \
+    chgrp -R colmap_users /usr/local/lib/colmap && \
+    chgrp -R colmap_users /usr/local/share/colmap && \
+    chmod -R g+rx /usr/local/bin/colmap && \
+    chmod -R g+rx /usr/local/lib/colmap && \
+    chmod -R g+rx /usr/local/share/colmap
+
