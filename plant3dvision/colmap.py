@@ -403,6 +403,66 @@ MATCHER_METHODS = ['exhaustive', 'sequential', 'spatial']
 DEF_MATCHER_METHODS = MATCHER_METHODS[0]
 
 
+def search_closest_tag(available_images, requested_tag):
+    """Find the closest matching tag from available Docker images.
+
+    Parameters
+    ----------
+    available_images : list
+        List of Docker image objects from `docker.images.list()`.
+    requested_tag : str
+        String of the requested tag (e.g. 'latest' or '3.8')
+
+    Returns
+    -------
+    str
+        The closest matching tag from available images.
+
+    Examples
+    --------
+    >>> import docker
+    >>> from plant3dvision.colmap import search_closest_tag
+    >>> client = docker.from_env()
+    >>> colmap_exe='roboticsmicrofarms/colmap'
+    >>> available_images = client.images.list(colmap_exe)
+    >>> closest_tag = search_closest_tag(available_images, '3.8-cuda_cc')
+    >>> print(closest_tag)
+
+    """
+    # Collect all available tags
+    available_tags = []
+    for image in available_images:
+        if image.tags:  # Ensure image has tags
+            available_tags.append(image.tags[0].split(':')[-1])
+
+    # If exact match exists, return it
+    if requested_tag in available_tags:
+        return requested_tag
+
+    # Split the requested tag into components
+    requested_parts = requested_tag.split('-')
+    base_version = requested_parts[0]  # e.g., '3.8'
+
+    # First, try to find tags with matching base version and similar pattern
+    matching_base = [tag for tag in available_tags if tag.startswith(base_version)]
+    if matching_base:
+        # If we have tags with same base version, prefer ones with similar pattern
+        if len(requested_parts) > 1:
+            # Look for tags containing similar components (e.g., 'cuda')
+            pattern_matches = [tag for tag in matching_base
+                               if any(part.split('_')[0] in tag
+                                      for part in requested_parts[1:])]
+            if pattern_matches:
+                return pattern_matches[0]
+        return matching_base[0]
+
+    # If no matching base version, return 'latest' if available, otherwise first tag
+    if 'latest' in available_tags:
+        return 'latest'
+
+    return available_tags[0] if available_tags else requested_tag
+
+
 class ColmapRunner(object):
     """COLMAP SfM methods wrapper, to apply to an 'image' fileset.
 
@@ -748,10 +808,25 @@ class ColmapRunner(object):
             client = docker.from_env()
             # Try to get the tag of the docker image or set it to 'latest' by default:
             try:
-                colmap_exe, tag = colmap_exe.split(":")
-            except ValueError:
+                tag = colmap_exe.split(":")[1]
+            except IndexError:
                 logger.error(f"Could not get docker image tag from {colmap_exe}!")
                 tag = 'latest'
+                logger.info(f"Using default tag '{tag}' with docker image {colmap_exe}!...")
+            else:
+                colmap_exe, tag = colmap_exe.split(":")
+                logger.info(f"Requested usage of docker image {colmap_exe}:{tag}...")
+
+            # Try to find the closest matching tag from available Docker images, if any
+            # This is done because cuda compute capability may vary depending on available hardware
+            # Locally built image may have a different 'cuda_cc' value than the default.
+            available_images = client.images.list(colmap_exe)
+            if len(available_images) != 0:
+                new_tag = search_closest_tag(available_images, tag)
+                if new_tag != tag:
+                    logger.info(f"Using docker image {colmap_exe}:{new_tag} instead of {colmap_exe}:{tag}...")
+                    tag = new_tag
+
             self.colmap_exe = f"{colmap_exe}:{tag}"
             # Check the image exists locally or download it:
             try:
@@ -760,7 +835,8 @@ class ColmapRunner(object):
                 logger.warning(f"Could not find '{self.colmap_exe}' image locally...")
                 client.images.pull(colmap_exe, tag=tag)
             else:
-                logger.info(f"Found '{colmap_exe}' image locally...")
+                logger.info(f"Found '{self.colmap_exe}' image locally...")
+
             # Get the 'default output' (banner, license or header) when starting a container:
             default_out = client.containers.run(self.colmap_exe, "", stdout=True, stderr=True)
             self._header = default_out.decode("utf-8")
