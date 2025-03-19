@@ -893,8 +893,21 @@ class ColmapRunner(object):
         # Defines environment variables:
         varenv = {}
         varenv.update({'PYOPENCL_CTX': os.environ.get('PYOPENCL_CTX', '0')})
-        # Defines the mount point
-        mount = docker.types.Mount(str(self.colmap_workdir), str(self.colmap_workdir), type='bind')
+
+        # Get the GID and UID from the workdir
+        workdir_stat = os.stat(self.colmap_workdir)
+        workdir_gid = str(workdir_stat.st_gid)
+        workdir_uid = str(workdir_stat.st_uid)
+        # Volume to bind mount
+        volumes = {
+            str(self.colmap_workdir): {
+                'bind': str(self.colmap_workdir),
+                'mode': 'rw',
+                'uid': workdir_uid,
+                'gid': workdir_gid
+            }
+        }
+
         # Create the bash command called inside the docker container
         cmd = " ".join(process)
         logger.debug('Docker subprocess: ' + cmd)
@@ -903,10 +916,15 @@ class ColmapRunner(object):
         # Run the command & catch the output:
         if _has_nvidia_gpu():
             gpu_device = docker.types.DeviceRequest(count=-1, capabilities=[['gpu']])
-            out = client.containers.run(self.colmap_exe, cmd, environment=varenv, mounts=[mount],
-                                        stdout=True, stderr=True, device_requests=[gpu_device])
+            out = client.containers.run(self.colmap_exe, cmd,
+                                        user=workdir_uid, group_add=["colmap_users"],
+                                        environment=varenv, volumes=volumes,
+                                        stdout=True, stderr=True,
+                                        device_requests=[gpu_device])
         else:
-            out = client.containers.run(self.colmap_exe, cmd, environment=varenv, mounts=[mount],
+            out = client.containers.run(self.colmap_exe, cmd,
+                                        user=workdir_uid, group_add=["colmap_users"],
+                                        environment=varenv, volumes=volumes,
                                         stdout=True, stderr=True)
         # Return the container logs decoded:
         out = out.decode('utf8')
