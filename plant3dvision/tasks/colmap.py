@@ -32,7 +32,7 @@ from romitask.task import RomiTask
 logger = get_logger(__name__)
 
 
-def get_cnc_poses_from_fileset(image_fileset, axes='xyzpt'):
+def get_cnc_poses_from_files(image_files, axes='xyzpt'):
     """Extract CNC machine poses from image fileset metadata.
 
     Retrieves pose information from image fileset metadata, using either 'pose' or 'approximate_pose'
@@ -40,17 +40,17 @@ def get_cnc_poses_from_fileset(image_fileset, axes='xyzpt'):
 
     Parameters
     ----------
-    image_fileset : plantdb.db.Fileset
-        Image fileset containing pose metadata for each image
+    image_files : list of plantdb.db.File
+        A list of image files containing pose metadata for each image.
     axes : str, optional
-        String specifying which axes to return, by default 'xyzpt'
-        Must contain only characters from 'xyzpt' (case insensitive)
+        A string specifying which axes to return, by default 'xyzpt'.
+        Must contain only characters from 'xyzpt' (case insensitive).
 
     Returns
     -------
     dict
-        Dictionary mapping image IDs to their pose coordinates
-        Values are lists of float coordinates in the order specified by `axes` parameter
+        The dictionary mapping image IDs to their pose coordinates.
+        Values are lists of float coordinates in the order specified by `axes` parameter.
 
     Warnings
     --------
@@ -69,7 +69,7 @@ def get_cnc_poses_from_fileset(image_fileset, axes='xyzpt'):
 
     Examples
     --------
-    >>> from plant3dvision.tasks.colmap import get_cnc_poses
+    >>> from plant3dvision.tasks.colmap import get_cnc_poses_from_files
     >>> from plantdb.test_database import test_database
     >>> db = test_database('real_plant')
     >>> db.connect()
@@ -77,29 +77,36 @@ def get_cnc_poses_from_fileset(image_fileset, axes='xyzpt'):
     >>> scan = db.get_scan('real_plant')
     >>> image_fs = scan.get_fileset('images')
     >>> # Get full 5-axis poses
-    >>> poses = get_cnc_poses_from_fileset(image_fs)
+    >>> poses = get_cnc_poses_from_files(image_fs.get_files(query={"channel": 'rgb'}))
     >>> print(poses['00001'])  # [x, y, z, pan, tilt]
     [100.0, 200.0, 300.0, 45.0, 30.0]
 
     >>> # Get only XYZ coordinates
-    >>> xyz_poses = get_cnc_poses_from_fileset(image_fs, axes='xyz')
+    >>> xyz_poses = get_cnc_poses_from_files(image_fs.get_files(query={"channel": 'rgb'}), axes='xyz')
     >>> print(xyz_poses['00001'])  # [x, y, z]
     [100.0, 200.0, 300.0]
     """
+    # Default order of axes in pose coordinates
     DEF_AXES = 'xyzpt'
-    approx_poses = {im.id: im.get_metadata("approximate_pose", default=None) for im in image_fileset.get_files()}
-    poses = {im.id: im.get_metadata("pose", default=None) for im in image_fileset.get_files()}
-    cnc_poses = {im.id: poses[im.id] if poses[im.id] is not None else approx_poses[im.id] for im in
-                 image_fileset.get_files()}
-    # Filter-out 'None' pose:
+    n_imgs = len(image_files)  # get the number of images
+
+    # Get 'approximate_pose' metadata for all images
+    approx_poses = {im.id: im.get_metadata("approximate_pose", default=None) for im in image_files}
+    # Get 'pose' metadata for all images
+    poses = {im.id: im.get_metadata("pose", default=None) for im in image_files}
+
+    # Prefer 'pose' over 'approximate_pose' when available
+    cnc_poses = {im.id: poses[im.id] if poses[im.id] is not None else approx_poses[im.id] for im in image_files}
+    # Remove entries where no pose data was found
     cnc_poses = {im_id: pose for im_id, pose in cnc_poses.items() if poses is not None}
-    # Select axes coordinates to return if non-default:
+
+    # If user requested specific axes, extract only those coordinates
     if axes != DEF_AXES:
         axes_idx = [DEF_AXES.index(ax.lower()) for ax in axes]
         cnc_poses = {im_id: [pose[ax_idx] for ax_idx in axes_idx] for im_id, pose in cnc_poses.items()}
-    # Warn if nb of obtained poses is different from images in scan dataset:
+
+    # Log warning if some images are missing pose data
     n_poses = len(cnc_poses)
-    n_imgs = len(image_fileset.get_files())
     if n_poses != n_imgs:
         logger.warning(f"Number of obtained CNC poses ({n_poses}) and images ({n_imgs}) differs!")
     return cnc_poses
@@ -116,7 +123,8 @@ def get_cnc_poses(scan_dataset, axes='xyzpt'):
     Returns
     -------
     dict
-        Image-id indexed dictionary of CNC poses as X, Y, Z, pan, tilt.
+        The dictionary mapping image IDs to their pose coordinates.
+        Values are lists of float coordinates in the order specified by `axes` parameter.
 
     Notes
     -----
@@ -142,8 +150,8 @@ def get_cnc_poses(scan_dataset, axes='xyzpt'):
     >>> db.disconnect()
 
     """
-    img_fs = scan_dataset.get_fileset('images')
-    return get_cnc_poses_from_fileset(img_fs, axes)
+    img_fs = scan_dataset.get_fileset('images').get_files()
+    return get_cnc_poses_from_files(img_fs, axes)
 
 
 def get_image_poses(scan_dataset, md="calibrated_pose", default=None):
@@ -596,6 +604,7 @@ class Colmap(RomiTask):
     alignment_max_error = luigi.IntParameter(default=10)
     bounding_box = luigi.DictParameter(default=None)
     cli_args = luigi.DictParameter(default={})
+    colmap_exe = luigi.Parameter(default="roboticsmicrofarms/colmap:3.8-cuda_cc75")
 
     def _workspace_as_bounding_box(self):
         """Use the scanner workspace as bounding-box.
@@ -796,7 +805,8 @@ class Colmap(RomiTask):
             all_cli_args=self.cli_args,
             align_pcd=bool(self.align_pcd),
             use_calibration=extrinsic_calibration,  # impact the ``poses.txt`` file: use calibrated instead of cnc poses
-            bounding_box=bounding_box
+            bounding_box=bounding_box,
+            colmap_exe=str(self.colmap_exe)
         )
 
         # Perform reconstruction and get results
@@ -854,11 +864,13 @@ class Colmap(RomiTask):
             hardware_str = ""
 
         # Generate visualization of camera poses
-        _ = pose_estimation_figure(cnc_poses, colmap_poses,
-                                   ref_scan_id="", pred_scan_id=current_scan.id,
-                                   ref_label="CNC", pred_label="COLMAP",
-                                   vignette=hardware_str + "\n" + camera_str,
-                                   path=self.output().get().path(), suffix="_estimated")
+        _ = pose_estimation_figure(
+            cnc_poses, colmap_poses,
+            ref_scan_id="", pred_scan_id=current_scan.id,
+            ref_label="CNC", pred_label="COLMAP",
+            vignette=hardware_str + "\n" + camera_str,
+            path=self.output().get().path(), suffix="_estimated"
+        )
 
         # Clean-up the temporary working directory created by the ColmapRunner instance:
         colmap_runner.clean_up()
@@ -875,7 +887,7 @@ class CameraPoseQC(RomiTask):
 
     Attributes
     ----------
-    upstream_task : luigi.TaskParameter
+    pose_task : luigi.TaskParameter
         The upstream COLMAP task that provides pose estimations (default: Colmap).
     image_fileset : luigi.TaskParameter
         The fileset containing input images (default: ImagesFilesetExists).
@@ -916,21 +928,25 @@ class CameraPoseQC(RomiTask):
     4. Verifies pose estimation quality if distance_threshold > 0
     5. Checks for consecutive pose estimation failures
     """
+    upstream_task = None  # override default attribute from ``RomiTask``
+    image_fileset = luigi.TaskParameter(default=ImagesFilesetExists)
+    pose_task = luigi.TaskParameter(default=Colmap)
+
     retry_count = luigi.IntParameter(default=10)
     retry = 0
-    upstream_task = luigi.TaskParameter(default=Colmap)  # override default attribute from ``RomiTask``
-    image_fileset = luigi.TaskParameter(default=ImagesFilesetExists)
+
     query = luigi.DictParameter(default={})
     intrinsic_calibration_scan_id = luigi.Parameter(default="")
     distance_threshold = luigi.FloatParameter(default=0)
     max_blind_angle = luigi.FloatParameter(default=20)
 
     def requires(self):
-        return {'images': self.image_fileset, 'upstream': self.upstream_task}
+        """Determines the dependencies required for the task execution."""
+        return {'images': self.image_fileset(), 'poses': self.pose_task()}
 
     def _get_cnc_poses(self, image_files):
         """Get the CNC poses from the image fileset scan."""
-        return get_cnc_poses_from_fileset(image_files)
+        return get_cnc_poses_from_files(image_files)
 
     def _get_colmap_extrinsics(self, image_files):
         """Get estimated camera poses from 'images' fileset metadata."""
@@ -973,7 +989,7 @@ class CameraPoseQC(RomiTask):
                 cameras = get_camera_kwargs_from_images_metadata(img_f)
                 if cameras is not None:
                     break
-            camera_str = format_camera_params(cameras) if cameras else "Not found!"
+            camera_str = format_camera_kwargs(cameras) if cameras else "Not found!"
 
         # Format camera parameters string
         prefix = "Intrinsic calibration scan:\n" if self.intrinsic_calibration_scan_id else "Colmap estimated intrinsics\n"
@@ -996,7 +1012,10 @@ class CameraPoseQC(RomiTask):
 
     def run(self):
         current_scan = DatabaseConfig().scan
-        image_files = self.input().get('images').get_files(query=self.query)
+
+        # Process each image in the input fileset
+        images_fileset = self.input()["images"].get()
+        image_files = images_fileset.get_files(query=self.query)
 
         scan_cfg = self._get_scan_config(current_scan)
 
@@ -1013,7 +1032,7 @@ class CameraPoseQC(RomiTask):
 
         # Generate visualization
         hardware_str = self._get_hardware_metadata(current_scan)
-        camera_str = self._get_camera_params(image_files, self.intrinsic_calibration_scan_id)
+        camera_str = self._get_camera_params(image_files, str(self.intrinsic_calibration_scan_id))
         # - Generate the pose estimation figure with CNC & COLMAP poses:
         fig_path = pose_estimation_figure(cnc_poses, colmap_poses,
                                           ref_scan_id="", pred_scan_id=current_scan.id,
