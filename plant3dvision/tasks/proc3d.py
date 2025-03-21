@@ -752,9 +752,9 @@ class RefineSkeleton(RomiTask):
     def run(self):
         from skeleton_refinement.stochastic_registration import perform_registration
         # Read input skeleton from JSON file (contains points and lines)
-        skel = io.read_json(self.upstream_task().get().get_files()[0])
+        skel = io.read_json(self.input()["skeleton"].get().get_file("CurveSkeleton"))
         # Read input point cloud data
-        pcd = io.read_point_cloud(self.upstream_pcd().get().get_files()[0])
+        pcd = io.read_point_cloud(self.input()["pcd"].get().get_file("PointCloud"))
 
         # Perform stochastic registration to refine skeleton points
         # Uses point cloud and skeleton points as input, returns refined points
