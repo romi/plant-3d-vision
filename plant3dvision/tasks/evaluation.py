@@ -27,7 +27,7 @@ from plantdb.io import write_npz
 from plantdb.io import write_point_cloud
 from plantdb.io import write_triangle_mesh
 from romitask.log import get_logger
-from romitask.task import DatabaseConfig
+from romitask.task import ScanConfiguration
 from romitask.task import FilesetTarget
 from romitask.task import ImagesFilesetExists
 from romitask.task import RomiTask
@@ -58,7 +58,7 @@ class EvaluationTask(RomiTask):
 
     def output(self):
         fileset_id = self.get_task_family()  # self.upstream_task().task_id + "Evaluation"
-        return FilesetTarget(DatabaseConfig().scan, fileset_id)
+        return FilesetTarget(ScanConfiguration().scan, fileset_id)
 
     def evaluate(self):
         raise NotImplementedError
