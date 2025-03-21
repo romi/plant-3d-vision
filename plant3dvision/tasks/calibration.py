@@ -11,7 +11,7 @@ from plant3dvision.calibration import calibrate_radial_camera
 from plant3dvision.calibration import calibrate_simple_radial_camera
 from plant3dvision.colmap import ColmapRunner
 from plant3dvision.colmap import estimate_camera_pose
-from romitask import DatabaseConfig
+from romitask import ScanConfiguration
 from romitask import FilesetTarget
 from romitask import RomiTask
 from romitask.log import get_logger
@@ -244,7 +244,7 @@ class IntrinsicCalibration(RomiTask):
 
     def output(self):
         """The output fileset associated to a ``IntrinsicCalibration`` is an 'camera_model' dataset."""
-        return FilesetTarget(DatabaseConfig().scan, "camera_model")
+        return FilesetTarget(ScanConfiguration().scan, "camera_model")
 
     def run(self):
         """Compute the intrinsic camera parameters for selected model using detected corners & ids."""
@@ -660,7 +660,7 @@ class IntrinsicCalibrationExists(DatasetExists):
         plant3dvision.proc2d.undistort
         """
         from plant3dvision.camera import get_camera_arrays_from_params
-        db = DatabaseConfig().scan.db
+        db = ScanConfiguration().scan.db
         calibration_scan = db.get_scan(self.scan_id)
         calib_fs = calibration_scan.get_filesets('camera_model')
         cameras = io.read_json(calib_fs.get_file("cameras"))
@@ -672,7 +672,7 @@ class IntrinsicCalibrationExists(DatasetExists):
 
     def run(self):
         """Check the existence of the dataset related to the `IntrinsicCalibration` task."""
-        db = DatabaseConfig().scan.db
+        db = ScanConfiguration().scan.db
         calibration_scan = db.get_scan(self.scan_id)
         if calibration_scan is None:
             raise OSError(f"Scan {self.scan_id} does not exist!")
@@ -711,7 +711,7 @@ class ExtrinsicCalibrationExists(DatasetExists):
         dict
             Image id indexed dictionary of camera extrinsic parameters as obtained by the `ExtrinsicCalibration` task.
         """
-        db = DatabaseConfig().scan.db
+        db = ScanConfiguration().scan.db
         calibration_scan = db.get_scan(self.scan_id)
         images_fs = calibration_scan.get_fileset('images')
         poses = {im.id: im.get_metadata("calibrated_pose", default=None) for im in images_fs.get_files()}
@@ -723,7 +723,7 @@ class ExtrinsicCalibrationExists(DatasetExists):
 
     def run(self):
         """Check the existence of the dataset related to the `ExtrinsicCalibration` task."""
-        db = DatabaseConfig().scan.db
+        db = ScanConfiguration().scan.db
         calibration_scan = db.get_scan(self.scan_id)
         if calibration_scan is None:
             raise OSError(f"Scan {self.scan_id} does not exist!")
