@@ -10,7 +10,7 @@ on:
 
 jobs:
   docker-build:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v1
@@ -22,7 +22,7 @@ jobs:
           ./docker/build.sh -t ${GITHUB_REF##*/} --no-cache
 
   unit-tests:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     needs: docker-build
 
     steps:
@@ -32,7 +32,7 @@ jobs:
           ./docker/run.sh -t ${GITHUB_REF##*/} --unittest
 
   integration-tests:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     needs: docker-build
 
     steps:
@@ -42,7 +42,7 @@ jobs:
           ./docker/run.sh -v /home/${USER}/ML_models:/home/${USER}/plant-3d-vision/tests/testdata/models/models -t ${GITHUB_REF##*/} --integration_test
 
   docker-clean:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     needs: [ integration-tests, unit-tests ]
     if: always()
 

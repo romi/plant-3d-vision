@@ -6,7 +6,7 @@ on: pull_request
 
 jobs:
   docker-build:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v1
@@ -18,7 +18,7 @@ jobs:
           ./docker/build.sh -t ${{ github.sha }} --no-cache
 
   unit-tests:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     needs: docker-build
 
     steps:
@@ -27,7 +27,7 @@ jobs:
           ./docker/run.sh -t ${{ github.sha }} --unittest
 
   integration-tests:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     needs: docker-build
 
     steps:
@@ -36,7 +36,7 @@ jobs:
           ./docker/run.sh -t ${{ github.sha }} --integration_test
 
   docker-clean:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     needs: [ integration-tests, unit-tests ]
     if: always()
 
