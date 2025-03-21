@@ -21,7 +21,7 @@ distance_threshold = 0  # the maximum 3D Euclidean distance to CNC pose to valid
 #y = [150, 650]
 #z = [-90, 300]
 
-[Undistorted]
+[Undistort]
 upstream_task = "ImagesFilesetExists"  # where to get the images from, here requires the 'images' fileset to exists
 camera_model_src = "Colmap"  # source of the camera model to use to undistort images, in {'Colmap', 'IntrinsicCalibration', 'ExtrinsicCalibration'}
 camera_model = "SIMPLE_RADIAL"  # name of the camera model to get if `camera_model_src='IntrinsicCalibration'`.
@@ -29,7 +29,7 @@ intrinsic_calib_scan_id = ""  # use a dataset with calibrated intrinsic camera p
 extrinsic_calib_scan_id = ""  # use a dataset with calibrated extrinsic camera poses
 
 [Masks]
-upstream_task = "Undistorted"  # other option "ImagesFilesetExists"
+upstream_task = "Undistort"  # other option "ImagesFilesetExists"
 type = "linear"  # type of filter to use, in {'linear', 'excess_green'}
 query = "{\"channel\":\"rgb\"}"  # query applied on metadata to select images from `upstream_task`
 parameters = "[0,1,0]"  # select the RGB channel to apply "linear" filter

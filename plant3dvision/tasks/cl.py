@@ -5,6 +5,7 @@ import sys
 import luigi
 import numpy as np
 
+from plant3dvision.tasks.colmap import CameraPoseQC
 from plant3dvision.tasks.colmap import Colmap
 from plant3dvision.tasks.proc2d import Masks
 from plantdb import io
@@ -16,17 +17,17 @@ logger = get_logger(__name__)
 
 
 class Voxels(RomiTask):
-    """Computes a volume from backprojection of 2D segmented images.
+    """Computes a volume from backprojection of 2D segmented images using voxel carving or averaging.
+
+    This class implements a RomiTask that performs 3D volume reconstruction from 2D segmented images
+    using either voxel carving or averaging methods.
 
     Attributes
     ----------
-    upstream_task : luigi.TaskParameter, optional
-        Upstream task that generate the masks.
-        Defaults to ``Masks``.
-    scan_id : luigi.Parameter, optional
-        The dataset id (scan name) to use to create the ``FilesetTarget``.
-        If unspecified (default), the current active scan will be used.
-    upstream_colmap : luigi.TaskParameter, optional
+    image_task : luigi.TaskParameter, optional
+        Upstream task that generate the masks. Defaults to ``Masks``.
+    pose_qc_task : luigi.TaskParameter, optional
+        Optional upstream task, that performs a quality check on the camera poses.
     query : luigi.DictParameter, optional
         A filtering dictionary to apply on input ```Fileset`` metadata.
         Key(s) and value(s) must be found in metadata to select the ``File``.
@@ -75,27 +76,35 @@ class Voxels(RomiTask):
     Upstream task format: `Fileset` with grayscale images ('Masks') and intrinsics & extrinsics camera parameters ('Colmap', ...)
     Output fileset format: NPZ file with as many arrays as `self.labels`
 
+    The bounding box can be obtained from multiple sources (in order of precedence):
+    1. Direct parameter specification
+    2. Scan metadata
+    3. Colmap metadata
+    4. Images fileset metadata
     """
-    upstream_task = luigi.TaskParameter(default=Masks)  # override default attribute from ``RomiTask``
+    upstream_task = None  # override default attribute from ``RomiTask``
+    image_task = luigi.TaskParameter(default=Masks)
 
     query = luigi.DictParameter(default={})
     camera_metadata = luigi.Parameter(default='colmap_camera')  # camera definition (intrinsic & poses) in metadata
     voxel_size = luigi.FloatParameter(default=1.0)
     type = luigi.Parameter(default="averaging")
     log = luigi.BoolParameter(default=True)
+
     threshold = luigi.FloatParameter(default=-100.)
+    missing_images_threshold = luigi.IntParameter(default=2)
 
     invert = luigi.BoolParameter(default=False)
     labels = luigi.ListParameter(default=[])
     bounding_box = luigi.DictParameter(default=None)
     bounding_box_edit = luigi.DictParameter(default=None)
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
     def requires(self):
         """Determines the dependencies required for the task execution."""
-        tasks = {"masks": self.upstream_task()}
+        # Initialize dictionary with mandatory mask images from image_task
+        tasks = {"masks": self.image_task()}
+
+        # Add COLMAP task for camera parameter estimation if using COLMAP camera metadata
         if str(self.camera_metadata).lower() == 'colmap_camera':
             tasks.update({"colmap": Colmap()})
 
@@ -207,7 +216,19 @@ class Voxels(RomiTask):
 
         # If "averaging" method was requested, apply thresholding:
         if self.type == "averaging":
-            vol = vol > self.threshold
+            uniq = np.unique(vol)
+            n_imgs = len(masks_files)
+            try:
+                nimg_val_map = dict(zip(list(range(-n_imgs, 1))[::-1], uniq[::-1]))
+            except:
+                logger.warning("Could not create a mapping from image number to unique values!")
+                logger.info(f"Using threshold value of {self.threshold} instead.")
+                logger.info(f"Found these unique values in the volume: {uniq}.")
+            else:
+                logger.info(f"Found this mapping between image number and unique values: {nimg_val_map}.")
+                self.threshold = nimg_val_map[-int(self.missing_images_threshold)]
+                logger.info(f"Using threshold value of {self.threshold} according to missing images threshold of {self.missing_images_threshold} image.")
+            vol = vol >= self.threshold
 
         if labels is not None:
             for i, label in enumerate(labels):

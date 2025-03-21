@@ -1,11 +1,18 @@
 import unittest
+from os import path
+from os import rmdir
 
 import luigi
-from romitask import RomiTask, DatabaseConfig, FilesetTarget
+
 from plantdb import io
-from romitask.task import FilesetExists, ImagesFilesetExists, FileByFileTask
 from plantdb.testing import FSDBTestCase
-from os import rmdir, path
+from romitask import FilesetTarget
+from romitask import RomiTask
+from romitask import ScanConfiguration
+from romitask.task import FileByFileTask
+from romitask.task import FilesetExists
+from romitask.task import ImagesFilesetExists
+
 
 class TouchFileTask(RomiTask):
     upstream_task = None
@@ -63,8 +70,8 @@ class TestFilesetTarget(FSDBTestCase):
 class TestRomiTask(FSDBTestCase):
     def test_romi_task(self):
         db = self.get_test_db()
-        DatabaseConfig.db = db
-        DatabaseConfig.scan = db.get_scan("myscan_001")
+        ScanConfiguration.db = db
+        ScanConfiguration.scan = db.get_scan("myscan_001")
         task = TouchFileTask()
         assert (not task.complete())
         luigi.build(tasks=[task], local_scheduler=True)
@@ -74,9 +81,9 @@ class TestRomiTask(FSDBTestCase):
 class TestFileByFileTask(FSDBTestCase):
     def test_romi_task(self):
         db = self.get_test_db()
-        DatabaseConfig.db = db
-        DatabaseConfig.scan_id = "myscan_001"
-        DatabaseConfig.scan = self.get_test_scan()
+        ScanConfiguration.db = db
+        ScanConfiguration.scan_id = "myscan_001"
+        ScanConfiguration.scan = self.get_test_scan()
         # task = ImageIdentityTask(fileset_id="testfileset")
         # assert (not task.complete())
         # luigi.build(tasks=[task], local_scheduler=True)

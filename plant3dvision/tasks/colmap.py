@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import json
-import shutil
+
 import sys
 from os.path import join
 from os.path import splitext
@@ -12,7 +11,9 @@ import toml
 from scipy.spatial.distance import euclidean
 
 from plant3dvision.calibration import pose_estimation_figure
+from plant3dvision.camera import format_camera_kwargs
 from plant3dvision.camera import format_camera_params
+from plant3dvision.camera import get_camera_kwargs_from_images_metadata
 from plant3dvision.camera import get_colmap_cameras_from_calib_scan
 from plant3dvision.colmap import ColmapRunner
 from plant3dvision.colmap import estimate_camera_pose
@@ -22,13 +23,93 @@ from plant3dvision.filenames import COLMAP_IMAGES_ID
 from plant3dvision.filenames import COLMAP_POINTS_ID
 from plant3dvision.filenames import COLMAP_SPARSE_ID
 from plantdb import io
-from romitask import DatabaseConfig
 from romitask import SCAN_TOML
+from romitask import ScanConfiguration
 from romitask.log import get_logger
 from romitask.task import ImagesFilesetExists
 from romitask.task import RomiTask
 
 logger = get_logger(__name__)
+
+
+def get_cnc_poses_from_files(image_files, axes='xyzpt'):
+    """Extract CNC machine poses from image fileset metadata.
+
+    Retrieves pose information from image fileset metadata, using either 'pose' or 'approximate_pose'
+    fields. Can return full 5-axis positions (X, Y, Z, pan, tilt) or a subset of axes.
+
+    Parameters
+    ----------
+    image_files : list of plantdb.db.File
+        A list of image files containing pose metadata for each image.
+    axes : str, optional
+        A string specifying which axes to return, by default 'xyzpt'.
+        Must contain only characters from 'xyzpt' (case insensitive).
+
+    Returns
+    -------
+    dict
+        The dictionary mapping image IDs to their pose coordinates.
+        Values are lists of float coordinates in the order specified by `axes` parameter.
+
+    Warnings
+    --------
+    Logs a warning if the number of retrieved poses differs from the number of images
+
+    Notes
+    -----
+    - Pose data is primarily retrieved from 'pose' metadata, falling back to 'approximate_pose'
+    - Images without pose data are excluded from the result
+    - Coordinate order in default 'xyzpt' format:
+        - x: X-axis position
+        - y: Y-axis position
+        - z: Z-axis position
+        - p: Pan angle
+        - t: Tilt angle
+
+    Examples
+    --------
+    >>> from plant3dvision.tasks.colmap import get_cnc_poses_from_files
+    >>> from plantdb.test_database import test_database
+    >>> db = test_database('real_plant')
+    >>> db.connect()
+    >>> # - Select the dataset to reconstruct:
+    >>> scan = db.get_scan('real_plant')
+    >>> image_fs = scan.get_fileset('images')
+    >>> # Get full 5-axis poses
+    >>> poses = get_cnc_poses_from_files(image_fs.get_files(query={"channel": 'rgb'}))
+    >>> print(poses['00001'])  # [x, y, z, pan, tilt]
+    [100.0, 200.0, 300.0, 45.0, 30.0]
+
+    >>> # Get only XYZ coordinates
+    >>> xyz_poses = get_cnc_poses_from_files(image_fs.get_files(query={"channel": 'rgb'}), axes='xyz')
+    >>> print(xyz_poses['00001'])  # [x, y, z]
+    [100.0, 200.0, 300.0]
+    """
+    # Default order of axes in pose coordinates
+    DEF_AXES = 'xyzpt'
+    n_imgs = len(image_files)  # get the number of images
+
+    # Get 'approximate_pose' metadata for all images
+    approx_poses = {im.id: im.get_metadata("approximate_pose", default=None) for im in image_files}
+    # Get 'pose' metadata for all images
+    poses = {im.id: im.get_metadata("pose", default=None) for im in image_files}
+
+    # Prefer 'pose' over 'approximate_pose' when available
+    cnc_poses = {im.id: poses[im.id] if poses[im.id] is not None else approx_poses[im.id] for im in image_files}
+    # Remove entries where no pose data was found
+    cnc_poses = {im_id: pose for im_id, pose in cnc_poses.items() if poses is not None}
+
+    # If user requested specific axes, extract only those coordinates
+    if axes != DEF_AXES:
+        axes_idx = [DEF_AXES.index(ax.lower()) for ax in axes]
+        cnc_poses = {im_id: [pose[ax_idx] for ax_idx in axes_idx] for im_id, pose in cnc_poses.items()}
+
+    # Log warning if some images are missing pose data
+    n_poses = len(cnc_poses)
+    if n_poses != n_imgs:
+        logger.warning(f"Number of obtained CNC poses ({n_poses}) and images ({n_imgs}) differs!")
+    return cnc_poses
 
 
 def get_cnc_poses(scan_dataset, axes='xyzpt'):
@@ -42,7 +123,8 @@ def get_cnc_poses(scan_dataset, axes='xyzpt'):
     Returns
     -------
     dict
-        Image-id indexed dictionary of CNC poses as X, Y, Z, pan, tilt.
+        The dictionary mapping image IDs to their pose coordinates.
+        Values are lists of float coordinates in the order specified by `axes` parameter.
 
     Notes
     -----
@@ -68,23 +150,8 @@ def get_cnc_poses(scan_dataset, axes='xyzpt'):
     >>> db.disconnect()
 
     """
-    DEF_AXES = 'xyzpt'
-    img_fs = scan_dataset.get_fileset('images')
-    approx_poses = {im.id: im.get_metadata("approximate_pose", default=None) for im in img_fs.get_files()}
-    poses = {im.id: im.get_metadata("pose", default=None) for im in img_fs.get_files()}
-    cnc_poses = {im.id: poses[im.id] if poses[im.id] is not None else approx_poses[im.id] for im in img_fs.get_files()}
-    # Filter-out 'None' pose:
-    cnc_poses = {im_id: pose for im_id, pose in cnc_poses.items() if poses is not None}
-    # Select axes coordinates to return if non-default:
-    if axes != DEF_AXES:
-        axes_idx = [DEF_AXES.index(ax.lower()) for ax in axes]
-        cnc_poses = {im_id: [pose[ax_idx] for ax_idx in axes_idx] for im_id, pose in cnc_poses.items()}
-    # Warn if nb of obtained poses is different from images in scan dataset:
-    n_poses = len(cnc_poses)
-    n_imgs = len(img_fs.get_files())
-    if n_poses != n_imgs:
-        logger.warning(f"Number of obtained CNC poses ({n_poses}) and images ({n_imgs}) differs!")
-    return cnc_poses
+    img_fs = scan_dataset.get_fileset('images').get_files()
+    return get_cnc_poses_from_files(img_fs, axes)
 
 
 def get_image_poses(scan_dataset, md="calibrated_pose", default=None):
@@ -497,10 +564,6 @@ class Colmap(RomiTask):
     alignment_max_error : luigi.IntParameter
         Maximum alignment error allowed during ``model_aligner`` COLMAP step.
         Defaults to ``10``.
-    distance_threshold : luigi.FloatParamater
-        A maximum distance (3D) from the CNC poses to consider the COLMAP estimated pose as correct.
-        If non-null, a "pose_estimation" metadata stating "correct" or "incorrect" is added to each image according to this threshold.
-        This can later be used to filter the images with a `query`.
 
     Notes
     -----
@@ -527,8 +590,6 @@ class Colmap(RomiTask):
     .. [#] `COLMAP official tutorial. <https://colmap.github.io/tutorial.html>`_
 
     """
-    retry_count = luigi.IntParameter(default=10)
-    retry = 0
     upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)  # override default attribute from ``RomiTask``
     query = luigi.DictParameter(default={})
     matcher = luigi.Parameter(default="exhaustive")
@@ -543,8 +604,15 @@ class Colmap(RomiTask):
     alignment_max_error = luigi.IntParameter(default=10)
     bounding_box = luigi.DictParameter(default=None)
     cli_args = luigi.DictParameter(default={})
-    distance_threshold = luigi.FloatParameter(default=0)
-    max_blind_angle = luigi.FloatParameter(default=20)
+    colmap_exe = luigi.Parameter(default="roboticsmicrofarms/colmap:3.8-cuda_cc75")
+
+    # Camera poses quality check parameters
+    distance_threshold = luigi.FloatParameter(default=6.)
+    max_blind_angle = luigi.FloatParameter(default=20.)
+
+    # Retry parameters
+    retry = luigi.IntParameter(default=0)
+    retry_count = luigi.IntParameter(default=10)
 
     def _workspace_as_bounding_box(self):
         """Use the scanner workspace as bounding-box.
@@ -559,7 +627,7 @@ class Colmap(RomiTask):
         {dict, None}
             Dictionary {'x': [int, int], 'y': [int, int], 'z': [int, int]}
         """
-        images_fileset = self.input().get()
+        images_fileset = self.input()['images'].get()
         # Try to get the "workspace" metadata from 'images' fileset
         bounding_box = images_fileset.get_metadata("workspace", default=None)
 
@@ -618,7 +686,7 @@ class Colmap(RomiTask):
         from plant3dvision.camera import get_camera_kwargs_from_colmap_json
         from plant3dvision.camera import get_colmap_cameras_from_calib_scan
         from plant3dvision.camera import get_camera_model_from_intrinsic
-        images_fileset = self.input().get()
+        images_fileset = self.input()['images'].get()
         db = images_fileset.scan.db
         calibration_scan = db.get_scan(calibration_scan_id)
         logger.info(f"Use intrinsic parameters from {calib_type} calibration scan.")
@@ -647,24 +715,74 @@ class Colmap(RomiTask):
         # Prevent refinement of extra params (k1, k2, p1, p2) by COLMAP:
         self.cli_args["mapper"]["--Mapper.ba_refine_extra_params"] = "0"
 
+    def requires(self):
+        return {"images": self.upstream_task()}
+
     def run(self):
+        """Execute COLMAP reconstruction pipeline with specified configuration.
+
+        This method performs a complete COLMAP reconstruction workflow including:
+        - Setting up COLMAP parameters
+        - Handling calibration (intrinsic and extrinsic)
+        - Processing image files
+        - Running sparse (+dense) reconstruction
+        - Saving results and generating visualization
+
+        Raises
+        ------
+        FileNotFoundError
+            If `scan.toml` configuration file is not found.
+        KeyError
+            If required metadata is missing in `scan.toml`.
+
+        Notes
+        -----
+        - Saves multiple output files including:
+            - Points cloud data (sparse and dense)
+            - Camera parameters
+            - Image information
+            - Log files
+        - Creates visualization of camera poses
+        - Cleans up temporary working directory after completion
+        - Uses workspace metadata for bounding box if not manually specified
+
+        See Also
+        --------
+        plant3dvision.colmap.ColmapRunner : Class handling core COLMAP operations
+        plant3dvision.task.colmap.check_colmap_cfg : Function to verify configuration compatibility
+        plant3dvision.task.colmap.use_precalibrated_poses : Function to apply pre-calibrated poses
+
+        """
+        # Log retry information
+        if self.retry:
+            logger.info(f"Running Colmap task - Retry #{self.retry}")
+        else:
+            logger.info("Running Colmap task - Initial run")
+
+        # Unfreeze CLI arguments to allow modification
         from plant3dvision.utils import recursively_unfreeze
-        self.cli_args = recursively_unfreeze(self.cli_args)  # originally an immutable `FrozenOrderedDict`
-        # Set some COLMAP CLI parameters:
+        self.cli_args = recursively_unfreeze(self.cli_args)
+
+        # Configure core COLMAP parameters
         self.set_gpu_use()
         self.set_single_camera()
         self.set_camera_model()
         self.set_alignment_max_error()
 
-        if self.extrinsic_calibration_scan_id != "":
+        # Check if calibration data is available
+        extrinsic_calibration = self.extrinsic_calibration_scan_id != ""
+        intrinsic_calibration = self.intrinsic_calibration_scan_id != ""
+
+        # Handle camera calibration parameters
+        if extrinsic_calibration:
             logger.info(f"Got an extrinsic calibration scan: '{self.extrinsic_calibration_scan_id}'.")
             if self.use_calibration_camera:
                 self.set_camera_params(self.extrinsic_calibration_scan_id, 'extrinsic')
-        elif self.intrinsic_calibration_scan_id != "":
+        elif intrinsic_calibration:
             logger.info(f"Got an intrinsic calibration scan: '{self.intrinsic_calibration_scan_id}'.")
             self.set_camera_params(self.intrinsic_calibration_scan_id, 'intrinsic')
 
-        # - If no manual definition of cropping bounding-box, try to use the 'workspace' metadata
+        # Determine bounding box - either from workspace metadata or manual definition
         if self.bounding_box is None:
             logger.info("Did not get a manually defined cropping bounding-box...")
             bounding_box = self._workspace_as_bounding_box()
@@ -676,40 +794,25 @@ class Colmap(RomiTask):
             bounding_box = dict(self.bounding_box)
             logger.info("Got a manually defined cropping bounding-box.")
 
-        current_scan = DatabaseConfig().scan
-        image_files = self.input().get().get_files(query=self.query)
-        cnc_poses = get_cnc_poses(current_scan)
+        # Get current scan configuration and image files
+        current_scan = ScanConfiguration().scan
+        image_files = self.input()['images'].get().get_files(query=self.query)
 
-        # - Defines if colmap should use an extrinsic calibration dataset:
-        use_calibration = self.extrinsic_calibration_scan_id != ""
-        if use_calibration:
+        # Handle extrinsic calibration if available
+        if extrinsic_calibration:
             logger.info(f"Check extrinsic calibration scan compatibility with current scan...")
             # Check we can use this calibration scan with this scan dataset:
             db = current_scan.db
             calibration_scan = db.get_scan(self.extrinsic_calibration_scan_id)
             current_cfg = {'single_camera': self.single_camera, 'camera_model': self.camera_model}
             check_colmap_cfg(current_cfg, current_scan, calibration_scan)
-            # - Get pre-calibrated poses from extrinsic calib scan and set them as "calibrated_pose" metadata in current images fileset
+            # Apply pre-calibrated poses to current imageset by setting "calibrated_pose" metadata
             logger.info(f"Use poses from extrinsic calibration scan: {self.extrinsic_calibration_scan_id}...")
             image_files = use_precalibrated_poses(image_files, calibration_scan)
-            # - Create the calibration figure:
-            colmap_poses = {im.id: im.get_metadata("calibrated_pose") for im in image_files}
-            camera_str = ""
-            if self.use_calibration_camera:
-                cameras = get_colmap_cameras_from_calib_scan(calibration_scan)
-                # Use of try/except strategy to avoid failure of luigi pipeline (destroy all fileset!)
-                try:
-                    camera_str = format_camera_params(cameras)
-                except:
-                    logger.warning("Could not format the camera parameters from COLMAP camera!")
-                    logger.info(f"COLMAP camera: {cameras}")
-            pose_estimation_figure(cnc_poses, colmap_poses, pred_scan_id=current_scan.id,
-                                   ref_scan_id=str(self.extrinsic_calibration_scan_id), path=self.output().get().path(),
-                                   header=camera_str)
         else:
             logger.info("No extrinsic calibration requested!")
 
-        # - Instantiate a ColmapRunner with parsed configuration:
+        # Initialize and run COLMAP reconstruction
         logger.debug("Instantiate a ColmapRunner...")
         colmap_runner = ColmapRunner(
             image_files,
@@ -717,12 +820,15 @@ class Colmap(RomiTask):
             compute_dense=bool(self.compute_dense),
             all_cli_args=self.cli_args,
             align_pcd=bool(self.align_pcd),
-            use_calibration=use_calibration,  # impact the ``poses.txt`` file
-            bounding_box=bounding_box
+            use_calibration=extrinsic_calibration,  # impact the ``poses.txt`` file: use calibrated instead of cnc poses
+            bounding_box=bounding_box,
+            colmap_exe=str(self.colmap_exe)
         )
-        # - Run colmap reconstruction:
+
+        # Perform reconstruction and get results
         logger.debug("Start a Colmap reconstruction...")
         points, images, cameras, sparse, dense, bounding_box = colmap_runner.run()
+
         # -- Export results of Colmap reconstruction to DB:
         # Note that file names are defined in plant3dvision.filenames
         # - Save colmap points dictionary in JSON file:
@@ -745,99 +851,287 @@ class Colmap(RomiTask):
         self.output().get().set_metadata("bounding_box", bounding_box)
 
         from pathlib import Path
-        # - Copy all log files from colmap working directory:
+        # - Copy all log files from COLMAP working directory:
         workdir = Path(colmap_runner.colmap_workdir)
         for log_path in workdir.glob('*.log'):
             outfile = self.output_file(log_path.stem)
             outfile.import_file(log_path)
 
-        # - Get estimated camera poses from 'images' fileset metadata:
-        colmap_poses = {im.id: im.get_metadata("estimated_pose") for im in image_files}
-        camera_str = format_camera_params(cameras)
-        if self.intrinsic_calibration_scan_id != "":
-            camera_str = f"Intrinsic calibration scan:\n{self.intrinsic_calibration_scan_id}\n" + camera_str
-        else:
-            camera_str = "Colmap estimated intrinsics\n" + camera_str
-        # - Get some hardware metadata:
+        # Initialize an instance to perform camera pose estimations quality check:
+        camera_pose_qc = CameraPoseQC(image_files, self.distance_threshold, self.max_blind_angle)
+
+        # Compute the Euclidean distances:
+        euclidean_distances = camera_pose_qc.compute_pose_distance()
+        # Save Euclidean distances to JSON:
+        dist_json = {
+            "mean_euclidean_distance": np.nanmean(list(euclidean_distances.values())),
+            "std_euclidean_distance": np.nanstd(list(euclidean_distances.values())),
+            "euclidean_distances": euclidean_distances,
+        }
+        dist_outfile = self.output_file(f"euclidean_distances.json", create=True)
+        io.write_json(dist_outfile, dist_json)
+
+        pose_fig_fpath = camera_pose_qc.make_pose_qc_figures(self.output().get().path())
+
+        def _rename_retry_file(fpath):
+            """Rename the file with a try number suffix."""
+            if isinstance(fpath, str):
+                fpath = Path(fpath)
+            ext = fpath.suffix
+            suffix = f"_try_{self.retry}{ext}"
+            fpath.rename(str(fpath).replace(ext, suffix))
+
+        # - Add a "pose_estimation" metadata and performs estimation accuracy checks if requested:
+        correctly_estimated = camera_pose_qc.is_correctly_estimated()
+        if not correctly_estimated:
+            _rename_retry_file(dist_outfile.path())
+            _rename_retry_file(pose_fig_fpath)
+            if self.retry < self.retry_count:
+                self.retry += 1
+                # Clean-up the temporary working directory created by the ColmapRunner instance:
+                colmap_runner.clean_up()
+                raise Exception(
+                    f"Attempt #{self.retry} - Failed to correctly estimate camera poses!")
+            else:
+                logger.critical(f"Failed to correctly estimate camera poses after {self.retry_count} attempts!")
+                logger.info(f"You can try again by increasing the `distance_threshold` parameter.")
+                logger.info(f"Check the `euclidean_distances_try_*.json` files for more details.")
+                raise Exception(f"Max retries ({self.retry_count}) reached - Failed to estimate camera poses!")
+
+        # Clean-up the temporary working directory created by the ColmapRunner instance:
+        colmap_runner.clean_up()
+        return
+
+
+class CameraPoseQC(object):
+    """Verify the quality of COLMAP camera pose estimation against CNC ground truth.
+
+    This class compares camera poses estimated by COLMAP with ground truth poses from a CNC machine.
+    It computes the Euclidean distance between estimated and ground truth poses, visualizes the comparison,
+    and verifies if the estimated poses are within acceptable thresholds. For circular scans, it also
+    checks for unacceptable "blind angles" where consecutive pose estimations have failed.
+
+    Attributes
+    ----------
+    image_files : list
+        The list of image file objects.
+    distance_threshold : float
+        Maximum allowed distance (in mm) between estimated and ground truth poses.
+    max_blind_angle : float
+        Maximum allowed angle (in degrees) between consecutive failed pose estimations.
+    intrinsic_calibration_scan_id : str or None
+        ID for the calibration scan, used to retrieve camera intrinsic parameters.
+    colmap_poses : dict
+        Dictionary mapping image IDs to their COLMAP estimated poses.
+    cnc_poses : dict
+        Dictionary mapping image IDs to their CNC ground truth poses.
+    euclidean_distances : dict
+        Dictionary mapping image IDs to Euclidean distances between CNC and COLMAP poses.
+    """
+
+    def __init__(self, image_files, distance_threshold, max_blind_angle):
+        """Initialize the class.
+
+        Parameters
+        ----------
+        image_files : list
+            The list of image file objects containing the metadata, notably the estimated camera poses.
+        distance_threshold : float
+            Maximum allowed distance (in mm) between estimated and ground truth poses.
+            If 0 or negative, no verification is performed.
+        max_blind_angle : float
+            Maximum allowed angle (in degrees) between consecutive failed pose estimations.
+            Only valid for circular path scans (`ScanPath` `class_name` is 'Circle' in `scan.toml`).
+        """
+        self.image_files = image_files
+        self.distance_threshold = distance_threshold
+        self.max_blind_angle = max_blind_angle
+
+        self.intrinsic_calibration_scan_id = ""  # FIXME: ID for calibration scan, not set yet
+
+        self.colmap_poses = None
+        self.cnc_poses = None
+        self.euclidean_distances = None
+
+    def _get_cnc_poses(self, image_files):
+        """Get the CNC poses from the image fileset scan."""
+        # Extract ground truth poses from CNC machine metadata
+        return get_cnc_poses_from_files(image_files)
+
+    def _get_colmap_extrinsics(self, image_files):
+        """Get estimated camera poses from 'images' fileset metadata."""
+        # Create dictionary mapping image ID to its estimated pose
+        return {im.id: im.get_metadata("estimated_pose") for im in image_files}
+
+    def _get_scan_config(self, current_scan):
+        """Get the scan configuration from the current scan."""
         try:
+            # Load scan configuration from TOML file
             scan_cfg = toml.load(join(current_scan.path(), SCAN_TOML))
-            hardware = scan_cfg['Scan']['metadata']['hardware']
-            hardware_str = f"sensor: {hardware.get('sensor', None)}\n"
         except FileNotFoundError:
             logger.warning("Could not find the `scan.toml` file!")
-            logger.info("No hardware information will be available in COLMAP's poses estimation figure!")
-            hardware_str = ""
+            return {}
+        else:
+            return scan_cfg
+
+    def _get_hardware_metadata(self, current_scan):
+        """Get the hardware metadata from the image fileset scan."""
+        # Get scan configuration
+        scan_cfg = self._get_scan_config(current_scan)
+        try:
+            # Extract hardware information from scan configuration
+            hardware = scan_cfg['Scan']['metadata']['hardware']
+            hardware_str = f"sensor: {hardware.get('sensor', None)}\n"
         except KeyError:
             logger.warning("Missing some metadata in the `scan.toml` file!")
             logger.info("No hardware information will be available in COLMAP's poses estimation figure!")
             hardware_str = ""
-        # - Generate the pose estimation figure with CNC & COLMAP poses:
-        fig_path = pose_estimation_figure(cnc_poses, colmap_poses,
-                                          ref_scan_id="", pred_scan_id=current_scan.id,
-                                          ref_label="CNC", pred_label="COLMAP",
-                                          distance_threshold=self.distance_threshold,
-                                          vignette=hardware_str + "\n" + camera_str,
-                                          path=self.output().get().path(), suffix="_estimated")
+        return hardware_str
 
-        # - Compute the Euclidean distances between CNC & COLMAP poses & export it to a file:
-        euclidean_distances = {}
-        for im in image_files:
-            euclidean_distances[im.id] = euclidean(cnc_poses[im.id][:3], colmap_poses[im.id][:3])
-        with open(join(self.output().get().path(), "euclidean_distances.json"), 'w') as f:
-            f.writelines(json.dumps({
-                "mean_euclidean_distance": np.nanmean(list(euclidean_distances.values())),
-                "std_euclidean_distance": np.nanstd(list(euclidean_distances.values())),
-                "euclidean_distances": euclidean_distances,
-            }, indent=4))
+    def _get_camera_params(self, image_files, calibration_scan_id):
+        """Get camera intrinsic parameters from calibration scan or image metadata."""
+        if calibration_scan_id != "":
+            # Use parameters from calibration scan if provided
+            db = ScanConfiguration().scan.db
+            calibration_scan = db.get_scan(calibration_scan_id)
+            cameras = get_colmap_cameras_from_calib_scan(calibration_scan)
+            camera_str = format_camera_params(cameras)
+        else:
+            # Try to get parameters from image metadata
+            cameras = None
+            for img_f in image_files:
+                cameras = get_camera_kwargs_from_images_metadata(img_f)
+                if cameras is not None:
+                    break
+            camera_str = format_camera_kwargs(cameras) if cameras else "Not found!"
 
-        # - If a distance threshold is given, add a "pose_estimation" metadata:
-        if self.distance_threshold > 0.:
-            wrong_pose = 0  # number of wrongly estimated pose
-            wrong_pose_idx = []  # index of images with a wrong pose
-            for im_idx, im in enumerate(image_files):
-                if euclidean_distances[im.id] >= self.distance_threshold:
-                    im.set_metadata("pose_estimation", "incorrect")
-                    logger.warning(f"Image {im.id} pose has been incorrectly estimated by COLMAP!")
-                    wrong_pose += 1
-                    wrong_pose_idx.append(im_idx)
-                else:
-                    im.set_metadata("pose_estimation", "correct")
-            # Warn if some images have wrongly estimated pose
-            if wrong_pose != 0:
-                logger.warning(
-                    f"Colmap failed to estimate the pose of {wrong_pose} images within a {self.distance_threshold}mm distance to CNC pose!")
-                logger.warning(f"The following image indexes failed: {wrong_pose_idx}.")
+        # Format camera parameters string with appropriate prefix
+        prefix = "Intrinsic calibration scan:\n" if self.intrinsic_calibration_scan_id else "Colmap estimated intrinsics\n"
+        return prefix + camera_str
 
-            # Check the number of consecutive wrong pose:
-            n_imgs = len(image_files)
-            angle_between_img = 360 / float(n_imgs)
-            if self.max_blind_angle < angle_between_img:
-                logger.warning(
-                    f"The allowed max blind angle ({self.max_blind_angle}°) is inferior to the angle between two images ({angle_between_img}°)!")
-                self.max_blind_angle = angle_between_img
-                logger.info(f"Changed the allowed max blind angle to {self.max_blind_angle}°.")
+    def compute_pose_distance(self):
+        """Calculate Euclidean distances between CNC and COLMAP poses."""
+        # Get poses from both sources
+        self.colmap_poses = self._get_colmap_extrinsics(self.image_files)
+        self.cnc_poses = self._get_cnc_poses(self.image_files)
+        # Calculate Euclidean distance between each pair of poses
+        self.euclidean_distances = {}
+        for im_id, cnc_pose in self.cnc_poses.items():
+            self.euclidean_distances[im_id] = euclidean(cnc_pose[:3], self.colmap_poses[im_id][:3])
+        return self.euclidean_distances
 
-            consecutive_wrong = np.split(wrong_pose_idx, np.where(np.diff(wrong_pose_idx) != 1)[0] + 1)
-            max_wrong_size = len(consecutive_wrong[np.argmax([len(cw_i) for cw_i in consecutive_wrong])])
-            blind_angle = angle_between_img * max_wrong_size
-            # Raise an exception if percentage of consecutive wrong pose is greater than 5%:
-            if blind_angle > float(self.max_blind_angle):
-                logger.error(
-                    f"Colmap failed to estimate the pose of {max_wrong_size} consecutive images generating a blind angle of {blind_angle}°!")
-                logger.critical(f"This is above the allowed {self.max_blind_angle}° blind angle!")
-                fig_path = Path(fig_path)
-                ext = fig_path.suffix
-                suffix = f"_try_{self.retry}{ext}"
-                fig_path.rename(str(fig_path).replace(ext, suffix))
-                if self.retry_count > 0:
-                    self.retry += 1
-                    # Clean-up the temporary working directory created by the ColmapRunner instance:
-                    shutil.rmtree(colmap_runner.colmap_workdir, ignore_errors=True)
-                    raise Exception(
-                        f"Attempt #{self.retry-1} - Failed to estimate {max_wrong_size} poses within a {self.distance_threshold}mm distance to CNC pose!")
+    def make_pose_qc_figures(self, fig_path):
+        """Generate a figure with the comparison between estimated and ground truth poses."""
+        # Get reference to current scan
+        current_scan = self.image_files[0].fileset.scan
+
+        # Get metadata for visualization
+        hardware_str = self._get_hardware_metadata(current_scan)
+        camera_str = self._get_camera_params(self.image_files, str(self.intrinsic_calibration_scan_id))
+
+        # Generate pose estimation figure comparing CNC (ground truth) and COLMAP poses
+        fig_fpath = pose_estimation_figure(
+            self.cnc_poses, self.colmap_poses,
+            ref_scan_id="", pred_scan_id=current_scan.id,
+            ref_label="CNC", pred_label="COLMAP",
+            distance_threshold=self.distance_threshold,
+            vignette=hardware_str + "\n" + camera_str,
+            path=fig_path, suffix="_estimated"
+        )
+        return fig_fpath
+
+    def is_correctly_estimated(self):
+        """Check if estimated poses are within acceptable thresholds."""
+        # Get scan information
+        current_scan = self.image_files[0].fileset.scan
+        scan_cfg = self._get_scan_config(current_scan)
+
+        # Skip verification if no threshold set (0 or negative value)
+        if self.distance_threshold <= 0.:
+            logger.info("No distance threshold given. No pose verification will be performed.")
+            return True
+
+        # Verify the scan path type when using max blind angle parameter
+        path_type = scan_cfg['ScanPath']['class_name']
+        if self.max_blind_angle != 0. and path_type != "Circle":
+            logger.info("Max blind angle is only valid for circular scans.")
+            self.max_blind_angle = None
+
+        logger.info(f"Check the pose estimation accuracy with a distance threshold of {self.distance_threshold}mm.")
+
+        # Track incorrectly estimated poses
+        wrong_pose = 0  # Count of wrongly estimated poses
+        wrong_pose_idx = []  # Indices of images with incorrect poses
+
+        # Verify each image's pose against threshold
+        for im_idx, im in enumerate(self.image_files):
+            if self.euclidean_distances[im.id] >= self.distance_threshold:
+                # Mark pose as incorrect in image metadata
+                im.set_metadata("pose_estimation", "incorrect")
+                logger.warning(f"Image {im.id} pose has been incorrectly estimated by COLMAP!")
+                wrong_pose += 1
+                wrong_pose_idx.append(im_idx)
             else:
-                logger.info(f"The blind angle {blind_angle} is below the threshold {self.max_blind_angle}.")
+                # Mark pose as correct in image metadata
+                im.set_metadata("pose_estimation", "correct")
 
-        # Clean-up the temporary working directory created by the ColmapRunner instance:
-        shutil.rmtree(colmap_runner.colmap_workdir, ignore_errors=True)
-        return
+        # Warn if any poses were incorrectly estimated
+        if wrong_pose != 0:
+            logger.warning(
+                f"Colmap failed to estimate the pose of {wrong_pose} images within a {self.distance_threshold}mm distance to CNC pose!")
+            logger.warning(f"The following image indexes failed: {wrong_pose_idx}.")
+
+        # Check for blind angles due to consecutive failures (only for circular scans)
+        if self.max_blind_angle is not None:
+            return self.check_blind_angles(wrong_pose_idx)
+
+        return True
+
+    def check_blind_angles(self, wrong_pose_idx):
+        """Checks whether the blind angle, caused by consecutive failed pose estimations, exceeds the allowed threshold.
+
+        This method evaluates the angular gap between images in a circular scan, which arises due to failed pose
+        estimations. It calculates the blind angle as the product of the angle between consecutive images and the
+        number of consecutive failed images. If this blind angle exceeds the maximum permissible blind angle value,
+        a warning is logged, and the method returns False. Otherwise, the method confirms that the blind angle is
+        acceptable and logs the information.
+
+        Parameters
+        ----------
+        wrong_pose_idx : array-like
+            Indices of images where pose estimation failed.
+
+        Returns
+        -------
+        bool
+            True if the calculated blind angle is within the allowed threshold, False otherwise.
+        """
+        # Calculate angle between consecutive images in a circular scan
+        n_imgs = len(self.image_files)
+        angle_between_img = 360 / float(n_imgs)
+
+        # Adjust max blind angle if it's smaller than angle between consecutive images
+        if self.max_blind_angle < angle_between_img:
+            logger.warning(
+                f"The allowed max blind angle ({self.max_blind_angle}°) is inferior to the angle between two images ({angle_between_img}°)!")
+            self.max_blind_angle = angle_between_img
+            logger.info(f"Changed the allowed max blind angle to {self.max_blind_angle}°.")
+
+        # Find groups of consecutive failed poses
+        consecutive_wrong = np.split(wrong_pose_idx, np.where(np.diff(wrong_pose_idx) != 1)[0] + 1)
+
+        # Get the longest sequence of consecutive failures
+        max_wrong_size = len(consecutive_wrong[np.argmax([len(cw_i) for cw_i in consecutive_wrong])])
+
+        # Calculate the resulting blind angle (consecutive missing poses)
+        blind_angle = angle_between_img * max_wrong_size
+
+        # Check if blind angle exceeds threshold
+        if blind_angle > float(self.max_blind_angle):
+            logger.warning(f"Failed to estimate the pose of {max_wrong_size} consecutive images!")
+            logger.warning(f"This correspond to a blind angle of {blind_angle}°!")
+            logger.warning(f"This is above the allowed {self.max_blind_angle}° blind angle!")
+            return False
+        else:
+            logger.info(f"The observed blind angle ({blind_angle}°) is below the threshold ({self.max_blind_angle}°).")
+            return True

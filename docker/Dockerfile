@@ -51,7 +51,9 @@ RUN apt-get update && \
     # Ugly fix for OpenCL:
     ln -s /usr/lib/x86_64-linux-gnu/libOpenCL.so.1 /usr/lib/libOpenCL.so && \
     mkdir -p /etc/OpenCL/vendors && \
-    echo "libnvidia-opencl.so.1" > /etc/OpenCL/vendors/nvidia.icd
+    echo "libnvidia-opencl.so.1" > /etc/OpenCL/vendors/nvidia.icd && \
+    # Give non-root user (romi) access to all COLMAP related files by making it a member of 'colmap_users' group
+    usermod -a -G colmap_users ${USER_NAME}
 
 # Change to non-root user:
 USER ${USER_NAME}

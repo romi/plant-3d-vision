@@ -325,6 +325,18 @@ def get_camera_kwargs_from_images_metadata(img_f):
     -----
     The 'colmap_camera' metadata is a JSON style dictionary of camera parameters in OPENCV format.
 
+    Examples
+    --------
+    >>> from plantdb.test_database import test_database
+    >>> from plant3dvision.camera import get_camera_kwargs_from_images_metadata
+    >>> db = test_database()
+    >>> db.connect()
+    >>> scan = db.get_scan('real_plant_analyzed')
+    >>> image_files = scan.get_fileset('images').get_files()
+    >>> img_f = image_files[0]
+    >>> get_camera_kwargs_from_images_metadata(img_f)
+    {'model': 'SIMPLE_RADIAL', 'f': 1166.9518889440105, 'cx': 720.0, 'cy': 540.0, 'k': -0.0013571157486977348}
+    >>> db.disconnect()
     """
     camera_model = img_f.get_metadata('colmap_camera')
     if camera_model is None:
@@ -335,26 +347,56 @@ def get_camera_kwargs_from_images_metadata(img_f):
 
 
 def get_camera_kwargs_from_colmap_json(colmap_cameras):
-    """Get a dictionary of named camera parameter depending on camera model.
+    """Extract camera parameters from COLMAP JSON format and convert to named parameters.
+
+    Processes a dictionary of COLMAP camera parameters in JSON format, converting camera IDs
+    to integers if needed, and returns a dictionary of named camera parameters based on the
+    camera model.
 
     Parameters
     ----------
     colmap_cameras : dict
-        A ???
+        A dictionary containing COLMAP camera parameters where:
+        - Keys are camera IDs (either str or int)
+        - Values are dictionaries containing:
+            - 'model': str, the camera model name
+            - 'params': list, the camera parameters
 
     Returns
     -------
     dict
-        A camera model dictionary with its parameter names as keys.
+        A dictionary containing named camera parameters specific to the camera model.
+        Keys are parameter names (e.g., 'fx', 'fy', 'cx', 'cy', 'k1', 'k2', etc.)
+        and values are their corresponding numerical values.
 
-    See Also
-    --------
-    plant3dvision.camera.get_camera_kwargs_from_params_list
+    Raises
+    ------
+    KeyError
+        If camera ID 1 is not found in the input dictionary
+    IndexError
+        If the camera parameters dictionary is empty
 
     Notes
     -----
-    The `colmap_cameras` is a (JSON style) dictionary of camera parameters in OPENCV format.
+    - Currently only processes camera ID 1 and will not work with multiple cameras
+    - Input dictionary is expected to be in OPENCV camera model format
+    - String camera IDs are automatically converted to integers
 
+    Examples
+    --------
+    >>> import json
+    >>> from plant3dvision.camera import get_camera_kwargs_from_colmap_json
+    >>> from plantdb.test_database import test_database
+    >>> from plantdb.utils import locate_task_filesets
+    >>> db = test_database()
+    >>> db.connect()
+    >>> scan = db.get_scan('real_plant_analyzed')
+    >>> colmap_task = locate_task_filesets(scan, ['Colmap'])['Colmap']
+    >>> colmap_json = scan.get_fileset(colmap_task).get_file('cameras')
+    >>> colmap_cameras = json.load(colmap_json)
+    >>> get_camera_kwargs_from_colmap_json(colmap_cameras)
+    {'model': 'SIMPLE_RADIAL', 'f': 1166.9518889440105, 'cx': 720.0, 'cy': 540.0, 'k': -0.0013571157486977348}
+    >>> db.disconnect()
     """
     # FIXME: will not work with more than one camera model!
     new_colmap_cameras = {}
@@ -370,8 +412,90 @@ def get_camera_kwargs_from_colmap_json(colmap_cameras):
 
 
 def format_camera_params(colmap_cameras):
-    """Format camera parameters from COLMAP camera dictionary."""
+    """Format COLMAP camera parameters into a human-readable string representation.
+
+    Creates a formatted string of camera parameters from a COLMAP camera dictionary,
+    with appropriate line breaks between different parameter groups and formatted
+    numerical values.
+
+    Parameters
+    ----------
+    colmap_cameras : dict
+        Dictionary containing COLMAP camera parameters. Expected to have camera
+        model and various intrinsic parameters like focal length, principal point,
+        and distortion coefficients.
+
+    Returns
+    -------
+    str
+        A formatted string containing camera parameters, with parameters grouped
+        by prefix and formatted numbers. Small values (<0.1) are shown in
+        scientific notation, others are rounded to 2 decimal places.
+
+    Notes
+    -----
+    - Parameters with the same first letter are grouped on the same line
+    - Values less than 0.1 are formatted in scientific notation
+    - Values greater than or equal to 0.1 are rounded to 2 decimal places
+    - The first parameter (typically 'model') starts the string
+    - New lines are added when parameter prefixes change
+
+    Examples
+    --------
+    >>> import json
+    >>> from plant3dvision.camera import format_camera_params
+    >>> from plantdb.test_database import test_database
+    >>> from plantdb.utils import locate_task_filesets
+    >>> db = test_database()
+    >>> db.connect()
+    >>> scan = db.get_scan('real_plant_analyzed')
+    >>> colmap_task = locate_task_filesets(scan, ['Colmap'])['Colmap']
+    >>> colmap_json = scan.get_fileset(colmap_task).get_file('cameras')
+    >>> colmap_cameras = json.load(colmap_json)
+    >>> print(format_camera_params(colmap_cameras))
+    model: SIMPLE_RADIAL
+    f: 1166.95
+    cx: 720.0, cy: 540.0
+    k: -1.36e-03
+    >>> db.disconnect()
+    """
     camera_kwargs = get_camera_kwargs_from_colmap_json(colmap_cameras)
+    return format_camera_kwargs(camera_kwargs)
+
+
+def format_camera_kwargs(camera_kwargs):
+    """Format COLMAP camera parameters into a human-readable string representation.
+
+    Parameters
+    ----------
+    camera_kwargs : dict
+        A dictionary containing named camera parameters specific to the camera model.
+
+    Returns
+    -------
+    str
+        A formatted string containing camera parameters, with parameters grouped
+        by prefix and formatted numbers. Small values (<0.1) are shown in
+        scientific notation, others are rounded to 2 decimal places.
+
+    Examples
+    --------
+    >>> from plantdb.test_database import test_database
+    >>> from plant3dvision.camera import get_camera_kwargs_from_images_metadata
+    >>> from plant3dvision.camera import format_camera_kwargs
+    >>> db = test_database()
+    >>> db.connect()
+    >>> scan = db.get_scan('real_plant_analyzed')
+    >>> image_files = scan.get_fileset('images').get_files()
+    >>> img_f = image_files[0]
+    >>> camera_kwargs = get_camera_kwargs_from_images_metadata(img_f)
+    >>> print(format_camera_kwargs(camera_kwargs))
+    model: SIMPLE_RADIAL
+    f: 1166.95
+    cx: 720.0, cy: 540.0
+    k: -1.36e-03
+    >>> db.disconnect()
+    """
     prev_param = list(camera_kwargs.keys())[0]
     cam_str = f"{prev_param}: {camera_kwargs.pop(prev_param)}"  # should start by 'model' key
     for k, v in camera_kwargs.items():
@@ -386,7 +510,6 @@ def format_camera_params(colmap_cameras):
             cam_str += "\n"
             cam_str += f"{k}: {value}"
         prev_param = k
-
     return cam_str
 
 
@@ -407,6 +530,62 @@ def get_colmap_cameras_from_calib_scan(calibration_scan):
 
 
 def colmap_params_from_kwargs(**kwargs):
+    """Convert camera parameters to COLMAP format based on camera model.
+
+    Converts camera intrinsic parameters from different model formats (OpenCV, Radial,
+    or Simple Radial) into COLMAP's parameter list format.
+
+    Other Parameters
+    ----------------
+    model : str
+        Camera model type ('opencv', 'radial', or 'simple_radial').
+    fx, fy : float
+        Focal lengths in x and y directions (OpenCV model only).
+    f : float
+        Focal length (Radial and Simple Radial models).
+    cx, cy : float
+        Principal point coordinates.
+    k1, k2 : float
+        Radial distortion coefficients.
+    p1, p2 : float
+        Tangential distortion coefficients (OpenCV model only).
+    k : float
+        Single radial distortion coefficient (Simple Radial model only).
+
+    Returns
+    -------
+    list
+        Camera parameters in COLMAP format with 8 elements:
+        - For OpenCV: [fx, fy, cx, cy, k1, k2, p1, p2]
+        - For Radial: [f, f, cx, cy, k1, k2, 0, 0]
+        - For Simple Radial: [f, f, cx, cy, k, 0, 0, 0]
+
+    Raises
+    ------
+    KeyError
+        If required parameters for the specified model are missing.
+
+    Notes
+    -----
+    The function assumes lowercase model names in comparison.
+    Zero values are used for unused parameters in simpler models.
+
+    Examples
+    --------
+    >>> # OpenCV model
+    >>> params = colmap_params_from_kwargs(
+    ...     model='opencv', fx=1000, fy=1000, cx=500, cy=500,
+    ...     k1=0.1, k2=0.01, p1=0.001, p2=0.001)
+    >>> print(params)
+    [1000, 1000, 500, 500, 0.1, 0.01, 0.001, 0.001]
+
+    >>> # Simple Radial model
+    >>> params = colmap_params_from_kwargs(
+    ...     model='simple_radial', f=1000, cx=500, cy=500, k=0.1)
+    >>> print(params)
+    [1000, 1000, 500, 500, 0.1, 0, 0, 0]
+    """
+
     model = kwargs.get('model')
     if model.lower() == 'opencv':
         return [kwargs['fx'], kwargs['fy'], kwargs['cx'], kwargs['cy'], kwargs['k1'], kwargs['k2'], kwargs['p1'],
