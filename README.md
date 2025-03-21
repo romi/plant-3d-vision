@@ -1,4 +1,4 @@
-# Plant 3D Vision v0.11.99 (dev)
+# Plant 3D Vision v0.13.1 (dev)
 
 This Python library is part of the ROMI European project.
 It provides tools to **reconstruct digital twins of plants** from a set of RGB images acquired with the "Plant Imager".
