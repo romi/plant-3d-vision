@@ -22,7 +22,7 @@ from plant3dvision.filenames import COLMAP_DENSE_ID
 from plant3dvision.filenames import COLMAP_IMAGES_ID
 from plant3dvision.filenames import COLMAP_POINTS_ID
 from plant3dvision.filenames import COLMAP_SPARSE_ID
-from plantdb import io
+from plantdb.commons import io
 from romitask import SCAN_TOML
 from romitask import ScanConfiguration
 from romitask.log import get_logger
@@ -70,7 +70,7 @@ def get_cnc_poses_from_files(image_files, axes='xyzpt'):
     Examples
     --------
     >>> from plant3dvision.tasks.colmap import get_cnc_poses_from_files
-    >>> from plantdb.test_database import test_database
+    >>> from plantdb.commons.test_database import test_database
     >>> db = test_database('real_plant')
     >>> db.connect()
     >>> # - Select the dataset to reconstruct:
@@ -138,7 +138,7 @@ def get_cnc_poses(scan_dataset, axes='xyzpt'):
     Examples
     --------
     >>> from plant3dvision.tasks.colmap import get_cnc_poses
-    >>> from plantdb.test_database import test_database
+    >>> from plantdb.commons.test_database import test_database
     >>> db = test_database('real_plant')
     >>> db.connect()
     >>> # - Select the dataset to reconstruct:
@@ -170,7 +170,7 @@ def get_image_poses(scan_dataset, md="calibrated_pose", default=None):
     Examples
     --------
     >>> import os
-    >>> from plantdb.fsdb import FSDB
+    >>> from plantdb.commons.fsdb import FSDB
     >>> from plant3dvision.tasks.colmap import get_image_poses
     >>> db = FSDB(os.environ.get('ROMI_DB', '/data/ROMI/DB'))
     >>> # Use the calibrated poses from/on a calibration scan:
@@ -203,7 +203,7 @@ def compute_camera_poses_from_colmap(scan_dataset):
     Examples
     --------
     >>> import os
-    >>> from plantdb.fsdb import FSDB
+    >>> from plantdb.commons.fsdb import FSDB
     >>> from plant3dvision.tasks.colmap import compute_colmap_poses_from_camera_json
     >>> db = FSDB(os.environ.get('ROMI_DB', '/data/ROMI/DB'))
     >>> # Example 1 - Compute & use the calibrated poses from/on a calibration scan:
@@ -245,7 +245,7 @@ def compute_colmap_poses_from_camera_json(scan_dataset):
     Examples
     --------
     >>> import os
-    >>> from plantdb.fsdb import FSDB
+    >>> from plantdb.commons.fsdb import FSDB
     >>> from plant3dvision.tasks.colmap import compute_colmap_poses_from_camera_json
     >>> db = FSDB(os.environ.get('ROMI_DB', '/data/ROMI/DB'))
     >>> # Example 1 - Compute & use the calibrated poses from/on a calibration scan:
@@ -326,7 +326,7 @@ def use_precalibrated_poses(images_fileset, calibration_scan):
     Examples
     --------
     >>> import os
-    >>> from plantdb.fsdb import FSDB
+    >>> from plantdb.commons.fsdb import FSDB
     >>> from plant3dvision.tasks.colmap import use_precalibrated_poses
     >>> db = FSDB(os.environ.get('ROMI_DB', '/data/ROMI/DB'))
     >>> # Example 1 - Try to use the calibrated poses on a scan with different acquisition parameters:
@@ -385,9 +385,9 @@ def check_scan_parameters(scan_to_calibrate, calibration_scan):
 
     Parameters
     ----------
-    scan_to_calibrate : plantdb.fsdb.Scan
+    scan_to_calibrate : plantdb.commons.fsdb.Scan
         Dataset containing scan to reconstruct with calibrated poses.
-    calibration_scan : plantdb.fsdb.Scan
+    calibration_scan : plantdb.commons.fsdb.Scan
         Dataset containing calibrated poses to use for reconstruction.
 
     Returns
@@ -398,7 +398,7 @@ def check_scan_parameters(scan_to_calibrate, calibration_scan):
     Examples
     --------
     >>> import os
-    >>> from plantdb.fsdb import FSDB
+    >>> from plantdb.commons.fsdb import FSDB
     >>> from plant3dvision.tasks.colmap import check_scan_parameters
     >>> db = FSDB(os.environ.get('ROMI_DB', '/data/ROMI/DB'))
     >>> db.connect()

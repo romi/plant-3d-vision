@@ -16,7 +16,7 @@ from plant3dvision.tasks.evaluation import SegmentedPointCloudEvaluation
 from plant3dvision.tasks.proc3d import CurveSkeleton
 from plant3dvision.tasks.proc3d import PointCloud
 from plant3dvision.tasks.proc3d import TriangleMesh
-from plantdb import io
+from plantdb.commons import io
 from romitask import RomiTask
 from romitask.log import get_logger
 from romitask.task import ImagesFilesetExists

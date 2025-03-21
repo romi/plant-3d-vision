@@ -316,7 +316,7 @@ def pose_estimation_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_
 
     Examples
     --------
-    >>> from plantdb.test_database import test_database
+    >>> from plantdb.commons.test_database import test_database
     >>> from plant3dvision.tasks.colmap import get_cnc_poses
     >>> from plant3dvision.tasks.colmap import compute_camera_poses_from_colmap
     >>> from plant3dvision.tasks.colmap import pose_estimation_figure

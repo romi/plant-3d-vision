@@ -252,7 +252,7 @@ def locate_task_filesets(scan, tasks):
 
     Parameters
     ----------
-    scan : plantdb.fsdb.Scan
+    scan : plantdb.commons.fsdb.Scan
         A scan object that has a `list_filesets()` method which returns a list of available
         fileset names in the scan.
     tasks : list of str
@@ -272,7 +272,7 @@ def locate_task_filesets(scan, tasks):
 
     Examples
     --------
-    >>> from plantdb.test_database import test_database
+    >>> from plantdb.commons.test_database import test_database
     >>> from plant3dvision.utils import locate_task_filesets
     >>> db = test_database()
     >>> db.connect()

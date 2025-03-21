@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 import numpy as np
 
-from plantdb import io
+from plantdb.commons import io
 from romitask.log import get_logger
 
 logger = get_logger(__name__)
@@ -309,7 +309,7 @@ def get_camera_kwargs_from_images_metadata(img_f):
 
     Parameters
     ----------
-    img_f : plantdb.fsdb.File
+    img_f : plantdb.commons.fsdb.File
         An image `File` instance with a defined 'colmap_camera' metadata.
 
     Returns
@@ -327,7 +327,7 @@ def get_camera_kwargs_from_images_metadata(img_f):
 
     Examples
     --------
-    >>> from plantdb.test_database import test_database
+    >>> from plantdb.commons.test_database import test_database
     >>> from plant3dvision.camera import get_camera_kwargs_from_images_metadata
     >>> db = test_database()
     >>> db.connect()
@@ -386,7 +386,7 @@ def get_camera_kwargs_from_colmap_json(colmap_cameras):
     --------
     >>> import json
     >>> from plant3dvision.camera import get_camera_kwargs_from_colmap_json
-    >>> from plantdb.test_database import test_database
+    >>> from plantdb.commons.test_database import test_database
     >>> from plantdb.utils import locate_task_filesets
     >>> db = test_database()
     >>> db.connect()
@@ -444,7 +444,7 @@ def format_camera_params(colmap_cameras):
     --------
     >>> import json
     >>> from plant3dvision.camera import format_camera_params
-    >>> from plantdb.test_database import test_database
+    >>> from plantdb.commons.test_database import test_database
     >>> from plantdb.utils import locate_task_filesets
     >>> db = test_database()
     >>> db.connect()
@@ -480,7 +480,7 @@ def format_camera_kwargs(camera_kwargs):
 
     Examples
     --------
-    >>> from plantdb.test_database import test_database
+    >>> from plantdb.commons.test_database import test_database
     >>> from plant3dvision.camera import get_camera_kwargs_from_images_metadata
     >>> from plant3dvision.camera import format_camera_kwargs
     >>> db = test_database()

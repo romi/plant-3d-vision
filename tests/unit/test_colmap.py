@@ -5,7 +5,7 @@ from pathlib import Path
 
 from plant3dvision import colmap
 
-from plantdb.testing import FSDBTestCase
+from plantdb.commons.testing import FSDBTestCase
 
 parent_dir = Path(__file__).resolve().parents[1]
 DATABASE_LOCATION = abspath(join(parent_dir, "testdata"))

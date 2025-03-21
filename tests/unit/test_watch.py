@@ -1,7 +1,7 @@
 import os
 import unittest
 
-from plantdb.testing import FSDBTestCase
+from plantdb.commons.testing import FSDBTestCase
 from romitask.watch import FSDBWatcher
 
 

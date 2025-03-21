@@ -12,8 +12,8 @@ from pathlib import Path
 import imageio
 
 from plant3dvision.visu import plt_volume_slice_viewer
-from plantdb import io
-from plantdb.fsdb import FSDB
+from plantdb.commons import io
+from plantdb.commons.fsdb import FSDB
 
 
 def parsing():

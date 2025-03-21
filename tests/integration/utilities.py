@@ -1,7 +1,7 @@
 import os
 import subprocess
 
-from plantdb.log import get_logger
+from romitask.log import get_logger
 
 logger = get_logger(__name__)
 

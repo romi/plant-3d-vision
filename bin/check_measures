@@ -11,8 +11,8 @@ import glob
 import sys
 from pathlib import Path
 
-from plantdb.fsdb import FSDB
-from romitask.log import configure_logger
+from plantdb.commons.fsdb import FSDB
+from romitask.log import get_logger
 
 
 def parsing():
@@ -89,13 +89,13 @@ def erase_measure(scan, args):
 
     Parameters
     ----------
-    scan : plantdb.fsdb.Scan
+    scan : plantdb.commons.fsdb.Scan
         The scan containing the invalid `measure.json` file.
     args : parser.parse_args
         Parsed input arguments.
     """
     from os import remove
-    from plantdb.fsdb import _scan_measures_path
+    from plantdb.commons.fsdb.path_helpers import _scan_measures_path
     json_path = Path(_scan_measures_path(scan))
     if args.remove:
         remove(json_path)
@@ -110,7 +110,7 @@ def erase_measure_kbi(scan, default):
 
     Parameters
     ----------
-    scan : plantdb.fsdb.Scan
+    scan : plantdb.commons.fsdb.Scan
         The scan containing the invalid `measure.json` file.
     default : bool
         The default action to suggest.
@@ -132,7 +132,7 @@ def main():
 
     # - Configure a logger from this application:
     global logger
-    logger = configure_logger("check_measures")
+    logger = get_logger("check_measures")
 
     # - If only one path in the list, get the first one:
     if len(args.dataset_path) == 1:

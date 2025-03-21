@@ -10,8 +10,8 @@ from plant3dvision.metrics import MaskEvaluator
 from plant3dvision.metrics import CompareMasks
 from plant3dvision.metrics import CompareMaskFilesets
 from plant3dvision.metrics import CompareSegmentedPointClouds
-from plantdb import io
-from plantdb import fsdb
+from plantdb.commons import io
+from plantdb.commons import fsdb
 
 class TestMaskMetrics(unittest.TestCase):
     square_left = np.array([[1, 1, 0, 0],

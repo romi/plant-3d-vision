@@ -23,8 +23,8 @@ import pyopencl as cl
 from skimage.util import img_as_float32
 
 from plant3dvision.proc3d import point2index
-from plantdb import io
-from plantdb.db import Fileset
+from plantdb.commons import io
+from plantdb.commons.db import Fileset
 from romitask.log import get_logger
 
 logger = get_logger(__name__)
@@ -95,7 +95,7 @@ class Backprojection(object):
     Examples
     --------
     >>> import numpy as np
-    >>> from plantdb.fsdb import FSDB
+    >>> from plantdb.commons.fsdb import FSDB
     >>> from plantdb.rest_api import compute_fileset_matches
     >>> from plant3dvision.cl import Backprojection
     >>> from plant3dvision.visu import plt_volume_slice_viewer

@@ -18,11 +18,11 @@ from plant3dvision.metrics import volume_ratio
 from plant3dvision.tasks.colmap import compute_camera_poses_from_colmap
 from plant3dvision.tasks.colmap import get_cnc_poses
 from plant3dvision.tasks.colmap import get_image_poses
-from plantdb import FSDB
-from plantdb.io import read_json
-from plantdb.io import read_npz
-from plantdb.io import read_point_cloud
-from plantdb.io import read_triangle_mesh
+from plantdb.commons.fsdb import FSDB
+from plantdb.commons.io import read_json
+from plantdb.commons.io import read_npz
+from plantdb.commons.io import read_point_cloud
+from plantdb.commons.io import read_triangle_mesh
 from romitask.log import get_logger
 
 logger = get_logger(__name__)
@@ -116,7 +116,7 @@ def pairwise_heatmap(pw_dict, scans_list, task_name, metrics, db, **kwargs):
 
     Examples
     --------
-    >>> from plantdb import FSDB
+    >>> from plantdb.commons.fsdb import FSDB
     >>> # - Connect to a ROMI databse to access an 'images' fileset to reconstruct with COLMAP:
     >>> db = FSDB("/data/ROMI/repeat_test_organseg")
     >>> db.connect()
@@ -177,14 +177,14 @@ def _get_task_fileset(scan_dataset, task_name):
 
     Parameters
     ----------
-    scan_dataset : plantdb.fsdb.Scan
+    scan_dataset : plantdb.commons.fsdb.Scan
         Dataset where to take the `Fileset` related to `task_name`.
     task_name : str
         Name of the task that generated the `Fileset`.
 
     Returns
     -------
-    plantdb.fsdb.Fileset
+    plantdb.commons.fsdb.Fileset
         A `Fileset` instance produced by `task_name` in given `scan_dataset`
 
     Raises
@@ -222,7 +222,7 @@ def _get_files(scan_dataset, task_name, unique=False):
 
     Parameters
     ----------
-    scan_dataset : plantdb.fsdb.Scan
+    scan_dataset : plantdb.commons.fsdb.Scan
         Dataset where to take the `Fileset` related to `task_name`.
     task_name : str
         Name of the task that generated the `File` in the `Fileset`.
@@ -231,7 +231,7 @@ def _get_files(scan_dataset, task_name, unique=False):
 
     Returns
     -------
-    list(plantdb.fsdb.File)
+    list(plantdb.commons.fsdb.File)
         The `File` objects produced by `task_name` in given `scan_dataset`
 
     Raises
@@ -259,11 +259,11 @@ def compare_intrinsic_params(db, task_name, scans_list):
 
     Parameters
     ----------
-    db : plantdb.fsdb.FSDB
+    db : plantdb.commons.fsdb.FSDB
         Local ROMI database instance with the replicated scan datasets
     task_name : str
         name of the task to test
-    scans_list : list of plantdb.fsdb.Scan
+    scans_list : list of plantdb.commons.fsdb.Scan
         List of `Scan` instance to compare.
 
     References
@@ -273,7 +273,7 @@ def compare_intrinsic_params(db, task_name, scans_list):
     Examples
     --------
     >>> from plant3dvision.compare import compare_intrinsic_params
-    >>> from plantdb import FSDB
+    >>> from plantdb.commons.fsdb import FSDB
     >>> db = FSDB('/data/ROMI/intrinsic_calib_experiments/2024.02.08_00.07_Eval_Colmap_auto_opencv/')
     >>> task_name = 'Colmap'
     >>> db.connect()
@@ -282,7 +282,7 @@ def compare_intrinsic_params(db, task_name, scans_list):
     >>> db.disconnect()
 
     """
-    from plantdb import io
+    from plantdb.commons import io
 
     def _get_intrinsic_calibration_params(scan, model_name):
         from plant3dvision.camera import get_camera_arrays_from_params
@@ -409,11 +409,11 @@ def estimated_pose_variability(db, task_name, scans_list):
 
     Parameters
     ----------
-    db : plantdb.fsdb.FSDB
+    db : plantdb.commons.fsdb.FSDB
         Local ROMI database instance with the replicated scan datasets.
     task_name : str
         Name of the task to test.
-    scans_list : list of plantdb.fsdb.Scan
+    scans_list : list of plantdb.commons.fsdb.Scan
         List of ``Scan`` instances to compare.
 
     """
@@ -498,11 +498,11 @@ def compare_to_cnc_poses(db, task_name, scans_list):
 
     Parameters
     ----------
-    db : plantdb.fsdb.FSDB
+    db : plantdb.commons.fsdb.FSDB
         Local ROMI database instance with the replicated scan datasets.
     task_name : str
         Name of the task to test.
-    scans_list : list of plantdb.fsdb.Scan
+    scans_list : list of plantdb.commons.fsdb.Scan
         List of ``Scan`` instances to compare.
 
     """
@@ -605,17 +605,17 @@ def compare_to_calibrated_poses(db, task_name, scans_list):
 
     Parameters
     ----------
-    db : plantdb.fsdb.FSDB
+    db : plantdb.commons.fsdb.FSDB
         Local ROMI database instance with the replicated scan datasets.
     task_name : str
         Name of the task to test.
-    scans_list : list of plantdb.fsdb.Scan
+    scans_list : list of plantdb.commons.fsdb.Scan
         List of ``Scan`` instances to compare.
 
     Examples
     --------
     >>> from plant3dvision.compare import compare_to_calibrated_poses
-    >>> from plantdb import FSDB
+    >>> from plantdb.commons.fsdb import FSDB
     >>> db = FSDB('/data/ROMI/intrinsic_calib_experiments/2024.02.08_00.07_Eval_Colmap_auto_opencv/')
     >>> task_name = 'Colmap'
     >>> db.connect()
@@ -717,11 +717,11 @@ def compare_binary_mask(db, task_name, scans_list):
 
     Parameters
     ----------
-    db : plantdb.fsdb.FSDB
+    db : plantdb.commons.fsdb.FSDB
         Local ROMI database instance with the replicated scan datasets
     task_name : str
         name of the task to test
-    scans_list : list of plantdb.fsdb.Scan
+    scans_list : list of plantdb.commons.fsdb.Scan
         List of `Scan` instance to compare.
 
     """
@@ -771,11 +771,11 @@ def compare_pointcloud(db, task_name, scans_list):
 
     Parameters
     ----------
-    db : plantdb.fsdb.FSDB
+    db : plantdb.commons.fsdb.FSDB
         Local ROMI database instance with the replicated scan datasets
     task_name : str
         name of the task to test
-    scans_list : list of plantdb.fsdb.Scan
+    scans_list : list of plantdb.commons.fsdb.Scan
         List of `Scan` instance to compare.
 
     """
@@ -830,11 +830,11 @@ def compare_voxels(db, task_name, scans_list):
 
     Parameters
     ----------
-    db : plantdb.fsdb.FSDB
+    db : plantdb.commons.fsdb.FSDB
         Local ROMI database instance with the replicated scan datasets
     task_name : str
         name of the task to test
-    scans_list : list of plantdb.fsdb.Scan
+    scans_list : list of plantdb.commons.fsdb.Scan
         List of `Scan` instance to compare.
 
     """
@@ -900,11 +900,11 @@ def compare_labelled_pointcloud(db, task_name, scans_list):
 
     Parameters
     ----------
-    db : plantdb.fsdb.FSDB
+    db : plantdb.commons.fsdb.FSDB
         Local ROMI database instance with the replicated scan datasets
     task_name : str
         name of the task to test
-    scans_list : list of plantdb.fsdb.Scan
+    scans_list : list of plantdb.commons.fsdb.Scan
         List of `Scan` instance to compare.
 
     """
@@ -990,11 +990,11 @@ def compare_trianglemesh_points(db, task_name, scans_list):
 
     Parameters
     ----------
-    db : plantdb.fsdb.FSDB
+    db : plantdb.commons.fsdb.FSDB
         Local ROMI database instance with the replicated scan datasets
     task_name : str
         name of the task to test
-    scans_list : list of plantdb.fsdb.Scan
+    scans_list : list of plantdb.commons.fsdb.Scan
         List of `Scan` instance to compare.
 
     """
@@ -1048,11 +1048,11 @@ def compare_curveskeleton_points(db, task_name, scans_list):
 
     Parameters
     ----------
-    db : plantdb.fsdb.FSDB
+    db : plantdb.commons.fsdb.FSDB
         Local ROMI database instance with the replicated scan datasets
     task_name : str
         name of the task to test
-    scans_list : list of plantdb.fsdb.Scan
+    scans_list : list of plantdb.commons.fsdb.Scan
         List of `Scan` instance to compare.
 
     """
@@ -1102,11 +1102,11 @@ def compare_angles_and_internodes(db, task_name, scans_list):
 
     Parameters
     ----------
-    db : plantdb.fsdb.FSDB
+    db : plantdb.commons.fsdb.FSDB
         Local ROMI database instance with the replicated scan datasets
     task_name : str
         name of the task to test
-    scans_list : list of plantdb.fsdb.Scan
+    scans_list : list of plantdb.commons.fsdb.Scan
         List of `Scan` instance to compare.
 
     """

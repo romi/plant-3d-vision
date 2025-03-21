@@ -17,11 +17,11 @@ from plant3dvision.camera import format_camera_params
 from plant3dvision.tasks.colmap import compute_colmap_poses_from_camera_json
 from plant3dvision.tasks.colmap import get_cnc_poses
 from plant3dvision.tasks.colmap import pose_estimation_figure
-from plantdb.fsdb import FSDB
+from plantdb.commons.fsdb import FSDB
 from romitask import SCAN_TOML
-from romitask.log import configure_logger
+from romitask.log import get_logger
 
-logger = configure_logger(__name__)
+logger = get_logger(__name__)
 
 
 def parsing():

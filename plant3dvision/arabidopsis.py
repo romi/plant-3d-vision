@@ -586,8 +586,8 @@ def compute_angles_and_internodes(T, n_nodes_fruit=5, n_nodes_stem=5):
     -------
     >>> import os
     >>> import networkx as nx
-    >>> from plantdb.io import read_graph
-    >>> from plantdb.fsdb import FSDB
+    >>> from plantdb.commons.io import read_graph
+    >>> from plantdb.commons.fsdb import FSDB
     >>> db = FSDB(os.environ['ROMI_DB'])  # requires definition of this environment variable!
     >>> db.connect()
     >>> scan = db.get_scan("real_plant")
@@ -833,8 +833,8 @@ def compute_stem_and_fruit_directions(tree, max_node_dist=10., branching_points=
     --------
     >>> from plant3dvision.arabidopsis import compute_stem_and_fruit_directions
     >>> from plant3dvision.utils import locate_task_filesets
-    >>> from plantdb.fsdb import FSDB
-    >>> from plantdb.io import read_graph
+    >>> from plantdb.commons.fsdb import FSDB
+    >>> from plantdb.commons.io import read_graph
     >>> db_path = '/data/ROMI/Romi_Alexis/analyse_jo'
     >>> db = FSDB(db_path)
     >>> db.connect()
@@ -918,8 +918,8 @@ def compute_angles_and_internodes_from_directions(fruit_dirs, stem_dirs, bp_coor
     >>> from plant3dvision.arabidopsis import compute_angles_and_internodes_from_directions
     >>> from plant3dvision.arabidopsis import compute_stem_and_fruit_directions
     >>> from plant3dvision.utils import locate_task_filesets
-    >>> from plantdb.fsdb import FSDB
-    >>> from plantdb.io import read_graph
+    >>> from plantdb.commons.fsdb import FSDB
+    >>> from plantdb.commons.io import read_graph
     >>> db_path = '/data/ROMI/Romi_Alexis/analyse_jo'
     >>> db = FSDB(db_path)
     >>> db.connect()

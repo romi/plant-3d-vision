@@ -4,8 +4,8 @@ from os import rmdir
 
 import luigi
 
-from plantdb import io
-from plantdb.testing import FSDBTestCase
+from plantdb.commons import io
+from plantdb.commons.testing import FSDBTestCase
 from romitask import FilesetTarget
 from romitask import RomiTask
 from romitask import ScanConfiguration

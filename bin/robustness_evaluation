@@ -17,10 +17,10 @@ from tqdm import tqdm
 
 from plant3dvision.compare import *
 from plant3dvision.compare import _get_task_fileset
-from plantdb import FSDB
-from plantdb.fsdb import LOCK_FILE_NAME
-from plantdb.fsdb import MARKER_FILE_NAME
-from romitask.log import configure_logger
+from plantdb.commons.fsdb import FSDB
+from plantdb.commons.fsdb.core import LOCK_FILE_NAME
+from plantdb.commons.fsdb.core import MARKER_FILE_NAME
+from romitask.log import get_logger
 
 dirname, filename = os.path.split(os.path.abspath(__file__))
 
@@ -118,7 +118,7 @@ def file_by_file_comparison(eval_db_path, task_name, scan_replicates):
 
     Parameters
     ----------
-    eval_db_path : plantdb.fsdb.FSDB
+    eval_db_path : plantdb.commons.fsdb.FSDB
         Local ROMI database instance with the replicated scan datasets
     task_name : str
         name of the task to evaluation
@@ -168,7 +168,7 @@ def compare_task_output(eval_db_path, task_name, scan_replicates, independent_ru
 
     Parameters
     ----------
-    eval_db_path : plantdb.fsdb.FSDB
+    eval_db_path : plantdb.commons.fsdb.FSDB
         Local ROMI database instance with the replicated scan datasets
     task_name : str
         Name of the task to evaluation.
@@ -228,7 +228,7 @@ def _perform_comparisons(eval_db_path, comp_func, task_name, valid_replicates):
     """Method that calls for the task comparison function(s) on the list of scan replicates that successfully ran it."""
     if isinstance(comp_func, str):
         comp_func = [comp_func]  # make a list to work in following loop
-    # Get the list of `plantdb.fsdb.Scan` instances to compare from list of Path:
+    # Get the list of `plantdb.commons.fsdb.Scan` instances to compare from list of Path:
     valid_replicates = [eval_db_path.get_scan(scan.name) for scan in valid_replicates]
     # - More than one comparison function can be applied to a same task!
     for func in comp_func:
@@ -287,9 +287,9 @@ def fill_tmp_db(dataset_path, models_path=None, extra_scans=None, clean=False):
     # - Get the path of the temporary ROMI database
     tmp_path = Path(tmp_dir)
     logger.info(f"Create a temporary directory '{tmp_path}'.")
-    # - Create the `MARKER_FILE_NAME` marker for an active `plantdb.fsdb.FSDB`
+    # - Create the `MARKER_FILE_NAME` marker for an active `plantdb.commons.fsdb.FSDB`
     with open(tmp_path / MARKER_FILE_NAME, 'w'):
-        logger.info(f"Create the `{MARKER_FILE_NAME}` marker for an active `plantdb.fsdb.FSDB`.")
+        logger.info(f"Create the `{MARKER_FILE_NAME}` marker for an active `plantdb.commons.fsdb.FSDB`.")
 
     # - If ML models are needed, copy them to evaluation DB directory:
     if models_path is not None:
@@ -457,7 +457,7 @@ def initialize_eval_db(eval_db_path="", **kwargs):
         eval_db_path = Path(eval_db_path).absolute()
     # Create the evaluation DB directory:
     eval_db_path.mkdir(exist_ok=True)
-    # - Creates the marker file to be able to get a `plantdb.fsdb.FSDB` instance:
+    # - Creates the marker file to be able to get a `plantdb.commons.fsdb.FSDB` instance:
     marker_file = eval_db_path / MARKER_FILE_NAME
     marker_file.touch()
     return eval_db_path
@@ -587,7 +587,7 @@ def run_task_eval(args):
 
     # - Initialize the logger
     global logger
-    logger = configure_logger(filename, eval_db_path, args.log_level)
+    logger = get_logger(filename, eval_db_path, args.log_level)
     logger.info(f"Robustness evaluation of task {args.task} is running on dataset '{Path(args.dataset_path).name}'...")
     logger.info(f"Path to the 'input scan dataset' is: '{dataset_path}'")
     # TODO: check if the scan is "raw" or not using call to some Clean task methods to get insight?

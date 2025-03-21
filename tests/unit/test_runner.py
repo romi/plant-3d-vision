@@ -1,7 +1,7 @@
 import unittest
 
 from romitask.runner import DBRunner
-from plantdb.testing import FSDBTestCase
+from plantdb.commons.testing import FSDBTestCase
 
 
 class TestFSDBRunner(FSDBTestCase):

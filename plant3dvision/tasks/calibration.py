@@ -3,7 +3,7 @@
 
 import luigi
 import numpy as np
-from plantdb import io
+from plantdb.commons import io
 from tqdm import tqdm
 
 from plant3dvision.calibration import calibrate_opencv_camera
@@ -139,14 +139,14 @@ class DetectCharuco(FileByFileTask):
 
         Parameters
         ----------
-        fi : plantdb.fsdb.File
+        fi : plantdb.commons.fsdb.File
             Image file to use for detection and labelling of ChArUco corners.
-        outfs : plantdb.fsdb.Fileset
+        outfs : plantdb.commons.fsdb.Fileset
             Fileset where to save the JSON files with detected ChArUco corners & ids.
 
         Returns
         -------
-        plantdb.fsdb.File
+        plantdb.commons.fsdb.File
             The File instance (JSON) with saved ChArUco corners and ids.
 
         See Also
@@ -504,7 +504,7 @@ class ExtrinsicCalibration(RomiTask):
 
             Parameters
             ----------
-            file: plantdb.fsdb.File
+            file: plantdb.commons.fsdb.File
                 The image file to use to compute and set "calibrated_pose" to metadata.
 
             Returns

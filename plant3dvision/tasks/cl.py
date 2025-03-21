@@ -8,7 +8,7 @@ import numpy as np
 from plant3dvision.tasks.colmap import CameraPoseQC
 from plant3dvision.tasks.colmap import Colmap
 from plant3dvision.tasks.proc2d import Masks
-from plantdb import io
+from plantdb.commons import io
 from romitask import RomiTask
 from romitask.log import get_logger
 from romitask.task import ImagesFilesetExists

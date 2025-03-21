@@ -1,7 +1,7 @@
 import unittest
 
-from plantdb.fsdb import dummy_db
-from plantdb.io import read_json
+from plantdb.commons.fsdb import dummy_db
+from plantdb.commons.io import read_json
 from utilities import run_task
 
 

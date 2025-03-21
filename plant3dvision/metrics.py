@@ -7,7 +7,7 @@ from abc import abstractmethod
 import numpy as np
 import open3d as o3d
 
-from plantdb import io
+from plantdb.commons import io
 from romitask.log import get_logger
 
 logger = get_logger(__name__)

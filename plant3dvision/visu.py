@@ -38,7 +38,7 @@ def plt_image_carousel(image_files, height=7, width=8, scan_name="Carousel"):
 
     """
     import ipywidgets as widgets
-    from plantdb.io import read_image
+    from plantdb.commons.io import read_image
     from IPython.display import display
 
     scan_name = image_files[0].get_filset().get_scan().id
@@ -99,7 +99,7 @@ def plotly_image_carousel(image_files, height=900, width=900, title="Carousel", 
 
     """
     import plotly.express as px
-    from plantdb.io import read_image
+    from plantdb.commons.io import read_image
 
     layout_style = {'height': height, 'width': width, 'title': title, 'showlegend': False,
                     'xaxis': {'visible': False}, 'yaxis': {'visible': False}}
@@ -314,8 +314,8 @@ def plotly_pointcloud_data(pcd, n_pts=9000, marker_kwargs=None, **kwargs):
     --------
     >>> from plant3dvision.visu import plotly_pointcloud_data
     >>> from plant3dvision.utils import locate_task_filesets
-    >>> from plantdb.fsdb import FSDB
-    >>> from plantdb.io import read_point_cloud
+    >>> from plantdb.commons.fsdb import FSDB
+    >>> from plantdb.commons.io import read_point_cloud
     >>> from os import environ
     >>> db = FSDB(environ.get('ROMI_DB', "/data/ROMI/DB/"))
     >>> db.connect()

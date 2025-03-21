@@ -82,9 +82,9 @@ def pcd2mesh(pcd):
     Examples
     --------
     >>> from plant3dvision.proc3d import pcd2mesh
-    >>> from plantdb.io import read_point_cloud
+    >>> from plantdb.commons.io import read_point_cloud
     >>> from plantdb.rest_api import compute_fileset_matches
-    >>> from plantdb.test_database import test_database
+    >>> from plantdb.commons.test_database import test_database
     >>> db = test_database()
     >>> db.connect()
     >>> scan = db.get_scan("real_plant_analyzed")
@@ -144,9 +144,9 @@ def pcd2vol(pcd, voxel_size, zero_padding=0):
     Examples
     --------
     >>> from plant3dvision.proc3d import pcd2vol
-    >>> from plantdb.io import read_point_cloud
+    >>> from plantdb.commons.io import read_point_cloud
     >>> from plantdb.rest_api import compute_fileset_matches
-    >>> from plantdb.test_database import test_database
+    >>> from plantdb.commons.test_database import test_database
     >>> db = test_database()
     >>> db.connect()
     >>> scan = db.get_scan("real_plant_analyzed")
@@ -197,9 +197,9 @@ def skeletonize(mesh):
     -------
     >>> import os
     >>> from plant3dvision.proc3d import skeletonize
-    >>> from plantdb.io import read_triangle_mesh
+    >>> from plantdb.commons.io import read_triangle_mesh
     >>> from plantdb.rest_api import compute_fileset_matches
-    >>> from plantdb.fsdb import FSDB
+    >>> from plantdb.commons.fsdb import FSDB
     >>> db = FSDB(os.environ['ROMI_DB'])  # requires definition of this environment variable!
     >>> db = FSDB('/data/ROMI/test_owner')
     >>> db.connect()
@@ -237,9 +237,9 @@ def knn_graph(pcd, k):
     Examples
     --------
     >>> from plant3dvision.visu import draw_pcd_graph    >>> from plant3dvision.proc3d import knn_graph
-    >>> from plantdb.io import read_point_cloud
+    >>> from plantdb.commons.io import read_point_cloud
     >>> from plantdb.rest_api import compute_fileset_matches
-    >>> from plantdb.test_database import test_database
+    >>> from plantdb.commons.test_database import test_database
     >>> db = test_database()
     >>> db.connect()
     >>> scan = db.get_scan("real_plant_analyzed")
@@ -293,9 +293,9 @@ def radius_graph(pcd, r):
     Examples
     --------
     >>> from plant3dvision.proc3d import radius_graph
-    >>> from plantdb.io import read_point_cloud
+    >>> from plantdb.commons.io import read_point_cloud
     >>> from plantdb.rest_api import compute_fileset_matches
-    >>> from plantdb.test_database import test_database
+    >>> from plantdb.commons.test_database import test_database
     >>> db = test_database()
     >>> db.connect()
     >>> scan = db.get_scan("real_plant_analyzed")
@@ -354,9 +354,9 @@ def connect_graph(g, pcd, root_index):
     Examples
     --------
     >>> from plant3dvision.proc3d import knn_graph, connect_graph
-    >>> from plantdb.io import read_point_cloud
+    >>> from plantdb.commons.io import read_point_cloud
     >>> from plantdb.rest_api import compute_fileset_matches
-    >>> from plantdb.test_database import test_database
+    >>> from plantdb.commons.test_database import test_database
     >>> db = test_database()
     >>> db.connect()
     >>> scan = db.get_scan("real_plant_analyzed")

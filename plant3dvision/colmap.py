@@ -24,7 +24,7 @@ from packaging import version
 
 from plant3dvision import proc3d
 from plant3dvision.thirdparty import read_model
-from plantdb import io
+from plantdb.commons import io
 from romitask.log import get_logger
 
 logger = get_logger(__name__)
@@ -354,7 +354,7 @@ def export_camera_parameters(image_files, intrinsics, extrinsics):
     --------
     >>> from plant3dvision.colmap import export_camera_parameters
     >>> from plant3dvision.colmap import ColmapRunner
-    >>> from plantdb.test_database import test_database
+    >>> from plantdb.commons.test_database import test_database
     >>> db = test_database('real_plant')
     >>> db.connect()
     >>> # - Select the dataset to reconstruct:
@@ -561,7 +561,7 @@ class ColmapRunner(object):
         Examples
         --------
         >>> from plant3dvision.colmap import ColmapRunner
-        >>> from plantdb.test_database import test_database
+        >>> from plantdb.commons.test_database import test_database
         >>> db = test_database('real_plant')
         >>> db.connect()
         >>> # - Select the dataset to reconstruct:
@@ -650,7 +650,7 @@ class ColmapRunner(object):
 
         """
         # -- Initialize attributes:
-        self.image_files = img_files  # list of plantdb.fsdb.File
+        self.image_files = img_files  # list of plantdb.commons.fsdb.File
         self.matcher_method = matcher_method if matcher_method in MATCHER_METHODS else DEF_MATCHER_METHODS
         self.compute_dense = compute_dense
         self.all_cli_args = all_cli_args
@@ -894,7 +894,7 @@ class ColmapRunner(object):
         Examples
         --------
         >>> from plant3dvision.colmap import ColmapRunner
-        >>> from plantdb.fsdb import FSDB
+        >>> from plantdb.commons.fsdb import FSDB
         >>> # - Connect to a ROMI databse to access an 'images' fileset to reconstruct with COLMAP:
         >>> db = FSDB("/data/ROMI/DB")
         >>> db.connect()
@@ -1427,7 +1427,7 @@ def test_runner(test_dataset='real_plant', colmap_exe="roboticsmicrofarms/colmap
     roboticsmicrofarms/colmap:3.8
 
    """
-    from plantdb.test_database import test_database
+    from plantdb.commons.test_database import test_database
     db = test_database(test_dataset)
     db.connect()
     # - Select the dataset to reconstruct:

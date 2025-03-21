@@ -10,11 +10,11 @@ import numpy
 import numpy as np
 from tqdm import tqdm
 
-import plantdb.db
+import plantdb.commons.db
 from plant3dvision.camera import colmap_params_from_kwargs
 from plant3dvision.tasks.colmap import Colmap
 from plant3dvision.utils import jsonify
-from plantdb import io
+from plantdb.commons import io
 from romitask.log import get_logger
 from romitask.task import FileByFileTask
 from romitask.task import ModelFilesetExists
@@ -274,7 +274,7 @@ class Masks(FileByFileTask):
     --------
     >>> import luigi
     >>> from plant3dvision import test_db_path
-    >>> from plantdb.fsdb import FSDB
+    >>> from plantdb.commons.fsdb import FSDB
     >>> db = FSDB(test_db_path())
     >>> global db
     >>> db.connect()

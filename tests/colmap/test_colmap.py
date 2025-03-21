@@ -4,13 +4,14 @@
 import argparse
 import json
 import os
-import secrets
 from pathlib import Path
+from tempfile import mkdtemp
 
 import docker
 
-from plantdb.test_database import TMP_TEST_DIR
-from plantdb.test_database import setup_test_database
+from plantdb.commons.test_database import setup_test_database
+
+TMP_TEST_DIR = mkdtemp(prefix="test_colmap_")
 
 
 def parsing():
@@ -38,8 +39,10 @@ def main(args):
     tag = args.tag
 
     # Set up a test database with the 'real_plant' dataset (pulled from ZENODO):
-    db_path = setup_test_database(['real_plant'],
-                                  out_path=f"{TMP_TEST_DIR}_{secrets.token_hex(8)}")
+    db_path = setup_test_database(
+        ['real_plant'],
+        out_path=TMP_TEST_DIR
+    )
     log_file = db_path / f"colmap.log"
 
     # -----------------------------------------------------------------------------

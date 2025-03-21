@@ -24,12 +24,12 @@ from plant3dvision.visu import plotly_mesh_data
 from plant3dvision.visu import plotly_pointcloud_data
 from plant3dvision.visu import plotly_treegraph_data
 from plant3dvision.visu import plotly_vert_sequences
-from plantdb import FSDB
-from plantdb.io import read_graph
-from plantdb.io import read_json
-from plantdb.io import read_point_cloud
-from plantdb.io import read_triangle_mesh
-from plantdb.log import configure_logger
+from plantdb.commons.fsdb import FSDB
+from plantdb.commons.io import read_graph
+from plantdb.commons.io import read_json
+from plantdb.commons.io import read_point_cloud
+from plantdb.commons.io import read_triangle_mesh
+from romitask.log import get_logger
 
 TASKS = [
     "PointCloud",
@@ -528,7 +528,7 @@ if __name__ == '__main__':
         args.host = "0.0.0.0"
 
     # - Configure a logger from this application:
-    logger = configure_logger('dash_explorer')
+    logger = get_logger('dash_explorer')
 
     dataset = Path(args.dataset)
     db_path = dataset.parent  # the root of the database is one level (directory) higher.

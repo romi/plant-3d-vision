@@ -50,7 +50,7 @@ class PyCOLMAPRunner(object):
     Examples
     --------
     >>> from plant3dvision.pycolmap import PyCOLMAPRunner
-    >>> from plantdb.test_database import test_database
+    >>> from plantdb.commons.test_database import test_database
     >>> db = test_database('real_plant')
     >>> db.connect()
     >>> # - Select the dataset to reconstruct:
