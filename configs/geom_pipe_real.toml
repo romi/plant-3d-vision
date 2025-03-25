@@ -1,76 +1,121 @@
 [Colmap]
-upstream_task = "ImagesFilesetExists"
-matcher = "exhaustive"
-camera_model = "SIMPLE_RADIAL"
-intrinsic_calibration_scan_id = ""  # use a dataset with calibrated intrinsic camera poses
-extrinsic_calibration_scan_id = ""  # use a dataset with calibrated extrinsic camera poses
-compute_dense = false
-align_pcd = true
-use_gpu = true
-single_camera = true
-alignment_max_error = 10
-distance_threshold = 6  # maximum allowed Euclidean distance from CNC pose
-# [Colmap.bounding_box]  # default to None
-# x = [150, 650]
-# y = [150, 650]
-# z = [-90, 300]
+# Type of matcher to use with COLMAP
+# Options: "exhaustive" (matches every image against every other) or "sequential" (matches successive images)
+matcher = "exhaustive"  # Default: "exhaustive"
+# Align and scale point clouds using CNC coordinates
+align_pcd = true  # Default: true
+# Camera model to use for reconstruction
+# Options: "SIMPLE_RADIAL", "RADIAL", "OPENCV"
+camera_model = "SIMPLE_RADIAL"  # Default: "SIMPLE_RADIAL"
+# Use GPU for feature extraction and matching when available
+use_gpu = true  # Default: true
+# Whether images were taken with a single camera (shared intrinsics)
+single_camera = true  # Default: true
+# Maximum alignment error allowed during model alignment
+alignment_max_error = 10  # Default: 10
+# Path to the COLMAP executable
+colmap_exe = "roboticsmicrofarms/colmap:3.8-cuda_cc75"  # Default: "roboticsmicrofarms/colmap:3.8-cuda_cc75" (uses docker image)
+# Maximum 3D Euclidean distance to CNC pose to validate COLMAP pose estimation
+distance_threshold = 6.0  # Default: 6.0mm
+# Maximum blind angle tolerated for camera pose quality control
+max_blind_angle = 20.0  # Default: 20.0 (degrees)
+# Number of retries if the task fails
+retry_count = 10  # Default: 10
 
 [Undistort]
-upstream_task = "ImagesFilesetExists"
-query = "{\"channel\":\"rgb\"}"  # RGB images
+# The upstream task that provides the input files
+upstream_task = "ImagesFilesetExists"  # Default: "ImagesFilesetExists"
+# Query to filter files from upstream task by metadata
+query = "{}"  # Default: "{}"  (empty dictionary, no filtering)
+# Source of the camera model
+# Options: 'Colmap', 'IntrinsicCalibration', 'ExtrinsicCalibration'
+camera_model_src = "Colmap"  # Default: "Colmap"
 
 [Masks]
-upstream_task = "Undistort"
-type = "linear"
+# The upstream task that provides input images
+# Options: "Undistort", "ImagesFilesetExists"
+upstream_task = "Undistort"  # Default: "Undistort"
+# Query to filter files from upstream task by metadata
+query = "{\"channel\":\"rgb\"}"  # Default: "{\"channel\":\"rgb\"}"  (only RGB images)
+# The type of image transformation algorithm to use prior to masking
+# Options: "linear" (linear combination of RGB channels), "excess_green" (excess green index)
+type = "linear"  # Default: "linear"
+# Linear coefficients to apply to each RGB channel of the original image
+# Used only when type="linear"
 parameters = "[0.2, 1, 0.1]"
-dilation = 3 # default to 0
-binarize = true
-threshold = 0.15
+# Binarization threshold applied after transforming the image
+threshold = 0.15 # Default: 0.3
+# Whether to apply binarization after thresholding
+binarize = true # Default: true
+# Dilation factor for the binary mask images (morphological dilation)
+dilation = 1 # Default: 0 (no dilation)
 
 [Voxels]
-image_task = "Masks"
+# Task that provides the masked images as input
+upstream_task = "Masks"  # Default: "Masks"
+# Query to filter files from upstream task by metadata
+# Default: "{}"  (empty dictionary, no filtering)
 # query = "{\"pose_estimation\":\"correct\"}"  # mask with a valid COLMAP pose if `type="carving"`
-query = "{}"  # all masks may be used with `type="averaging"`, even those with incorect pose estimates by Colmap
-camera_metadata = "colmap_camera"
-voxel_size = 0.5
-type = "averaging"
-[Voxels.bounding_box]  # works for 'real_plant' example, default to None
+query = "{}" # all masks may be used with `type="averaging"`, even those with incorect pose estimates by Colmap
+# Size of the voxel to reconstruct, defines the resolution of the 3D array
+voxel_size = 1.0  # Default: 1.0
+# Type of backprojection algorithm to use
+# Options: "carving", "averaging"
+type = "averaging"  # Default: "averaging"
+# Threshold for the number of missing images allowed in the reconstruction
+missing_images_threshold = 2  # Default: 2
+
+[Voxels.bounding_box]
+# 3D bounding box defining the region of interest for reconstruction
+# Default: None (uses the entire volume)
+# The values works with the 'real_plant' test data
 x = [330, 450]
 y = [300, 430]
 z = [-125, 100]
 
 [PointCloud]
-upstream_task = "Voxels"
-level_set_value = 1.0
+# Task that provides the voxel array as input
+upstream_task = "Voxels"  # Default: "Voxels"
+# Distance of the level set on which the points are sampled
+level_set_value = 1.0  # Default: 1.0
 
 [TriangleMesh]
-upstream_task = "PointCloud"
-library = "open3d" # or "cgal"
-filtering = "most connected triangles"  # ["", "most connected triangles", "largest connected triangles", "dbscan point-cloud"]
-depth = 9  # depth parameter used by Open3D to mesh the point cloud
+# Task that provides the point cloud as input
+upstream_task = "PointCloud"  # Default: "PointCloud"
+# The library to use for meshing the point cloud
+# Options: 'open3d', 'cgal'
+library = "open3d"  # Default: "open3d"
+# Filtering method to apply to the obtained triangle mesh
+# Options: "", "most connected triangles", "largest connected triangles", "dbscan point-cloud"
+filtering = "most connected triangles"  # Default: "most connected triangles"
+# Depth parameter used by Open3D to mesh the point cloud
+# Only used if library = "open3d"
+depth = 9  # Default: 9
 
 [CurveSkeleton]
-upstream_task = "TriangleMesh"
-
-[RefineSkeleton]
-upstream_task = "CurveSkeleton"
-upstream_pcd = "PointCloud"
-alpha = 5.0
-beta = 5.0
-knn_mst = true
+# Task that provides the triangle mesh as input
+upstream_task = "TriangleMesh"  # Default: "TriangleMesh"
 
 [TreeGraph]
-upstream_task = "CurveSkeleton"
-z_axis = 2
-stem_axis_inverted = false
+# Task that provides the skeleton data as input
+upstream_task = "RefineSkeleton"  # Default: "RefineSkeleton"
+# Axis to use for stem orientation to determine the root node
+# Options: 0 (x-axis), 1 (y-axis), 2 (z-axis)
+z_axis = 2  # Default: 2 (z-axis)
+# Whether the direction of the stem along the specified axis is inverted
+stem_axis_inverted = false  # Default: false
 
 [AnglesAndInternodes]
-upstream_task = "TreeGraph"
-characteristic_length = 1.0
-stem_axis_inverted = false
-organ_type = "fruit"
-node_sampling_dist = 10  # path distance from branching point in millimeters
-min_fruit_size = 8  # path distance from branching point in millimeters
+# Task that provides the input data for angle and internode measurements
+# Options: "TreeGraph", "ClusteredMesh", "OrganSegmentation"
+upstream_task = "TreeGraph"  # Default: "TreeGraph"
+# Minimum size (in millimeters) for an organ to be considered as a fruit
+# Used with all upstream task types
+min_fruit_size = 8.0  # Default: 6.0
+# Distance for node sampling along the skeleton
+node_sampling_dist = 10.0  # Default: 10.0
+# Type of organs to analyze when using ClusteredMesh or OrganSegmentation as upstream task
+organ_type = "fruit"  # Default: "fruit"
 
 # --------------- Evaluation --------------- #
 [AnglesAndInternodesEvaluation]
@@ -80,5 +125,5 @@ free_ends = 0.4
 free_ends_eps = 1e-2
 
 [Clean]
-pose_task = "Colmap"
-no_confirm = true
+# Whether NOT to ask for confirmation prior to cleaning a dataset
+no_confirm = true  # Default: false
