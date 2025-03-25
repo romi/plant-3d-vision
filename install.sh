@@ -131,17 +131,31 @@ fi
 # Check numpy version after installation.
 check_numpy_version
 
-# Install `plantdb` sources:
-echo -e "\n\n${INFO}# - Installing 'plantdb' sources..."
+# Install `plantdb.commons` sources:
+echo -e "\n\n${INFO}# - Installing 'plantdb.commons' sources..."
 start_time=$(date +%s)
-python3 -m pip install ${pip_opt} plantdb/
+python3 -m pip install ${pip_opt} plantdb/src/commons/.[io]
 build_status=$?
 if [ ${build_status} == 0 ]; then
-  echo -e "${INFO}'plantdb' sources installed in $(($(date +%s) - start_time)) s."
+  echo -e "${INFO}'plantdb.commons' sources installed in $(($(date +%s) - start_time)) s."
   # Check numpy version after installation.
   check_numpy_version
 else
-  echo -e "${ERROR}'plantdb' sources install failed with code '${build_status}'!"
+  echo -e "${ERROR}'plantdb.commons' sources install failed with code '${build_status}'!"
+  exit ${build_status}
+fi
+
+# Install `plantdb.commons` sources:
+echo -e "\n\n${INFO}# - Installing 'plantdb.client' sources..."
+start_time=$(date +%s)
+python3 -m pip install ${pip_opt} plantdb/src/client/.[io]
+build_status=$?
+if [ ${build_status} == 0 ]; then
+  echo -e "${INFO}'plantdb.client' sources installed in $(($(date +%s) - start_time)) s."
+  # Check numpy version after installation.
+  check_numpy_version
+else
+  echo -e "${ERROR}'plantdb.client' sources install failed with code '${build_status}'!"
   exit ${build_status}
 fi
 
@@ -221,7 +235,7 @@ fi
 # Install `plant-3d-vision` sources:
 echo -e "\n\n${INFO}# - Installing 'plant-3d-vision' sources..."
 start_time=$(date +%s)
-envpython3 -m pip install ${pip_opt} .
+python3 -m pip install ${pip_opt} .
 build_status=$?
 if [ ${build_status} == 0 ]; then
   echo -e "${INFO}'plant-3d-vision' sources installed in $(($(date +%s) - start_time)) s."
