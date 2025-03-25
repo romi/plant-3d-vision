@@ -20,12 +20,8 @@ pip_opt=""
 doc=0
 # Boolean to install notebook requirements:
 notebook=0
-
-# Check if conda is installed & available
-if ! command -v conda &>/dev/null; then
-  echo -e "${ERROR}Conda is not installed or not found in PATH. Please install Conda before running this script."
-  exit 1
-fi
+# Boolean to control environment creation:
+create_env=1
 
 # Function to check numpy version
 check_numpy_version() {
@@ -37,6 +33,47 @@ check_numpy_version() {
     echo -e "${WARNING}Numpy is not installed or could not be detected."
     echo "Numpy is not installed or could not be detected." >> numpy_versions.log
   fi
+}
+
+# Check if conda is installed & available
+check_conda(){
+  if ! command -v conda &>/dev/null; then
+    echo -e "${ERROR}Conda is not installed or not found in PATH. Please install Conda before running this script."
+    exit 1
+  fi
+}
+
+# Function to create and activate conda environment
+create_conda_environment() {
+  check_conda  # Check if conda is installed & available
+  local env_name="$1"
+  local python_version="$2"
+
+  # Get the path to the environment to create:
+  CONDA_BASE_PATH=$(dirname "$(dirname $CONDA_EXE)")
+  CONDA_ENV_PATH=${CONDA_BASE_PATH}/envs/${env_name}
+
+  if [ -d "$CONDA_ENV_PATH" ]; then
+    echo -e "${WARNING}# - Using existing '${env_name}' conda environment..."
+  else
+    echo -e "${INFO}# - Creating '${env_name}' conda environment..."
+    start_time=$(date +%s)
+    conda create -y -n "${env_name}" python="${python_version}" "numpy<2"
+    if [ $? -ne 0 ]; then
+      echo -e "${ERROR}Failed to create conda environment '${env_name}'."
+      return 1
+    fi
+    echo -e "${INFO}Conda environment creation done in $(($(date +%s) - start_time)) s."
+  fi
+
+  eval "$(conda shell.bash hook)"
+  conda activate ${env_name}
+  if [ $? -ne 0 ]; then
+    echo -e "${ERROR}Failed to activate conda environment '${env_name}'."
+    return 1
+  fi
+
+  return 0
 }
 
 usage() {
@@ -60,6 +97,10 @@ usage() {
   echo "  --python
     Set the version of python to use, defaults to '${py_version}'.
     Only used if the conda environment is created."
+  echo "  --no-env
+    Skip conda environment creation and activation."
+  echo "  --no-cache-dir
+    Deactivate pip cache directory."
   # General options:
   echo "  -h, --help
     Output a usage message and exit."
@@ -81,6 +122,9 @@ while [ "$1" != "" ]; do
   --dev)
     pip_opt="${pip_opt} -e"
     ;;
+  --no-cache-dir)
+    pip_opt="${pip_opt} --no-cache-dir"
+    ;;
   --doc)
     doc=1
     ;;
@@ -90,6 +134,9 @@ while [ "$1" != "" ]; do
   --python)
     shift
     py_version=$1
+    ;;
+  --no-env)
+    create_env=0
     ;;
   -h | --help)
     usage
@@ -103,31 +150,17 @@ while [ "$1" != "" ]; do
   shift
 done
 
-# source ${HOME}/miniconda3/bin/activate
-# Get the path to the environment to create:
-CONDA_BASE_PATH=$(dirname "$(dirname $CONDA_EXE)")
-CONDA_ENV_PATH=${CONDA_BASE_PATH}/envs/${name}
-
-if [ -d "$CONDA_ENV_PATH" ]; then
-  echo -e "${WARNING}# - Using existing '${name}' conda environment..."
-  eval "$(conda shell.bash hook)"
-  conda activate ${name}
+# Handle conda environment
+if [ ${create_env} == 1 ]; then
+  # Create and activate conda environment
+  create_conda_environment "${name}" "${py_version}"
+  if [ $? -ne 0 ]; then
+    exit 1
+  fi
 else
-  echo -e "${INFO}# - Creating '${name}' conda environment..."
-  start_time=$(date +%s)
-  conda create -y -n "${name}" python="${py_version}" "numpy<2"
-  if [ $? -ne 0 ]; then
-    echo -e "${ERROR}Failed to create conda environment '${name}'."
-    exit 1
-  fi
-  echo -e "${INFO}Conda environment creation done in $(($(date +%s) - start_time)) s."
-  eval "$(conda shell.bash hook)"
-  conda activate "${name}"
-  if [ $? -ne 0 ]; then
-    echo -e "${ERROR}Failed to activate conda environment '${name}'."
-    exit 1
-  fi
+  echo -e "${INFO}# - Skipping conda environment creation..."
 fi
+
 # Check numpy version after installation.
 check_numpy_version
 
