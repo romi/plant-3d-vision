@@ -4,13 +4,13 @@
 import luigi
 import numpy as np
 import open3d as o3d
+from plantdb.commons import io
 
 from plant3dvision import proc3d
 from plant3dvision.tasks import config
 from plant3dvision.tasks.cl import Voxels
 from plant3dvision.tasks.colmap import Colmap
 from plant3dvision.tasks.proc2d import Segmentation2D
-from plantdb.commons import io
 from romitask import RomiTask
 from romitask.log import get_logger
 from skeleton_refinement.stochastic_registration import knn_mst
@@ -19,36 +19,59 @@ logger = get_logger(__name__)
 
 
 class PointCloud(RomiTask):
-    """Task for generating a 3D point cloud from volume or voxel data.
+    """Generate a 3D point cloud from volumetric/voxel data.
 
-    Processes volume or voxel inputs, extracts features, and converts them into a 3D point
-    cloud representation. The task supports handling both single-class and multi-class
-    volumes, applying contrast thresholds and scores to filter data for point cloud
-    generation. Metadata such as origin and voxel size are used in the processing, while
-    results are saved as point cloud files with metadata annotations.
+    This task processes either a single-class or multi-class volume by extracting
+    features based on a specified level set value and optional thresholds (contrast
+    and score). For multi-class volumes, data are filtered and combined by applying
+    a background prior and thresholding rules, and label information is attached to
+    the output point cloud. The final result is stored as a PLY file with associated
+    metadata such as the data origin, voxel size, and (if applicable) label names.
 
-    Attributes
+    Parameters
     ----------
-    upstream_task : luigi.TaskParameter
-        The upstream task providing the input data for this task. Defaults to `Voxels`.
-    level_set_value : luigi.FloatParameter
-        Value used to define the level set for point cloud generation.
-    background_prior : luigi.FloatParameter
+    upstream_task : luigi.TaskParameter, optional
+        The upstream task providing the input data for this task. Defaults to ``Voxels``.
+    level_set_value : luigi.FloatParameter, optional
+        Value used to define the level set for point cloud generation. Default is ``1.0``.
+    labels : luigi.ListParameters, optional
+        List of class labels to process. An empty list (default) processes a single unlabeled volume.
+        A single label processes that specific class. Multiple labels trigger multi-class processing.
+        Defaults to ``[]``.
+    background_prior : luigi.FloatParameter, optional
         Prior weight applied to the background class when processing multi-class volumes.
-    min_contrast : luigi.FloatParameter
+        Defaults to ``1.0``.
+    min_contrast : luigi.FloatParameter, optional
         Minimum contrast ratio to consider for class predictions in a multi-class volume.
-    min_score : luigi.FloatParameter
+        Defaults to ``10.0``.
+    min_score : luigi.FloatParameter, optional
         Minimum score threshold for class predictions in a multi-class volume.
+        Defaults to ``0.2``.
+
+    Returns
+    -------
+    romitask.task.FilesetTarget
+        A PLY file containing the (labelled) point cloud.
 
     See Also
     --------
-    plant3dvision.proc3d.vol2pcd
+    plant3dvision.proc3d.vol2pcd : Core function used for volume to point cloud conversion
 
     Notes
     -----
-    Task output is a single PLY file with the point cloud.
+    For multi-class volumes:
+    - Classes are processed based on highest probability per voxel
+    - Background class is weighted by the background_prior
+    - Points are filtered based on contrast between the highest and second-highest class
+    - Points are filtered based on minimum score threshold
+    - Each class gets a color from the configuration or a random color
 
-    Metadata may include label names if multiclass.
+    For single-class volumes:
+    - A point cloud is generated directly from the volumetric data
+    - The level_set_value determines the isosurface extraction
+
+    The output is a PLY file containing the point cloud with associated metadata.
+    If multi-class, point label information is included in the metadata.
     """
     upstream_task = luigi.TaskParameter(default=Voxels)  # override default attribute from ``RomiTask``
     level_set_value = luigi.FloatParameter(default=1.0)
@@ -59,6 +82,40 @@ class PointCloud(RomiTask):
     min_score = luigi.FloatParameter(default=0.2)  # only used if labels were defined (multiclass)
 
     def run_multiclass(self, labels):
+        """Processes multi-class voxel data to generate a unified point cloud.
+
+        Parameters
+        ----------
+        labels : list of str
+            A list of class labels to process. Each label corresponds to a
+            voxel class in the input volume data.
+
+        Raises
+        ------
+        FileNotFoundError
+            If the input files corresponding to any of the specified labels
+            do not exist.
+        ValueError
+            If voxel data or metadata is improperly formatted or missing.
+        TypeError
+            If labels or voxel data contain invalid types.
+
+        Notes
+        -----
+        - This method performs multi-class processing by iterating over the
+          provided labels and aggregating voxel data into a multi-dimensional
+          array.
+        - The algorithm applies class-specific modifications, such as adjusting
+          the background voxel values using a prior and filtering voxels based
+          on contrast and score thresholds.
+        - A point cloud is generated for each class based on its filtered voxel
+          data. Each point cloud shares metadata on origin and voxel size.
+        - Points are colorized and added to a final aggregated point cloud.
+          Predefined colors are used when available; otherwise, random colors
+          are assigned.
+        - Finally, the point cloud and labels for all points are saved as
+          outputs.
+        """
         for label in labels:
             ifile = self.input_file(suffix=label)
             voxels = io.read_volume(ifile)
@@ -358,9 +415,13 @@ class SegmentedPointCloud(RomiTask):
 
 
 class TriangleMesh(RomiTask):
-    """Triangulates input point cloud.
+    """Triangulates a 3D point cloud to create a triangle mesh.
 
-    Attributes
+    This task creates a triangular mesh from an input point cloud using
+    either CGAL or Open3D libraries. The mesh can be filtered to retain only
+    the largest connected component based on different criteria.
+
+    Parameters
     ----------
     upstream_task  : luigi.TaskParameter, optional
         Task upstream of this task, should provide a point cloud.
@@ -369,19 +430,26 @@ class TriangleMesh(RomiTask):
         The dataset id (scan name) to use to create the ``FilesetTarget``.
         If unspecified (default), the current active scan will be used.
     library : luigi.Parameter, optional
-        The library to mesh the point cloud, choose either "cgal" or "open3d".
-        If "cgal", use the ``poisson_mesh`` method from the CGAL library, see [CGAL]_.
-        If "open3d", use the ``create_from_point_cloud_poisson`` method from the Open3D library, see [Open3D]_.
-        Defaults to ``"open3d"``.
+        The library to mesh the point cloud. Options:
+        - "cgal": use the ``poisson_mesh`` method from the CGAL library
+        - "open3d": use the ``create_from_point_cloud_poisson`` method from Open3D
+        Default is "open3d".
     filtering : luigi.Parameter, optional
-        The filtering method to apply to obtained triangle mesh, if any.
-        Valid choices are "most connected triangles", "largest connected triangles" or "".
-        "most connected triangles": get the largest cluster of triangles in terms of "number of triangles".
-        "largest connected triangles": get the largest cluster of triangles in terms of "total triangle area".
-        Defaults to ``"most connected triangles"``, use ``""`` to deactivate filtering.
+        The filtering method to apply to the triangle mesh. Options:
+        - "most connected triangles": get the largest cluster by number of triangles
+        - "largest connected triangles": get the largest cluster by total triangle area
+        - "": no filtering
+        Default is "most connected triangles".
     depth : luigi.IntParameter, optional
-        Depth parameter used by Open3D to mesh the point cloud, see [o3d_tri_poisson]_ for more details.
+        Depth parameter used by Open3D to mesh the point cloud.
+        Controls the resolution of the resulting mesh.
+        Higher values create finer meshes but require more computation, see [o3d_tri_poisson]_ for more details.
         Defaults to ``9``.
+
+    Returns
+    -------
+    romitask.task.FilesetTarget
+        A PLY file containing the triangular mesh.
 
     See Also
     --------
@@ -391,9 +459,14 @@ class TriangleMesh(RomiTask):
 
     Notes
     -----
-    Currently, ignores class data and needs only one connected component, use ``ClusteredMesh`` instead.
+    Currently ignores class data and needs only one connected component.
+    For more sophisticated mesh clustering, use ``ClusteredMesh`` instead.
 
-    Task output is a single PLY file with the triangular mesh.
+    The task output is a single PLY file with the triangular mesh.
+
+    When using "open3d" library, the depth parameter significantly affects
+    the mesh quality and processing time. Higher values (9-11) produce finer
+    meshes but take longer to compute.
 
     References
     ----------
@@ -647,7 +720,11 @@ class OrganSegmentation(RomiTask):
 class CurveSkeleton(RomiTask):
     """Creates a 3D curve skeleton from a triangular mesh.
 
-    Attributes
+    This class implements a task that generates a curve skeleton representation from a
+    triangular mesh. The skeleton consists of points and lines that capture the essential
+    topological structure of the 3D shape.
+
+    Parameters
     ----------
     upstream_task : luigi.TaskParameter
         The task upstream to this one, should provide a triangular mesh.
@@ -656,13 +733,30 @@ class CurveSkeleton(RomiTask):
         The dataset id (scan name) to use to create the ``FilesetTarget``.
         If unspecified (default), the current active scan will be used.
 
+    Returns
+    -------
+    romitask.task.FilesetTarget
+        A JSON file containing the skeleton data with two keys:
+        - "points": The 3D coordinates of the skeleton vertices
+        - "lines": The connectivity information defining the skeleton edges
+
+    Raises
+    ------
+    NotImplementedError
+        If the upstream task is not supported (currently only supports ``TriangleMesh``).
+
     See Also
     --------
-    plant3dvision.proc3d.skeletonize
+    plant3dvision.proc3d.skeletonize : Core function used to generate the skeleton.
 
     Notes
     -----
     Task output is a JSON file with two entries, "points" and "lines".
+    "points" contains the 3D coordinates of vertices in the skeleton.
+    "lines" contains pairs of vertex indices that define the connections.
+
+    The skeletonization algorithm is implemented in the `plant3dvision.proc3d` module.
+    Only triangular meshes from the ``TriangleMesh`` task are currently supported as input.
     """
     upstream_task = luigi.TaskParameter(default=TriangleMesh)  # override default attribute from ``RomiTask``
 
@@ -691,7 +785,14 @@ class CurveSkeleton(RomiTask):
 class RefineSkeleton(RomiTask):
     """Refine a 3D curve skeleton using stochastic deformation registration.
 
-    Attributes
+    This class implements a ROMI task that refines an existing 3D curve skeleton by
+    using stochastic deformation registration against a point cloud.
+    The refinement process adjusts skeleton vertices to better match the underlying point cloud data
+    while maintaining the overall structure.
+    An optional step can reconstruct the skeleton connectivity using a minimum
+    spanning tree on a k-nearest neighbor graph.
+
+    Parameters
     ----------
     upstream_task : luigi.TaskParameter
         The task upstream to this one, should provide a triangular mesh.
@@ -703,37 +804,53 @@ class RefineSkeleton(RomiTask):
         The dataset id (scan name) to use to create the ``FilesetTarget``.
         If unspecified (default), the current active scan will be used.
     alpha : luigi.FloatParameter, optional
-        The alpha value to use for skeleton refinement.
+        The alpha value controlling the stiffness term in skeleton refinement.
+        Higher values result in less deformation.
         Defaults to `5.`.
     beta : luigi.FloatParameter, optional
-        The beta value to use for skeleton refinement.
+        The beta value controlling the regularization strength in skeleton refinement.
+        Higher values result in smoother deformation.
         Defaults to `5.`.
     max_iterations : luigi.IntParameter, optional
         Maximum number of iterations of the EM algorithm to perform.
         Defaults to `100`.
     tolerance : luigi.FloatParameter, optional
-        Tolerance to use to stop the iterations of the EM algorithm.
+        Convergence tolerance to use to stop the iterations of the EM algorithm.
         Defaults to `0.0001`.
     knn_mst : luigi.BoolParameter, optional
-        Wheter to perform an update of the skeleton using the minimum spanning tree on knn-graph.
-        Defaults to `True`.
+        Whether to perform an update of the skeleton using the minimum spanning tree on knn-graph.
+        If ``False``, original connectivity is kept. Defaults to `True`.
     n_neighbors : luigi.IntParameter, optional
-        The number of neighbors to search for in `skeleton_points`.
-        Defaults to `5`.
+        The number of neighbors to search for in the skeleton points when creating the knn-graph.
+        Only used if `knn_mst` is ``True``. Defaults to `5`.
     knn_algorithm : luigi.Parameter, optional
         The algorithm to use for computing the kNN distance.
-        Defaults to `kd_tree`, valid choices are in 'auto', 'ball_tree', 'kd_tree' or 'brute'.
+        Defaults to `kd_tree`, valid choices are 'auto', 'ball_tree', 'kd_tree' or 'brute'.
     mst_algorithm : luigi.Parameter, optional
         The algorithm to use for computing the minimum spanning tree.
-        Defaults to `kruskal`, valid choices are in 'kruskal', 'prim' or 'boruvka'.
+        Defaults to `kruskal`, valid choices are 'kruskal', 'prim' or 'boruvka'.
+
+    Returns
+    -------
+    romitask.task.FilesetTarget
+        A FilesetTarget containing a JSON file with the refined skeleton data.
+        The JSON has two keys:
+        - "points": list of lists, 3D coordinates of skeleton points
+        - "lines": list of tuples, connectivity information as pairs of point indices
 
     See Also
     --------
-    skeleton_refinement.stochastic_registration.perform_registration
+    skeleton_refinement.stochastic_registration.perform_registration : Core function used to refine the skeleton
+    plant3dvision.tasks.proc3d.PointCloud : Task that provides the point cloud data
+    plant3dvision.tasks.proc3d.CurveSkeleton : Task that generates the initial skeleton
 
     Notes
     -----
-    Task output is a JSON file with two entries, "points" and "lines".
+    The refinement process involves two main steps:
+    1. Stochastic deformation registration to adjust skeleton points to better match the point cloud
+    2. Optional connectivity reconstruction using minimum spanning tree on the k-nearest neighbor graph
+
+    If `knn_mst` is False, the original skeleton connectivity is preserved while using the refined point positions.
     """
     upstream_task = luigi.TaskParameter(default=CurveSkeleton)  # override default attribute from ``RomiTask``
     upstream_pcd = luigi.TaskParameter(default=PointCloud)
@@ -847,4 +964,3 @@ class VoxelsWithPrior(RomiTask):
         io.write_npz(outfile, out)
         # Copy metadata from input file to output file
         outfile.set_metadata(prediction_file.get_metadata())
-

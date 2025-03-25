@@ -332,7 +332,7 @@ def export_camera_parameters(image_files, intrinsics, extrinsics):
 
     Parameters
     ----------
-    image_files : list of plantdb.db.File
+    image_files : list of plantdb.commons.db.File
         The list of image `File` to set metadata.
     intrinsics : dict
         An OPENCV intrinsics camera parameter dictionary.
@@ -346,7 +346,7 @@ def export_camera_parameters(image_files, intrinsics, extrinsics):
 
     Returns
     -------
-    list of plantdb.db.File
+    list of plantdb.commons.db.File
         The ist of image files with metadata.
 
 
@@ -468,7 +468,7 @@ class ColmapRunner(object):
 
     Attributes
     ----------
-    image_files : list of plantdb.db.File
+    image_files : list of plantdb.commons.db.File
         The list of image ``File`` to use for reconstruction.
     matcher_method : {'exhaustive', 'sequential', 'spatial'}
         Method to use to perform feature matching operation.
@@ -526,7 +526,7 @@ class ColmapRunner(object):
 
         Parameters
         ----------
-        img_files : list of plantdb.db.File
+        img_files : list of plantdb.commons.db.File
             The list of image ``File`` to use for reconstruction.
         matcher_method : {'exhaustive', 'sequential', 'spatial'}, optional
             Method to use to perform feature matching operation, default is 'exhaustive'.

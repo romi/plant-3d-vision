@@ -40,7 +40,7 @@ def get_cnc_poses_from_files(image_files, axes='xyzpt'):
 
     Parameters
     ----------
-    image_files : list of plantdb.db.File
+    image_files : list of plantdb.commons.db.File
         A list of image files containing pose metadata for each image.
     axes : str, optional
         A string specifying which axes to return, by default 'xyzpt'.
@@ -117,7 +117,7 @@ def get_cnc_poses(scan_dataset, axes='xyzpt'):
 
     Parameters
     ----------
-    scan_dataset : plantdb.db.Scan
+    scan_dataset : plantdb.commons.db.Scan
         The scan to get the CNC poses from.
 
     Returns
@@ -159,7 +159,7 @@ def get_image_poses(scan_dataset, md="calibrated_pose", default=None):
 
     Parameters
     ----------
-    scan_dataset : plantdb.db.Scan
+    scan_dataset : plantdb.commons.db.Scan
         Get the calibrated poses from this scan dataset.
 
     Returns
@@ -192,7 +192,7 @@ def compute_camera_poses_from_colmap(scan_dataset):
 
     Parameters
     ----------
-    scan_dataset : plantdb.db.Scan
+    scan_dataset : plantdb.commons.db.Scan
         The scan to get the colmap poses from.
 
     Returns
@@ -234,7 +234,7 @@ def compute_colmap_poses_from_camera_json(scan_dataset):
 
     Parameters
     ----------
-    scan_dataset : plantdb.db.Scan
+    scan_dataset : plantdb.commons.db.Scan
         The scan to get the colmap poses from.
 
     Returns
@@ -304,10 +304,10 @@ def use_precalibrated_poses(images_fileset, calibration_scan):
 
     Parameters
     ----------
-    images_fileset : list of plantdb.db.File
+    images_fileset : list of plantdb.commons.db.File
         List of `File`s refering to images that should receive 'calibrated_pose' metadata.
         Later, this will be used during reconstruction, instead of performing an estimation of each image pose.
-    calibration_scan : plantdb.db.Scan
+    calibration_scan : plantdb.commons.db.Scan
         Dataset containing calibrated poses to use for reconstruction.
         Should contain an 'ExtrinsicCalibration' ``Fileset``.
 
@@ -461,9 +461,9 @@ def check_colmap_cfg(current_cfg, current_scan, calibration_scan):
     current_cfg : dict
         Current configuration of the Colmap task.
         Should be restricted to meaningful parameters to compare.
-    current_scan : plantdb.db.Scan
+    current_scan : plantdb.commons.db.Scan
         Current scan dataset to reconstruct.
-    calibration_scan : plantdb.db.Scan
+    calibration_scan : plantdb.commons.db.Scan
         Calibration scan dataset to use (for camera poses).
     """
     import toml
@@ -502,30 +502,34 @@ def _get_diff_between_dict(d1, d2):
 
 
 class Colmap(RomiTask):
-    """Task performing a COLMAP SfM reconstruction on the "images" fileset of a dataset.
+    """Task performing a COLMAP Structure-from-Motion (SfM) reconstruction on image datasets.
 
-    Attributes
+    This class implements a Luigi task to perform a complete 3D reconstruction pipeline using
+    COLMAP software on images stored in a dataset's "images" fileset. It handles feature extraction,
+    image matching, sparse and optionally dense reconstruction, and alignment of point clouds.
+    The task can use intrinsic and extrinsic camera calibration parameters from another dataset,
+    apply bounding box constraints, and configure various COLMAP parameters.
+
+    Parameters
     ----------
     upstream_task : luigi.TaskParameter, optional
         Task upstream of this task. Defaults to ``ImagesFilesetExists``.
     scan_id : luigi.Parameter, optional
-        The dataset id (scan name) to use to create the ``FilesetTarget``.
+        The dataset ID (scan name) to use to create the ``FilesetTarget``.
         If unspecified (default), the current active scan will be used.
     query : luigi.DictParameter, optional
         A filtering dictionary to apply on input ```Fileset`` metadata.
         Key(s) and value(s) must be found in metadata to select the ``File``.
         By default, no filtering is performed, all inputs are used.
     matcher : luigi.Parameter, optional
-        Type of matcher to use, choose either "exhaustive" or "sequential".
+        Type of matcher to use, either "exhaustive" or "sequential".
         *Exhaustive matcher* tries to match every other image.
         *Sequential matcher* tries to match successive image, this requires a sequential file name ordering.
         Defaults to "exhaustive".
     compute_dense : luigi.BoolParameter, optional
-        Whether to run the dense point cloud reconstruction by COLMAP.Defaults to ``False``.
-    cli_args : luigi.DictParameter, optional
-        Dictionary of arguments to pass to colmap command lines, empty by default.
+        Whether to run the dense point cloud reconstruction. Defaults to ``False``.
     align_pcd : luigi.BoolParameter, optional
-        Whether to "world-align" (scale and geo-reference) the reconstructed model using calibrated or estimated poses.
+        Whether to "world-align" (scale and geo-reference) the reconstructed model using 'calibrated' or 'estimated' poses.
         Default to ``True``.
     intrinsic_calibration_scan_id : luigi.Parameter, optional
         If set, get the intrinsic camera parameters from this scan dataset.
@@ -534,12 +538,6 @@ class Colmap(RomiTask):
         Obviously, it requires to run the ``IntrinsicCalibration`` task on this dataset prior to using it here.
         If ``extrinsic_calibration_scan_id`` is specified this does nothing!
         Defaults to NO intrinsic calibration scan.
-    camera_model : luigi.Parameter, optional
-        If no intrinsic or extrinsic calibration scan is defined, this select the camera model to estimate by COLMAP.
-        Valid models are in {'SIMPLE_RADIAL', 'RADIAL', 'OPENCV'}.
-        If an ``intrinsic_calibration_scan_id`` is specified, this select the intrinsic parameters to set in COLMAP.
-        If an ``extrinsic_calibration_scan_id`` is specified and `use_calibration_camera` is ``True``, this does nothing!
-        Defaults to "SIMPLE_RADIAL" camera model.
     extrinsic_calibration_scan_id : luigi.Parameter, optional
         If set, get the extrinsic camera parameters from this scan dataset.
         These extrinsic parameter will be set in COLMAP ``poses.txt`` file using the estimated "calibrated_poses" metadata.
@@ -550,45 +548,79 @@ class Colmap(RomiTask):
     use_calibration_camera : luigi.BoolParameter, optional
         If ``True``, use the intrinsic parameters from ``extrinsic_calibration_scan_id``.
         Else, estimate the intrinsic parameters automatically.
+    camera_model : luigi.Parameter, optional
+        If no intrinsic or extrinsic calibration scan is defined, this select the camera model to estimate by COLMAP.
+        Valid models are in {'SIMPLE_RADIAL', 'RADIAL', 'OPENCV'}.
+        If an ``intrinsic_calibration_scan_id`` is specified, this select the intrinsic parameters to set in COLMAP.
+        If an ``extrinsic_calibration_scan_id`` is specified and `use_calibration_camera` is ``True``, this does nothing!
+        Defaults to "SIMPLE_RADIAL" camera model.
+    use_gpu : luigi.BoolParameter
+        Whether to use GPU for feature extraction (feature_extractor) and matching (*_matcher).
+        Defaults to ``True``.
+    single_camera : luigi.BoolParameter
+        Whether there is only one camera. Defaults to ``True``.
+    alignment_max_error : luigi.IntParameter
+        Maximum alignment error allowed during ``model_aligner`` step.
+        Defaults to ``10``.
     bounding_box : luigi.DictParameter, optional
         Volume dictionary used to crop the point cloud after colmap reconstruction and keep only points associated to the plant.
         By default, it uses the scanner workspace defined in the 'images' fileset.
         Defined as `{'x': [int, int], 'y': [int, int], 'z': [int, int]}`.
         Defaults to NO bounding-box.
-    use_gpu : luigi.BoolParameter
-        Defines if the GPU should be used to extract features (feature_extractor) and performs their matching (*_matcher).
-        Defaults to ``True``.
-    single_camera : luigi.BoolParameter
-        Defines if there is only one camera.
-        Defaults to ``True``.
-    alignment_max_error : luigi.IntParameter
-        Maximum alignment error allowed during ``model_aligner`` COLMAP step.
-        Defaults to ``10``.
+    cli_args : luigi.DictParameter, optional
+        Dictionary of arguments to pass to colmap command lines, empty by default.
+    colmap_exe : str, optional
+        COLMAP executable path or container image, defaults to "roboticsmicrofarms/colmap:3.8-cuda_cc75"
+    distance_threshold : float, optional
+        Maximum allowed distance between estimated and calibrated poses, defaults to 6.0
+    max_blind_angle : float, optional
+        Maximum allowed blind angle for camera poses, defaults to 20.0
+    retry_count : int, optional
+        Maximum number of retries allowed, defaults to 10
+
+    Attributes
+    ----------
+    retry : int
+        Current retry count
+
+    Returns
+    -------
+    romitask.task.FilesetTarget
+        Target fileset containing:
+            - images.json: Camera poses for each image
+            - cameras.json: Camera intrinsic parameters
+            - points3d.json: Reconstructed 3D points
+            - sparse.ply: Sparse point cloud
+            - dense.ply (optional): Dense point cloud if compute_dense is True
 
     Notes
     -----
-    Upstream task format: Fileset with image files.
-    Output fileset format: images.json, cameras.json, points3d.json, sparse.ply [, dense.ply]
+    This task requires COLMAP to be installed or available as a container.
 
-    **Exhaustive Matching**: If the number of images in your dataset is relatively low (up to several hundreds), this matching mode should be fast enough and leads to the best reconstruction results.
-    Here, every image is matched against every other image, while the block size determines how many images are loaded from disk into memory at the same time.
+    For exhaustive matching, all image pairs are compared which is suitable for datasets
+    with up to several hundred images.
 
-    **Sequential Matching**: This mode is useful if the images are acquired in sequential order, e.g., by a video camera.
-    In this case, consecutive frames have visual overlap and there is no need to match all image pairs exhaustively.
-    Instead, consecutively captured images are matched against each other.
-    This matching mode has built-in loop detection based on a vocabulary tree, where every N-th image (loop_detection_period) is matched against its visually most similar images (loop_detection_num_images).
-    Note that image file names must be ordered sequentially (e.g., image0001.jpg, image0002.jpg, etc.).
-    The order in the database is not relevant, since the images are explicitly ordered according to their file names.
-    Note that loop detection requires a pre-trained vocabulary tree, that can be downloaded from https://demuc.de/colmap/.
+    For sequential matching, only consecutive frames are matched, which is suitable for
+    video or ordered image sequences. Sequential matching requires images to be named
+    in sequential order (e.g., image0001.jpg, image0002.jpg).
 
     See Also
     --------
-    plant3dvision.colmap.ColmapRunner
+    plant3dvision.colmap.ColmapRunner : Low-level COLMAP execution class
+    plant3dvision.colmap.CameraPoseQC : Camera pose quality control
+
+    Raises
+    ------
+    ValueError
+        If an invalid matcher type is specified
+    RuntimeError
+        If COLMAP execution fails
+    IOError
+        If required files cannot be found or read
 
     References
     ----------
     .. [#] `COLMAP official tutorial. <https://colmap.github.io/tutorial.html>`_
-
     """
     upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)  # override default attribute from ``RomiTask``
     query = luigi.DictParameter(default={})
@@ -603,7 +635,6 @@ class Colmap(RomiTask):
     single_camera = luigi.BoolParameter(default=True)
     alignment_max_error = luigi.IntParameter(default=10)
     bounding_box = luigi.DictParameter(default=None)
-    cli_args = luigi.DictParameter(default={})
     colmap_exe = luigi.Parameter(default="roboticsmicrofarms/colmap:3.8-cuda_cc75")
 
     # Camera poses quality check parameters
@@ -611,8 +642,10 @@ class Colmap(RomiTask):
     max_blind_angle = luigi.FloatParameter(default=20.)
 
     # Retry parameters
-    retry = luigi.IntParameter(default=0)
+    retry = 0
     retry_count = luigi.IntParameter(default=10)
+
+    cli_args = luigi.DictParameter(default={})
 
     def _workspace_as_bounding_box(self):
         """Use the scanner workspace as bounding-box.

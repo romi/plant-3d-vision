@@ -15,7 +15,11 @@ logger = get_logger(__name__)
 class TreeGraph(RomiTask):
     """Creates a tree graph of the plant from a skeleton.
 
-    Attributes
+    This task processes a plant skeleton to generate a tree graph representation
+    of the plant structure. It identifies the root node, finds the main stem, and
+    computes a connected tree representing the plant architecture.
+
+    Parameters
     ----------
     upstream_task : luigi.TaskParameter
         Upstream task that generate the skeleton.
@@ -30,9 +34,25 @@ class TreeGraph(RomiTask):
         Direction of the stem along the specified `stem_axis`, inverted or not.
         Defaults to ``False``.
 
+    Returns
+    -------
+    romitask.task.FilesetTarget
+        The tree graph file.
+
+    Notes
+    -----
+    The task reads a skeleton from the upstream task and converts it into a graph
+    structure representing the plant's architecture. The root node is determined
+    based on the specified z_axis parameter.
+
+    The task works with skeleton data that contains points (vertices) and lines (edges)
+    representing the plant structure.
+
     See Also
     --------
-    plant3dvision.arabidopsis.compute_tree_graph
+    plant3dvision.arabidopsis.compute_tree_graph : Core function used to generate the tree graph.
+    plant3dvision.tasks.proc3d.CurveSkeleton : Task that can provide skeleton input for this task.
+    plant3dvision.tasks.proc3d.RefineSkeleton : Task that can provide skeleton input for this task.
     """
     upstream_task = luigi.TaskParameter(default=CurveSkeleton)  # override default attribute from ``RomiTask``
     z_axis = luigi.IntParameter(default=2)
@@ -65,38 +85,60 @@ class TreeGraph(RomiTask):
 class AnglesAndInternodes(RomiTask):
     """Computes the sequences of angle and internode between successive organs.
 
-    Attributes
+    This class provides methods to analyze plant architecture by computing angles between
+    successive organs (typically fruits) and the internodes (distances between organs).
+    The calculations can be performed using three different source data: tree graphs,
+    clustered meshes, or segmented point clouds, depending on the upstream task.
+
+    Parameters
     ----------
-    upstream_task : luigi.TaskParameter
+    upstream_task : luigi.TaskParameter, optional
         Upstream task that generate the tree graph, organ segmented mesh or organ segmented point-cloud.
         Defaults to ``TreeGraph``.
     scan_id : luigi.Parameter, optional
         The dataset id (scan name) to use to create the ``FilesetTarget``.
         If unspecified (default), the current active scan will be used.
-    organ_type : luigi.Parameter
+    organ_type : luigi.Parameter, optional
         Name of the organ to consider when using organ segmented mesh or organ segmented point-cloud.
         Defaults to ``"fruit"``.
-    node_sampling_dist : luigi.FloatParameter
+    node_sampling_dist : luigi.FloatParameter, optional
         The path distance to use to sample tree nodes around the branching point for organ direction estimation.
         Used with the tree graph.
         Defaults to ``10.``.
-    characteristic_length : luigi.FloatParameter
-        ???. Used with organ segmented mesh or organ segmented point-cloud.
+    characteristic_length : luigi.FloatParameter, optional
+        Scale parameter for calculations in mesh/point cloud methods.
+        Used with organ segmented mesh or organ segmented point-cloud.
         Defaults to ``1.``.
-    stem_axis : luigi.IntParameter
-        Axis to use to get the *root node* as the node with minimal coordinates for that axis.
+    stem_axis : luigi.IntParameter, optional
+        Axis index (0, 1, or 2) used to determine the *root node* as the node with minimal coordinates for that axis.
         Used with organ segmented mesh or organ segmented point-cloud.
         Defaults to ``2``.
-    stem_axis_inverted : luigi.BoolParameter
+    stem_axis_inverted : luigi.BoolParameter, optional
         Direction of the stem along the specified `stem_axis`, inverted or not.
         Used with organ segmented mesh or organ segmented point-cloud.
         Defaults to ``False``.
-    min_elongation_ratio : luigi.FloatParameter
-        ???. Used with organ segmented mesh or organ segmented point-cloud.
+    min_elongation_ratio : luigi.FloatParameter, optional
+        Minimum ratio for organ elongation.
+        Used with organ segmented mesh or point cloud.
         Defaults to ``2.0``.
-    min_fruit_size : luigi.FloatParameter
+    min_fruit_size : luigi.FloatParameter, optional
         Minimum size of a fruit, in same units as coordinates, so should be millimeters.
+        Used to filter out small objects that might be noise.
         Defaults to ``6.``.
+
+    Returns
+    -------
+    romitask.task.FilesetTarget
+        A JSON file containing the angles and internodes measurements as a dictionary with
+        two entries: "angles" and "internodes".
+        With `TreeGraph` as `upstream_task` you will also get:
+          - a "fruit_direction" JSON file with the fruit "fruit_dirs" & "bp_coords"
+          - a "stem_direction" JSON file with the stem "stem_dirs" & "bp_coords"
+
+    Raises
+    ------
+    NotImplementedError
+        If the `upstream_task` is not supported (must be one of: TreeGraph, ClusteredMesh, or OrganSegmentation).
 
     See Also
     --------
@@ -107,15 +149,9 @@ class AnglesAndInternodes(RomiTask):
     Notes
     -----
     Depending on the upstream task this task will use a different algorithm:
-      - `TreeGraph`: based on a skeleton
-      - `ClusteredMesh`: based on an organ segmented mesh
-      - `OrganSegmentation`: based on an organ segmented point cloud
-
-    Task output is a JSON file with two entries, "angles" and "internodes".
-    With `TreeGraph` as `upstream_task` you will also get:
-      - a "fruit_direction" JSON file with the fruit "fruit_dirs" & "bp_coords"
-      - a "stem_direction" JSON file with the stem "stem_dirs" & "bp_coords"
-
+      - `TreeGraph`: Based on a skeletal representation of the plant
+      - `ClusteredMesh`: Based on an organ-segmented mesh
+      - `OrganSegmentation`: Based on an organ-segmented point cloud
     """
     upstream_task = luigi.TaskParameter(default=TreeGraph)  # override default attribute from ``RomiTask``
 

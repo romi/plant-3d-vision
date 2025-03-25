@@ -143,7 +143,7 @@ def get_camera_model_from_intrinsic(dataset, model="OPENCV"):
 
     Parameters
     ----------
-    dataset : plantdb.db.Scan
+    dataset : plantdb.commons.db.Scan
         Get the camera parameters for this scan dataset.
     model : {"OPENCV", "RADIAL", "SIMPLE_RADIAL"}, optional
         Get the parameter for this model.

@@ -305,7 +305,7 @@ class Backprojection(object):
 
         Parameters
         ----------
-        fs : plantdb.db.Fileset or list of plantdb.db.File
+        fs : plantdb.commons.db.Fileset or list of plantdb.commons.db.File
             The images `Fileset` or list of images `File` to process.
         camera_metadata : str
             Name of the metadata to use to get the camera intrinsics (fx, fy, cx, cy) & poses.
@@ -330,7 +330,7 @@ class Backprojection(object):
 
         Parameters
         ----------
-        fs : plantdb.db.Fileset or list of plantdb.db.File
+        fs : plantdb.commons.db.Fileset or list of plantdb.commons.db.File
             The images `Fileset` or list of images `File` to process.
         camera_metadata : str
             Name of the metadata to use to get the camera intrinsics (fx, fy, cx, cy) & poses ('rotmat', 'tvec').

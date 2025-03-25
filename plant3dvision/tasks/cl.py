@@ -22,12 +22,10 @@ class Voxels(RomiTask):
     This class implements a RomiTask that performs 3D volume reconstruction from 2D segmented images
     using either voxel carving or averaging methods.
 
-    Attributes
+    Parameters
     ----------
-    image_task : luigi.TaskParameter, optional
-        Upstream task that generate the masks. Defaults to ``Masks``.
-    pose_qc_task : luigi.TaskParameter, optional
-        Optional upstream task, that performs a quality check on the camera poses.
+    upstream_task : luigi.TaskParameter, optional
+        Upstream task that generate the binary masks. Defaults to ``Masks``.
     query : luigi.DictParameter, optional
         A filtering dictionary to apply on input ```Fileset`` metadata.
         Key(s) and value(s) must be found in metadata to select the ``File``.
@@ -51,6 +49,10 @@ class Voxels(RomiTask):
         Defaults to ``True``.
     threshold : luigi.FloatParameter, optional
         The threshold value to use for 'averaging' `type` conversion to logarithmic values.
+        Defaults to ``-100.0``.
+    missing_images_threshold : luigi.IntParameter, optional
+        Maximum number of missing images allowed in the processing pipeline.
+        Defaults to ``2``.
     invert : luigi.BoolParameter, optional
         If ``True``, invert the values of the mask.
         Defaults to ``False``.
@@ -61,29 +63,45 @@ class Voxels(RomiTask):
         Volume dictionary used to define the space to reconstruct.
         By default, it uses the scanner workspace defined in the 'images' fileset.
         Defined as `{'x': [int, int], 'y': [int, int], 'z': [int, int]}`.
-        Defaults to NO bounding-box.
+        Defaults to ``None`` (NO bounding-box).
     bounding_box_edit : luigi.DictParameter, optional
         Edit the bounding box dictionary.
         Useful with VirtualPlants where the `bounding_box` is known, but we would like to edit it.
-        Defaults to NO bounding-box editing.
+        Defaults to ``None`` (NO bounding-box editing).
+
+    Returns
+    -------
+    romitask.task.FilesetTarget
+        A TIFF file containing the reconstructed volume.
 
     See Also
     --------
-    plant3dvision.cl.Backprojection
+    plant3dvision.tasks.cl.Backprojection : Class handling the actual voxelization computation
+    plant3dvision.tasks.proc2d.Masks : Typical upstream task providing mask images
+    plant3dvision.tasks.colmap.Colmap : Task providing camera parameters when using COLMAP
+
+    Raises
+    ------
+    SystemExit
+        If a valid bounding box cannot be obtained from any source.
+    TypeError
+        If the bounding box or labels contain unexpected types.
+    ValueError
+        If the voxel size results in invalid dimensions or if invalid metadata
+        is encountered.
 
     Notes
     -----
-    Upstream task format: `Fileset` with grayscale images ('Masks') and intrinsics & extrinsics camera parameters ('Colmap', ...)
-    Output fileset format: NPZ file with as many arrays as `self.labels`
-
-    The bounding box can be obtained from multiple sources (in order of precedence):
-    1. Direct parameter specification
-    2. Scan metadata
-    3. Colmap metadata
-    4. Images fileset metadata
+    - The bounding box is automatically determined from various sources in this order:
+      1. Manual bounding_box parameter
+      2. Scan metadata
+      3. COLMAP metadata
+      4. Images fileset metadata
+    - When using "averaging" type, the threshold is automatically adjusted based on
+      the missing_images_threshold if possible.
+    - Displacement metadata, if present, is automatically applied to the bounding box.
     """
-    upstream_task = None  # override default attribute from ``RomiTask``
-    image_task = luigi.TaskParameter(default=Masks)
+    upstream_task = luigi.TaskParameter(default=Masks)
 
     query = luigi.DictParameter(default={})
     camera_metadata = luigi.Parameter(default='colmap_camera')  # camera definition (intrinsic & poses) in metadata
@@ -101,8 +119,8 @@ class Voxels(RomiTask):
 
     def requires(self):
         """Determines the dependencies required for the task execution."""
-        # Initialize dictionary with mandatory mask images from image_task
-        tasks = {"masks": self.image_task()}
+        # Initialize dictionary with mandatory mask images from upstream_task
+        tasks = {"masks": self.upstream_task()}
 
         # Add COLMAP task for camera parameter estimation if using COLMAP camera metadata
         if str(self.camera_metadata).lower() == 'colmap_camera':

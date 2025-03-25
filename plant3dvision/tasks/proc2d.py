@@ -30,7 +30,7 @@ class Undistort(FileByFileTask):
     parameters. It supports multiple sources for camera models including Colmap, 
     intrinsic calibration, and extrinsic calibration.
 
-    Attributes
+    Parameters
     ----------
     upstream_task : luigi.TaskParameter, optional
         The task to use upstream to the `Undistort` tasks.
@@ -43,7 +43,6 @@ class Undistort(FileByFileTask):
         A filtering dictionary to apply on input ```Fileset`` metadata.
         Key(s) and value(s) must be found in metadata to select the ``File``.
         By default, no filtering is performed, all inputs are used.
-
     camera_model_src : luigi.Parameter, optional
         Source of the camera model, can be in ['Colmap', 'IntrinsicCalibration', 'ExtrinsicCalibration']
     camera_model : luigi.Parameter, optional
@@ -57,13 +56,17 @@ class Undistort(FileByFileTask):
 
     Returns
     -------
-    plantdb.db.Fileset
-        Fileset containing undistorted images with preserved metadata.
+    romitask.task.FilesetTarget
+        The fileset containing undistorted images with preserved metadata.
     
     Raises
     ------
     SystemExit
         If using ``IntrinsicCalibration`` without specifying `extrinsic_calib_scan_id`.
+    ImportError
+        If required camera calibration modules cannot be imported.
+    KeyError
+        If required camera calibration data is missing from input.
 
     See Also
     --------
@@ -72,8 +75,14 @@ class Undistort(FileByFileTask):
 
     Notes
     -----
-    The output of this task is an image fileset.
+    The output of this task is an image fileset containing undistorted images.
 
+    The calibration metadata is stored in each output image's metadata under:
+    - 'calibrated_pose': Camera pose information (for extrinsic calibration)
+    - 'colmap_camera': Camera model parameters
+
+    All original metadata from input images is preserved in the output images
+    and supplemented with calibration information.
     """
     # Override default task parameter to specify source of input images
     upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)
@@ -182,15 +191,15 @@ class Undistort(FileByFileTask):
 
         Parameters
         ----------
-        fi : plantdb.db.File
+        fi : plantdb.commons.db.File
             Input image file to be undistorted. Must contain camera calibration parameters
             in its metadata.
-        outfs : plantdb.db.Fileset
+        outfs : plantdb.commons.db.Fileset
             Output fileset where the undistorted image will be saved.
 
         Returns
         -------
-        plantdb.db.File or None
+        plantdb.commons.db.File or None
             If successful, returns the new File object containing the undistorted image.
             Returns None if camera parameters cannot be found in the image metadata.
 
@@ -229,16 +238,19 @@ class Undistort(FileByFileTask):
 
 
 class Masks(FileByFileTask):
-    """Compute masks from RGB images.
+    """Compute binary masks from RGB images using various filtering methods.
 
-    The output of this task is a binary image fileset.
+    This task applies image transformation techniques to RGB images followed by
+    thresholding to create binary masks. The output is a fileset of binary mask images.
+    The class supports different types of filtering methods including linear combination
+    of RGB channels and excess green index.
 
     Parameters
     ----------
     upstream_task : luigi.TaskParameter, optional
         The task to use upstream to this task.
         It should be a tasks that generates a ``Fileset`` of RGB images.
-        It can thus be ``ImagesFilesetExists`` or ``Undistort``.
+        It can be ``ImagesFilesetExists`` or ``Undistort``.
         Defaults to `'Undistort'`.
     scan_id : luigi.Parameter, optional
         The dataset id (scan name) to use to create the ``FilesetTarget``.
@@ -249,22 +261,34 @@ class Masks(FileByFileTask):
         By default, no filtering is performed, all inputs are used.
     type : luigi.Parameter, optional
         The type of image tranformation algorithm to use prior to masking by thresholding.
-        It can be "linear" or "excess_green". Defaults to `'linear'`.
+        Can be "linear" or "excess_green". Defaults to `'linear'`.
         Have a look at the documentation [mask_type]_ for more details.
     parameters : luigi.ListParameter, optional
         List of parameters, only used if `type` is `"linear"`.
         They are the linear coefficient to apply to each RGB channel of the original image.
-        Defaults to `[0, 1, 0]`.
+        Defaults to `[0, 1, 0]` (using only the green channel).
     threshold : luigi.FloatParameter, optional
         Binarization threshold applied after transforming the image. Defaults to ``0.3``.
     dilation : luigi.IntParameter, optional
-        Dilation factor for the binary mask images. Defaults to `0`.
+        Dilation factor for the binary mask images. Applies morphological dilation
+        to expand the masked regions. Defaults to 0 (no dilation).
+
+    Returns
+    -------
+    romitask.task.FilesetTarget
+        The fileset containing the binary mask images.
 
     See Also
     --------
-    plant3dvision.proc2d.linear
-    plant3dvision.proc2d.excess_green
-    romitask.task.FileByFileTask
+    plant3dvision.proc2d.linear : Linear filtering of RGB images
+    plant3dvision.proc2d.excess_green : Excess green index calculation
+    romitask.task.FileByFileTask : Base class for file-by-file processing
+
+    Notes
+    -----
+    The task creates a binary mask by first applying a filter to transform the RGB image,
+    then thresholding the result, and optionally applying dilation. The filter can be
+    either a linear combination of RGB channels or the excess green index.
 
     References
     ----------
@@ -296,7 +320,23 @@ class Masks(FileByFileTask):
     dilation = luigi.IntParameter(default=0)
 
     def f_raw(self, img: numpy.ndarray) -> numpy.ndarray:
-        """Apply the selected filter to the image."""
+        """Apply the selected filter to the image.
+
+        Parameters
+        ----------
+        img : numpy.ndarray
+            Input RGB image as a numpy array.
+
+        Returns
+        -------
+        numpy.ndarray
+            Filtered image according to the selected filter type.
+
+        Raises
+        ------
+        Exception
+            If the specified filter type is unknown.
+        """
         from plant3dvision import proc2d
         logger.debug(f"Image shape: {img.shape}")
         if self.type == "linear":
@@ -306,8 +346,21 @@ class Masks(FileByFileTask):
         else:
             raise Exception(f"Unknown masking type '{self.type}'!")
 
-    def f(self, fi: plantdb.db.File, outfs: plantdb.db.Fileset) -> plantdb.db.File:
-        """Compute the binary mask image for the input image ``File``."""
+    def f(self, fi: plantdb.commons.db.File, outfs: plantdb.commons.db.Fileset) -> plantdb.commons.db.File:
+        """Compute the binary mask image for the input image ``File``.Compute the binary mask image for the input image ``File``.
+
+        Parameters
+        ----------
+        fi : plantdb.commons.db.File
+            Input image file to process.
+        outfs : plantdb.commons.db.Fileset
+            Output fileset where the binary mask will be stored.
+
+        Returns
+        -------
+        plantdb.commons.db.File
+            The created binary mask file with metadata.
+        """
         from plant3dvision import proc2d
         logger.debug(f"Loading file: {fi.filename}")
         img = io.read_image(fi)
