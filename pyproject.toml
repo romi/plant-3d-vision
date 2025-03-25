@@ -1,35 +1,10 @@
 [build-system]
-requires = ["setuptools>=42"]
+requires = ["setuptools >=75"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "plant3dvision"
 version = "0.13.1"
-description = "3D reconstruction & quantification of single potted plants from RGB scans."
-readme = "README.md"
-license = { text = "LGPL-3.0" }
-authors = [
-    { name = "Timothée Wintz", email = "timothee@timwin.fr" }
-]
-maintainers = [
-    { name = "Jonathan Legrand", email = "jonathan.legrand@ens-lyon.fr" }
-]
-classifiers = [
-    "Programming Language :: Python :: 3",
-    "Development Status :: 4 - Beta",
-    "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: GNU Lesser General Public License v3 or later (LGPLv3+)"
-]
-keywords = [
-    "Robotics for Microfarms",
-    "ROMI",
-    "photogrammetry",
-    "SfM",
-    "COLMAP",
-    "pipeline",
-]
-
-requires-python = ">=3.8"
 dependencies = [
     "pywavefront",
     "trimesh",
@@ -51,6 +26,35 @@ dependencies = [
     "dash",
     "dash-iconify",
 ]
+description = "3D reconstruction & quantification of single potted plants from RGB scans."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { 'text' = "LGPL-3.0-or-later" }   # to replace by "LGPL-3.0-or-later" only in next release, pending deprecation
+authors = [
+    { name = "Peter Hanappe", email = "peter.hanappe@sony.com" },
+    { name = "Timothée Wintz", email = "timothee@timwin.fr" },
+    { name = "Nabil Ait Taleb", email = "mohamednabil.aittaleb@sony.com" },
+]
+maintainers = [
+    { name = "Jonathan Legrand", email = "jonathan.legrand@ens-lyon.fr" }
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Operating System :: OS Independent",
+    "Natural Language :: English",
+]
+keywords = [
+    "Robotics for Microfarms",
+    "ROMI",
+    "photogrammetry",
+    "SfM",
+    "COLMAP",
+    "pipeline",
+]
 
 [project.scripts]
 check_measures = "bin.check_measures:main"
@@ -61,10 +65,10 @@ robustness_evaluation = "bin.robustness_evaluation:main"
 voronoi_texture_generator = "bin.voronoi_texture_generator:main"
 
 [project.urls]
-Homepage = "https://romi-project.eu/"
-Documentation = "https://docs.romi-project.eu/plant_imager/"
-Repository = "https://github.com/romi/plant-3d-vision"
-Issues = "https://github.com/romi/plant-3d-vision/issues"
+homepage = "https://romi-project.eu/"
+documentation = "https://docs.romi-project.eu/plant_imager/"
+source = "https://github.com/romi/plant-3d-vision"
+issues = "https://github.com/romi/plant-3d-vision/issues"
 
 [project.optional-dependencies]
 doc = [
