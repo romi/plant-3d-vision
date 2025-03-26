@@ -1,5 +1,13 @@
-# Plant 3D Vision v0.13.1 (dev)
+# [![ROMI_logo](docs/assets/images/ROMI_logo_green_25.svg)](https://romi-project.eu) / Plant 3D Vision v0.13.1 (dev)
 
+[![Licence](https://img.shields.io/github/license/romi/plant-3d-vision?color=lightgray)](https://www.gnu.org/licenses/lgpl-3.0.en.html)
+[![Python Version](https://img.shields.io/python/required-version-toml?tomlFilePath=https%3A%2F%2Fraw.githubusercontent.com%2Fromi%2Fplant-3d-vision%2Frefs%2Fheads%2Fdev%2Fpyproject.toml&logo=python&logoColor=white)]()
+[![PyPI - Version](https://img.shields.io/pypi/v/plant-3d-vision?logo=pypi&logoColor=white)](https://pypi.org/project/plant-3d-vision/)
+[![Conda - Version](https://img.shields.io/conda/vn/romi-eu/plant-3d-vision?logo=anaconda&logoColor=white&label=romi-eu&color=%2344A833)](https://anaconda.org/romi-eu/plant-3d-vision)
+[![GitHub branch check runs](https://img.shields.io/github/check-runs/romi/plant-3d-vision/dev)](https://github.com/romi/plant-3d-vision)
+
+
+## Overview
 This Python library is part of the ROMI European project.
 It provides tools to **reconstruct digital twins of plants** from a set of RGB images acquired with the "Plant Imager".
 It also provides tools to **quantify some traits of the plant's aerial architecture** like angles between successive organs and inter-nodes length.
