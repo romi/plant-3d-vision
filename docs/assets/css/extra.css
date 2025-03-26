@@ -1,0 +1,80 @@
+:root {
+  --md-primary-fg-color:        #00A960;
+  --md-default-bg-color:        #F3F3F3;
+  --md-accent-fg-color:         #FF8400;
+  --md-footer-fg-color:         #00a960;
+  --md-footer-bg-color:         #282828;
+  --md-footer-bg-color--dark:   #282828;
+}
+
+div.polaroid {
+  width: 60%;
+  background-color: white;
+  box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);
+  margin-bottom: 25px;
+  margin-left: auto;
+  margin-right: auto;
+  border-radius: 8px;
+}
+div.container {
+  text-align: center;
+}
+
+img {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+div.icon img {
+  display: inline-block;
+  width: 50px;
+  margin-left: 5px;
+  margin-right: 5px;
+}
+
+div.gallery {
+  border: 1px solid #ccc;
+}
+
+div.gallery:hover {
+  border: 1px solid #777;
+}
+
+div.gallery img {
+  width: 100%;
+  height: auto;
+}
+
+div.desc {
+  padding: 15px;
+  text-align: center;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.responsive {
+  padding: 0 6px;
+  float: left;
+  width: 24.99999%;
+}
+
+@media only screen and (max-width: 1000px) {
+  .responsive {
+    width: 49.99999%;
+    margin: 6px 0;
+  }
+}
+
+@media only screen and (max-width: 800px) {
+  .responsive {
+    width: 100%;
+  }
+}
+
+.clearfix:after {
+  content: "";
+  display: table;
+  clear: both;
+}
