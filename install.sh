@@ -282,7 +282,7 @@ fi
 if [ "${doc}" -eq 1 ]; then
   echo -e "\n\n${INFO}# - Installing documentation requirements..."
   start_time=$(date +%s)
-  python3 -m pip install -U "Sphinx>5" sphinx-material sphinx-argparse sphinx-copybutton sphinx-panels sphinx-prompt myst-nb myst-parser
+  python3 -m pip install .[doc]
 
   build_status=$?
   if [ ${build_status} == 0 ]; then
@@ -296,7 +296,7 @@ fi
 if [ "${notebook}" -eq 1 ]; then
   echo -e "\n\n${INFO}# - Installing notebook requirements..."
   start_time=$(date +%s)
-  python3 -m pip install -U jupyter notebook ipywidgets plotly
+  python3 -m pip install .[nb]
 
   build_status=$?
   if [ ${build_status} == 0 ]; then
