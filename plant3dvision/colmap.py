@@ -663,7 +663,7 @@ class ColmapRunner(object):
         self.imgs_dir = self.colmap_workdir / 'images'  # COLMAP's 'images' directory
         self.sparse_dir = self.colmap_workdir / 'sparse'  # COLMAP's 'sparse reconstruction' directory
         self.dense_dir = self.colmap_workdir / 'dense'  # COLMAP's 'dense reconstruction' directory
-        # - Make sure those directories exists & create them otherwise:
+        # - Make sure those directories exist & create them otherwise:
         self._init_directories()
         # - Fill COLMAP's 'images' directory with files from the 'images' Fileset (self.image_files)
         self._init_images_directory()
@@ -702,7 +702,7 @@ class ColmapRunner(object):
                 n_rgb_im += 1
             if not image_exists and is_rgb_image:
                 im = io.read_image(img_f)  # load the image (from DB)
-                im = im[:, :, :3]  # remove alpha channel, if any
+                im = im[:, :, :3]  # remove the alpha channel, if any
                 imageio.imwrite(filepath, im)  # write the image to COLMAP's 'images' directory
                 n_cp_im += 1
         logger.info(f"Copied {n_cp_im} images out of {n_rgb_im} RGB images found in the 'images' Fileset!")
@@ -719,7 +719,7 @@ class ColmapRunner(object):
         """Initialize the ``poses.txt`` file for COLMAP.
 
         If the use of an "extrinsic calibration" is requested, this will try to get the "calibrated_poses" from the 'images' fileset metadata.
-        This obviously requires to perform such "extrinsic calibration" (``ExtrinsicCalibration``) task prior to reconstructing this set of images.
+        This obviously requires performing such "extrinsic calibration" (``ExtrinsicCalibration``) task prior to reconstructing this set of images.
         Else, if the "pose" metadata is found in all files from the 'images' fileset, we are in the case of images obtained from a ``VirtualScan`` task.
         Else (try) to use "approximate poses".
 
@@ -1063,7 +1063,7 @@ class ColmapRunner(object):
 
     def matcher(self, matcher_method=None, **cli_args):
         """Perform feature matching after performing feature extraction."""
-        # If matcher method is not manually defined, use attribute method and cli arguments:
+        # If a matcher method is not manually defined, use attribute method and cli arguments:
         if matcher_method is None:
             matcher_method = self.matcher_method
             cli_args.update(**self.all_cli_args.get(f"{matcher_method}_matcher", {}))
@@ -1179,7 +1179,7 @@ class ColmapRunner(object):
 
     def get_intrinsics(self):
         """Get the camera intrinsic dictionary."""
-        # Defines path to COLMAP image binary file and make sure it exists:
+        # Defines the path to COLMAP image binary file and make sure it exists:
         cam_bin = Path(f'{self.sparse_dir}/0/cameras.bin')
         try:
             assert cam_bin.is_file()
@@ -1255,7 +1255,7 @@ class ColmapRunner(object):
         -----
         If a bounding-box was specified at object instantiation, and it leads to an empty sparse point cloud, we return
          the non-cropped version.
-        Same goes for dense (colored) point cloud.
+        The same goes for dense (colored) point cloud.
 
         Returns
         -------
