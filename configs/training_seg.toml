@@ -7,7 +7,6 @@ scan_id = "models"
 [Masks]
 type = "excess_green"
 dilation = 5
-binarize = true
 threshold = 0.0
 
 [TrainingDirectory]

@@ -21,7 +21,6 @@ query = "{\"channel\":\"rgb\"}"
 type = "linear"
 parameters = "[0, 1, 0]"
 dilation = 1
-binarize = true
 threshold = 0.2
 
 [Voxels]

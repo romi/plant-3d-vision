@@ -72,8 +72,6 @@ type = "linear"  # Default: "linear"
 parameters = "[0,1,0]"  # Default: [0, 1, 0] (using only the green channel)
 # Binarization threshold applied after transforming the image
 threshold = 0.2 # Default: 0.3
-# Whether to apply binarization after thresholding
-binarize = true # Default: true
 # Dilation factor for the binary mask images (morphological dilation)
 dilation = 1 # Default: 0 (no dilation)
 
