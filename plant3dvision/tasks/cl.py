@@ -244,8 +244,12 @@ class Voxels(RomiTask):
                 logger.info(f"Found these unique values in the volume: {uniq}.")
             else:
                 logger.info(f"Found this mapping between image number and unique values: {nimg_val_map}.")
-                self.threshold = nimg_val_map[-int(self.missing_images_threshold)]
-                logger.info(f"Using threshold value of {self.threshold} according to missing images threshold of {self.missing_images_threshold} image.")
+                try:
+                    self.threshold = nimg_val_map[-int(self.missing_images_threshold)]
+                except KeyError:
+                    logger.warning("Could not find a threshold value corresponding to the missing images threshold ({self.missing_images_threshold})!")
+                else:
+                    logger.info(f"Using threshold value of {self.threshold} according to missing images threshold of {self.missing_images_threshold} image.")
             vol = vol >= self.threshold
 
         if labels is not None:
