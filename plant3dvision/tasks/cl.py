@@ -188,9 +188,9 @@ class Voxels(RomiTask):
         logger.info(f"Bounding-box to use: {self.bounding_box}")
 
         # - Check if any displacement exists, and use it to modify the shape of the voxel array (to create):
-        x_min, x_max = self.bounding_box["x"]
-        y_min, y_max = self.bounding_box["y"]
-        z_min, z_max = self.bounding_box["z"]
+        x_min, x_max = sorted(self.bounding_box["x"])
+        y_min, y_max = sorted(self.bounding_box["y"])
+        z_min, z_max = sorted(self.bounding_box["z"])
         try:
             scan = masks_fileset.scan
             displacement = scan.get_metadata("displacement", default=None)
