@@ -638,6 +638,7 @@ class Colmap(RomiTask):
     colmap_exe = luigi.Parameter(default="roboticsmicrofarms/colmap:3.8-cuda_cc75")
 
     # Camera poses quality check parameters
+    qc_check = luigi.BoolParameter(default=True)
     distance_threshold = luigi.FloatParameter(default=6.)
     max_blind_angle = luigi.FloatParameter(default=20.)
 
@@ -914,22 +915,23 @@ class Colmap(RomiTask):
             suffix = f"_try_{self.retry}{ext}"
             fpath.rename(str(fpath).replace(ext, suffix))
 
-        # - Add a "pose_estimation" metadata and performs estimation accuracy checks if requested:
-        correctly_estimated = camera_pose_qc.is_correctly_estimated()
-        if not correctly_estimated:
-            _rename_retry_file(dist_outfile.path())
-            _rename_retry_file(pose_fig_fpath)
-            if self.retry < self.retry_count:
-                self.retry += 1
-                # Clean-up the temporary working directory created by the ColmapRunner instance:
-                colmap_runner.clean_up()
-                raise Exception(
-                    f"Attempt #{self.retry} - Failed to correctly estimate camera poses!")
-            else:
-                logger.critical(f"Failed to correctly estimate camera poses after {self.retry_count} attempts!")
-                logger.info(f"You can try again by increasing the `distance_threshold` parameter.")
-                logger.info(f"Check the `euclidean_distances_try_*.json` files for more details.")
-                raise Exception(f"Max retries ({self.retry_count}) reached - Failed to estimate camera poses!")
+        if self.qc_check:
+            # - Add a "pose_estimation" metadata and performs estimation accuracy checks if requested:
+            correctly_estimated = camera_pose_qc.is_correctly_estimated()
+            if not correctly_estimated:
+                _rename_retry_file(dist_outfile.path())
+                _rename_retry_file(pose_fig_fpath)
+                if self.retry < self.retry_count:
+                    self.retry += 1
+                    # Clean-up the temporary working directory created by the ColmapRunner instance:
+                    colmap_runner.clean_up()
+                    raise Exception(
+                        f"Attempt #{self.retry} - Failed to correctly estimate camera poses!")
+                else:
+                    logger.critical(f"Failed to correctly estimate camera poses after {self.retry_count} attempts!")
+                    logger.info(f"You can try again by increasing the `distance_threshold` parameter.")
+                    logger.info(f"Check the `euclidean_distances_try_*.json` files for more details.")
+                    raise Exception(f"Max retries ({self.retry_count}) reached - Failed to estimate camera poses!")
 
         # Clean-up the temporary working directory created by the ColmapRunner instance:
         colmap_runner.clean_up()
