@@ -11,28 +11,79 @@
     <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.7.2/dist/socket.io.min.js"></script>
 </head>
 <body>
-    <div class="terminal-container">
-        <header class="terminal-header">
-            <div class="user-info">
-                <span class="welcome-text">Welcome, {{ full_name }}</span>
-                <span class="username">@{{ username }}</span>
+    <header class="terminal-header">
+        <div class="user-info">
+            <span class="welcome-text">Welcome, {{ full_name }}</span>
+            <span class="username">@{{ username }}</span>
+        </div>
+        <div class="actions">
+            <button id="btn-fullscreen" title="Toggle Fullscreen">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M5.828 10.172a.5.5 0 0 0-.707 0l-4.096 4.096V11.5a.5.5 0 0 0-1 0v3.975a.5.5 0 0 0 .5.5H4.5a.5.5 0 0 0 0-1H1.732l4.096-4.096a.5.5 0 0 0 0-.707zm4.344 0a.5.5 0 0 1 .707 0l4.096 4.096V11.5a.5.5 0 1 1 1 0v3.975a.5.5 0 0 1-.5.5H11.5a.5.5 0 0 1 0-1h2.768l-4.096-4.096a.5.5 0 0 1 0-.707zm0-4.344a.5.5 0 0 0 .707 0l4.096-4.096V4.5a.5.5 0 1 0 1 0V.525a.5.5 0 0 0-.5-.5H11.5a.5.5 0 0 0 0 1h2.768l-4.096 4.096a.5.5 0 0 0 0 .707zm-4.344 0a.5.5 0 0 1-.707 0L1.025 1.732V4.5a.5.5 0 0 1-1 0V.525a.5.5 0 0 1 .5-.5H4.5a.5.5 0 0 1 0 1H1.732l4.096 4.096a.5.5 0 0 1 0 .707z"/>
+                </svg>
+            </button>
+            <a href="/logout" class="logout-btn" title="Logout">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                    <path fill-rule="evenodd" d="M10 12.5a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5h8a.5.5 0 0 1 .5.5v2a.5.5 0 0 0 1 0v-2A1.5 1.5 0 0 0 9.5 2h-8A1.5 1.5 0 0 0 0 3.5v9A1.5 1.5 0 0 0 1.5 14h8a1.5 1.5 0 0 0 1.5-1.5v-2a.5.5 0 0 0-1 0v2z"/>
+                    <path fill-rule="evenodd" d="M15.854 8.354a.5.5 0 0 0 0-.708l-3-3a.5.5 0 0 0-.708.708L14.293 7.5H5.5a.5.5 0 0 0 0 1h8.793l-2.147 2.146a.5.5 0 0 0 .708.708l3-3z"/>
+                </svg>
+            </a>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <div class="terminal-side">
+            <div class="terminal-container">
+                <div id="terminal"></div>
             </div>
-            <div class="actions">
-                <button id="btn-fullscreen" title="Toggle Fullscreen">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                        <path d="M5.828 10.172a.5.5 0 0 0-.707 0l-4.096 4.096V11.5a.5.5 0 0 0-1 0v3.975a.5.5 0 0 0 .5.5H4.5a.5.5 0 0 0 0-1H1.732l4.096-4.096a.5.5 0 0 0 0-.707zm4.344 0a.5.5 0 0 1 .707 0l4.096 4.096V11.5a.5.5 0 1 1 1 0v3.975a.5.5 0 0 1-.5.5H11.5a.5.5 0 0 1 0-1h2.768l-4.096-4.096a.5.5 0 0 1 0-.707zm0-4.344a.5.5 0 0 0 .707 0l4.096-4.096V4.5a.5.5 0 1 0 1 0V.525a.5.5 0 0 0-.5-.5H11.5a.5.5 0 0 0 0 1h2.768l-4.096 4.096a.5.5 0 0 0 0 .707zm-4.344 0a.5.5 0 0 1-.707 0L1.025 1.732V4.5a.5.5 0 0 1-1 0V.525a.5.5 0 0 1 .5-.5H4.5a.5.5 0 0 1 0 1H1.732l4.096 4.096a.5.5 0 0 1 0 .707z"/>
-                    </svg>
-                </button>
-                <a href="/logout" class="logout-btn" title="Logout">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                        <path fill-rule="evenodd" d="M10 12.5a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5h8a.5.5 0 0 1 .5.5v2a.5.5 0 0 0 1 0v-2A1.5 1.5 0 0 0 9.5 2h-8A1.5 1.5 0 0 0 0 3.5v9A1.5 1.5 0 0 0 1.5 14h8a1.5 1.5 0 0 0 1.5-1.5v-2a.5.5 0 0 0-1 0v2z"/>
-                        <path fill-rule="evenodd" d="M15.854 8.354a.5.5 0 0 0 0-.708l-3-3a.5.5 0 0 0-.708.708L14.293 7.5H5.5a.5.5 0 0 0 0 1h8.793l-2.147 2.146a.5.5 0 0 0 .708.708l3-3z"/>
-                    </svg>
-                </a>
+        </div>
+
+        <div class="info-side">
+            <div class="scan-list">
+                <div class="section-header">
+                    <h2>Available Scan Datasets</h2>
+                    <button class="refresh-btn" id="refresh-scans">Refresh</button>
+                </div>
+                <div class="scan-grid" id="scan-datasets">
+                    <!-- Scan datasets will be populated here by JavaScript -->
+                </div>
             </div>
-        </header>
-        <div id="terminal"></div>
+
+            <div class="help-section">
+                <h2>Command Help:</h2>
+                <pre id="command-help">
+Usage: romi_run_task [OPTIONS] TASK_ID
+
+  Execute a specific ROMI processing task on a dataset.
+
+  Examples:
+    romi_run_task Colmap /path/to/dataset
+    romi_run_task AnglesAndInternodes /path/to/dataset --config my_config.toml
+
+Positional arguments:
+  task                  Name of the ROMI task to run. See the list of pre-defined tasks below.
+  dataset_path          Path to the dataset to process (directory). You may use Unix pattern matching with "*"
+                        and "?" to select a list of dataset.
+
+Optional arguments:
+  --config CONFIG       Pipeline configuration file (TOML) or directory. If a file, read the configuration from
+                        it. If a directory, read & concatenate all configuration files in it. By default,
+                        search a 'pipeline.toml' file in the selected dataset directory.
+  --module MODULE       Library and module of the task. Use it if not available or different than defined in
+                        `romitask.modules.MODULES`.
+  --log-level {CRITICAL,DEBUG,INFO,NOTSET,WARNING,ERROR}
+                        Level of message logging, defaults to 'INFO'.
+  --dry-run             Use this to test the command-line by doing everything except calling the task(s).
+  -h, --help            show this help message and exit
+
+The list of pre-defined tasks is:
+    CreateCharucoBoard, DetectCharuco, ExtrinsicCalibration, IntrinsicCalibration,
+    Colmap, Undistort, Masks, Voxels, PointCloud, TriangleMesh, CurveSkeleton, Segmentation2D, SegmentedPointCloud, ClusteredMesh, OrganSegmentation, TreeGraph, AnglesAndInternodes, DummyTask, Clean.
+</pre>
+            </div>
+        </div>
     </div>
+
     <script src="/static/js/terminal.js"></script>
 </body>
 </html>

@@ -11,6 +11,7 @@
 import os
 
 from flask import Flask
+from flask import jsonify
 from flask import redirect
 from flask import render_template
 from flask import request
@@ -20,6 +21,7 @@ from flask_socketio import SocketIO
 
 from auth import authenticate_user
 from auth import hash_password
+from plantdb.commons.fsdb import FSDB
 from terminal import create_terminal
 from terminal import handle_terminal_input
 
@@ -128,6 +130,19 @@ def add_user():
         return {'success': True}, 200
     except Exception as e:
         return {'success': False, 'error': str(e)}, 500
+
+
+@app.route('/api/scans', methods=['GET'])
+def get_scans():
+    try:
+        # db = FSDB(os.getenv('ROMI_DB', '/myapp/db'))
+        db = FSDB(os.getenv('ROMI_DB', '/data/ROMI/test_owner'))
+        db.connect(unsafe=True)
+        list_scan_names = db.list_scans(owner_only=False)
+        db.disconnect()
+        return jsonify(list_scan_names)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == '__main__':

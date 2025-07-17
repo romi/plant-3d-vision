@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     // Initialize terminal
     const terminal = new Terminal({
         cursorBlink: true,
@@ -55,7 +55,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Send terminal input to server
     terminal.onData((data) => {
-        socket.emit('terminal_input', { input: data });
+        socket.emit('terminal_input', {input: data});
     });
 
     // Handle window resize
@@ -95,4 +95,51 @@ document.addEventListener('DOMContentLoaded', function() {
             socket.emit('resize', dimensions);
         }, 100);
     });
+});
+
+// Function to fetch and display scan datasets
+function loadScanDatasets() {
+    fetch('/api/scans')
+        .then(response => response.json())
+        .then(data => {
+            console.log('Got scans from API call:', data);
+            return data; // Return the data to the next .then()
+        })
+        .then(data => {
+            const scanContainer = document.getElementById('scan-datasets');
+            scanContainer.innerHTML = '';
+
+            if (data.length === 0) {
+                scanContainer.innerHTML = '<p>No scan datasets available</p>';
+                return;
+            }
+
+            data.forEach(scan => {
+                const scanElement = document.createElement('div');
+                scanElement.className = 'scan-item';
+                scanElement.textContent = scan;
+                scanElement.addEventListener('click', () => {
+                    // Handle scan selection - could execute a command in terminal
+                    const terminal = window.term;
+                    if (terminal) {
+                        terminal.write(`\r\nSelected scan: ${scan}\r\n`);
+                    }
+                });
+                scanContainer.appendChild(scanElement);
+            });
+        })
+        .catch(error => {
+            console.error('Error fetching scan datasets:', error);
+            document.getElementById('scan-datasets').innerHTML =
+                '<p>Error loading scan datasets</p>';
+        });
+}
+
+// Load scan datasets when page loads
+document.addEventListener('DOMContentLoaded', () => {
+    // After terminal is initialized
+    setTimeout(loadScanDatasets, 1000);
+
+    // Add refresh button functionality
+    document.getElementById('refresh-scans').addEventListener('click', loadScanDatasets);
 });
