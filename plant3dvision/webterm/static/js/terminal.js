@@ -2,6 +2,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // Initialize terminal
     const terminal = new Terminal({
         cursorBlink: true,
+        convertEol: true,  // Convert line feed characters to carriage return + line feed
         theme: {
             background: '#1e1e1e',
             foreground: '#f0f0f0',
@@ -23,9 +24,11 @@ document.addEventListener('DOMContentLoaded', function () {
             brightCyan: '#56b6c2',
             brightWhite: '#ffffff'
         },
-        fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-        fontSize: 14,
-        lineHeight: 1.2
+        fontFamily: '"Ubuntu Mono", monospace',
+        fontSize: 15,
+        lineHeight: 1.2,
+        rendererType: 'canvas',   // Use canvas renderer for better performance
+        disableStdin: false
     });
 
     // Add fit addon to make terminal resize to container
