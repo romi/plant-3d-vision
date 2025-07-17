@@ -1,0 +1,112 @@
+/*https://fonts.google.com/*/
+@import url('https://fonts.googleapis.com/css2?family=Nunito+Sans:ital,opsz,wght@0,6..12,200..1000;1,6..12,200..1000&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Ubuntu+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: "Nunito Sans", sans-serif;
+    background-color: #282c34;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #F3F3F3;
+}
+
+.login-container {
+    width: 100%;
+    max-width: 400px;
+    padding: 20px;
+}
+
+.login-box {
+    background-color: #1e2127;
+    border-radius: 8px;
+    padding: 30px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+}
+
+h1 {
+    color: #00A960;
+    margin-bottom: 5px;
+    text-align: center;
+}
+
+h2 {
+    font-size: 1rem;
+    font-weight: 400;
+    color: #aaa;
+    margin-bottom: 25px;
+    text-align: center;
+}
+
+.error-message {
+    background-color: rgba(255, 87, 87, 0.2);
+    border: 1px solid #ff5757;
+    color: #ff5757;
+    padding: 10px;
+    border-radius: 4px;
+    margin-bottom: 20px;
+    font-size: 0.9rem;
+}
+
+.input-group {
+    margin-bottom: 20px;
+}
+
+label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 0.9rem;
+    color: #ddd;
+}
+
+input {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #444;
+    border-radius: 4px;
+    background-color: #2c313a;
+    color: white;
+    font-size: 16px;
+    transition: border-color 0.3s;
+}
+
+input:focus {
+    outline: none;
+    border-color: #00A960;
+    box-shadow: 0 0 0 1px #00A960;
+}
+
+.logo-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.login-button {
+    width: 100%;
+    padding: 12px;
+    background-color: #00A960;
+    color: #1e2127;
+    border: none;
+    border-radius: 4px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+.login-button:hover {
+    background-color: #50b7e0;
+}
+
+.login-button:active {
+    background-color: #3a9bca;
+}
