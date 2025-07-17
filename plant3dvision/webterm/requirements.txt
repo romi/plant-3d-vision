@@ -1,6 +1,0 @@
-flask
-flask-socketio
-eventlet
-passlib
-python-engineio
-python-socketio
