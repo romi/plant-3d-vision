@@ -16,6 +16,8 @@ name="plant3dvision"
 py_version="3.9"
 # Options to use with `pip`:
 pip_opt=""
+# Boolean to install webterm requirements:
+webterm=0
 # Boolean to install documentation requirements:
 doc=0
 # Boolean to install notebook requirements:
@@ -76,6 +78,98 @@ create_conda_environment() {
   return 0
 }
 
+get_installed_setuptools() {
+  # Try to get the version of setuptools & return an empty string without raising an error
+  python3 -c 'import setuptools; print(setuptools.__version__)' 2>/dev/null || echo ""
+}
+
+get_required_setuptools() {
+  local toml_path="${1:-pyproject.toml}"  # Use provided path or default to "pyproject.toml"
+
+  return $(python3 -c '
+import re
+import os
+from pathlib import Path
+try:
+  toml_path = Path(os.getenv("toml_path", None))
+  if not toml_path.exists():
+      print("-1")
+  with open(toml_path, "r") as f:
+      content = f.read()
+  # Look for setuptools requirements with version specifications
+  matches = re.findall(r"setuptools\s?[>=<]+([0-9]+(\.[0-9]+)*)", content)
+  if matches:
+      print(matches[0][0])  # First match, first group
+  else:
+      print("0")
+except Exception as e:
+    print("-2")  # Default version if file not found or parsing error
+')
+}
+
+# Function to install package sources
+install_package_source() {
+  local package_name="$1"
+  local source_path="$2"
+  local extra_args="$3"  # Optional extra arguments like ".[io]"
+
+  echo -e "\n\n${INFO}# - Installing '${package_name}' sources..."
+
+  # Check required and installed setuptools if a pyproject.toml file exists
+  if [[ -f "${source_path}/pyproject.toml" ]]; then
+    installed_setuptools=$(get_installed_setuptools)
+    required_setuptools=$(get_required_setuptools "${source_path}/pyproject.toml")
+
+    # Check if both versions are available
+    if [[ -n "${required_setuptools}" && -n "${installed_setuptools}" ]]; then
+      # Check if both are valid numbers and compare them
+      if [[ "${required_setuptools}" =~ ^[0-9]+$ && "${installed_setuptools}" =~ ^[0-9]+$ ]]; then
+        if [[ ${required_setuptools} -gt ${installed_setuptools} ]]; then
+          echo -e "${WARNING}Required setuptools (${required_setuptools}) is greater than the one installed (${installed_setuptools})!"
+          echo -e "${INFO}Consider updating it with 'python3 -m pip install --upgrade setuptools'"
+        else
+          echo -e "${INFO}Found version of setuptools ${installed_setuptools} >= ${required_setuptools} (required)"
+        fi
+      else
+        echo -e "${WARNING}Could not compare setuptools versions. Required: ${required_setuptools}, Installed: ${installed_setuptools}"
+      fi
+    # Handle cases where one or both versions are missing
+    elif [[ -z "${required_setuptools}" && -n "${installed_setuptools}" ]]; then
+      echo -e "${WARNING}Could not detect required version of setuptools (got ${required_setuptools})! Installed version: ${installed_setuptools}"
+    elif [[ -n "${required_setuptools}" && -z "${installed_setuptools}" ]]; then
+      echo -e "${WARNING}Could not detect installed version of setuptools (got ${installed_setuptools})! Required version: ${required_setuptools}"
+    else
+      echo -e "${WARNING}Could not detect required or installed version of setuptools!"
+    fi
+  else
+    echo -e "${ERROR}Could not find TOML file at: ${source_path}/pyproject.toml"
+  fi
+
+  start_time=$(date +%s)
+  python3 -m pip install ${pip_opt} "${source_path}/${extra_args}"
+  build_status=$?
+
+  if [ ${build_status} == 0 ]; then
+    echo -e "${INFO}'${package_name}' sources installed in $(($(date +%s) - start_time)) s."
+    # Check numpy version after installation.
+    check_numpy_version
+
+    # Test import if there's a package to import (skip for some packages that may not have direct imports)
+    if [[ -n "${package_name}" && "${package_name}" != "." ]]; then
+      python3 -c "import ${package_name}" 2>/dev/null
+      test_import_status=$?
+      if [ ${test_import_status} -gt 0 ]; then
+        echo -e "${WARNING}'${package_name}' test import failed!"
+        python3 -c "import ${package_name}"
+      fi
+    fi
+  else
+    echo -e "${ERROR}'${package_name}' sources install failed with code '${build_status}'!"
+    exit ${build_status}
+  fi
+}
+
+
 usage() {
   echo -e "$(bold USAGE):"
   echo -e "  ./install.sh [OPTIONS]"
@@ -90,6 +184,10 @@ usage() {
     Name of the conda environment to use, defaults to '${name}'."
   echo "  --dev
     Install the sources in developer mode."
+  echo "  --user
+    Install to the Python user install directory for your platform."
+  echo "  --webterm
+    Install the packages required to run WebTerm."
   echo "  --doc
     Install the packages required to build documentation."
   echo "  --notebook
@@ -122,8 +220,14 @@ while [ "$1" != "" ]; do
   --dev)
     pip_opt="${pip_opt} -e"
     ;;
+  --user)
+    pip_opt="${pip_opt} --user"
+    ;;
   --no-cache-dir)
     pip_opt="${pip_opt} --no-cache-dir"
+    ;;
+  --webterm)
+    webterm=1
     ;;
   --doc)
     doc=1
@@ -161,136 +265,61 @@ else
   echo -e "${INFO}# - Skipping conda environment creation..."
 fi
 
+
+echo -e "\n\n${INFO}Using `python3 --version`"
+echo -e "${INFO}Using `python3 -m pip --version`"
+echo -e "${INFO}Using setuptools `get_installed_setuptools`"
+
+
 # Check numpy version after installation.
 check_numpy_version
 
-# Install `plantdb.commons` sources:
-echo -e "\n\n${INFO}# - Installing 'plantdb.commons' sources..."
-start_time=$(date +%s)
-python3 -m pip install ${pip_opt} plantdb/src/commons/.[io]
-build_status=$?
-if [ ${build_status} == 0 ]; then
-  echo -e "${INFO}'plantdb.commons' sources installed in $(($(date +%s) - start_time)) s."
-  # Check numpy version after installation.
-  check_numpy_version
-else
-  echo -e "${ERROR}'plantdb.commons' sources install failed with code '${build_status}'!"
-  exit ${build_status}
-fi
+# Define packages to install as an array of arrays
+declare -a packages=(
+  "plantdb.commons|plantdb/src/commons/|[io]"
+  "plantdb.client|plantdb/src/client/|"
+  "plantdb.server|plantdb/src/server/|"
+  "romitask|romitask/|"
+  "skeleton_refinement|skeleton_refinement/|"
+  "romiseg|romiseg/|"
+  "romicgal|romicgal/|"
+  "dtw|dtw/|"
+  "plant-3d-vision|.|"
+)
 
-# Install `plantdb.client` sources:
-echo -e "\n\n${INFO}# - Installing 'plantdb.client' sources..."
-start_time=$(date +%s)
-python3 -m pip install ${pip_opt} plantdb/src/client/.
-build_status=$?
-if [ ${build_status} == 0 ]; then
-  echo -e "${INFO}'plantdb.client' sources installed in $(($(date +%s) - start_time)) s."
-  # Check numpy version after installation.
-  check_numpy_version
-else
-  echo -e "${ERROR}'plantdb.client' sources install failed with code '${build_status}'!"
-  exit ${build_status}
-fi
+# Special pre-installation steps for some packages
+for package_info in "${packages[@]}"; do
+  IFS="|" read -r package_name source_path extra_args <<< "${package_info}"
 
-# Install `plantdb.server` sources:
-echo -e "\n\n${INFO}# - Installing 'plantdb.server' sources..."
-start_time=$(date +%s)
-python3 -m pip install ${pip_opt} plantdb/src/server/.
-build_status=$?
-if [ ${build_status} == 0 ]; then
-  echo -e "${INFO}'plantdb.server' sources installed in $(($(date +%s) - start_time)) s."
-  # Check numpy version after installation.
-  check_numpy_version
-else
-  echo -e "${ERROR}'plantdb.server' sources install failed with code '${build_status}'!"
-  exit ${build_status}
-fi
+  # Special pre-installation steps for specific packages
+  if [[ "${package_name}" == "romiseg" ]]; then
+    echo -e "\n\n${INFO}# - Installing PyTorch dependencies for 'romiseg'..."
+    python3 -m pip install torch==1.12.1+cu102 torchvision==0.13.1+cu102 --extra-index-url https://download.pytorch.org/whl/cu102
+  elif [[ "${package_name}" == "romicgal" ]]; then
+    echo -e "\n\n${INFO}# - Installing pybind11 dependency for 'romicgal'..."
+    python3 -m pip install pybind11
+  elif [[ "${package_name}" == "dtw" ]]; then
+    echo -e "\n\n${INFO}# - Installing requirements for 'dtw'..."
+    python3 -m pip install -r dtw/requirements.txt
+  fi
 
-# Install `romitask` sources:
-echo -e "\n\n${INFO}# - Installing 'romitask' sources..."
-start_time=$(date +%s)
-python3 -m pip install ${pip_opt} romitask/
-build_status=$?
-if [ ${build_status} == 0 ]; then
-  echo -e "${INFO}'romitask' sources installed in $(($(date +%s) - start_time)) s."
-  # Check numpy version after installation.
-  check_numpy_version
-else
-  echo -e "${ERROR}'romitask' sources install failed with code '${build_status}'!"
-  exit ${build_status}
-fi
+  # Install the package
+  install_package_source "${package_name}" "${source_path}" "${extra_args}"
+done
 
-# Install `skeleton_refinement` sources:
-echo -e "\n\n${INFO}# - Installing 'skeleton_refinement' sources..."
-start_time=$(date +%s)
-python3 -m pip install ${pip_opt} skeleton_refinement/
-build_status=$?
-if [ ${build_status} == 0 ]; then
-  echo -e "${INFO}'skeleton_refinement' sources installed in $(($(date +%s) - start_time)) s."
-  # Check numpy version after installation.
-  check_numpy_version
-else
-  echo -e "${ERROR}'skeleton_refinement' sources install failed with code '${build_status}'!"
-  exit ${build_status}
-fi
 
-# Install `romiseg` sources:
-echo -e "\n\n${INFO}# - Installing 'romiseg' sources..."
-start_time=$(date +%s)
-python3 -m pip install torch==1.12.1+cu102 torchvision==0.13.1+cu102 --extra-index-url https://download.pytorch.org/whl/cu102
-python3 -m pip install ${pip_opt} romiseg/
-build_status=$?
-if [ ${build_status} == 0 ]; then
-  echo -e "${INFO}'romiseg' sources installed in $(($(date +%s) - start_time)) s."
-  # Check numpy version after installation.
-  check_numpy_version
-else
-  echo -e "${ERROR}'romiseg' sources install failed with code '${build_status}'!"
-  exit ${build_status}
-fi
+if [ "${webterm}" -eq 1 ]; then
+  echo -e "\n\n${INFO}# - Installing WebTerm requirements..."
+  start_time=$(date +%s)
+  python3 -m pip install .[webterm]
 
-# Install `romicgal` sources:
-echo -e "\n\n${INFO}# - Installing 'romicgal' sources..."
-start_time=$(date +%s)
-python3 -m pip install pybind11
-python3 -m pip install romicgal/
-build_status=$?
-if [ ${build_status} == 0 ]; then
-  echo -e "${INFO}'romicgal' sources installed in $(($(date +%s) - start_time)) s."
-  # Check numpy version after installation.
-  check_numpy_version
-else
-  echo -e "${ERROR}'romicgal' sources install failed with code '${build_status}'!"
-  exit ${build_status}
-fi
-
-# Install `dtw` sources:
-echo -e "\n\n${INFO}# - Installing 'dtw' sources..."
-start_time=$(date +%s)
-python3 -m pip install -r dtw/requirements.txt
-python3 -m pip install ${pip_opt} dtw/
-build_status=$?
-if [ ${build_status} == 0 ]; then
-  echo -e "${INFO}'dtw' sources installed in $(($(date +%s) - start_time)) s."
-  # Check numpy version after installation.
-  check_numpy_version
-else
-  echo -e "${ERROR}'dtw' sources install failed with code '${build_status}'!"
-  exit ${build_status}
-fi
-
-# Install `plant-3d-vision` sources:
-echo -e "\n\n${INFO}# - Installing 'plant-3d-vision' sources..."
-start_time=$(date +%s)
-python3 -m pip install ${pip_opt} .
-build_status=$?
-if [ ${build_status} == 0 ]; then
-  echo -e "${INFO}'plant-3d-vision' sources installed in $(($(date +%s) - start_time)) s."
-  # Check numpy version after installation.
-  check_numpy_version
-else
-  echo -e "${ERROR}'plant-3d-vision' sources install failed with code '${build_status}'!"
-  exit ${build_status}
+  build_status=$?
+  if [ ${build_status} == 0 ]; then
+    echo -e "${INFO}WebTerm requirements installed in $(($(date +%s) - start_time)) s."
+  else
+    echo -e "${ERROR}WebTerm requirements install failed with code '${build_status}'!"
+    exit ${build_status}
+  fi
 fi
 
 if [ "${doc}" -eq 1 ]; then
