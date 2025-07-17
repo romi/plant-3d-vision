@@ -66,7 +66,7 @@ RUN cd plant-3d-vision/ && \
     # Install `plant-3d-vision` dependencies and sources:
     ./install.sh --no-env --no-cache-dir && \
     # Install dependencies be able to start the WebTerm
-    python3 -m pip install -r plant3dvision/webterm/requirements.txt
+    python3 -m pip install -r plant3dvision/webterm/requirements.txt && \
     # Download the trained CNN model file:
     ./get_model.sh
 
