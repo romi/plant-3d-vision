@@ -27,7 +27,7 @@ def create_terminal():
     # Set terminal size
     set_terminal_size(master, 24, 80)
 
-    # Start shell process
+    # Start a shell process
     shell = subprocess.Popen(
         os.environ.get('SHELL', '/bin/bash'),
         preexec_fn=os.setsid,
@@ -62,7 +62,7 @@ def set_terminal_size(fd, rows, cols):
 
 
 def read_terminal_output(fd, max_read=4096):
-    """Read output from terminal."""
+    """Read output from the terminal."""
     output = ""
     try:
         while True:
@@ -100,9 +100,9 @@ def resize_terminal(terminal, rows, cols):
 def close_terminal(terminal):
     """Close the terminal."""
     try:
-        # Try to terminate process gracefully
+        # Try to terminate the process gracefully
         os.killpg(os.getpgid(terminal['pid']), signal.SIGTERM)
         # Close the master fd
         os.close(terminal['master'])
     except:
-        pass  # Process might already be dead
+        pass  # The Process might already be dead
