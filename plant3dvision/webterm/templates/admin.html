@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebTerm - Admin Panel</title>
+    <link rel="stylesheet" href="/static/css/admin.css">
+    <!-- Add Bootstrap Icons CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <script src="/static/js/admin.js" defer></script>
+
+</head>
+<body>
+<div class="login-container">
+    <div class="login-box">
+        <div class="logo-container">
+            <img src="/static/img/ROMI_logo_green.svg" alt="P3DV Logo">
+        </div>
+        <h1>Admin Panel</h1>
+
+        <div class="nav-bar">
+            <div>
+                <a href="/terminal">Back to Terminal</a> |
+                <a href="/logout">Logout</a>
+            </div>
+        </div>
+
+        <h3>Add New User</h3>
+        <form id="addUserForm">
+            <div class="input-group">
+                <label for="full_name">Full Name</label>
+                <input type="text" id="full_name" name="full_name" required autofocus>
+            </div>
+            <div class="input-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" required>
+            </div>
+            <div class="input-group">
+                <label for="password">Password</label>
+                <div class="password-container">
+                    <input type="password" id="password" name="password" required>
+                    <span class="toggle-password" onclick="togglePasswordVisibility('password')">
+                        <i class="bi bi-eye"></i>
+                    </span>
+                </div>
+            </div>
+            <div class="input-group">
+                <label for="confirm_password">Confirm Password</label>
+                <div class="password-container">
+                    <input type="password" id="confirm_password" name="confirm_password" required>
+                    <span class="toggle-password" onclick="togglePasswordVisibility('confirm_password')">
+                        <i class="bi bi-eye"></i>
+                    </span>
+                </div>
+            </div>
+            <button type="submit" class="login-button">Add User</button>
+        </form>
+
+        <div id="result" class="result" style="display: none;"></div>
+    </div>
+</div>
+
+</body>
+</html>

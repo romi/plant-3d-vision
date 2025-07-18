@@ -107,6 +107,11 @@ def socket_handle_terminal_input(data):
     output = handle_terminal_input(terminal, data)
     socketio.emit('terminal_output', {'output': output}, room=request.sid)
 
+@app.route('/admin')
+def admin_panel():
+    if 'username' not in session or session.get('username') != 'admin':
+        return redirect(url_for('index'))
+    return render_template('admin.html')
 
 @app.route('/admin/add_user', methods=['POST'])
 def add_user():

@@ -1,0 +1,101 @@
+@import 'webterm.css';
+
+body {
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.login-container {
+    width: 100%;
+    max-width: 500px;
+    padding: 20px;
+}
+
+.login-box {
+    background-color: #1e2127;
+    border-radius: 8px;
+    padding: 30px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+}
+
+h1, h2 {
+    text-align: center;
+}
+
+h3 {
+    margin-top: 20px;
+    text-align: center;
+}
+
+.input-group {
+    margin-bottom: 20px;
+}
+
+.logo-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.login-button {
+    width: 100%;
+}
+
+.nav-bar {
+    display: flex;
+    justify-content: center;
+    margin: 15px 0;
+    align-items: center;
+    text-align: center;
+}
+
+.nav-bar a {
+    color: #ccc;
+    text-decoration: none;
+    transition: color 0.3s;
+}
+
+.nav-bar a:hover {
+    color: #00A960;
+}
+
+.result {
+    margin-top: 20px;
+    padding: 10px;
+    border-radius: 4px;
+    text-align: center;
+}
+
+.success {
+    background-color: rgba(0, 169, 96, 0.2);
+    color: #00A960;
+}
+
+.error {
+    background-color: rgba(255, 76, 76, 0.2);
+    color: #ff4c4c;
+}
+
+.password-container {
+    position: relative;
+    width: 100%;
+}
+
+.password-container input {
+    width: 100%;
+    padding-right: 35px; /* Space for the eye icon */
+    box-sizing: border-box;
+}
+
+.toggle-password {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    user-select: none;
+    z-index: 10;
+}
