@@ -22,6 +22,8 @@ from flask_socketio import SocketIO
 from auth import authenticate_user
 from auth import hash_password
 from plantdb.commons.fsdb import FSDB
+
+from plant3dvision.webterm.auth import format_csv_line
 from terminal import create_terminal
 from terminal import handle_terminal_input
 
@@ -130,7 +132,7 @@ def add_user():
         # Add user to CSV
         with open('users.csv', 'a') as f:
             password_hash = hash_password(password)
-            f.write(f"\n{full_name},{username},{password_hash}")
+            f.write(format_csv_line(full_name, username, password_hash))
 
         return {'success': True}, 200
     except Exception as e:
@@ -154,11 +156,10 @@ if __name__ == '__main__':
     # Create users.csv if it doesn't exist
     if not os.path.exists('users.csv'):
         with open('users.csv', 'w') as f:
-            f.write('"full_name";"username";"password_hash"\n')
+            f.write(format_csv_line("full_name", "username", "password_hash"))
             # Add default admin user
             admin_hash = hash_password('admin')
-            print(f"Default admin user created with password: {admin_hash}")
-            f.write(f'"Administrator";"admin";"{admin_hash}"\n')
+            f.write(format_csv_line("Administrator", "admin", admin_hash))
 
     # Start the server
     host = os.environ.get('HOST', '0.0.0.0')
