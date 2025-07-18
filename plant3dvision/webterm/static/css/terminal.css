@@ -1,19 +1,9 @@
-/*https://fonts.google.com/*/
-@import url('https://fonts.googleapis.com/css2?family=Nunito+Sans:ital,opsz,wght@0,6..12,200..1000;1,6..12,200..1000&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Ubuntu+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap');
 
-* {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-}
+@import 'webterm.css';
 
 body {
-    font-family: 'Nunito Sans', sans-serif;
-    background-color: #282c34;
     height: 100vh;
     overflow: hidden;
-    color: #eee;
 }
 
 .terminal-container {
@@ -142,13 +132,6 @@ body {
     overflow-y: auto;
     padding: 15px;
     background-color: #1a1a1a;
-}
-
-h2 {
-    margin-top: 0;
-    color: #ddd;
-    border-bottom: 1px solid #444;
-    padding-bottom: 8px;
 }
 
 pre {
