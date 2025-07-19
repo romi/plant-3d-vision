@@ -17,8 +17,41 @@ body {
     justify-content: space-between;
     align-items: center;
     padding: 10px 15px;
-    background-color: #1e2127;
-    border-bottom: 1px solid #333;
+    background-color: #1a1a1a;
+    border-bottom: 1px solid #444;
+    height: 50px;
+}
+
+.terminal-header .actions a,
+.terminal-header .actions button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background-color: transparent;
+    border: none;
+    border-radius: 4px;
+    color: #ccc;
+    font-size: 1.2rem;
+    margin-left: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.terminal-header .actions a:hover,
+.terminal-header .actions button:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #00A960;
+}
+
+.terminal-header .profile-btn {
+    color: #ccc;
+    text-decoration: none;
+}
+
+.terminal-header .admin-button {
+    color: #00A960;
 }
 
 .user-info {
@@ -38,7 +71,9 @@ body {
 
 .actions {
     display: flex;
+    align-items: center;
     gap: 10px;
+    margin-left: auto;
 }
 
 .actions button, .actions a {
