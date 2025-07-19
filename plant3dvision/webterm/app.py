@@ -16,8 +16,8 @@ from plantdb.commons.fsdb import FSDB
 
 from auth import authenticate_user
 from auth import hash_password
-from plant3dvision.webterm.auth import format_csv_line
-from plant3dvision.webterm.auth import load_users
+from auth import format_csv_line
+from auth import load_users
 from terminal import create_terminal
 from terminal import handle_terminal_input
 
