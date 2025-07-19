@@ -146,3 +146,58 @@ document.addEventListener('DOMContentLoaded', () => {
     // Add refresh button functionality
     document.getElementById('refresh-scans').addEventListener('click', loadScanDatasets);
 });
+
+document.addEventListener('DOMContentLoaded', function() {
+    const resizeHandle = document.querySelector('.resize-handle');
+    const terminalSide = document.querySelector('.terminal-side');
+    const mainContainer = document.querySelector('.main-container');
+
+    let isResizing = false;
+
+    // Mouse down event on the resize handle
+    resizeHandle.addEventListener('mousedown', function(e) {
+        isResizing = true;
+        resizeHandle.classList.add('active');
+
+        // Prevent text selection during resize
+        document.body.style.userSelect = 'none';
+
+        // Initial mouse position
+        const startX = e.clientX;
+        const startWidth = terminalSide.offsetWidth;
+
+        // Mouse move event for resizing
+        function handleMouseMove(e) {
+            if (!isResizing) return;
+
+            const newWidth = startWidth + (e.clientX - startX);
+            const containerWidth = mainContainer.offsetWidth;
+
+            // Limit resizing within reasonable bounds (10% to 90% of container)
+            const minWidth = Math.max(200, containerWidth * 0.1);
+            const maxWidth = containerWidth * 0.9;
+
+            if (newWidth >= minWidth && newWidth <= maxWidth) {
+                terminalSide.style.width = newWidth + 'px';
+
+                // Ensure terminal resizes properly if you're using xterm.js
+                if (window.fitAddon) {
+                    window.fitAddon.fit();
+                }
+            }
+        }
+
+        // Mouse up event to stop resizing
+        function handleMouseUp() {
+            isResizing = false;
+            resizeHandle.classList.remove('active');
+            document.body.style.userSelect = '';
+
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+        }
+
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+    });
+});
