@@ -135,11 +135,11 @@ function loadScanDatasets() {
                 const scanElement = document.createElement('div');
                 scanElement.className = 'scan-item';
                 scanElement.textContent = scan;
-                scanElement.addEventListener('click', () => {
-                    // Handle scan selection - could execute a command in terminal
+                scanElement.addEventListener('dblclick', () => {
+                    // Handle scan selection by double click: write scan name in the terminal
                     const terminal = window.term;
                     if (terminal) {
-                        terminal.write(`\r\nSelected scan: ${scan}\r\n`);
+                        terminal.write(`${scan}`);
                     }
                 });
                 scanContainer.appendChild(scanElement);
