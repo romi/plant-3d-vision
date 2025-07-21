@@ -19,7 +19,7 @@ from auth import authenticate_user
 from auth import format_csv_line
 from auth import hash_password
 from auth import load_users
-from plant3dvision.webterm.terminal import read_terminal_output
+from terminal import read_terminal_output
 from terminal import create_terminal
 from terminal import handle_terminal_input
 
