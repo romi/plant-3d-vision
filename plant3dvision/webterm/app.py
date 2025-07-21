@@ -4,6 +4,7 @@
 
 import os
 
+from dotenv import load_dotenv
 from flask import Flask
 from flask import jsonify
 from flask import redirect
@@ -13,12 +14,12 @@ from flask import session
 from flask import url_for
 from flask_socketio import SocketIO
 from plantdb.commons.fsdb import FSDB
-from dotenv import load_dotenv
 
 from auth import authenticate_user
 from auth import format_csv_line
 from auth import hash_password
 from auth import load_users
+from plant3dvision.webterm.terminal import read_terminal_output
 from terminal import create_terminal
 from terminal import handle_terminal_input
 
@@ -66,6 +67,50 @@ def socket_handle_terminal_input(data):
     terminal = terminals[username]
     output = handle_terminal_input(terminal, data)
     socketio.emit('terminal_output', {'output': output}, room=request.sid)
+
+
+@socketio.on('start_output_polling')
+def start_output_polling():
+    username = session.get('username')
+    if not username or username not in terminals:
+        return
+
+    # Get the current request.sid and store it
+    sid = request.sid
+
+    terminal = terminals[username]
+
+    # Store a flag in terminal dict to track if polling should continue
+    terminal['polling_active'] = True
+    # Store the session ID
+    terminal['sid'] = sid
+
+    def poll_output():
+        while terminal.get('polling_active', False):
+            try:
+                # Check if there's any output available
+                output = read_terminal_output(terminal['main'])
+                if output:
+                    # Use the stored sid instead of request.sid
+                    socketio.emit('terminal_output', {'output': output}, room=terminal['sid'])
+            except Exception as e:
+                # Use the stored sid instead of request.sid
+                socketio.emit('terminal_output',
+                              {'output': f"\r\nError in polling: {str(e)}\r\n"},
+                              room=terminal['sid'])
+                break
+            # Sleep a short time to avoid consuming too much CPU
+            socketio.sleep(0.1)
+
+    # Start polling in a background task
+    socketio.start_background_task(poll_output)
+
+
+@socketio.on('stop_output_polling')
+def stop_output_polling():
+    username = session.get('username')
+    if username and username in terminals:
+        terminals[username]['polling_active'] = False
 
 
 @app.route('/')

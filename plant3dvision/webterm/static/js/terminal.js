@@ -37,6 +37,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Create socket connection
     const socket = io();
+    // Store for global access
+    window.term = terminal;
+    window.fitAddon = fitAddon;
 
     // Open terminal
     terminal.open(document.getElementById('terminal'));
@@ -45,6 +48,8 @@ document.addEventListener('DOMContentLoaded', function () {
     // Handle connection events
     socket.on('connect', () => {
         console.log('Connected to server');
+        // Start polling for output updates when connected
+        socket.emit('start_output_polling');
     });
 
     socket.on('disconnect', () => {
@@ -97,6 +102,15 @@ document.addEventListener('DOMContentLoaded', function () {
             };
             socket.emit('resize', dimensions);
         }, 100);
+    });
+
+    // Re-enable polling after page visibility changes
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            socket.emit('start_output_polling');
+        } else {
+            socket.emit('stop_output_polling');
+        }
     });
 });
 
