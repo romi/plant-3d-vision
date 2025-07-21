@@ -145,6 +145,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Add refresh button functionality
     document.getElementById('refresh-scans').addEventListener('click', loadScanDatasets);
+
+    // Initialize TOML editor
+    initTomlEditor();
 });
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -201,3 +204,251 @@ document.addEventListener('DOMContentLoaded', function() {
         document.addEventListener('mouseup', handleMouseUp);
     });
 });
+
+// CodeMirror instance
+let codeMirror;
+
+// Default TOML content
+const defaultTomlContent = `# Example TOML configuration
+[task]
+name = 'Colmap'
+type = 'reconstruction'
+
+[parameters]
+quality = 'high'
+use_gpu = true
+match_type = 'exhaustive'
+
+[output]
+format = 'ply'
+save_intermediate = false`;
+
+// TOML Editor Functionality
+function initTomlEditor() {
+    const editorContainer = document.getElementById('toml-editor');
+    const filenameInput = document.getElementById('toml-filename');
+    const saveButton = document.getElementById('save-toml-btn');
+    const loadButton = document.getElementById('load-toml-btn');
+    const dropZone = document.getElementById('toml-editor-container');
+    const fileSelector = document.getElementById('toml-file-selector');
+    const filesList = document.getElementById('toml-files-list');
+    const closeFileSelector = document.getElementById('close-file-selector');
+
+    let currentFilename = 'config.toml';
+
+    // Initialize CodeMirror
+    codeMirror = CodeMirror(editorContainer, {
+        value: defaultTomlContent,
+        mode: 'toml',
+        theme: 'monokai',
+        lineNumbers: true,
+        indentUnit: 4,
+        smartIndent: true,
+        tabSize: 4,
+        indentWithTabs: false,
+        electricChars: true,
+        lineWrapping: true,
+        matchBrackets: true,
+        autoCloseBrackets: true,
+        autofocus: false
+    });
+
+    // Adjust editor size after initialization
+    setTimeout(() => {
+        codeMirror.refresh();
+    }, 100);
+
+    // Set initial filename
+    filenameInput.value = currentFilename;
+
+    // Handle file drop
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('drag-over');
+    });
+
+    dropZone.addEventListener('dragleave', () => {
+        dropZone.classList.remove('drag-over');
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('drag-over');
+
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            const file = files[0];
+
+            // Check if it's a TOML file
+            if (file.name.toLowerCase().endsWith('.toml')) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    codeMirror.setValue(event.target.result);
+                    currentFilename = file.name;
+                    filenameInput.value = currentFilename;
+                };
+                reader.readAsText(file);
+            } else {
+                alert('Please drop a TOML file (.toml)');
+            }
+        }
+    });
+
+    // Handle save button click
+    saveButton.addEventListener('click', () => {
+        // Get the updated filename from the input
+        const filename = filenameInput.value.trim();
+        if (!filename) {
+            alert('Please enter a filename');
+            return;
+        }
+
+        // Ensure filename has .toml extension
+        const finalFilename = filename.toLowerCase().endsWith('.toml')
+            ? filename
+            : `${filename}.toml`;
+
+        // Get the TOML content from CodeMirror
+        const content = codeMirror.getValue();
+
+        // Save the file
+        saveTomlFile(finalFilename, content);
+    });
+
+    // Handle load button click
+    loadButton.addEventListener('click', () => {
+        // Show file selector and load the list of TOML files
+        fileSelector.classList.remove('hidden');
+        loadTomlFilesList();
+    });
+
+    // Close file selector
+    closeFileSelector.addEventListener('click', () => {
+        fileSelector.classList.add('hidden');
+    });
+
+    // Allow editing filename
+    filenameInput.addEventListener('change', () => {
+        currentFilename = filenameInput.value;
+    });
+}
+
+// Function to load the list of TOML files
+function loadTomlFilesList() {
+    const filesList = document.getElementById('toml-files-list');
+    filesList.innerHTML = '<div class="loading-indicator">Loading files...</div>';
+
+    // Get the username from the DOM
+    const usernameElement = document.querySelector('.username');
+    let username = 'default';
+
+    if (usernameElement) {
+        // Extract username from format like "@username"
+        const usernameText = usernameElement.textContent;
+        username = usernameText.startsWith('@') ? usernameText.substring(1) : usernameText;
+    }
+
+    // Fetch the list of available TOML files
+    fetch(`/api/list-toml-files?username=${encodeURIComponent(username.trim())}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to load files list');
+            }
+            return response.json();
+        })
+        .then(data => {
+            filesList.innerHTML = '';
+
+            if (data.files && data.files.length > 0) {
+                data.files.forEach(file => {
+                    const fileItem = document.createElement('div');
+                    fileItem.className = 'file-item';
+                    fileItem.innerHTML = `<i class="bi bi-file-earmark-text"></i> ${file}`;
+                    fileItem.addEventListener('click', () => {
+                        loadTomlFile(file);
+                    });
+                    filesList.appendChild(fileItem);
+                });
+            } else {
+                filesList.innerHTML = '<div class="no-files">No TOML files found</div>';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading TOML files list:', error);
+            filesList.innerHTML = `<div class="no-files">Error: ${error.message}</div>`;
+        });
+}
+
+// Function to load a specific TOML file
+function loadTomlFile(filename) {
+    // Get the username from the DOM
+    const usernameElement = document.querySelector('.username');
+    let username = 'default';
+
+    if (usernameElement) {
+        // Extract username from format like "@username"
+        const usernameText = usernameElement.textContent;
+        username = usernameText.startsWith('@') ? usernameText.substring(1) : usernameText;
+    }
+
+    fetch(`/api/load-toml-file?filename=${encodeURIComponent(filename)}&username=${encodeURIComponent(username.trim())}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to load file');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.content) {
+                // Set content in CodeMirror
+                codeMirror.setValue(data.content);
+                document.getElementById('toml-filename').value = filename;
+                document.getElementById('toml-file-selector').classList.add('hidden');
+            } else {
+                throw new Error('File content is empty');
+            }
+        })
+        .catch(error => {
+            console.error('Error loading TOML file:', error);
+            alert(`Error loading file: ${error.message}`);
+        });
+}
+
+// Function to save TOML file to server
+function saveTomlFile(filename, content) {
+    // Get the username from the DOM
+    const usernameElement = document.querySelector('.username');
+    let username = 'default';
+
+    if (usernameElement) {
+        // Extract username from format like "@username"
+        const usernameText = usernameElement.textContent;
+        username = usernameText.startsWith('@') ? usernameText.substring(1) : usernameText;
+    }
+
+    fetch('/api/save-toml', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            filename: filename,
+            content: content,
+            username: username.trim()
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Failed to save file');
+        }
+        return response.json();
+    })
+    .then(data => {
+        console.log('File saved successfully:', data);
+        alert(`File "${filename}" saved successfully to ${data.path}`);
+    })
+    .catch(error => {
+        console.error('Error saving file:', error);
+        alert(`Error saving file: ${error.message}`);
+    });
+}

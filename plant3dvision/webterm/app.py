@@ -13,13 +13,17 @@ from flask import session
 from flask import url_for
 from flask_socketio import SocketIO
 from plantdb.commons.fsdb import FSDB
+from dotenv import load_dotenv
 
 from auth import authenticate_user
-from auth import hash_password
 from auth import format_csv_line
+from auth import hash_password
 from auth import load_users
 from terminal import create_terminal
 from terminal import handle_terminal_input
+
+# Load environment variables from .env file
+load_dotenv(verbose=False, override=True)
 
 # Initialize Flask application
 app = Flask(__name__)
@@ -138,14 +142,118 @@ def add_user():
 @app.route('/api/scans', methods=['GET'])
 def get_scans():
     try:
-        # db = FSDB(os.getenv('ROMI_DB', '/myapp/db'))
-        db = FSDB(os.getenv('ROMI_DB', '/data/ROMI/test_owner'))
+        db = FSDB(os.getenv('ROMI_DB', '/myapp/db'))
         db.connect(unsafe=True)
         list_scan_names = db.list_scans(owner_only=False)
         db.disconnect()
         return jsonify(list_scan_names)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/list-toml-files', methods=['GET'])
+def list_toml_files():
+    username = request.args.get('username', 'default')
+
+    # Get the directory from environment variable or use default
+    default_path = f'/myapp/cfg/{username}/'
+    save_dir = os.environ.get('ROMI_CFG', default_path)
+
+    try:
+        # Ensure directory exists
+        os.makedirs(save_dir, exist_ok=True)
+
+        # Get all TOML files in the directory
+        files = [f for f in os.listdir(save_dir) if f.lower().endswith('.toml')]
+
+        return jsonify({
+            'success': True,
+            'files': files,
+            'directory': save_dir
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/load-toml-file', methods=['GET'])
+def load_toml_file():
+    filename = request.args.get('filename')
+    username = request.args.get('username', 'default')
+
+    if not filename:
+        return jsonify({
+            'success': False,
+            'error': 'Filename is required'
+        }), 400
+
+    # Get the directory from environment variable or use default
+    default_path = f'/myapp/cfg/{username}/'
+    save_dir = os.environ.get('ROMI_CFG', default_path)
+
+    try:
+        # Construct full file path
+        file_path = os.path.join(save_dir, filename)
+
+        # Check if file exists
+        if not os.path.exists(file_path):
+            return jsonify({
+                'success': False,
+                'error': f'File not found: {filename}'
+            }), 404
+
+        # Read file content
+        with open(file_path, 'r') as f:
+            content = f.read()
+
+        return jsonify({
+            'success': True,
+            'filename': filename,
+            'content': content,
+            'path': file_path
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/save-toml', methods=['POST'])
+def save_toml():
+    data = request.json
+    filename = data.get('filename')
+    content = data.get('content')
+
+    # Get username from session or request
+    username = session.get('username')  # Assuming username is stored in session
+
+    # Get the save directory from environment variable or use default
+    if username:
+        default_path = f'/myapp/cfg/{username}/'
+    else:
+        default_path = '/myapp/cfg/'  # Fallback path if username is not available
+
+    save_dir = os.environ.get('ROMI_CFG', default_path)
+
+    # Ensure directory exists
+    os.makedirs(save_dir, exist_ok=True)
+
+    # Save the file
+    file_path = os.path.join(save_dir, filename)
+
+    try:
+        with open(file_path, 'w') as f:
+            f.write(content)
+        return jsonify({
+            'success': True,
+            'path': file_path,
+            'message': f'File saved to {save_dir}{filename}'
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/user/profile')

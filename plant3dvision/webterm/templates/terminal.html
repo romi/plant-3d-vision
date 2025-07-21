@@ -4,12 +4,24 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WebTerm - Terminal</title>
+    <!-- XTerm.js CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.1.0/css/xterm.css">
+    <!-- BootStrap CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <!-- CodeMirror CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/monokai.min.css">
+    <!-- Custom CSS -->
     <link rel="stylesheet" href="/static/css/terminal.css">
+    <!-- XTerm.js -->
     <script src="https://cdn.jsdelivr.net/npm/xterm@5.1.0/lib/xterm.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.7.0/lib/xterm-addon-fit.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.7.2/dist/socket.io.min.js"></script>
+    <!-- CodeMirror JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/toml/toml.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/addon/edit/matchbrackets.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/addon/edit/closebrackets.min.js"></script>
 </head>
 <body>
 <header class="terminal-header">
@@ -55,37 +67,32 @@
             </div>
         </div>
 
-        <div class="help-section">
-            <h2>Command Help:</h2>
-            <pre id="command-help">
-Usage: romi_run_task [OPTIONS] TASK_ID
-
-  Execute a specific ROMI processing task on a dataset.
-
-  Examples:
-    romi_run_task Colmap /path/to/dataset
-    romi_run_task AnglesAndInternodes /path/to/dataset --config my_config.toml
-
-Positional arguments:
-  task                  Name of the ROMI task to run. See the list of pre-defined tasks below.
-  dataset_path          Path to the dataset to process (directory). You may use Unix pattern matching with "*"
-                        and "?" to select a list of dataset.
-
-Optional arguments:
-  --config CONFIG       Pipeline configuration file (TOML) or directory. If a file, read the configuration from
-                        it. If a directory, read & concatenate all configuration files in it. By default,
-                        search a 'pipeline.toml' file in the selected dataset directory.
-  --module MODULE       Library and module of the task. Use it if not available or different than defined in
-                        `romitask.modules.MODULES`.
-  --log-level {CRITICAL,DEBUG,INFO,NOTSET,WARNING,ERROR}
-                        Level of message logging, defaults to 'INFO'.
-  --dry-run             Use this to test the command-line by doing everything except calling the task(s).
-  -h, --help            show this help message and exit
-
-The list of pre-defined tasks is:
-    CreateCharucoBoard, DetectCharuco, ExtrinsicCalibration, IntrinsicCalibration,
-    Colmap, Undistort, Masks, Voxels, PointCloud, TriangleMesh, CurveSkeleton, Segmentation2D, SegmentedPointCloud, ClusteredMesh, OrganSegmentation, TreeGraph, AnglesAndInternodes, DummyTask, Clean.
-</pre>
+        <div class="toml-editor-section">
+            <div class="section-header">
+                <h2>TOML Configuration Editor</h2>
+                <div class="toml-actions">
+                    <button id="load-toml-btn" class="action-btn load-btn" title="Load TOML file">
+                        <i class="bi bi-folder2-open"></i> Load
+                    </button>
+                    <div class="toml-filename-container">
+                        <input type="text" id="toml-filename" placeholder="filename.toml" class="toml-filename-input">
+                        <button id="save-toml-btn" class="save-btn">Save</button>
+                    </div>
+                </div>
+            </div>
+            <div id="toml-file-selector" class="file-selector hidden">
+                <div class="file-selector-header">
+                    <h3>Select TOML Configuration</h3>
+                    <button id="close-file-selector" class="close-btn"><i class="bi bi-x"></i></button>
+                </div>
+                <div id="toml-files-list" class="files-list">
+                    <!-- Files will be loaded here -->
+                    <div class="loading-indicator">Loading files...</div>
+                </div>
+            </div>
+            <div id="toml-editor-container" class="toml-editor-container">
+                <div id="toml-editor"></div>
+            </div>
         </div>
     </div>
 </div>
