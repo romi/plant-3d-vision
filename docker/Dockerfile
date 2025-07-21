@@ -26,6 +26,7 @@ ENV PATH="${PATH}:/home/${USER_NAME}/.local/bin"
 
 # Required by `romi_run_task`:
 ENV ROMI_DB="/myapp/db"
+ENV ROMI_CFG="/myapp/cfg"
 ENV COLMAP_EXE='colmap'
 ENV PYOPENCL_CTX='0'
 
@@ -44,10 +45,13 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/* && \
     # Create a non-root user named romi' and create a "home" folder wih proper rights:
     adduser --disabled-password --gecos '' --uid ${USER_ID} ${USER_NAME} && \
-    chown -R ${USER_NAME}: /home/${USER_NAME} && \
+    chown -R ${USER_NAME}:${USER_NAME} /home/${USER_NAME} && \
     # Create the folder used to mount the database:
     mkdir -p ${ROMI_DB} && \
-    chown -R ${USER_NAME}: ${ROMI_DB} && \
+    chown -R ${USER_NAME}:${USER_NAME} ${ROMI_DB} && \
+    # Create the folder used to store the TOML configurations:
+    mkdir -p ${ROMI_CFG} && \
+    chown -R ${USER_NAME}:${USER_NAME} ${ROMI_CFG} && \
     # Ugly fix for OpenCL:
     ln -s /usr/lib/x86_64-linux-gnu/libOpenCL.so.1 /usr/lib/libOpenCL.so && \
     mkdir -p /etc/OpenCL/vendors && \
