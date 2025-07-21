@@ -45,6 +45,8 @@ def handle_connect():
     # Create a new terminal for this user if one doesn't exist
     if username not in terminals:
         terminals[username] = create_terminal()
+        # Change to $ROMI_DB directory automatically
+        handle_terminal_input(terminals[username], {'input': 'cd $ROMI_DB\n'})
 
     return True
 
