@@ -89,6 +89,7 @@ webterm = [
     "passlib",
     "python-engineio",
     "python-socketio",
+    "python-dotenv",
 ]
 
 [tool.setuptools]
