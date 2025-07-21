@@ -63,8 +63,10 @@ WORKDIR /home/${USER_NAME}
 COPY --chown=${USER_NAME} ./ plant-3d-vision/
 
 RUN cd plant-3d-vision/ && \
+    # Upgrade pip & setuptools to latest versions
+    python3 -m pip install --upgrade pip setuptools && \
     # Install `plant-3d-vision` dependencies and sources:
-    ./install.sh --no-env --no-cache-dir && \
+    ./install.sh --no-env --user --no-cache-dir --webterm && \
     # Download the trained CNN model file:
     ./get_model.sh
 

@@ -82,6 +82,15 @@ doc = [
     "mkdocs-section-index",
 ]
 
+webterm = [
+    "flask",
+    "flask-socketio",
+    "eventlet",
+    "passlib",
+    "python-engineio",
+    "python-socketio",
+]
+
 [tool.setuptools]
 packages = [
     "romitask",

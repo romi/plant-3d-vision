@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebTerm - Terminal</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.1.0/css/xterm.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/static/css/terminal.css">
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.1.0/lib/xterm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.7.0/lib/xterm-addon-fit.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.7.2/dist/socket.io.min.js"></script>
+</head>
+<body>
+<header class="terminal-header">
+    <div class="user-info">
+        <span class="welcome-text">Welcome, {{ full_name }}</span>
+        <span class="username">@{{ username }}</span>
+    </div>
+    <div class="actions">
+        {% if username == 'admin' %}
+        <a href="/admin" class="admin-button" title="Admin Panel">
+            <i class="bi bi-shield-lock"></i>
+        </a>
+        {% endif %}
+        <a href="/user/profile" class="profile-btn" title="User Profile">
+            <i class="bi bi-person-circle"></i>
+        </a>
+        <button id="btn-fullscreen" title="Toggle Fullscreen">
+            <i class="bi bi-arrows-fullscreen"></i>
+        </button>
+        <a href="/logout" class="logout-btn" title="Logout">
+            <i class="bi bi-box-arrow-right"></i>
+        </a>
+    </div>
+</header>
+
+<div class="main-container">
+    <div class="terminal-side">
+        <div class="terminal-container">
+            <div id="terminal"></div>
+        </div>
+    </div>
+
+    <div class="resize-handle"></div>
+
+    <div class="info-side">
+        <div class="scan-list">
+            <div class="section-header">
+                <h2>Available Scan Datasets</h2>
+                <button class="refresh-btn" id="refresh-scans">Refresh</button>
+            </div>
+            <div class="scan-grid" id="scan-datasets">
+                <!-- JavaScript will populate scan datasets here -->
+            </div>
+        </div>
+
+        <div class="help-section">
+            <h2>Command Help:</h2>
+            <pre id="command-help">
+Usage: romi_run_task [OPTIONS] TASK_ID
+
+  Execute a specific ROMI processing task on a dataset.
+
+  Examples:
+    romi_run_task Colmap /path/to/dataset
+    romi_run_task AnglesAndInternodes /path/to/dataset --config my_config.toml
+
+Positional arguments:
+  task                  Name of the ROMI task to run. See the list of pre-defined tasks below.
+  dataset_path          Path to the dataset to process (directory). You may use Unix pattern matching with "*"
+                        and "?" to select a list of dataset.
+
+Optional arguments:
+  --config CONFIG       Pipeline configuration file (TOML) or directory. If a file, read the configuration from
+                        it. If a directory, read & concatenate all configuration files in it. By default,
+                        search a 'pipeline.toml' file in the selected dataset directory.
+  --module MODULE       Library and module of the task. Use it if not available or different than defined in
+                        `romitask.modules.MODULES`.
+  --log-level {CRITICAL,DEBUG,INFO,NOTSET,WARNING,ERROR}
+                        Level of message logging, defaults to 'INFO'.
+  --dry-run             Use this to test the command-line by doing everything except calling the task(s).
+  -h, --help            show this help message and exit
+
+The list of pre-defined tasks is:
+    CreateCharucoBoard, DetectCharuco, ExtrinsicCalibration, IntrinsicCalibration,
+    Colmap, Undistort, Masks, Voxels, PointCloud, TriangleMesh, CurveSkeleton, Segmentation2D, SegmentedPointCloud, ClusteredMesh, OrganSegmentation, TreeGraph, AnglesAndInternodes, DummyTask, Clean.
+</pre>
+        </div>
+    </div>
+</div>
+
+<script src="/static/js/terminal.js"></script>
+</body>
+</html>

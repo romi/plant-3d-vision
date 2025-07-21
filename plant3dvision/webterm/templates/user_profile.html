@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebTerm - User Profile</title>
+    <link rel="stylesheet" href="/static/css/admin.css">
+    <!-- Add Bootstrap Icons CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <script src="/static/js/user_profile.js" defer></script>
+</head>
+<body>
+<div class="login-container">
+    <div class="login-box">
+        <div class="logo-container">
+            <img src="/static/img/ROMI_logo_green.svg" alt="P3DV Logo">
+        </div>
+        <h1>User Profile</h1>
+
+        <div class="nav-bar">
+            <div>
+                <a href="/terminal">Back to Terminal</a> |
+                <a href="/logout">Logout</a>
+            </div>
+        </div>
+
+        <h3>User Information</h3>
+        <div class="input-group">
+            <label>Full Name</label>
+            <p>{{ full_name }}</p>
+        </div>
+        <div class="input-group">
+            <label>Username</label>
+            <p>{{ username }}</p>
+        </div>
+
+        <h3>Change Password</h3>
+        <form id="changePasswordForm">
+            <div class="input-group">
+                <label for="current_password">Current Password</label>
+                <div class="password-container">
+                    <input type="password" id="current_password" name="current_password" required>
+                    <span class="toggle-password" onclick="togglePasswordVisibility('current_password')">
+                        <i class="bi bi-eye"></i>
+                    </span>
+                </div>
+            </div>
+            <div class="input-group">
+                <label for="new_password">New Password</label>
+                <div class="password-container">
+                    <input type="password" id="new_password" name="new_password" required>
+                    <span class="toggle-password" onclick="togglePasswordVisibility('new_password')">
+                        <i class="bi bi-eye"></i>
+                    </span>
+                </div>
+            </div>
+            <div class="input-group">
+                <label for="confirm_new_password">Confirm New Password</label>
+                <div class="password-container">
+                    <input type="password" id="confirm_new_password" name="confirm_new_password" required>
+                    <span class="toggle-password" onclick="togglePasswordVisibility('confirm_new_password')">
+                        <i class="bi bi-eye"></i>
+                    </span>
+                </div>
+            </div>
+            <button type="submit" class="login-button">Change Password</button>
+        </form>
+
+        <div id="result" class="result" style="display: none;"></div>
+    </div>
+</div>
+</body>
+</html>

@@ -5,7 +5,7 @@
 plant3dvision.proc2d
 --------------------
 
-This module contains all functions for processing of 2D images data.
+This module contains all functions for processing of 2D image data.
 
 """
 
@@ -28,11 +28,11 @@ def undistort(img, camera_mtx, distortion_vect):
     Parameters
     ----------
     img : numpy.ndarray
-        RGB image as an NxMx3 array.
+        An RGB image as an NxMx3 array.
     camera_mtx : numpy.ndarray
-        3x3 floating-point camera matrix.
+        A 3x3 floating-point camera matrix.
     distortion_vect : numpy.ndarray
-        Vector of distortion coefficients (k1, k2, p1, p2, k3)
+        A Vector of distortion coefficients (k1, k2, p1, p2, k3)
 
     See Also
     --------
@@ -67,12 +67,12 @@ def undistort(img, camera_mtx, distortion_vect):
 
 
 def linear(img, coefs):
-    """Apply linear coefficients to RGB array.
+    """Apply linear coefficients to an RGB array.
 
     Parameters
     ----------
     img : numpy.ndarray
-        RGB image as an NxMx3 array.
+        An RGB image as an NxMx3 array.
     coefs : list
         A len-3 list of coefficients to apply to the image.
         They are applied to the corresponding RBG channel of the 2D array, *e.g.* `coefs[0]` to the red channel.
@@ -92,7 +92,7 @@ def linear(img, coefs):
     >>> img = imread(path.joinpath('real_plant/images/00000_rgb.jpg'))
     >>> filter_img = linear(img, [0.1, 1., 0.1])  # apply `linear` filter
     >>> threshold = 0.3
-    >>> mask = filter_img > threshold  # convert to binary mask using threshold
+    >>> mask = filter_img > threshold  # convert to binary mask using a threshold
     >>> radius = 2
     >>> dilated_mask = dilation(mask, radius)  # apply a dilation to binary mask
     >>> fig, axes = plt.subplots(2, 2, figsize=(8, 7))
@@ -121,12 +121,12 @@ def excess_green(img):
     Parameters
     ----------
     img : numpy.ndarray
-        RGB image as an NxMx3 array.
+        An RGB image as an NxMx3 array.
 
     Returns
     -------
     numpy.ndarray
-        The excess green image
+        The excess green image.
 
     References
     ----------
@@ -142,7 +142,7 @@ def excess_green(img):
     >>> img = imread(path.joinpath('real_plant/images/00000_rgb.jpg'))
     >>> filter_img = excess_green(img)  # apply `excess_green` filter
     >>> threshold = 0.3
-    >>> mask = filter_img > threshold  # convert to binary mask using threshold
+    >>> mask = filter_img > threshold  # convert to binary mask using a threshold
     >>> radius = 2
     >>> dilated_mask = dilation(mask, radius)  # apply a dilation to binary mask
     >>> fig, axes = plt.subplots(2, 2, figsize=(8, 7))
@@ -175,9 +175,9 @@ def dilation(img, n):
     Parameters
     ----------
     img : numpy.ndarray
-        Binary input image to dilate.
+        A binary input image to dilate.
     n : int
-        Number of pixels, equivalent to a radius.
+        A number of pixels, equivalent to a radius.
 
     See Also
     --------
@@ -199,7 +199,7 @@ def dilation(img, n):
     >>> img = imread(path.joinpath('real_plant/images/00000_rgb.jpg'))
     >>> filter_img = linear(img, [0.1, 1., 0.1])  # apply `linear` filter
     >>> threshold = 0.3
-    >>> mask = filter_img > threshold  # convert to binary mask using threshold
+    >>> mask = filter_img > threshold  # convert to binary mask using a threshold
     >>> radius = 2
     >>> dilated_mask = dilation(mask, radius)  # apply a dilation to binary mask
     >>> fig, axes = plt.subplots(2, 2, figsize=(8, 7))
