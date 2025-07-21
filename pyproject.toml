@@ -93,13 +93,16 @@ webterm = [
 ]
 
 [tool.setuptools]
-packages = [
-    "romitask",
-    "plantdb",
-    "plant3dvision",
-    "romicgal",
-    "romiseg",
-    "dtw",
-    "skeleton_refinement",
-]
 include-package-data = true  # Includes files from MANIFEST.in
+
+[tool.setuptools.packages.find]
+include = [
+    "plant3dvision*",
+    "romitask*",
+    "plantdb/src/commons/*",
+    "plantdb/src/client/*",
+    "romicgal*",
+    "romiseg*",
+    "dtw*",
+    "skeleton_refinement*"
+]
