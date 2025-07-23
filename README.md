@@ -259,7 +259,8 @@ EOF
 3. Install the submodules (`plantdb`, `romitask`, `romiseg`, `romicgal` & `dtw`) and `plant3dvision` in activated environment:
     ```bash
     conda activate plant3dvision
-    python3 -m pip install -e ./plantdb/.
+    python3 -m pip install -e ./plantdb/src/commons/.
+    python3 -m pip install -e ./plantdb/src/client/.
     python3 -m pip install -e ./romitask/.
     python3 -m pip install -e ./skeleton_refinement/.
     python3 -m pip install -e ./romiseg/.
@@ -267,7 +268,6 @@ EOF
     python3 -m pip install -e ./romicgal/.
     python3 -m pip install -r ./dtw/requirements.txt
     python3 -m pip install -e ./dtw/.
-    python3 -m pip install -r requirements.txt
     python3 -m pip install -e .
     ```
 4. Test import of `plant3dvision` library:
@@ -277,7 +277,6 @@ EOF
     ```
 5. Longer tests using shipped "test dataset":
     ```bash
-    cd tests/
     bash check_pipe.sh
     rm testdata/models/models/Resnet_896_896_epoch50.pt
     ```

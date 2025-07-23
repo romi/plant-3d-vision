@@ -12,13 +12,13 @@ bold() { echo -e "\e[1m$*\e[0m"; }
 
 # - Default variables
 # Default test database location:
-db='tests/testdata'
+db="$(dirname "$0")/testdata"
 # Defaults for 'real_plant' dataset & config:
 r_dataset="${db}/real_plant/"
-r_cfg='configs/test_geom_pipe_real.toml'
+r_cfg="$(dirname "$0")/../configs/test_geom_pipe_real.toml"
 # Defaults for 'virtual_plant' dataset & config:
 v_dataset="${db}/virtual_plant/"
-v_cfg='configs/test_geom_pipe_virtual.toml'
+v_cfg="$(dirname "$0")/../configs/test_geom_pipe_virtual.toml"
 
 # Default tested ROMI task for GEOMETRIC based pipeline is "AnglesAndInternodes":
 task='AnglesAndInternodes'

@@ -12,9 +12,9 @@ bold() { echo -e "\e[1m$*\e[0m"; }
 
 # - Default variables
 # Default configuration file used for CNN based pipeline is:
-cfg='configs/ml_pipe_real.toml'
+cfg="$(dirname "$0")/../configs/ml_pipe_real.toml"
 # Default database location:
-db='tests/testdata'
+db="$(dirname "$0")/testdata"
 # Default test dataset for CNN based pipeline is the "real_plant":
 dataset="${db}/real_plant/"
 # Virtual test dataset:
@@ -23,6 +23,8 @@ v_dataset="${db}/virtual_plant/"
 task='AnglesAndInternodes'
 # Directory with the trained organ segmentation models:
 MODEL_DIRECTORY="models/models"
+
+log_level="INFO"
 
 usage() {
   echo -e "$(bold USAGE):"

@@ -88,9 +88,10 @@ done
 # - Check geometric pipeline
 echo ""
 echo "${INFO}Testing the GEOMETRICAL pipeline..."
-./check_geom_pipe.sh ${opts}
+"$(dirname "$0")"/check_geom_pipe.sh ${opts}
 
 # - Check machine learning pipeline
 echo ""
 echo "${INFO}Testing the CNN based pipeline..."
-./check_ml_pipe.sh ${opts}
+"$(dirname "$0")"/check_ml_pipe.sh ${opts}
+
