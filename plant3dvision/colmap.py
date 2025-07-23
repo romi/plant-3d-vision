@@ -673,7 +673,7 @@ class ColmapRunner(object):
         self.log_file = f"{self.colmap_workdir}/colmap.log"
         logger.info(f"See {self.log_file} for a detailed log about COLMAP jobs...")
         # - Check the COLMAP executable to use:
-        self.exe = None
+        self.colmap_exe = None
         self.colmap_version = None
         self._header = None
         self._init_exe(kwargs.get('colmap_exe', COLMAP_EXE))
