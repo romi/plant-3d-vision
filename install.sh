@@ -12,7 +12,7 @@ bold() { echo -e "\e[1m$*\e[0m"; }
 
 # Name of the conda environment to create:
 name="plant3dvision"
-# Python version to use:
+# Python version to use when creating a conda environment:
 py_version="3.9"
 # Options to use with `pip`:
 pip_opt=""
@@ -284,7 +284,7 @@ declare -a packages=(
   "romiseg|romiseg/|"
   "romicgal|romicgal/|"
   "dtw|dtw/|"
-  "plant-3d-vision|.|"
+  "plant3dvision|.|"
 )
 
 # Special pre-installation steps for some packages
