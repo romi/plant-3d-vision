@@ -787,6 +787,7 @@ class ColmapRunner(object):
         .. [roboticsmicrofarms_colmap] Colmap docker image on `roboticsmicrofarms <https://hub.docker.com/repository/docker/roboticsmicrofarms/colmap>`_' docker hub.
 
         """
+        logger.info(f"Initializing ColmapRunner with '{colmap_exe}' executable!")
 
         def _parse_colmap_version(out):
             return out.split(' ')[1].split('-')[0]
