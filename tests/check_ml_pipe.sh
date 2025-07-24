@@ -112,6 +112,11 @@ if [ -z ${PYOPENCL_CTX+x} ]; then
   echo -e "${INFO}Set 'PYOPENCL_CTX' to '0'."
 fi
 
+# If defined, echo defined 'COLMAP_EXE'
+if [ -n "${COLMAP_EXE}" ]; then
+  echo -e "${INFO}Using 'COLMAP_EXE' as Colmap executable."
+fi
+
 # Create the copy to temporary folder
 if [ "${tmp}" = 1 ]; then
   echo -e "${INFO}Creation of a temporary copy is requested."
