@@ -86,12 +86,10 @@ while [ "$1" != "" ]; do
 done
 
 # - Check geometric pipeline
-echo ""
-echo "${INFO}Testing the GEOMETRICAL pipeline..."
+echo -e "\n\n${INFO}Testing the GEOMETRICAL pipeline..."
 "$(dirname "$0")"/check_geom_pipe.sh ${opts}
 
 # - Check machine learning pipeline
-echo ""
-echo "${INFO}Testing the CNN based pipeline..."
+echo -e "\n\n${INFO}Testing the CNN based pipeline..."
 "$(dirname "$0")"/check_ml_pipe.sh ${opts}
 
