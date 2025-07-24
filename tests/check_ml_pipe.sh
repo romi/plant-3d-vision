@@ -114,7 +114,7 @@ fi
 
 # If defined, echo defined 'COLMAP_EXE'
 if [ -n "${COLMAP_EXE}" ]; then
-  echo -e "${INFO}Using 'COLMAP_EXE' as Colmap executable."
+  echo -e "${INFO}Using '${COLMAP_EXE}' as Colmap executable."
 fi
 
 # Create the copy to temporary folder
