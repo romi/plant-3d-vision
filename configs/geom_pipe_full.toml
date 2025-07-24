@@ -25,8 +25,6 @@ use_gpu = true  # Default: true
 single_camera = true  # Default: true
 # Maximum alignment error allowed during model alignment
 alignment_max_error = 10  # Default: 10
-# Path to the COLMAP executable
-colmap_exe = "roboticsmicrofarms/colmap:3.8-cuda_cc75"  # Default: "roboticsmicrofarms/colmap:3.8-cuda_cc75" (uses docker image)
 # Maximum 3D Euclidean distance to CNC pose to validate COLMAP pose estimation
 distance_threshold = 6.0  # Default: 6.0mm
 # Maximum blind angle tolerated for camera pose quality control

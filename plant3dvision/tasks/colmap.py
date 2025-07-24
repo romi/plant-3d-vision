@@ -569,8 +569,6 @@ class Colmap(RomiTask):
         Defaults to NO bounding-box.
     cli_args : luigi.DictParameter, optional
         Dictionary of arguments to pass to colmap command lines, empty by default.
-    colmap_exe : str, optional
-        COLMAP executable path or container image, defaults to "roboticsmicrofarms/colmap:3.8-cuda_cc75"
     distance_threshold : float, optional
         Maximum allowed distance between estimated and calibrated poses, defaults to 6.0
     max_blind_angle : float, optional
@@ -635,7 +633,6 @@ class Colmap(RomiTask):
     single_camera = luigi.BoolParameter(default=True)
     alignment_max_error = luigi.IntParameter(default=10)
     bounding_box = luigi.DictParameter(default=None)
-    colmap_exe = luigi.Parameter(default="roboticsmicrofarms/colmap:3.8-cuda_cc75")
 
     # Camera poses quality check parameters
     qc_check = luigi.BoolParameter(default=True)
@@ -856,7 +853,6 @@ class Colmap(RomiTask):
             align_pcd=bool(self.align_pcd),
             use_calibration=extrinsic_calibration,  # impact the ``poses.txt`` file: use calibrated instead of cnc poses
             bounding_box=bounding_box,
-            colmap_exe=str(self.colmap_exe)
         )
 
         # Perform reconstruction and get results
