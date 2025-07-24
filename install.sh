@@ -60,7 +60,8 @@ create_conda_environment() {
   else
     echo -e "${INFO}# - Creating '${env_name}' conda environment..."
     start_time=$(date +%s)
-    conda create -y -n "${env_name}" python="${python_version}" "numpy<2"
+    # conda create -y -n "${env_name}" python="${python_version}" "numpy<2"  # add "numpy<2" for compatibility with pytorch < 2.6
+    conda create -y -n "${env_name}" python="${python_version}"
     if [ $? -ne 0 ]; then
       echo -e "${ERROR}Failed to create conda environment '${env_name}'."
       return 1
@@ -294,7 +295,8 @@ for package_info in "${packages[@]}"; do
   # Special pre-installation steps for specific packages
   if [[ "${package_name}" == "romiseg" ]]; then
     echo -e "\n\n${INFO}# - Installing PyTorch dependencies for 'romiseg'..."
-    python3 -m pip install torch==1.12.1+cu102 torchvision==0.13.1+cu102 --extra-index-url https://download.pytorch.org/whl/cu102
+    # python3 -m pip install torch==1.13.1 torchvision==0.14.1 --extra-index-url https://download.pytorch.org/whl/cu118
+    python3 -m pip install 'torch>=2.0.0' 'torchvision>=0.15.0' --extra-index-url 'https://download.pytorch.org/whl/cu118'
   elif [[ "${package_name}" == "romicgal" ]]; then
     echo -e "\n\n${INFO}# - Installing pybind11 dependency for 'romicgal'..."
     python3 -m pip install pybind11
