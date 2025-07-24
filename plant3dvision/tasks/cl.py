@@ -25,11 +25,11 @@ class Voxels(RomiTask):
     Parameters
     ----------
     upstream_task : luigi.TaskParameter, optional
-        Upstream task that generate the binary masks. Defaults to ``Masks``.
+        Upstream task that generates the binary masks. Defaults to ``Masks``.
     query : luigi.DictParameter, optional
         A filtering dictionary to apply on input ```Fileset`` metadata.
         Key(s) and value(s) must be found in metadata to select the ``File``.
-        By default, no filtering is performed, all inputs are used.
+        By default, no filtering is performed; all inputs are used.
     camera_metadata : luigi.Parameter, optional
         Name of the entry to get from the images metadata dictionary.
         Use it to get the camera intrinsics (fx, fy, cx, cy) & poses ('rotmat', 'tvec').
@@ -41,7 +41,7 @@ class Voxels(RomiTask):
         That is if ``voxel_size=1.``, then the final shape of the _volume_ is the same as the ``bounding_box``.
         defaults to ``1.``.
     type : luigi.Parameter
-        Type of back-projection to performs.
+        Type of back-projection to perform.
         Valid values are in ["carving", "averaging"].
         Defaults to ``"carving"``.
     log : luigi.BoolParameter, optional
