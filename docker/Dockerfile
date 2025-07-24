@@ -17,7 +17,7 @@ ENV USER_ID=2020
 
 # Variables required by `nvidia-container-runtime`:
 ENV NVIDIA_VISIBLE_DEVICES=all
-ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics
 # Variables required by Python:
 ENV LANG=C.UTF-8
 ENV PYTHONUNBUFFERED=1
@@ -29,6 +29,8 @@ ENV ROMI_DB="/myapp/db"
 ENV ROMI_CFG="/myapp/cfg"
 ENV COLMAP_EXE='colmap'
 ENV PYOPENCL_CTX='0'
+# Disable OpenCL automatic platform selection
+ENV PYOPENCL_NO_CACHE=1
 
 RUN apt-get update && \
     # Install the required dependencies
@@ -36,6 +38,7 @@ RUN apt-get update && \
         nano \
         wget \
         ocl-icd-libopencl1 opencl-headers clinfo \
+        ocl-icd-opencl-dev \
         python3-dev python3-pip \
         gcc build-essential \
         libeigen3-dev libcgal-dev \
@@ -52,8 +55,7 @@ RUN apt-get update && \
     # Create the folder used to store the TOML configurations:
     mkdir -p ${ROMI_CFG} && \
     chown -R ${USER_NAME}:${USER_NAME} ${ROMI_CFG} && \
-    # Ugly fix for OpenCL:
-    ln -s /usr/lib/x86_64-linux-gnu/libOpenCL.so.1 /usr/lib/libOpenCL.so && \
+    # Proper setup for OpenCL:
     mkdir -p /etc/OpenCL/vendors && \
     echo "libnvidia-opencl.so.1" > /etc/OpenCL/vendors/nvidia.icd && \
     # Give non-root user (romi) access to all COLMAP related files by making it a member of 'colmap_users' group
