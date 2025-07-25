@@ -1,3 +1,4 @@
+
 ARG COLMAP_VERSION="3.8"
 ARG CUDA_CC="75"
 
@@ -38,7 +39,7 @@ RUN apt-get update && \
         nano \
         wget \
         ocl-icd-libopencl1 opencl-headers clinfo \
-        ocl-icd-opencl-dev \
+        ocl-icd-opencl-dev pocl-opencl-icd \
         python3-dev python3-pip \
         gcc build-essential \
         libeigen3-dev libcgal-dev \
