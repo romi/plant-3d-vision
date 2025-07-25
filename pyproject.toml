@@ -92,8 +92,8 @@ webterm = [
     "python-dotenv",
 ]
 
-[tool.setuptools]
-include-package-data = true  # Includes files from MANIFEST.in
+[tool.setuptools.package-data]
+plant3dvision = ["kernels/*.c", "kernels/*.h"]
 
 [tool.setuptools.packages.find]
 include = [

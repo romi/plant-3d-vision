@@ -1,2 +1,0 @@
-include plant3dvision/kernels/*.c
-include plant3dvision/kernels/*.h
