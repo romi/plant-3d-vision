@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from plant3dvision.cl import FIM
+from plant3dvision.voxel_opencl import FIM
 from matplotlib import pyplot as plt
 import numpy as np
 # import pymrt

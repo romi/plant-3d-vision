@@ -12,7 +12,7 @@ from PIL import Image
 
 from plant3dvision.metrics import CompareMaskFilesets
 from plant3dvision.metrics import CompareSegmentedPointClouds
-from plant3dvision.tasks import cl
+from plant3dvision.tasks import voxel_reconstruction
 from plant3dvision.tasks import config
 from plant3dvision.tasks import proc2d
 from plant3dvision.tasks import proc3d

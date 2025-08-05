@@ -1,5 +1,5 @@
 import unittest
-from plant3dvision import cl
+from plant3dvision import voxel_opencl
 
 class TestBackProjection(unittest.TestCase):
     def test_init(self):

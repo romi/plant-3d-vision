@@ -5,7 +5,6 @@ import sys
 import luigi
 import numpy as np
 
-from plant3dvision.tasks.colmap import CameraPoseQC
 from plant3dvision.tasks.colmap import Colmap
 from plant3dvision.tasks.proc2d import Masks
 from plantdb.commons import io
@@ -153,7 +152,7 @@ class Voxels(RomiTask):
         UserWarning
             If no displacement is found or improperly formatted metadata is detected.
         """
-        from plant3dvision.cl import Backprojection
+        from plant3dvision.voxel_opencl import Backprojection
         masks_fileset = self.input()['masks'].get()
         masks_files = masks_fileset.get_files(query=self.query)
         logger.info(f"Processing a list of {len(masks_files)} mask files...")

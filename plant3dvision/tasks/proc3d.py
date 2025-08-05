@@ -8,7 +8,7 @@ from plantdb.commons import io
 
 from plant3dvision import proc3d
 from plant3dvision.tasks import config
-from plant3dvision.tasks.cl import Voxels
+from plant3dvision.tasks.voxel_reconstruction import Voxels
 from plant3dvision.tasks.colmap import Colmap
 from plant3dvision.tasks.proc2d import Segmentation2D
 from romitask import RomiTask
