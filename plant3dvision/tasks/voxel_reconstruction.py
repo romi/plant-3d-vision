@@ -1,5 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+
+"""
+Voxel Reconstruction Module
+
+This module provides functionality for computing 3D volumes from 2D segmented images using voxel carving or averaging techniques.
+It is useful for tasks that require reconstructing volumetric data from a series of 2D slices.
+
+Key Features:
+- Supports both "carving" and "averaging" back-projection methods
+- Allows customization of voxel size, camera metadata, thresholds, etc.
+- Handles bounding box determination from various sources (scan metadata, COLMAP)
+- Can process labeled mask datasets for semantic segmentation
+"""
+
 import sys
 
 import luigi
