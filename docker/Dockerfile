@@ -1,4 +1,3 @@
-
 ARG COLMAP_VERSION="3.8"
 ARG CUDA_CC="75"
 
@@ -38,8 +37,9 @@ RUN apt-get update && \
     apt-get install -yq --no-install-recommends \
         nano \
         wget \
-        ocl-icd-libopencl1 opencl-headers clinfo \
-        ocl-icd-opencl-dev pocl-opencl-icd \
+        # ocl-icd-libopencl1 opencl-headers clinfo \
+        # pocl-opencl-icd \  # CPU library
+        nvidia-cuda-toolkit \
         python3-dev python3-pip \
         gcc build-essential \
         libeigen3-dev libcgal-dev \
@@ -57,8 +57,8 @@ RUN apt-get update && \
     mkdir -p ${ROMI_CFG} && \
     chown -R ${USER_NAME}:${USER_NAME} ${ROMI_CFG} && \
     # Proper setup for OpenCL:
-    mkdir -p /etc/OpenCL/vendors && \
-    echo "libnvidia-opencl.so.1" > /etc/OpenCL/vendors/nvidia.icd && \
+    # mkdir -p /etc/OpenCL/vendors && \
+    # echo "libnvidia-opencl.so.1" > /etc/OpenCL/vendors/nvidia.icd && \
     # Give non-root user (romi) access to all COLMAP related files by making it a member of 'colmap_users' group
     usermod -a -G colmap_users ${USER_NAME}
 
