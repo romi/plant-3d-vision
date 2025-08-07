@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-BackprojectionCUDA Module
+Backprojection Module
 
 This module provides functionality for performing backprojections using CUDA acceleration,
 which is useful for speeding up computationally intensive reconstruction tasks in 3D imaging.
@@ -34,7 +34,7 @@ prg_dir = os.path.join(os.path.dirname(__file__), 'kernels')
 with open(os.path.join(prg_dir, 'backprojection_cuda.c')) as f:
     cuda_code = f.read()
 
-class BackprojectionCUDA:
+class Backprojection:
     """
     Backprojection implementation using PyCUDA to process and construct volumes from multiple input views.
     
@@ -71,7 +71,7 @@ class BackprojectionCUDA:
     >>> from plantdb.commons.fsdb import FSDB
     >>> from plantdb.commons.test_database import test_database
     >>> from plantdb.server.rest_api import compute_fileset_matches
-    >>> from plant3dvision.cl_cuda import BackprojectionCUDA
+    >>> from plant3dvision.voxel_cuda import Backprojection
     >>> from plant3dvision.visu import plt_volume_slice_viewer
     >>>
     >>> # Set up the database and scan
@@ -102,7 +102,7 @@ class BackprojectionCUDA:
     >>> invert_masks = False  # Whether to invert the mask values
     >>>
     >>> # EXAMPLE 1 - Carving mode
-    >>> bp_carving = BackprojectionCUDA(shape, origin, voxel_size, type="carving", labels=None)
+    >>> bp_carving = Backprojection(shape, origin, voxel_size, type="carving", labels=None)
     >>> volume = bp_carving.process_fileset(mask_files, camera_md, invert_masks)
     >>> # 'volume' is now a NumPy array holding the 3D backprojected binary data
     >>> vol_values = np.unique(volume)
@@ -110,7 +110,7 @@ class BackprojectionCUDA:
     >>> plt_volume_slice_viewer(volume, cmap="viridis")
 
     >>> # EXAMPLE 2 - Averaging mode
-    >>> bp_averaging = BackprojectionCUDA(shape, origin, voxel_size, type="averaging", labels=None, log=True)
+    >>> bp_averaging = Backprojection(shape, origin, voxel_size, type="averaging", labels=None, log=True)
     >>> volume = bp_averaging.process_fileset(mask_files, camera_md, invert_masks)
     >>> # 'volume' is now a NumPy array holding the 3D backprojected data
     >>> vol_values = np.unique(volume)
