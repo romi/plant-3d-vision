@@ -1,6 +1,5 @@
 ARG COLMAP_VERSION="3.8"
 ARG CUDA_CC="75"
-
 FROM roboticsmicrofarms/colmap:${COLMAP_VERSION}-cuda_cc${CUDA_CC}
 
 LABEL maintainer="Jonathan LEGRAND <jonathan.legrand@ens-lyon.fr>"
@@ -28,9 +27,13 @@ ENV PATH="${PATH}:/home/${USER_NAME}/.local/bin"
 ENV ROMI_DB="/myapp/db"
 ENV ROMI_CFG="/myapp/cfg"
 ENV COLMAP_EXE='colmap'
-ENV PYOPENCL_CTX='0'
+
+ARG PYCUDA_NVCC_FLAGS=""
+ENV PYCUDA_DEFAULT_NVCC_FLAGS=PYCUDA_NVCC_FLAGS
+
+#ENV PYOPENCL_CTX='0'
 # Disable OpenCL automatic platform selection
-ENV PYOPENCL_NO_CACHE=1
+#ENV PYOPENCL_NO_CACHE=1
 
 RUN apt-get update && \
     # Install the required dependencies

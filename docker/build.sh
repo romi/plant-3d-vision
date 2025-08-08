@@ -127,11 +127,30 @@ else
   echo -e "Done!"
 fi
 
-# Construct the docker build command
+get_cuda_version() {
+  nvidia-smi -q | grep 'CUDA Version' | awk '{print $4}'
+}
+
+CUDA_VERSION=$(docker run -t --rm --gpus all ${base_image} get_cuda_version)
+if [ -z "${CUDA_VERSION}" ]; then
+  echo -e "${ERROR}Failed to determine CUDA version in base image!"
+else
+  echo -e "${INFO}Found CUDA version in base image: ${CUDA_VERSION}"
+fi
+
+# If CUDA_VERSION is greater than 12, `nvcc` arch can not be greater than 86, set PYCUDA_NVCC_FLAGS accordingly
+if [ "${CUDA_VERSION}" -ge "12" ] && [ "${CUDA_CC}" -ge "86" ]; then
+    echo -e "${INFO}Setting PYCUDA_NVCC_FLAGS for CUDA CC > 86"
+    PYCUDA_NVCC_FLAGS="-arch=sm_86"
+else
+    echo -e "${INFO}Using default PYCUDA_NVCC_FLAGS"
+fi
+
 # Construct the docker build command
 docker_cmd="docker build"
 docker_cmd+=" --build-arg COLMAP_VERSION=\"${COLMAP_VERSION}\""
 docker_cmd+=" --build-arg CUDA_CC=\"${CUDA_CC}\""
+docker_cmd+=" --build-arg PYCUDA_NVCC_FLAGS=\"${PYCUDA_NVCC_FLAGS}\""
 docker_cmd+=" -t \"roboticsmicrofarms/plant-3d-vision:${vtag}-cuda_cc${CUDA_CC}\""
 docker_cmd+=" ${docker_opts}"  # Additional options like --no-cache, --pull, etc.
 docker_cmd+=" -f \"docker/Dockerfile\""
