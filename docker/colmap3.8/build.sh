@@ -14,8 +14,10 @@ bold() { echo -e "\e[1m$*\e[0m"; }
 vtag="3.8"
 # String aggregating the docker build options to use:
 docker_opts=""
-# Default CUDA Compute Capability is empty (to enable automatic search):
+# Default CUDA Compute Capability is empty (to enable automatic detection):
 CUDA_CC=""
+# Default NVIDIA CUDA Version is empty (to enable automatic detection):
+NVIDIA_CUDA_VERSION=""
 
 # Check for required commands:
 if ! command -v docker >/dev/null 2>&1; then
@@ -42,6 +44,9 @@ usage() {
   echo "  --cuda-cc
     The CUDA Compute Capability value to use to build Colmap." \
     "By default, try to gess it from the system."
+  echo "  --cuda-version
+    The CUDA version to use to build Colmap." \
+    "By default, try to gess it from the system."
   # -- Docker options:
   echo "  --no-cache
     Do not use cache when building the image, (re)start from scratch."
@@ -63,6 +68,10 @@ while [ "$1" != "" ]; do
   --cuda-cc)
     shift
     CUDA_CC=$1
+    ;;
+  --cuda-version)
+    shift
+    NVIDIA_CUDA_VERSION=$1
     ;;
   --no-cache)
     docker_opts="${docker_opts} --no-cache"
@@ -101,8 +110,49 @@ else
   echo -e "${INFO}Using provided CUDA GPU Compute Capability: ${CUDA_CC}"
 fi
 
+# If NVIDIA_CUDA_VERSION is not set, attempt to derive it:
+if [ -z "${NVIDIA_CUDA_VERSION}" ]; then
+  if command -v nvcc >/dev/null 2>&1; then
+    # Extract CUDA version from nvcc output
+    NVIDIA_CUDA_VERSION=$(nvidia-smi -q | grep 'CUDA Version' | awk '{print $4}')
+    if [ -z "${NVIDIA_CUDA_VERSION}" ]; then
+      echo -e "${ERROR}Failed to determine NVIDIA CUDA Version!"
+      exit 1
+    fi
+    echo -e "${INFO}Found NVIDIA CUDA Version: ${NVIDIA_CUDA_VERSION}"
+  else
+    echo -e "${WARNING}nvcc is not installed or not found! Assuming default CUDA version."
+    NVIDIA_CUDA_VERSION="12.0.0" # Default fallback version
+  fi
+else
+  echo -e "${INFO}Using provided NVIDIA CUDA Version: ${NVIDIA_CUDA_VERSION}"
+fi
+
+# Assuming NVIDIA_CUDA_VERSION contains the detected version
+if [[ "${NVIDIA_CUDA_VERSION}" != *.*[*]* ]]; then
+  # If only major or major.minor is present, append .0 to make it major.minor.release format
+  NVIDIA_CUDA_VERSION="${NVIDIA_CUDA_VERSION}.0"
+fi
+
+# Split the version into components for comparison
+IFS='.' read -r -a version_parts <<< "$NVIDIA_CUDA_VERSION"
+# Extract major and minor versions
+MAJOR=${version_parts[0]}
+MINOR=${version_parts[1]}
+# Compare with max allowed CUDA version (11.8)
+if (( 10#$MAJOR < 11 || ( 10#$MAJOR == 11 && 10#$MINOR <= 8 ) )); then
+    echo -e "${INFO}CUDA version $NVIDIA_CUDA_VERSION is supported."
+else
+    echo -e "${WARNING}CUDA version $NVIDIA_CUDA_VERSION exceeds the maximum allowed version of 11.8 for Colmap3.8."
+    NVIDIA_CUDA_VERSION="11.8.0"
+fi
+
+# Print the final CUDA version
+echo -e "${INFO}Final NVIDIA CUDA Version: ${NVIDIA_CUDA_VERSION}"
+
 # Construct the docker build command
 docker_cmd="docker build"
+docker_cmd+=" --build-arg NVIDIA_CUDA_VERSION=\"${NVIDIA_CUDA_VERSION}\""
 docker_cmd+=" --build-arg CUDA_ARCHITECTURES=\"${CUDA_CC}\""
 docker_cmd+=" -t \"roboticsmicrofarms/colmap:${vtag}-cuda_cc${CUDA_CC}\""
 docker_cmd+=" ${docker_opts}"  # Additional options like --no-cache, --pull, etc.
