@@ -122,29 +122,32 @@ if ! docker image inspect "${base_image}" >/dev/null 2>&1; then
         echo -e "${INFO}Alternatively, you can build it from 'colmap${COLMAP_VERSION}/' directory."
         exit 1
     fi
-    echo -e "${INFO}Successfully pulled base image"
+    echo -e "${INFO}Successfully pulled base image."
 else
-  echo -e "Done!"
+  echo -e "${INFO}Found the required base image."
 fi
 
-get_cuda_version() {
-  nvidia-smi -q | grep 'CUDA Version' | awk '{print $4}'
-}
-
-CUDA_VERSION=$(docker run -t --rm --gpus all ${base_image} get_cuda_version)
-if [ -z "${CUDA_VERSION}" ]; then
-  echo -e "${ERROR}Failed to determine CUDA version in base image!"
+CUDA_VERSION=$(docker run -t --rm --gpus all --entrypoint bash ${base_image} -c "nvidia-smi -q | grep 'CUDA Version' | awk '{print \$3}'")
+# Check if CUDA_VERSION is a number
+if ! [[ "${CUDA_VERSION}" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+  echo -e "${WARNING}Could not parse CUDA version: '${CUDA_VERSION}'"
+  echo -e "${INFO}Using default PYCUDA_NVCC_FLAGS"
+  PYCUDA_NVCC_FLAGS=""
 else
   echo -e "${INFO}Found CUDA version in base image: ${CUDA_VERSION}"
+  # Extract major version for comparison
+  CUDA_MAJOR_VERSION=$(echo "${CUDA_VERSION}" | cut -d. -f1)
+
+  # If CUDA_VERSION is greater than 12, `nvcc` arch can not be greater than 86
+  if [ "${CUDA_MAJOR_VERSION}" -ge "12" ] && [ "${CUDA_CC}" -ge "86" ]; then
+      echo -e "${INFO}Setting PYCUDA_NVCC_FLAGS for CUDA CC > 86"
+      PYCUDA_NVCC_FLAGS="-arch=sm_86"
+  else
+      echo -e "${INFO}Using default PYCUDA_NVCC_FLAGS"
+      PYCUDA_NVCC_FLAGS=""
+  fi
 fi
 
-# If CUDA_VERSION is greater than 12, `nvcc` arch can not be greater than 86, set PYCUDA_NVCC_FLAGS accordingly
-if [ "${CUDA_VERSION}" -ge "12" ] && [ "${CUDA_CC}" -ge "86" ]; then
-    echo -e "${INFO}Setting PYCUDA_NVCC_FLAGS for CUDA CC > 86"
-    PYCUDA_NVCC_FLAGS="-arch=sm_86"
-else
-    echo -e "${INFO}Using default PYCUDA_NVCC_FLAGS"
-fi
 
 # Construct the docker build command
 docker_cmd="docker build"
