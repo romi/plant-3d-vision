@@ -29,7 +29,7 @@ ENV ROMI_CFG="/myapp/cfg"
 ENV COLMAP_EXE='colmap'
 
 ARG PYCUDA_NVCC_FLAGS=""
-ENV PYCUDA_DEFAULT_NVCC_FLAGS=PYCUDA_NVCC_FLAGS
+ENV PYCUDA_NVCC_FLAGS=PYCUDA_NVCC_FLAGS
 
 #ENV PYOPENCL_CTX='0'
 # Disable OpenCL automatic platform selection
@@ -43,7 +43,7 @@ RUN apt-get update && \
         # ocl-icd-libopencl1 opencl-headers clinfo \
         # pocl-opencl-icd \  # CPU library
         nvidia-cuda-toolkit \
-        python3-dev python3-pip \
+        python3-dev python3-pip python3-venv \
         gcc build-essential \
         libeigen3-dev libcgal-dev \
         libjpeg-dev libffi-dev && \
@@ -73,10 +73,14 @@ WORKDIR /home/${USER_NAME}
 COPY --chown=${USER_NAME} ./ plant-3d-vision/
 
 RUN cd plant-3d-vision/ && \
+    # Create a virtual environment
+    python3 -m venv /home/${USER_NAME}/venv && \
+    # Activate the virtual environment and install packages
+    . /home/${USER_NAME}/venv/bin/activate && \
     # Upgrade pip & setuptools to latest versions
-    python3 -m pip install --upgrade pip setuptools && \
+    /home/${USER_NAME}/venv/bin/pip install --upgrade pip setuptools && \
     # Install `plant-3d-vision` dependencies and sources:
-    ./install.sh --no-env --user --no-cache-dir --webterm && \
+    ./install.sh --no-env --no-cache-dir --webterm && \
     # Download the trained CNN model file:
     ./get_model.sh
 
