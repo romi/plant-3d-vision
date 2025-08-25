@@ -96,7 +96,7 @@ class Backprojection(object):
     --------
     >>> import numpy as np
     >>> from plantdb.commons.fsdb import FSDB
-    >>> from plantdb.rest_api import compute_fileset_matches
+    >>> from plantdb.server.rest_api import compute_fileset_matches
     >>> from plant3dvision.cl import Backprojection
     >>> from plant3dvision.visu import plt_volume_slice_viewer
     >>> db = FSDB('/data/ROMI/test_owner')
