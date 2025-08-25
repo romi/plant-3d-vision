@@ -13,9 +13,10 @@ ENV QT_XCB_GL_INTEGRATION=xcb_egl
 # Prevent stop building ubuntu at time zone selection.
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Prepare and empty machine for building.
+# Prepare and empty machine for building (using `apt-mark hold` to prevent the systemd packages from being installed).
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
+    apt-mark hold systemd systemd-dev && \
+    apt-get install -y \
         git \
         cmake \
         ninja-build \
@@ -36,8 +37,7 @@ RUN apt-get update && \
         libcgal-dev \
         libceres-dev \
         libcurl4-openssl-dev \
-        libmkl-full-dev \
-        libblas-dev
+        libmkl-full-dev
 
 # Build and install COLMAP.
 RUN git clone https://github.com/colmap/colmap.git
