@@ -39,7 +39,7 @@ jobs:
       - name: Run Integration Tests
         run: |
           docker container prune -f
-          ./docker/run.sh -v /home/${USER}/ML_models:/home/${USER}/plant-3d-vision/tests/testdata/models/models -t ${GITHUB_REF##*/} --integration_test
+          ./docker/run.sh -v /home/${USER}/ML_models:/home/${USER}/plant-3d-vision/tests/testdata/models/models -t ${GITHUB_REF##*/} --test-integration
 
   docker-clean:
     runs-on: ubuntu-latest

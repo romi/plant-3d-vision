@@ -36,7 +36,7 @@ initialize_variables() {
   # Default group id to use when starting the container:
   gid=2020
   # Docker image tag to use, 'latest' by default:
-  vtag="latest"
+  VTAG="latest"
   # Command to execute after starting the docker container:
   cmd=''
   # Volume mounting options:
@@ -77,7 +77,7 @@ show_usage() {
   echo -e "$(bold OPTIONS):"
   echo "  -t, --tag
     Image tag to use." \
-    "By default, use the '${vtag}' tag."
+    "By default, use the '${VTAG}' tag."
   echo "  -db, --database
     Path to the host database to mount inside the docker container." \
     "By default, use the 'ROMI_DB' environment variable (if defined)."
@@ -96,17 +96,17 @@ show_usage() {
   echo "You may select ONE of the test option below to execute this test instead of accessing the terminal or running a command."
   echo "  --unittest
     Run the unit tests defined in 'plant-3d-vision/tests/unit'."
-  echo "  --integration_test
+  echo "  --test-integration
     Run the integration tests defined in 'plant-3d-vision/tests/integration'."
-  echo "  --pipeline_test
+  echo "  --test-pipelines
     Run the reconstruction & quantification pipelines (geometric & machine-learning based) on the 'real_plant test dataset."
-  echo "  --geom_pipeline_test
+  echo "  --test-geom-pipeline
     Run the reconstruction & quantification pipeline using the geometric based workflow on the 'real_plant test dataset." \
     "Test dataset are located under 'tests/testdata'."
-  echo "  --ml_pipeline_test
+  echo "  --test-ml-pipeline
     Run the reconstruction & quantification pipeline using the machine-learning based workflow on the 'real_plant test dataset." \
     "Test dataset are located under 'tests/testdata'."
-  echo "  --gpu_test
+  echo "  --test-gpu
     Test correct access to NVIDIA GPU resources from docker container."
 }
 
@@ -163,7 +163,7 @@ parse_arguments() {
     case $1 in
     -t | --tag)
       shift
-      vtag=$1
+      VTAG=$1
       ;;
     -db | --database)
       shift
@@ -179,27 +179,27 @@ parse_arguments() {
       self_test=1
       log_info "Running unitary tests..."
       ;;
-    --integration_test)
+    --test-integration)
       cmd=${integration_test_cmd}
       self_test=1
       log_info "Running integration tests..."
       ;;
-    --pipeline_test)
+    --test-pipelines)
       cmd=${pipeline_cmd}
       self_test=1
       log_info "Running reconstruction pipeline self-tests (geometric & machine-learning based)..."
       ;;
-    --geom_pipeline_test)
+    --test-geom-pipeline)
       cmd=${geom_pipeline_cmd}
       self_test=1
       log_info "Running reconstruction pipeline self-test using geometric based workflow..."
       ;;
-    --ml_pipeline_test)
+    --test-ml-pipeline)
       cmd=${ml_pipeline_cmd}
       self_test=1
       log_info "Running reconstruction pipeline self-test using machine-learning based workflow..."
       ;;
-    --gpu_test)
+    --test-gpu)
       cmd=${gpu_cmd}
       self_test=1
       log_info "Running GPU self-test procedure..."
@@ -245,7 +245,7 @@ run_interactive_docker() {
     --env PYOPENCL_CTX='0' \
     ${docker_option} \
     -i ${USE_TTY} \
-    "roboticsmicrofarms/plant-3d-vision:${vtag}" \
+    "roboticsmicrofarms/plant-3d-vision:${VTAG}" \
     "bash"
 }
 
@@ -262,7 +262,7 @@ run_docker_command() {
     --env PYOPENCL_CTX='0' \
     ${docker_option} \
     -i ${USE_TTY} \
-    "roboticsmicrofarms/plant-3d-vision:${vtag}" \
+    "roboticsmicrofarms/plant-3d-vision:${VTAG}" \
     "${cmd}"
 
   # Get command exit code:

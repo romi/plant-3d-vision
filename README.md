@@ -122,19 +122,19 @@ Do NOT forget to specify your tag with the `-t` option if you changed it (_i.e._
 #### Test GPU access
 To test if you have access to your GPU(s) can easily be done as follows:
 ```shell
-./docker/run.sh --gpu_test
+./docker/run.sh --test-gpu
 ```
 
 #### Test the geometric pipeline
 To test if you can run the _geometric pipeline_:
 ```shell
-./docker/run.sh --geom_pipeline_test
+./docker/run.sh --test-geom-pipeline
 ```
 
 #### Test the machine learning pipeline
 To test if you can run the _machine learning pipeline_:
 ```shell
-./docker/run.sh --ml_pipeline_test
+./docker/run.sh --test-ml-pipeline
 ```
 
 ### Enable write access to local database with bind mount
