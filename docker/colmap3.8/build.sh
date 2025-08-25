@@ -159,11 +159,11 @@ setup_cuda_version() {
     # Extract CUDA version from nvidia-smi output
     NVIDIA_CUDA_VERSION=$(nvidia-smi -q | grep 'CUDA Version' | awk '{print $4}')
     if [ -z "${NVIDIA_CUDA_VERSION}" ]; then
-      log_error "Failed to determine NVIDIA CUDA Version using nvidia-smi!"
-      NVIDIA_CUDA_VERSION="12.9.1" # Default fallback version
+      log_error "Failed to determine host NVIDIA CUDA Version using nvidia-smi!"
+      NVIDIA_CUDA_VERSION="11.8.0" # Default fallback version
       log_warning "Assuming default CUDA version: ${NVIDIA_CUDA_VERSION}."
     else
-      log_info "Found NVIDIA CUDA Version: ${NVIDIA_CUDA_VERSION}"
+      log_info "Found host NVIDIA CUDA Version: ${NVIDIA_CUDA_VERSION}"
     fi
   else
     log_info "Using provided NVIDIA CUDA Version: ${NVIDIA_CUDA_VERSION}"
@@ -191,8 +191,9 @@ setup_cuda_version() {
   log_info "Final NVIDIA CUDA Version: ${NVIDIA_CUDA_VERSION}"
 }
 
+
 check_and_fix_base_image() {
-  ubuntu_version="24.04"
+  local ubuntu_version="22.04"
   local cuda_version="${NVIDIA_CUDA_VERSION}"
   local base_image="nvidia/cuda:${cuda_version}-devel-ubuntu${ubuntu_version}"
 
@@ -204,25 +205,6 @@ check_and_fix_base_image() {
   else
     log_warning "Base image ${base_image} not found in registry!"
     log_info "Searching for alternative images..."
-
-    # Try finding alternatives with same Ubuntu version but similar CUDA version
-    # Extract major.minor from CUDA version (e.g., 12.2.0 -> 12.2)
-    local cuda_major_minor=$(echo "${cuda_version}" | cut -d'.' -f1,2)
-    local cuda_major=$(echo "${cuda_version}" | cut -d'.' -f1)
-
-    # Try similar minor versions
-    for minor in {0..9}; do
-      local alt_cuda="${cuda_major}.${minor}"
-      if [[ "${alt_cuda}" != "${cuda_major_minor}" ]]; then
-        local alt_image="nvidia/cuda:${alt_cuda}.0-devel-ubuntu${ubuntu_version}"
-        if docker manifest inspect "${alt_image}" >/dev/null 2>&1; then
-          log_info "Found alternative with similar CUDA version: ${alt_image}"
-          NVIDIA_CUDA_VERSION="${alt_cuda}.0"
-          log_info "Automatically selecting ${alt_image}"
-          return 0
-        fi
-      fi
-    done
 
     log_error "No suitable alternative found. Please check available images at https://hub.docker.com/r/nvidia/cuda/tags"
     return 1

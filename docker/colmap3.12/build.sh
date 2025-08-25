@@ -158,11 +158,11 @@ setup_cuda_version() {
     # Extract CUDA version from nvidia-smi output
     NVIDIA_CUDA_VERSION=$(nvidia-smi -q | grep 'CUDA Version' | awk '{print $4}')
     if [ -z "${NVIDIA_CUDA_VERSION}" ]; then
-      log_error "Failed to determine NVIDIA CUDA Version using nvidia-smi!"
+      log_error "Failed to determine host NVIDIA CUDA Version using nvidia-smi!"
       NVIDIA_CUDA_VERSION="12.9.1" # Default fallback version
-      log_warning "Assuming default CUDA version: ${NVIDIA_CUDA_VERSION}."
+      log_warning "Assuming default host CUDA version: ${NVIDIA_CUDA_VERSION}."
     else
-      log_info "Found NVIDIA CUDA Version: ${NVIDIA_CUDA_VERSION}"
+      log_info "Found host NVIDIA CUDA Version: ${NVIDIA_CUDA_VERSION}"
     fi
   else
     log_info "Using provided NVIDIA CUDA Version: ${NVIDIA_CUDA_VERSION}"
@@ -195,6 +195,7 @@ check_and_fix_base_image() {
     return 1
   fi
 }
+
 # --------------------------------
 # Docker build function
 # --------------------------------
