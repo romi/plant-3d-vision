@@ -15,7 +15,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Prepare and empty machine for building.
 RUN apt-get update && \
-    apt-get install -y \
+    apt-get install -y --no-install-recommends \
         git \
         cmake \
         ninja-build \
