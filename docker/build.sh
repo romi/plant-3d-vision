@@ -34,9 +34,9 @@ log_error() {
 # --------------------------------
 initialize_variables() {
   # Image tag to use, 'latest' by default:
-  vtag="latest"
+  VTAG="latest"
   # String aggregating the docker build options to use:
-  docker_opts=""
+  DOCKER_OPTS=""
   # Default Colmap version to use:
   COLMAP_VERSION="3.8"
   # Default CUDA Compute Capability is empty (to enable automatic search):
@@ -73,7 +73,7 @@ show_usage() {
   echo -e "$(bold OPTIONS):"
   echo "  -t, --tag
     Image tag to use." \
-    "By default, use the '${vtag}' tag."
+    "By default, use the '${VTAG}' tag."
   echo "  --colmap
     The version of Colmap to use." \
     "By default, use '${COLMAP_VERSION}'."
@@ -100,7 +100,7 @@ parse_arguments() {
     case $1 in
     -t | --tag)
       shift
-      vtag=$1
+      VTAG=$1
       ;;
     --colmap)
       shift
@@ -111,13 +111,13 @@ parse_arguments() {
       CUDA_CC=$1
       ;;
     --no-cache)
-      docker_opts="${docker_opts} --no-cache"
+      DOCKER_OPTS="${DOCKER_OPTS} --no-cache"
       ;;
     --pull)
-      docker_opts="${docker_opts} --pull"
+      DOCKER_OPTS="${DOCKER_OPTS} --pull"
       ;;
     --plain)
-      docker_opts="${docker_opts} --progress=plain"
+      DOCKER_OPTS="${DOCKER_OPTS} --progress=plain"
       ;;
     -h | --help)
       show_usage
@@ -212,8 +212,8 @@ build_docker_image() {
   docker_cmd+=" --build-arg COLMAP_VERSION=\"${COLMAP_VERSION}\""
   docker_cmd+=" --build-arg CUDA_CC=\"${CUDA_CC}\""
   docker_cmd+=" --build-arg PYCUDA_NVCC_FLAGS=\"${PYCUDA_NVCC_FLAGS}\""
-  docker_cmd+=" -t \"roboticsmicrofarms/plant-3d-vision:${vtag}-cuda_cc${CUDA_CC}\""
-  docker_cmd+=" ${docker_opts}"  # Additional options like --no-cache, --pull, etc.
+  docker_cmd+=" -t \"roboticsmicrofarms/plant-3d-vision:${VTAG}-cuda_cc${CUDA_CC}\""
+  docker_cmd+=" ${DOCKER_OPTS}"  # Additional options like --no-cache, --pull, etc.
   docker_cmd+=" -f \"docker/Dockerfile\""
   docker_cmd+=" ."  # Build context
 
