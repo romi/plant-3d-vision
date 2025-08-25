@@ -623,7 +623,7 @@ def old_vol2pcd(volume, origin, voxel_size, level_set_value=0):
     return pcd
 
 
-def vol2pcd(volume, origin, voxel_size, level_set_value=0):
+def vol2pcd_parallel(volume, origin, voxel_size, level_set_value=0):
     """Converts a volume into a point-cloud with normals.
 
     Parameters
@@ -642,39 +642,71 @@ def vol2pcd(volume, origin, voxel_size, level_set_value=0):
     -------
     open3d.geometry.PointCloud
         Point-cloud with normal vectors.
+
+    Examples
+    --------
+    >>> from plant3dvision.proc3d import vol2pcd_parallel
+    >>> from plantdb.commons.io import read_volume
+    >>> from plantdb.server.rest_api import compute_fileset_matches
+    >>> from plantdb.commons.test_database import test_database
+    >>> db = test_database()
+    >>> db.connect()
+    >>> scan = db.get_scan("real_plant_analyzed")
+    >>> vol_fs_id = compute_fileset_matches(scan)["Voxels"]
+    >>> vol_fs = scan.get_fileset(vol_fs_id)
+    >>> vol = read_volume(vol_fs.get_file("Voxels"))
+    >>> print(vol.shape)
+    (301, 301, 561)
+    >>> pcd = vol2pcd_parallel(vol, [0., 0., 0.], 0.5, level_set_value=1.0)
+    >>> print(len(pcd.points))
+    20320
+    >>> import open3d as o3d
+    >>> o3d.visualization.draw_geometries([pcd])
+    >>> db.disconnect()
     """
+    import time
     from joblib import Parallel
     from joblib import delayed
+    start_time = time.time()
 
     logger.info("Volume binarization...")
-    # Binarize volume using threshold of 0.5
+    # Binarize volume using a threshold of 0.5
     volume = 1.0 * (volume > 0.5)
+    logger.info(f"Volume binarization... Done in {time.time() - start_time:.2f}s")
 
+    step_start = time.time()
     logger.info("Distance transform...")
     # Calculate distance transform for volume and its inverse
     dist = distance_transform_edt(volume)
     mdist = distance_transform_edt(1 - volume)
-    logger.info(f"Max distance transform: {dist.max()}")
-    logger.info(f"Min distance transform: {dist.min()}")
+    logger.info(f"Distance transform... Done in {time.time() - step_start:.2f}s")
+    logger.debug(f"Max distance transform: {dist.max()}")
+    logger.debug(f"Min distance transform: {dist.min()}")
 
     # Combine distance transforms with offset
     dist = np.where(dist > 0.5, dist - 0.5, -mdist + 0.5)
 
+    step_start = time.time()
     logger.info("Gradiant computation...")
     # Calculate spatial gradients in x, y, z directions
     gx, gy, gz = np.gradient(dist)
+    logger.info(f"Gradient computation... Done in {time.time() - step_start:.2f}s")
 
+    step_start = time.time()
     logger.info("Gradiant Gaussian filtering...")
     # Apply Gaussian smoothing to gradients
     gx = gaussian_filter(gx, 1)
     gy = gaussian_filter(gy, 1)
     gz = gaussian_filter(gz, 1)
+    logger.info(f"Gradient Gaussian filtering... Done in {time.time() - step_start:.2f}s")
 
+    step_start = time.time()
     logger.info("Detecting points...")
     # Find points near the surface using level set threshold
     on_edge = (dist > -level_set_value) * (dist <= -level_set_value + np.sqrt(3))
     x, y, z = np.nonzero(on_edge)
     logger.debug(f"Number of points = {len(x)}")
+    logger.info(f"Detecting points... Done in {time.time() - step_start:.2f}s")
 
     def _compute_normal(i):
         # Initialize empty point and normal vectors
@@ -704,13 +736,16 @@ def vol2pcd(volume, origin, voxel_size, level_set_value=0):
     all_norms = Parallel(n_jobs=-1)(
         delayed(_compute_normal)(i) for i in tqdm(range(len(x)), desc="Computing point normals"))
 
+    step_start = time.time()
     logger.info("Sorting normals...")
     pts, normals = zip(*all_norms)
     # Filter out invalid points (those with NaN values)
     not_none_idx = np.where(~np.isnan(normals).any(axis=1))[0]
     pts = np.array(pts)[not_none_idx]
     normals = np.array(normals)[not_none_idx]
+    logger.info(f"Sorting normals... Done in {time.time() - step_start:.2f}s")
 
+    step_start = time.time()
     logger.info("Creating Open3D PointCloud instance...")
     # Convert indices to real-world coordinates
     pts = index2point(pts, origin, voxel_size)
@@ -720,7 +755,140 @@ def vol2pcd(volume, origin, voxel_size, level_set_value=0):
     pcd.points = o3d.utility.Vector3dVector(pts)
     pcd.normals = o3d.utility.Vector3dVector(normals)
     pcd.normalize_normals()
+    logger.info(f"Creating Open3D PointCloud instance... Done in {time.time() - step_start:.2f}s")
 
+    logger.info(f"Total execution time: {time.time() - start_time:.2f}s")
+    return pcd
+
+
+def vol2pcd(volume, origin, voxel_size, level_set_value=0):
+    """Converts a volume into a point-cloud with normals.
+
+    Parameters
+    ----------
+    volume : numpy.ndarray
+        ``NxMxP`` 3D numpy array
+    origin : numpy.ndarray
+        Origin of the volume
+    voxel_size : float
+        Voxel size to use to create the point-cloud from the array.
+    level_set_value : float, optional
+        distance of the level set on which the points are sampled
+        Defaults to ``0``.
+
+    Returns
+    -------
+    open3d.geometry.PointCloud
+        Point-cloud with normal vectors.
+
+    Examples
+    --------
+    >>> from plant3dvision.proc3d import vol2pcd
+    >>> from plantdb.commons.io import read_volume
+    >>> from plantdb.server.rest_api import compute_fileset_matches
+    >>> from plantdb.commons.test_database import test_database
+    >>> db = test_database()
+    >>> db.connect()
+    >>> scan = db.get_scan("real_plant_analyzed")
+    >>> vol_fs_id = compute_fileset_matches(scan)["Voxels"]
+    >>> vol_fs = scan.get_fileset(vol_fs_id)
+    >>> vol = read_volume(vol_fs.get_file("Voxels"))
+    >>> print(vol.shape)
+    (301, 301, 561)
+    >>> pcd = vol2pcd(vol, [0., 0., 0.], 0.5, level_set_value=1.0)
+    >>> print(len(pcd.points))
+    20320
+    >>> import open3d as o3d
+    >>> o3d.visualization.draw_geometries([pcd])
+    >>> db.disconnect()
+    """
+    import time
+    start_time = time.time()
+
+    logger.info("Volume binarization...")
+    # Binarize volume using a threshold of 0.5
+    volume = 1.0 * (volume > 0.5)
+    logger.info(f"Volume binarization... Done in {time.time() - start_time:.2f}s")
+
+    step_start = time.time()
+    logger.info("Distance transform...")
+    # Calculate distance transform for volume and its inverse
+    dist = distance_transform_edt(volume)
+    mdist = distance_transform_edt(1 - volume)
+    logger.info(f"Distance transform... Done in {time.time() - step_start:.2f}s")
+    logger.debug(f"Max distance transform: {dist.max()}")
+    logger.debug(f"Min distance transform: {dist.min()}")
+
+    # Combine distance transforms with offset
+    dist = np.where(dist > 0.5, dist - 0.5, -mdist + 0.5)
+
+    step_start = time.time()
+    logger.info("Gradient computation...")
+    # Calculate spatial gradients in x, y, z directions
+    gx, gy, gz = np.gradient(dist)
+    logger.info(f"Gradient computation... Done in {time.time() - step_start:.2f}s")
+
+    step_start = time.time()
+    logger.info("Gradient Gaussian filtering...")
+    # Apply Gaussian smoothing to gradients
+    gx = gaussian_filter(gx, 1)
+    gy = gaussian_filter(gy, 1)
+    gz = gaussian_filter(gz, 1)
+    logger.info(f"Gradient Gaussian filtering... Done in {time.time() - step_start:.2f}s")
+
+    step_start = time.time()
+    logger.info("Detecting points...")
+    # Find points near the surface using level set threshold
+    on_edge = (dist > -level_set_value) * (dist <= -level_set_value + np.sqrt(3))
+    x, y, z = np.nonzero(on_edge)
+    logger.debug(f"Number of points = {len(x)}")
+    logger.info(f"Detecting points... Done in {time.time() - step_start:.2f}s")
+
+    # Vectorized implementation
+    step_start = time.time()
+    logger.info("Computing normals (vectorized)...")
+    # Extract gradient values at edge points
+    grad_x = gx[x, y, z]
+    grad_y = gy[x, y, z]
+    grad_z = gz[x, y, z]
+    # Stack gradients into a single array
+    gradients = np.vstack([grad_x, grad_y, grad_z]).T
+    # Calculate gradient norms (vectorized)
+    grad_norms = np.linalg.norm(gradients, axis=1)
+    # Create mask for valid gradients (non-zero norm)
+    valid_mask = grad_norms > 0
+    # Pre-allocate arrays for points and normals
+    pts = np.full((len(x), 3), np.nan)
+    normals = np.full((len(x), 3), np.nan)
+    # Normalize gradients where valid
+    normalized_gradients = np.zeros_like(gradients)
+    normalized_gradients[valid_mask] = gradients[valid_mask] / grad_norms[valid_mask, np.newaxis]
+    # Get distance values at edge points
+    dist_values = dist[x, y, z]
+    val = dist_values + level_set_value - np.sqrt(3) / 2
+    # Calculate points (vectorized)
+    idx_array = np.column_stack([x, y, z])
+    pts[valid_mask] = idx_array[valid_mask] - normalized_gradients[valid_mask] * val[valid_mask, np.newaxis]
+    # Calculate normals (vectorized)
+    normals[valid_mask] = -normalized_gradients[valid_mask]
+    # Filter out invalid points (those with NaN values)
+    not_none_idx = ~np.isnan(normals).any(axis=1)
+    pts = pts[not_none_idx]
+    normals = normals[not_none_idx]
+    logger.info(f"Computing normals (vectorized)... Done in {time.time() - step_start:.2f}s")
+
+    step_start = time.time()
+    logger.info("Creating Open3D PointCloud instance...")
+    # Convert indices to real-world coordinates
+    pts = index2point(pts, origin, voxel_size)
+    # Create and populate Open3D point cloud object
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(pts)
+    pcd.normals = o3d.utility.Vector3dVector(normals)
+    pcd.normalize_normals()
+    logger.info(f"Creating Open3D PointCloud instance... Done in {time.time() - step_start:.2f}s")
+
+    logger.info(f"Total execution time: {time.time() - start_time:.2f}s")
     return pcd
 
 
