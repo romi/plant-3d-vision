@@ -156,36 +156,36 @@ setup_cuda_compute_capability() {
 setup_cuda_version() {
   # If NVIDIA_CUDA_VERSION is not set, attempt to derive it:
   if [ -z "${NVIDIA_CUDA_VERSION}" ]; then
-    # Extract CUDA version from nvidia-smi output
-    NVIDIA_CUDA_VERSION=$(nvidia-smi -q | grep 'CUDA Version' | awk '{print $4}')
-    if [ -z "${NVIDIA_CUDA_VERSION}" ]; then
-      log_error "Failed to determine host NVIDIA CUDA Version using nvidia-smi!"
-      NVIDIA_CUDA_VERSION="11.8.0" # Default fallback version
+    # Check if nvidia-smi exists
+    if ! command -v nvidia-smi &> /dev/null; then
+      log_error "nvidia-smi command not found. Please install NVIDIA drivers."
+      NVIDIA_CUDA_VERSION="12.9.1" # Default fallback version
       log_warning "Assuming default CUDA version: ${NVIDIA_CUDA_VERSION}."
     else
-      log_info "Found host NVIDIA CUDA Version: ${NVIDIA_CUDA_VERSION}"
+      # Extract CUDA version from nvidia-smi output
+      NVIDIA_CUDA_VERSION=$(nvidia-smi -q 2>/dev/null | grep 'CUDA Version' | awk '{print $4}')
+      if [ -z "${NVIDIA_CUDA_VERSION}" ]; then
+        log_error "Failed to determine host NVIDIA CUDA Version using nvidia-smi!"
+        NVIDIA_CUDA_VERSION="12.9.1" # Default fallback version
+        log_warning "Assuming default host CUDA version: ${NVIDIA_CUDA_VERSION}."
+      else
+        log_info "Found host NVIDIA CUDA Version: ${NVIDIA_CUDA_VERSION}"
+      fi
     fi
   else
     log_info "Using provided NVIDIA CUDA Version: ${NVIDIA_CUDA_VERSION}"
   fi
 
-  # Assuming NVIDIA_CUDA_VERSION contains the detected version
-  if [[ "${NVIDIA_CUDA_VERSION}" != *.*[*]* ]]; then
-    # If only major or major.minor is present, append .0 to make it major.minor.release format
-    NVIDIA_CUDA_VERSION="${NVIDIA_CUDA_VERSION}.0"
-  fi
+  # Properly format version to ensure major.minor.patch format
+  # Count the number of dots in the version string
+  dot_count=$(echo "${NVIDIA_CUDA_VERSION}" | tr -cd '.' | wc -c)
 
-  # Split the version into components for comparison
-  IFS='.' read -r -a version_parts <<< "$NVIDIA_CUDA_VERSION"
-  # Extract major and minor versions
-  MAJOR=${version_parts[0]}
-  MINOR=${version_parts[1]}
-  # Compare with max allowed CUDA version (11.8)
-  if (( 10#$MAJOR < 11 || ( 10#$MAJOR == 11 && 10#$MINOR <= 8 ) )); then
-    log_info "CUDA version $NVIDIA_CUDA_VERSION is supported."
-  else
-    log_warning "CUDA version $NVIDIA_CUDA_VERSION exceeds the maximum allowed version of 11.8 for Colmap3.8."
-    NVIDIA_CUDA_VERSION="11.8.0"
+  if [ "$dot_count" -eq 0 ]; then
+    # Only major version (e.g., "11")
+    NVIDIA_CUDA_VERSION="${NVIDIA_CUDA_VERSION}.0.0"
+  elif [ "$dot_count" -eq 1 ]; then
+    # Only major.minor (e.g., "11.8")
+    NVIDIA_CUDA_VERSION="${NVIDIA_CUDA_VERSION}.0"
   fi
 
   log_info "Final NVIDIA CUDA Version: ${NVIDIA_CUDA_VERSION}"
