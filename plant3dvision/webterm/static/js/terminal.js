@@ -442,10 +442,11 @@ function loadScanDatasets() {
                 scanElement.className = 'scan-item';
                 scanElement.textContent = scan;
                 scanElement.addEventListener('dblclick', () => {
-                    // Handle scan selection by double click: write scan name in the terminal
-                    const terminal = window.term;
-                    if (terminal) {
-                        terminal.write(`${scan}`);
+                    // Handle scan selection by double click: insert scan name into terminal command
+                    const socket = window.socket;
+                    if (socket && socket.connected) {
+                        // Send the scan name as terminal input so it becomes part of the command
+                        socket.emit('terminal_input', { input: scan });
                     }
                 });
                 scanContainer.appendChild(scanElement);
@@ -458,9 +459,9 @@ function loadScanDatasets() {
         });
 }
 
-// Load scan datasets when page loads
+// Load scan datasets when the page loads
 document.addEventListener('DOMContentLoaded', () => {
-    // After terminal is initialized
+    // After the terminal is initialized
     setTimeout(loadScanDatasets, 1000);
 
     // Add refresh button functionality
