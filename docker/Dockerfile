@@ -63,12 +63,17 @@ RUN apt-get update && \
     # mkdir -p /etc/OpenCL/vendors && \
     # echo "libnvidia-opencl.so.1" > /etc/OpenCL/vendors/nvidia.icd && \
     # Give non-root user (romi) access to all COLMAP related files by making it a member of 'colmap_users' group
-    usermod -a -G colmap_users ${USER_NAME}
+    usermod -a -G colmap_users ${USER_NAME} && \
+    # Make sure .bashrc gets loaded in non-interactive shells by adding to .bash_profile
+    echo 'if [ -f ~/.bashrc ]; then . ~/.bashrc; fi' > /home/${USER_NAME}/.bash_profile && \
+    chown ${USER_NAME}:${USER_NAME} /home/${USER_NAME}/.bash_profile
 
 # Change to non-root user:
 USER ${USER_NAME}
 # Change working directory:
 WORKDIR /home/${USER_NAME}
+# Copy .bashrc file
+COPY --chown=${USER_NAME} docker/.bashrc .bashrc
 # Copy the source files starting from the root folder (relative to context build):
 COPY --chown=${USER_NAME} ./ plant-3d-vision/
 
