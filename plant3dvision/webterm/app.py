@@ -421,6 +421,16 @@ def change_password():
     except Exception as e:
         return {'success': False, 'error': str(e)}, 500
 
+# Error handlers
+@app.errorhandler(404)
+def not_found_error(error):
+    return render_template('error.html', error_code=404, error_message="Page not found"), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    logger.error(f"Internal server error: {error}")
+    return render_template('error.html', error_code=500, error_message="Internal server error"), 500
+
 
 if __name__ == '__main__':
     # Create users.csv if it doesn't exist

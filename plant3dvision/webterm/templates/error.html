@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebTerm - Error {{ error_code }}</title>
+
+    <!-- Bootstrap Icons CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <!-- WebTerm CSS -->
+    <link rel="stylesheet" href="/static/css/webterm.css">
+</head>
+<body>
+<div class="error-container">
+    <div class="error-icon">
+        {% if error_code == 404 %}
+        <i class="bi bi-search"></i>
+        {% elif error_code == 500 %}
+        <i class="bi bi-exclamation-triangle"></i>
+        {% elif error_code == 403 %}
+        <i class="bi bi-shield-exclamation"></i>
+        {% else %}
+        <i class="bi bi-exclamation-circle"></i>
+        {% endif %}
+    </div>
+
+    <div class="error-code">{{ error_code }}</div>
+    <div class="error-message">{{ error_message }}</div>
+
+    <div class="error-description">
+        {% if error_code == 404 %}
+        The page you're looking for doesn't exist or has been moved.
+        It might have been deleted, renamed, or you entered the wrong URL.
+        {% elif error_code == 500 %}
+        Something went wrong on our end. Our team has been notified and
+        is working to fix this issue. Please try again in a few minutes.
+        {% elif error_code == 403 %}
+        You don't have permission to access this resource.
+        Please check your credentials or contact an administrator.
+        {% else %}
+        An unexpected error occurred. Please try again or contact support
+        if the problem persists.
+        {% endif %}
+    </div>
+
+    <div class="action-buttons">
+        <a href="/" class="btn btn-primary">
+            <i class="bi bi-house"></i>
+            Go Home
+        </a>
+        <button onclick="history.back()" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i>
+            Go Back
+        </button>
+        {% if error_code == 500 %}
+        <button onclick="window.location.reload()" class="btn btn-secondary">
+            <i class="bi bi-arrow-clockwise"></i>
+            Retry
+        </button>
+        {% endif %}
+    </div>
+
+    <div class="terminal-ascii">╭─────────────────────────────────────╮
+│  WebTerm - Terminal Web Application │
+│  Something didn't go as planned...  │
+╰─────────────────────────────────────╯</div>
+
+</div>
+</body>
+</html>
