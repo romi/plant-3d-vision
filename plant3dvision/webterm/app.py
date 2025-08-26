@@ -28,7 +28,7 @@ load_dotenv(verbose=False, override=True)
 
 # Initialize Flask application
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', os.urandom(24))
+app.secret_key = os.environ.get('SERVER_SECRET_KEY', os.urandom(24))
 socketio = SocketIO(app, async_mode='eventlet')
 
 # Store active terminals
@@ -241,7 +241,7 @@ def load_toml_file():
     save_dir = os.environ.get('ROMI_CFG', default_path)
 
     try:
-        # Construct full file path
+        # Construct a full file path
         file_path = os.path.join(save_dir, filename)
 
         # Check if file exists
@@ -324,7 +324,7 @@ def change_password():
         if not all([current_password, new_password]):
             return {'success': False, 'error': 'Missing required fields'}, 400
 
-        # Verify current password
+        # Verify the current password
         username = session.get('username')
         users = load_users()
 
@@ -353,6 +353,7 @@ def change_password():
 
 
 if __name__ == '__main__':
+    print('Starting WebTerm server...')
     # Create users.csv if it doesn't exist
     if not os.path.exists('users.csv'):
         with open('users.csv', 'w') as f:
@@ -362,6 +363,8 @@ if __name__ == '__main__':
             f.write(format_csv_line("Administrator", "admin", admin_hash))
 
     # Start the server
-    host = os.environ.get('HOST', '0.0.0.0')
-    port = int(os.environ.get('PORT', 8080))
+    host = os.environ.get('SERVER_HOST', '0.0.0.0')
+    port = int(os.environ.get('SERVER_PORT', 8080))
+    print(f"Starting server on http://{host}:{port}")
     socketio.run(app, host=host, port=port)
+    print('WebTerm server stopped!')
