@@ -160,15 +160,16 @@ setup_cuda_compute_capability() {
       log_error "nvidia-smi is not installed or not found!"
       exit 1
     fi
-    CUDA_CC=$(nvidia-smi --query-gpu=compute_cap --format=csv | awk 'NR==2' | sed -e 's/\.//g')
-    log_debug "nvidia-smi returned: ${CUDA_CC}"
+    nvidia_smi_ouptut=$(nvidia-smi --query-gpu=compute_cap --format=csv | awk 'NR==2')
+    log_debug "Parsed 'compute_cap': ${nvidia_smi_ouptut}"
+    CUDA_CC=$(echo ${nvidia_smi_ouptut} | sed -e 's/\.//g')
     if [ -z "${CUDA_CC}" ] || ! [[ "${CUDA_CC}" =~ ^[0-9]+$ ]]; then
       log_error "Failed to determine CUDA GPU Compute Capability!"
       exit 1
     fi
-    log_info "Found CUDA GPU Compute Capability: ${CUDA_CC}"
+    log_debug "Found CUDA GPU Compute Capability: ${CUDA_CC}"
   else
-    log_info "Using provided CUDA GPU Compute Capability: ${CUDA_CC}"
+    log_debug "Using provided CUDA GPU Compute Capability: ${CUDA_CC}"
   fi
 }
 
@@ -207,7 +208,7 @@ setup_cuda_nvcc_flags() {
   base_image="roboticsmicrofarms/colmap:${COLMAP_VERSION}-cuda_cc${CUDA_CC}"
 
   # The base image is built on top of an nvidia/cuda image that echo a message with the 'CUDA Version'
-  log_info "Running Docker container to detect CUDA version..."
+  log_info "Running Docker container to detect CUDA version in base image..."
   docker_output=$(docker run --rm --gpus all "${base_image}" 2>/dev/null)
   log_debug "Docker output: ${docker_output}"
 
