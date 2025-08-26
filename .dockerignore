@@ -26,4 +26,6 @@
 
 # IDEs
 **/.vscode
-**/.idea
+
+# WebTerm users database
+**/users.csv

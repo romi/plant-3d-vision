@@ -135,5 +135,5 @@ CMakeFiles/
 /.idea/plant-3d-vision.iml
 /.idea/vcs.xml
 
-
-users.csv
+# WebTerm users database
+**/users.csv
