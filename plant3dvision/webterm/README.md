@@ -28,7 +28,7 @@ It allows for remote command execution in a secure environment with user managem
   - Flask
   - Flask-SocketIO
   - eventlet
-  - passlib
+  - bcrypt
   - plantdb.commons
 
 ### Setup

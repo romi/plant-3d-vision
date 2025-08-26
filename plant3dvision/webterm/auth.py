@@ -4,12 +4,13 @@
 
 import csv
 import os
-from passlib.hash import bcrypt_sha256
+
+import bcrypt
 
 
 def hash_password(password):
     """
-    Hash the given password using bcrypt and SHA-256.
+    Hash the given password using bcrypt.
 
     Parameters
     ----------
@@ -20,11 +21,18 @@ def hash_password(password):
     Return
     -------
     str
-        A string representing the hashed password, including the algorithm identifier, rounds count,
-        salt, and digest separated by dollar signs.
+        A string representing the hashed password.
     """
-    # h_name, h_version, h_type, h_round, h_salt, h_digest = bcrypt_sha256.hash(password).split("$")
-    return bcrypt_sha256.hash(password)
+    # Convert password to bytes if it's not already
+    if isinstance(password, str):
+        password = password.encode('utf-8')
+
+    # Generate a salt and hash the password
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password, salt)
+
+    # Return the hash as a string
+    return hashed.decode('utf-8')
 
 
 def load_users():
@@ -39,7 +47,7 @@ def load_users():
     -------
     dict
         A dictionary where the keys are usernames and the values are dictionaries with full_name and password_hash for each user.
-        If the file does not exist or cannot be read, returns an empty dict.
+        If the file does not exist or cannot be read, it returns an empty dict.
     """
     users = {}
     if not os.path.exists('users.csv'):
@@ -77,7 +85,7 @@ def authenticate_user(username, password):
     """
     users = load_users()
     if username in users:
-        if bcrypt_sha256.verify(password, users[username]['password_hash']):
+        if verify_password(users[username]['password_hash'], password):
             return {
                 'username': username,
                 'full_name': users[username]['full_name']
@@ -87,27 +95,33 @@ def authenticate_user(username, password):
 
 def verify_password(stored_hash, password):
     """
-    Compute a hash from a string using bcrypt_sha256 algorithm.
+    Verify a password against a stored hash using bcrypt.
 
     Parameters
     ----------
+    stored_hash : str
+        The stored password hash to verify against.
     password : str
-        The input string to be hashed.
-    salt : bytes, optional
-        Optional salt value to use in addition to the built-in salt.
-        If None, a new random salt will be generated and used.
+        The plain text password to verify.
 
     Returns
     -------
-    bytes
-        The resulting hash as raw bytes
-
-    See Also
-    --------
-    passlib.hash.bcrypt_sha256
-        The underlying cryptographic algorithm used for hashing.
+    bool
+        True if the password matches the hash, False otherwise.
     """
-    return bcrypt_sha256.verify(password, stored_hash)
+    # Convert inputs to bytes if they're not already
+    if isinstance(password, str):
+        password = password.encode('utf-8')
+    if isinstance(stored_hash, str):
+        stored_hash = stored_hash.encode('utf-8')
+
+    try:
+        # Use bcrypt's checkpw function to verify the password
+        return bcrypt.checkpw(password, stored_hash)
+    except Exception:
+        # Return False if there's any error (e.g., invalid hash format)
+        return False
+
 
 def format_csv_line(full_name, username, password_hash):
     """
