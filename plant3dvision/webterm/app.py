@@ -30,8 +30,14 @@ logger = get_logger("WebTerm")
 # Load environment variables from .env file
 load_dotenv(verbose=False, override=True)
 
-# Initialize Flask application
-app = Flask("WebTerm")
+# Get the directory where this app.py file is located
+app_dir = os.path.dirname(os.path.abspath(__file__))
+
+# Initialize Flask application with explicit template and static folders
+app = Flask("WebTerm",
+            template_folder=os.path.join(app_dir, 'templates'),
+            static_folder=os.path.join(app_dir, 'static'))
+
 # Get secret key from environment variable or generate a random one
 app.secret_key = os.environ.get('SERVER_SECRET_KEY', os.urandom(24))
 logger.warning("No secret key found, using a random key.")
