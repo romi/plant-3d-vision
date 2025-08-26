@@ -7,10 +7,12 @@ setup_colors() {
   RED="\033[0;31m"    # Define red color code
   GREEN="\033[0;32m"  # Define green color code
   YELLOW="\033[0;33m" # Define yellow color code
+  BLUE="\033[0;34m"   # Define blue color code for debug messages
   NC="\033[0m"        # No Color code to reset colors
   INFO="${GREEN}INFO${NC}    "    # Prefix for info messages
   WARNING="${YELLOW}WARNING${NC} " # Prefix for warning messages
   ERROR="${RED}$(bold ERROR)${NC}   " # Prefix for error messages using bold function
+  DEBUG="${BLUE}DEBUG${NC}   "   # Prefix for debug messages
 }
 
 bold() {
@@ -29,6 +31,12 @@ log_error() {
   echo -e "${ERROR}$1" # Print error message with ERROR prefix
 }
 
+log_debug() {
+  if [ "${DEBUG_MODE}" = true ]; then
+    echo -e "${DEBUG}$1" # Print debug message with DEBUG prefix if debug mode is enabled
+  fi
+}
+
 # --------------------------------
 # Functions for script initialization
 # --------------------------------
@@ -43,6 +51,8 @@ initialize_variables() {
   CUDA_CC=""
   # PYCUDA NVCC flags
   PYCUDA_NVCC_FLAGS=""
+  # Debug mode is disabled by default
+  DEBUG_MODE=false
 }
 
 # --------------------------------
@@ -87,6 +97,9 @@ show_usage() {
     Always attempt to pull a newer version of the parent image."
   echo "  --plain
     Plain output during docker build."
+  # -- Debug option:
+  echo "  --debug
+    Enable debug mode to print additional debug information."
   # -- General options:
   echo "  -h, --help
     Output a usage message and exit."
@@ -119,6 +132,10 @@ parse_arguments() {
     --plain)
       DOCKER_OPTS="${DOCKER_OPTS} --progress=plain"
       ;;
+    --debug)
+      DEBUG_MODE=true
+      log_debug "Debug mode enabled"
+      ;;
     -h | --help)
       show_usage
       exit 0
@@ -138,11 +155,13 @@ parse_arguments() {
 setup_cuda_compute_capability() {
   # If CUDA_CC is not set, attempt to derive it:
   if [ -z "${CUDA_CC}" ]; then
+    log_debug "CUDA_CC not set, attempting to derive it automatically"
     if ! command -v nvidia-smi >/dev/null 2>&1; then
       log_error "nvidia-smi is not installed or not found!"
       exit 1
     fi
     CUDA_CC=$(nvidia-smi --query-gpu=compute_cap --format=csv | awk 'NR==2' | sed -e 's/\.//g')
+    log_debug "nvidia-smi returned: ${CUDA_CC}"
     if [ -z "${CUDA_CC}" ] || ! [[ "${CUDA_CC}" =~ ^[0-9]+$ ]]; then
       log_error "Failed to determine CUDA GPU Compute Capability!"
       exit 1
@@ -179,26 +198,41 @@ check_base_image() {
 # Determine CUDA version and setup NVCC flags
 # --------------------------------
 setup_cuda_nvcc_flags() {
+  # Check if required variables are set
+  if [ -z "${COLMAP_VERSION}" ] || [ -z "${CUDA_CC}" ]; then
+    log_error "Required variables COLMAP_VERSION or CUDA_CC not set!"
+    return 1
+  fi
+
   base_image="roboticsmicrofarms/colmap:${COLMAP_VERSION}-cuda_cc${CUDA_CC}"
 
-  CUDA_VERSION=$(docker run -t --rm --gpus all --entrypoint bash ${base_image} -c "nvidia-smi -q | grep 'CUDA Version' | awk '{print \$3}'")
+  # The base image is built on top of an nvidia/cuda image that echo a message with the 'CUDA Version'
+  log_info "Running Docker container to detect CUDA version..."
+  docker_output=$(docker run --rm --gpus all "${base_image}" 2>/dev/null)
+  log_debug "Docker output: ${docker_output}"
+
+  # Extract CUDA version with robust parsing
+  CUDA_VERSION=$(echo "$docker_output" | grep -o 'CUDA Version [0-9.]*' | awk '{print $3}' | tr -d '[:space:]')
+  log_debug "Extracted CUDA version: '${CUDA_VERSION}'"
+
   # Check if CUDA_VERSION is a number
-  if ! [[ "${CUDA_VERSION}" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
-    log_warning "Could not parse CUDA version!"
-    log_info "Using default PYCUDA_NVCC_FLAGS"
-    PYCUDA_NVCC_FLAGS=""
+  if [ -z "${CUDA_VERSION}" ] || ! [[ "${CUDA_VERSION}" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
+    log_warning "Could not parse base image CUDA version!"
+    log_debug "Got CUDA version from base image output: ${CUDA_VERSION}"
+    log_debug "Using default PYCUDA_NVCC_FLAGS"
   else
-    log_info "Found CUDA version in base image: ${CUDA_VERSION}"
+    log_info "Found valid CUDA version in base image: ${CUDA_VERSION}"
     # Extract major version for comparison
     CUDA_MAJOR_VERSION=$(echo "${CUDA_VERSION}" | cut -d. -f1)
+    log_debug "CUDA major version: ${CUDA_MAJOR_VERSION}"
 
-    # If CUDA_VERSION is greater than 12, `nvcc` arch can not be greater than 86
-    if [ "${CUDA_MAJOR_VERSION}" -ge "12" ] && [ "${CUDA_CC}" -ge "86" ]; then
-      log_info "Setting PYCUDA_NVCC_FLAGS for CUDA CC > 86"
+    # If CUDA_VERSION is lower than 12, `nvcc` arch can not be greater than 86
+    if [ "${CUDA_MAJOR_VERSION}" -lt "12" ] && [ "${CUDA_CC}" -ge "86" ]; then
+      log_debug "Setting PYCUDA_NVCC_FLAGS for CUDA CC > 86"
       PYCUDA_NVCC_FLAGS="-arch=sm_86"
+      log_debug "Using PYCUDA_NVCC_FLAGS=${PYCUDA_NVCC_FLAGS}"
     else
-      log_info "Using default PYCUDA_NVCC_FLAGS"
-      PYCUDA_NVCC_FLAGS=""
+      log_debug "Using default PYCUDA_NVCC_FLAGS"
     fi
   fi
 }
@@ -217,8 +251,15 @@ build_docker_image() {
   docker_cmd+=" -f \"docker/Dockerfile\""
   docker_cmd+=" ."  # Build context
 
+  # Print the build configutation options
+  log_debug "Build configuration:"
+  log_debug "- COLMAP_VERSION: ${COLMAP_VERSION}"
+  log_debug "- CUDA_CC: ${CUDA_CC}"
+  log_debug "- PYCUDA_NVCC_FLAGS: ${PYCUDA_NVCC_FLAGS}"
+  log_debug "- Docker tag: roboticsmicrofarms/plant-3d-vision:${VTAG}-cuda_cc${CUDA_CC}"
+  log_debug "- Docker options: ${DOCKER_OPTS}"
   # Print the full command that will be executed
-  log_info "Executing command: ${docker_cmd}"
+  log_debug "Executing command: ${docker_cmd}"
 
   # Get the date to estimate docker image build time:
   start_time=$(date +%s)
@@ -234,6 +275,7 @@ build_docker_image() {
 
   # Print build time if successful (code 0), else print exit code
   if [ ${docker_build_status} -eq 0 ]; then
+    log_debug "Docker image successfully created with tag: roboticsmicrofarms/plant-3d-vision:${VTAG}-cuda_cc${CUDA_CC}"
     log_info "Docker build SUCCEEDED in ${elapsed_time}s!"
   else
     log_error "Docker build FAILED after ${elapsed_time}s with code ${docker_build_status}!"
