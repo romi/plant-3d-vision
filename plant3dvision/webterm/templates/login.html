@@ -2,38 +2,50 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebTerm - Login</title>
-    <link rel="stylesheet" href="/static/css/login.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"> <!-- Responsive design settings -->
+    <title>WebTerm - Login</title> <!-- Page title shown in browser tab -->
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/webterm.css">
+    <!-- Custom JS for client-side functionality, loaded after the page is parsed -->
+    <script src="/static/js/login.js" defer></script>
 </head>
-<body>
-    <div class="login-container">
-        <div class="login-box">
-            <div class="logo-container">
-                <img src="/static/img/ROMI_logo_green.svg" alt="P3DV Logo">
-            </div>
-            <h1>P3DV - WebTerm</h1>
-            <h2>Secure Terminal Access</h2>
 
-            {% if error %}
-            <div class="error-message">{{ error }}</div>
-            {% endif %}
-
-            <form action="/login" method="post">
-                <div class="input-group">
-                    <label for="username">Username</label>
-                    <input type="text" id="username" name="username" required autofocus>
-                </div>
-
-                <div class="input-group">
-                    <label for="password">Password</label>
-                    <input type="password" id="password" name="password" required>
-                </div>
-
-                <button type="submit" class="login-button">Login</button>
-            </form>
+<body class="centered-layout">
+<!-- Container for login form and logo -->
+<div class="form-container">
+    <div class="content-box">
+        <!-- Logo section with image -->
+        <div class="logo-container">
+            <img src="/static/img/ROMI_logo_green.svg" alt="P3DV Logo">
         </div>
+        <h1>P3DV - WebTerm</h1>
+        <h2>Secure Terminal Access</h2>
+
+        <!-- Conditional error message display if 'error' is defined in context -->
+        {% if error %}
+        <div class="error-message">{{ error }}</div>
+        {% endif %}
+
+        <!-- Login form that sends a POST request to "/login" endpoint -->
+        <form action="/login" method="post">
+
+            <!-- Input group for username -->
+            <div class="input-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" required autofocus>
+            </div>
+
+            <!-- Input group for password -->
+            <div class="input-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+
+            <!-- Submit button to send login form data -->
+            <button type="submit" class="primary-button">Login</button>
+        </form>
     </div>
-    <script src="/static/js/login.js"></script>
+</div>
 </body>
 </html>

@@ -2,27 +2,24 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebTerm - User Profile</title>
-    <link rel="stylesheet" href="/static/css/admin.css">
-    <!-- Add Bootstrap Icons CSS -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"> <!-- Responsive design settings -->
+    <title>WebTerm - User Profile</title> <!-- Page title shown in browser tab -->
+
+    <!-- Bootstrap Icons CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/webterm.css">
+    <!-- Custom JS -->
     <script src="/static/js/user_profile.js" defer></script>
 </head>
-<body>
-<div class="login-container">
-    <div class="login-box">
+
+<body class="centered-layout">
+<div class="form-container">
+    <div class="content-box">
         <div class="logo-container">
             <img src="/static/img/ROMI_logo_green.svg" alt="P3DV Logo">
         </div>
         <h1>User Profile</h1>
-
-        <div class="nav-bar">
-            <div>
-                <a href="/terminal">Back to Terminal</a> |
-                <a href="/logout">Logout</a>
-            </div>
-        </div>
 
         <h3>User Information</h3>
         <div class="input-group">
@@ -63,8 +60,16 @@
                     </span>
                 </div>
             </div>
-            <button type="submit" class="login-button">Change Password</button>
+            <button type="submit" class="primary-button">Change Password</button>
         </form>
+
+        <div class="nav-bar">
+            <div>
+                <a href="/terminal"><i class="bi bi-terminal"></i> Back to Terminal</a>
+                <br>
+                <a href="/logout"><i class="bi bi-box-arrow-right"></i> Logout</a>
+            </div>
+        </div>
 
         <div id="result" class="result" style="display: none;"></div>
     </div>

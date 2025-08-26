@@ -1,8 +1,7 @@
-
 @import 'webterm.css';
 
 body {
-    height: 100vh;
+    display: inherit;
     overflow: hidden;
 }
 
