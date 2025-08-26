@@ -14,6 +14,8 @@ from flask import session
 from flask import url_for
 from flask_socketio import SocketIO
 from plantdb.commons.fsdb import FSDB
+from romitask.log import get_logger
+
 
 from auth import authenticate_user
 from auth import format_csv_line
@@ -23,12 +25,19 @@ from terminal import read_terminal_output
 from terminal import create_terminal
 from terminal import handle_terminal_input
 
+logger = get_logger("WebTerm")
+
 # Load environment variables from .env file
 load_dotenv(verbose=False, override=True)
 
 # Initialize Flask application
-app = Flask(__name__)
+app = Flask("WebTerm")
+# Get secret key from environment variable or generate a random one
 app.secret_key = os.environ.get('SERVER_SECRET_KEY', os.urandom(24))
+logger.warning("No secret key found, using a random key.")
+logger.warning("Please set the SERVER_SECRET_KEY environment variable.")
+
+# Initialize Socket.IO server
 socketio = SocketIO(app, async_mode='eventlet')
 
 # Store active terminals
@@ -353,18 +362,22 @@ def change_password():
 
 
 if __name__ == '__main__':
-    print('Starting WebTerm server...')
     # Create users.csv if it doesn't exist
     if not os.path.exists('users.csv'):
+        logger.warning("No existing users database found, creating a new one.")
         with open('users.csv', 'w') as f:
             f.write(format_csv_line("full_name", "username", "password_hash"))
             # Add default admin user
             admin_hash = hash_password('admin')
             f.write(format_csv_line("Administrator", "admin", admin_hash))
+    else:
+        logger.info("Existing users database found.")
 
-    # Start the server
     host = os.environ.get('SERVER_HOST', '0.0.0.0')
     port = int(os.environ.get('SERVER_PORT', 8080))
-    print(f"Starting server on http://{host}:{port}")
+
+    # Start the server
+    logger.info(f"Starting server on http://{host}:{port}")
     socketio.run(app, host=host, port=port)
-    print('WebTerm server stopped!')
+
+    logger.info('WebTerm server stopped!')
