@@ -33,29 +33,86 @@
         <span class="username">@{{ username }}</span>
     </div>
     <div class="actions">
+        <!-- Admin button only visible to admin users -->
         {% if username == 'admin' %}
         <a href="/admin" class="admin-button" title="Admin Panel">
             <i class="bi bi-shield-lock"></i>
         </a>
         {% endif %}
+        <!-- User profile button -->
         <a href="/user/profile" class="profile-btn" title="User Profile">
             <i class="bi bi-person-circle"></i>
         </a>
+        <!-- Help button -->
+         <button id="btn-help" class="help-btn" title="Keyboard Shortcuts (Ctrl+?)">
+            <i class="bi bi-question-circle"></i>
+        </button>
+       <!-- Documentation button -->
         <a href="https://docs.romi-project.eu/plant_imager/" target="_blank" class="docs-btn" title="Documentation">
             <i class="bi bi-book"></i>
         </a>
+        <!-- Fullscreen button -->
         <button id="btn-fullscreen" title="Toggle Fullscreen">
             <i class="bi bi-arrows-fullscreen"></i>
         </button>
+        <!-- Logout button -->
         <a href="/logout" class="logout-btn" title="Logout">
             <i class="bi bi-box-arrow-right"></i>
         </a>
+        <!-- GitHub link button -->
         <a href="https://github.com/romi/plant-3d-vision/tree/dev/plant3dvision/webterm" target="_blank"
            class="github-btn" title="GitHub Repository">
             <i class="bi bi-github"></i>
         </a>
     </div>
 </header>
+
+<!-- Help tooltip popup -->
+<div id="help-tooltip" class="help-tooltip hidden">
+    <div class="help-tooltip-header">
+        <h3>Keyboard Shortcuts</h3>
+        <button id="close-help-tooltip" class="close-btn">
+            <i class="bi bi-x"></i>
+        </button>
+    </div>
+    <div class="help-tooltip-content">
+        <div class="shortcut-section">
+            <h4>Terminal Controls</h4>
+            <div class="shortcut-item">
+                <span class="shortcut-key">Ctrl+C</span>
+                <span class="shortcut-desc">Interrupt current command</span>
+            </div>
+            <div class="shortcut-item">
+                <span class="shortcut-key">Ctrl+V</span>
+                <span class="shortcut-desc">Paste from clipboard</span>
+            </div>
+            <div class="shortcut-item">
+                <span class="shortcut-key">Ctrl+? or Ctrl+,</span>
+                <span class="shortcut-desc">Show this help</span>
+            </div>
+        </div>
+
+        <div class="shortcut-section">
+            <h4>Navigation</h4>
+            <div class="shortcut-item">
+                <span class="shortcut-key">Tab</span>
+                <span class="shortcut-desc">Auto-complete commands/paths</span>
+            </div>
+            <div class="shortcut-item">
+                <span class="shortcut-key">↑/↓</span>
+                <span class="shortcut-desc">Navigate command history</span>
+            </div>
+            <div class="shortcut-item">
+                <span class="shortcut-key">Ctrl+←/→</span>
+                <span class="shortcut-desc">Move cursor by word</span>
+            </div>
+            <div class="shortcut-item">
+                <span class="shortcut-key">Middle-click</span>
+                <span class="shortcut-desc">Paste selection</span>
+            </div>
+        </div>
+    </div>
+</div>
 
 <div class="main-container">
     <div class="terminal-side">

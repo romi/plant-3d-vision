@@ -205,3 +205,248 @@ h3 {
     user-select: none;
     z-index: 10;
 }
+
+/* Help tooltip styles */
+.help-tooltip {
+    position: fixed;
+    top: 60px;
+    right: 20px;
+    background: rgba(30, 30, 30, 0.98);
+    border: 1px solid #444;
+    border-radius: 8px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(10px);
+    color: #f0f0f0;
+    font-family: 'Ubuntu', sans-serif;
+    z-index: 1000;
+    max-width: 400px;
+    min-width: 350px;
+}
+
+.help-tooltip.hidden {
+    display: none;
+}
+
+.help-tooltip-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px 12px;
+    border-bottom: 1px solid #444;
+}
+
+.help-tooltip-header h3 {
+    margin: 0;
+    font-size: 18px;
+    color: #61afef;
+}
+
+.help-tooltip-content {
+    padding: 16px 20px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.shortcut-section {
+    margin-bottom: 20px;
+}
+
+.shortcut-section:last-child {
+    margin-bottom: 0;
+}
+
+.shortcut-section h4 {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    color: #00A960;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.shortcut-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.shortcut-item:last-child {
+    border-bottom: none;
+}
+
+.shortcut-key {
+    background: #2d2d2d;
+    color: #FF8400;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-family: 'Ubuntu Mono', monospace;
+    font-size: 12px;
+    font-weight: bold;
+    min-width: 80px;
+    text-align: center;
+}
+
+.shortcut-desc {
+    color: #F3F3F3;
+    font-size: 13px;
+    flex: 1;
+    margin-left: 16px;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    color: #5c6370;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: color 0.2s;
+}
+
+.close-btn:hover {
+    color: #e06c75;
+}
+
+.help-btn {
+    background: none;
+    border: none;
+    color: #abb2bf;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 6px;
+    transition: all 0.2s;
+    font-size: 18px;
+}
+
+.help-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #61afef;
+}
+
+/* Responsive design for help tooltip */
+@media (max-width: 768px) {
+    .help-tooltip {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        right: auto;
+        max-width: 90vw;
+        min-width: 300px;
+    }
+}
+
+/* Error page styles */
+.error-container {
+    text-align: center;
+    max-width: 600px;
+    padding: 30px;
+    background-color: #1e2127;
+    border-radius: 8px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+}
+
+.error-icon {
+    font-size: 4rem;
+    color: #ff4c4c;
+    margin-bottom: 1rem;
+}
+
+.error-code {
+    font-size: 3rem;
+    font-weight: bold;
+    color: #00A960;
+    margin-bottom: 0.5rem;
+}
+
+.error-title {
+    font-size: 1.5rem;
+    color: #F3F3F3;
+    margin-bottom: 2rem;
+}
+
+.error-description {
+    font-size: 1rem;
+    color: #aaa;
+    margin-bottom: 2rem;
+    line-height: 1.6;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 4px;
+    text-decoration: none;
+    font-size: 16px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    font-family: "Nunito Sans", sans-serif;
+}
+
+.btn-primary {
+    background-color: #00A960;
+    color: #1e2127;
+}
+
+.btn-primary:hover {
+    background-color: #50b7e0;
+}
+
+.btn-secondary {
+    background-color: transparent;
+    color: #F3F3F3;
+    border: 1px solid #444;
+}
+
+.btn-secondary:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-color: #00A960;
+    color: #00A960;
+}
+
+.terminal-ascii {
+    font-family: 'Lucida Console', monospace;
+    font-size: 0.75rem;
+    color: #aaa;
+    margin-top: 2rem;
+    white-space: pre;
+    display: inline-block;
+    text-align: left;
+}
+
+@media (max-width: 768px) {
+    .error-container {
+        margin: 1rem;
+        padding: 20px;
+    }
+
+    .error-code {
+        font-size: 2.5rem;
+    }
+
+    .error-title {
+        font-size: 1.2rem;
+    }
+
+    .action-buttons {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .btn {
+        width: 100%;
+        max-width: 200px;
+    }
+}

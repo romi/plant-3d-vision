@@ -1,8 +1,9 @@
 # !/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-
 import os
+import threading
+import time
 
 from dotenv import load_dotenv
 from flask import Flask
@@ -16,14 +17,11 @@ from flask_socketio import SocketIO
 from plantdb.commons.fsdb import FSDB
 from romitask.log import get_logger
 
-
 from auth import authenticate_user
 from auth import format_csv_line
 from auth import hash_password
 from auth import load_users
-from terminal import read_terminal_output
-from terminal import create_terminal
-from terminal import handle_terminal_input
+from terminal import terminal_manager
 
 logger = get_logger("WebTerm")
 
@@ -40,84 +38,137 @@ app = Flask("WebTerm",
 
 # Get secret key from environment variable or generate a random one
 app.secret_key = os.environ.get('SERVER_SECRET_KEY', os.urandom(24))
-logger.warning("No secret key found, using a random key.")
-logger.warning("Please set the SERVER_SECRET_KEY environment variable.")
+if not os.environ.get('SERVER_SECRET_KEY'):
+    logger.warning("No secret key found, using a random key.")
+    logger.warning("Please set the SERVER_SECRET_KEY environment variable.")
 
-# Initialize Socket.IO server
-socketio = SocketIO(app, async_mode='eventlet')
+# Initialize Socket.IO server with better configuration
+socketio = SocketIO(
+    app,
+    async_mode='eventlet',
+    cors_allowed_origins="*",
+    ping_timeout=60,
+    ping_interval=25
+)
 
-# Store active terminals
-terminals = {}
+
+# Background cleanup task
+def cleanup_inactive_terminals():
+    """Background task to clean up inactive terminals."""
+    while True:
+        try:
+            # Clean up terminals inactive for more than 1 hour
+            terminal_manager.cleanup_inactive_terminals(max_idle_time=3600)
+            time.sleep(300)  # Run cleanup every 5 minutes
+        except Exception as e:
+            logger.error(f"Cleanup task error: {e}")
+            time.sleep(60)  # Wait longer on error
 
 
-# Socket.IO event handlers
+# Start cleanup task
+cleanup_thread = threading.Thread(target=cleanup_inactive_terminals, daemon=True)
+cleanup_thread.start()
+
+
+# Socket.IO event handlers with enhanced error handling
 @socketio.on('connect')
-def handle_connect():
+def handle_connect(auth=None):
     if 'username' not in session:
+        logger.warning("Connection rejected: No valid session")
         return False
 
     username = session.get('username')
-    # Create a new terminal for this user if one doesn't exist
-    if username not in terminals:
-        terminals[username] = create_terminal()
-        # Change to $ROMI_DB directory automatically
-        handle_terminal_input(terminals[username], {'input': 'cd $ROMI_DB\n'})
+    logger.info(f"User {username} connected")
 
-    return True
+    try:
+        # Create terminal for user if it doesn't exist
+        if username not in terminal_manager.terminals:
+            result = terminal_manager.create_terminal(username)
+            if not result.get('success', False):
+                logger.error(f"Failed to create terminal for {username}: {result.get('error')}")
+                return False
+
+            # Change to $ROMI_DB directory automatically
+            terminal_manager.handle_input(username, 'cd $ROMI_DB\n')
+
+        return True
+    except Exception as e:
+        logger.error(f"Connection error for {username}: {e}")
+        return False
 
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    username = session.get('username', None)
-    if username and username in terminals:
-        # Don't actually close the terminal on disconnect to preserve state
-        # between page refreshes, only on logout
-        pass
+    username = session.get('username')
+    if username:
+        logger.info(f"User {username} disconnected")
+        # Don't close terminal on disconnect - preserve state for reconnection
+
+
+@socketio.on('resize')
+def handle_resize(data):
+    """Handle terminal resize events from the client."""
+    username = session.get('username')
+    if not username:
+        return
+
+    try:
+        rows = max(1, min(100, data.get('rows', 24)))  # Validate dimensions
+        cols = max(1, min(300, data.get('cols', 80)))
+
+        success = terminal_manager.resize_terminal(username, rows, cols)
+        if not success:
+            logger.warning(f"Failed to resize terminal for {username}")
+    except Exception as e:
+        logger.error(f"Resize error for {username}: {e}")
 
 
 @socketio.on('terminal_input')
 def socket_handle_terminal_input(data):
     username = session.get('username')
-    if not username or username not in terminals:
+    if not username:
         return
 
-    terminal = terminals[username]
-    output = handle_terminal_input(terminal, data)
-    socketio.emit('terminal_output', {'output': output}, room=request.sid)
+    try:
+        input_data = data.get('input', '')
+        if not input_data:
+            return
+
+        result = terminal_manager.handle_input(username, input_data)
+        if not result.get('success', False):
+            logger.warning(f"Input handling failed for {username}: {result.get('error')}")
+    except Exception as e:
+        logger.error(f"Terminal input error for {username}: {e}")
+        socketio.emit('terminal_output', {
+            'output': f'\r\n\x1b[31mError processing input: {str(e)}\x1b[0m\r\n'
+        }, room=request.sid)
 
 
 @socketio.on('start_output_polling')
 def start_output_polling():
     username = session.get('username')
-    if not username or username not in terminals:
+    if not username or username not in terminal_manager.terminals:
         return
 
-    # Get the current request.sid and store it
     sid = request.sid
+    terminal = terminal_manager.terminals[username]
 
-    terminal = terminals[username]
-
-    # Store a flag in terminal dict to track if polling should continue
+    # Mark polling as active for this session
     terminal['polling_active'] = True
-    # Store the session ID
-    terminal['sid'] = sid
+    terminal['current_sid'] = sid
 
     def poll_output():
-        while terminal.get('polling_active', False):
+        while terminal.get('polling_active', False) and terminal.get('current_sid') == sid:
             try:
-                # Check if there's any output available
-                output = read_terminal_output(terminal['main'])
+                output = terminal_manager.get_output(username)
                 if output:
-                    # Use the stored sid instead of request.sid
-                    socketio.emit('terminal_output', {'output': output}, room=terminal['sid'])
+                    socketio.emit('terminal_output', {'output': output}, room=sid)
             except Exception as e:
-                # Use the stored sid instead of request.sid
-                socketio.emit('terminal_output',
-                              {'output': f"\r\nError in polling: {str(e)}\r\n"},
-                              room=terminal['sid'])
+                logger.error(f"Output polling error for {username}: {e}")
                 break
-            # Sleep a short time to avoid consuming too much CPU
-            socketio.sleep(0.1)
+
+            # Use eventlet sleep to be cooperative
+            socketio.sleep(0.05)
 
     # Start polling in a background task
     socketio.start_background_task(poll_output)
@@ -126,8 +177,8 @@ def start_output_polling():
 @socketio.on('stop_output_polling')
 def stop_output_polling():
     username = session.get('username')
-    if username and username in terminals:
-        terminals[username]['polling_active'] = False
+    if username and username in terminal_manager.terminals:
+        terminal_manager.terminals[username]['polling_active'] = False
 
 
 @app.route('/')
@@ -146,16 +197,20 @@ def login():
     if user:
         session['username'] = username
         session['full_name'] = user['full_name']
+        logger.info(f"User {username} logged in successfully")
         return redirect(url_for('terminal'))
+
+    logger.warning(f"Failed login attempt for username: {username}")
     return render_template('login.html', error='Invalid credentials')
 
 
 @app.route('/logout')
 def logout():
-    # Close terminal if exists
-    if session.get('username') in terminals:
-        # Close the terminal process
-        terminals.pop(session.get('username'), None)
+    username = session.get('username')
+    if username:
+        # Close the terminal when user logs out
+        terminal_manager.close_terminal(username)
+        logger.info(f"User {username} logged out")
 
     session.clear()
     return redirect(url_for('index'))
@@ -384,6 +439,5 @@ if __name__ == '__main__':
 
     # Start the server
     logger.info(f"Starting server on http://{host}:{port}")
-    socketio.run(app, host=host, port=port)
-
+    socketio.run(app, host=host, port=port, debug=False)
     logger.info('WebTerm server stopped!')

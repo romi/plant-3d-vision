@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-
 import os
 import pty
 import select
@@ -11,201 +10,318 @@ import termios
 import struct
 import signal
 import time
+import threading
+import queue
+import logging
+from typing import Dict, Optional, Tuple
 
+logger = logging.getLogger(__name__)
 
-def create_terminal():
-    """
-    Create a pseudo-terminal and initialize it with a shell process.
+class TerminalManager:
+    """Enhanced terminal manager with better resource management and features."""
 
-    Set up a pseudo-terminal by opening a new terminal device, configuring its size, launching a shell process,
-    and returning the main file descriptor, the process ID of the shell, and any initial output from the shell.
+    def __init__(self):
+        self.terminals: Dict[str, Dict] = {}
+        self._cleanup_lock = threading.Lock()
 
-    Returns
-    -------
-    dict
-        A dictionary containing:
-        - 'main': int
-            The main file descriptor for the pseudo-terminal.
-        - 'pid': int
-            The process ID of the shell process.
-        - 'last_output': str
-            Any initial output from the shell.
+    def create_terminal(self, user_id: str) -> Dict:
+        """Create a new terminal session for a user."""
+        try:
+            # Clean up existing terminal if any
+            self.close_terminal(user_id)
 
-    Raises
-    ------
-    OSError
-        If opening a pseudo-terminal fails or if setting terminal size/attributes fails.
-    """
-    # Create a pseudo-terminal
-    main, secondary = pty.openpty()
+            # Create pseudo-terminal
+            main_fd, secondary_fd = pty.openpty()
 
-    # Set terminal size
-    set_terminal_size(main, 24, 80)
+            # Set terminal size and attributes
+            self._set_terminal_size(main_fd, 24, 80)
+            self._set_terminal_attributes(main_fd)
 
-    # Start a shell process
-    shell = subprocess.Popen(
-        os.environ.get('SHELL', '/bin/bash'),
-        preexec_fn=os.setsid,
-        stdin=secondary,
-        stdout=secondary,
-        stderr=secondary,
-        universal_newlines=True
-    )
+            # Start shell process
+            env = os.environ.copy()
+            env['TERM'] = 'xterm-256color'  # Better terminal type
+            env['PS1'] = r'\u@\h:\w\$ '  # Standard prompt
 
-    # Close secondary fd, we don't need it
-    os.close(secondary)
+            shell_process = subprocess.Popen(
+                env.get('SHELL', '/bin/bash'),
+                preexec_fn=os.setsid,
+                stdin=secondary_fd,
+                stdout=secondary_fd,
+                stderr=secondary_fd,
+                env=env,
+                universal_newlines=False  # Handle binary data properly
+            )
 
-    # Set non-blocking mode for main
-    fl = fcntl.fcntl(main, fcntl.F_GETFL)
-    fcntl.fcntl(main, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+            # Close secondary fd - child process will use it
+            os.close(secondary_fd)
 
-    # Read the initial output
-    time.sleep(0.1)  # Small delay to ensure output is ready
-    initial_output = read_terminal_output(main)
+            # Set non-blocking mode
+            self._set_nonblocking(main_fd)
 
-    return {
-        'main': main,
-        'pid': shell.pid,
-        'last_output': initial_output
-    }
+            # Initialize terminal data structure
+            terminal_data = {
+                'main_fd': main_fd,
+                'process': shell_process,
+                'pid': shell_process.pid,
+                'created_at': time.time(),
+                'last_activity': time.time(),
+                'output_queue': queue.Queue(maxsize=1000),  # Buffer for output
+                'input_buffer': '',  # Buffer for incomplete input sequences
+                'command_history': [],  # Store command history
+                'current_directory': os.getcwd(),
+                'active': True
+            }
 
+            self.terminals[user_id] = terminal_data
 
-def set_terminal_size(fd, rows, cols):
-    """
-    Set the terminal size for the given file descriptor.
+            # Start output monitoring thread
+            self._start_output_monitor(user_id)
 
-    Parameters
-    ----------
-    fd : int
-        The file descriptor to set the terminal size for.
-    rows : int
-        The number of rows in the terminal.
-    cols : int
-        The number of columns in the terminal.
-    """
-    size = struct.pack("HHHH", rows, cols, 0, 0)
-    fcntl.ioctl(fd, termios.TIOCSWINSZ, size)
+            # Read initial output
+            initial_output = self._read_with_timeout(main_fd, timeout=0.5)
 
+            logger.info(f"Terminal created for user {user_id}")
+            return {
+                'success': True,
+                'initial_output': initial_output,
+                'terminal_id': user_id
+            }
 
-def read_terminal_output(fd, max_read=4096):
-    """
-    Reads output from a file descriptor and returns it as a string.
+        except Exception as e:
+            logger.error(f"Failed to create terminal for {user_id}: {e}")
+            return {'success': False, 'error': str(e)}
 
-    This function reads data from the given file descriptor until there is no
-    more data to read or the maximum number of bytes to read has been reached.
-    The data is decoded using UTF-8 encoding, with any errors replaced by
-    replacement characters. The function handles OSError and IOError exceptions
-    silently.
+    def _set_terminal_attributes(self, fd: int):
+        """Set proper terminal attributes for better compatibility."""
+        try:
+            attrs = termios.tcgetattr(fd)
+            # Enable canonical mode for better line editing
+            attrs[3] |= termios.ECHO | termios.ICANON
+            termios.tcsetattr(fd, termios.TCSANOW, attrs)
+        except (OSError, termios.error) as e:
+            logger.warning(f"Could not set terminal attributes: {e}")
 
-    Parameters
-    ----------
-    fd : int
-        The file descriptor from which to read the output.
-    max_read : int, optional
-        The maximum number of bytes to read at once (default is 4096).
+    def _set_nonblocking(self, fd: int):
+        """Set file descriptor to non-blocking mode."""
+        flags = fcntl.fcntl(fd, fcntl.F_GETFL)
+        fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
 
-    Returns
-    -------
-    str
-        The output read from the file descriptor as a string.
-    """
-    output = ""
-    try:
+    def _set_terminal_size(self, fd: int, rows: int, cols: int):
+        """Set terminal window size."""
+        try:
+            winsize = struct.pack("HHHH", rows, cols, 0, 0)
+            fcntl.ioctl(fd, termios.TIOCSWINSZ, winsize)
+        except OSError as e:
+            logger.warning(f"Could not set terminal size: {e}")
+
+    def _read_with_timeout(self, fd: int, timeout: float = 0.1) -> str:
+        """Read from file descriptor with timeout."""
+        try:
+            ready, _, _ = select.select([fd], [], [], timeout)
+            if ready:
+                data = os.read(fd, 4096)
+                return data.decode('utf-8', errors='replace')
+        except (OSError, BlockingIOError):
+            pass
+        return ""
+
+    def _start_output_monitor(self, user_id: str):
+        """Start background thread to monitor terminal output."""
+        def monitor():
+            terminal = self.terminals.get(user_id)
+            if not terminal:
+                return
+
+            fd = terminal['main_fd']
+            output_queue = terminal['output_queue']
+
+            while terminal.get('active', False):
+                try:
+                    output = self._read_with_timeout(fd, timeout=0.1)
+                    if output:
+                        terminal['last_activity'] = time.time()
+                        if not output_queue.full():
+                            output_queue.put(output)
+                        else:
+                            # Queue is full, drop oldest output
+                            try:
+                                output_queue.get_nowait()
+                                output_queue.put(output)
+                            except queue.Empty:
+                                pass
+                except Exception as e:
+                    logger.error(f"Output monitor error for {user_id}: {e}")
+                    break
+
+                time.sleep(0.05)  # Small delay to prevent excessive CPU usage
+
+        thread = threading.Thread(target=monitor, daemon=True)
+        thread.start()
+
+    def handle_input(self, user_id: str, data: str) -> Dict:
+        """Handle terminal input with enhanced processing."""
+        terminal = self.terminals.get(user_id)
+        if not terminal or not terminal.get('active', False):
+            return {'success': False, 'error': 'Terminal not found or inactive'}
+
+        try:
+            fd = terminal['main_fd']
+            terminal['last_activity'] = time.time()
+
+            # Handle special key sequences
+            processed_data = self._process_input(data, terminal)
+
+            # Write to terminal
+            os.write(fd, processed_data.encode('utf-8'))
+
+            # Update command history if it's a complete command
+            if '\n' in data or '\r' in data:
+                self._update_command_history(terminal, processed_data)
+
+            return {'success': True}
+
+        except Exception as e:
+            logger.error(f"Input handling error for {user_id}: {e}")
+            return {'success': False, 'error': str(e)}
+
+    def _process_input(self, data: str, terminal: Dict) -> str:
+        """Process input for special sequences and features."""
+        # Handle tab completion
+        if '\t' in data:
+            return self._handle_tab_completion(data, terminal)
+
+        # Handle Ctrl+C, Ctrl+D, etc.
+        if len(data) == 1 and ord(data) < 32:
+            return data  # Pass control characters through
+
+        return data
+
+    def _handle_tab_completion(self, data: str, terminal: Dict) -> str:
+        """Handle tab completion by sending to shell."""
+        # For now, pass tab through to shell which will handle completion
+        # In the future, could implement custom completion logic
+        return data
+
+    def _update_command_history(self, terminal: Dict, command: str):
+        """Update command history."""
+        clean_command = command.strip()
+        if clean_command and clean_command not in ['', '\n', '\r']:
+            terminal['command_history'].append(clean_command)
+            # Keep only last 1000 commands
+            if len(terminal['command_history']) > 1000:
+                terminal['command_history'] = terminal['command_history'][-1000:]
+
+    def get_output(self, user_id: str) -> str:
+        """Get pending output for a user."""
+        terminal = self.terminals.get(user_id)
+        if not terminal:
+            return ""
+
+        output_parts = []
+        output_queue = terminal['output_queue']
+
+        # Get all pending output
         while True:
-            data = os.read(fd, max_read)
-            if not data:
+            try:
+                output_parts.append(output_queue.get_nowait())
+            except queue.Empty:
                 break
-            output += data.decode('utf-8', errors='replace')
-    except (OSError, IOError):
-        pass  # No more data to read
-    return output
 
+        return ''.join(output_parts)
+
+    def resize_terminal(self, user_id: str, rows: int, cols: int) -> bool:
+        """Resize terminal window."""
+        terminal = self.terminals.get(user_id)
+        if not terminal:
+            return False
+
+        try:
+            self._set_terminal_size(terminal['main_fd'], rows, cols)
+            logger.debug(f"Resized terminal for {user_id} to {rows}x{cols}")
+            return True
+        except Exception as e:
+            logger.error(f"Resize error for {user_id}: {e}")
+            return False
+
+    def close_terminal(self, user_id: str):
+        """Close a terminal session and cleanup resources."""
+        with self._cleanup_lock:
+            terminal = self.terminals.get(user_id)
+            if not terminal:
+                return
+
+            # Mark as inactive to stop monitoring
+            terminal['active'] = False
+
+            try:
+                # Terminate the process group
+                os.killpg(os.getpgid(terminal['pid']), signal.SIGTERM)
+
+                # Wait a bit for graceful termination
+                time.sleep(0.1)
+
+                # Force kill if still running
+                try:
+                    os.killpg(os.getpgid(terminal['pid']), signal.SIGKILL)
+                except ProcessLookupError:
+                    pass  # Already dead
+
+            except (OSError, ProcessLookupError):
+                pass  # Process already dead
+
+            try:
+                # Close file descriptor
+                os.close(terminal['main_fd'])
+            except OSError:
+                pass
+
+            # Remove from terminals dict
+            del self.terminals[user_id]
+            logger.info(f"Terminal closed for user {user_id}")
+
+    def cleanup_inactive_terminals(self, max_idle_time: float = 3600):
+        """Clean up terminals that have been inactive for too long."""
+        current_time = time.time()
+        inactive_users = []
+
+        for user_id, terminal in self.terminals.items():
+            if current_time - terminal['last_activity'] > max_idle_time:
+                inactive_users.append(user_id)
+
+        for user_id in inactive_users:
+            logger.info(f"Cleaning up inactive terminal for {user_id}")
+            self.close_terminal(user_id)
+
+# Global terminal manager instance
+terminal_manager = TerminalManager()
+
+# Legacy function wrappers for compatibility
+def create_terminal():
+    """Legacy wrapper - creates terminal for 'default' user."""
+    return terminal_manager.create_terminal('default')
 
 def handle_terminal_input(terminal, data):
-    """
-    Handle terminal input and retrieve output after a short delay.
+    """Legacy wrapper."""
+    user_id = getattr(terminal, 'user_id', 'default')
+    result = terminal_manager.handle_input(user_id, data.get('input', ''))
+    if result['success']:
+        return terminal_manager.get_output(user_id)
+    return result.get('error', '')
 
-    This function writes the given data to the specified terminal and retrieves any
-    output generated as a result of that input. It is designed to handle terminal
-    interactions where input is sent and output is expected to be read after a small
-    delay.
-
-    Parameters
-    ----------
-    terminal : dict
-        A dictionary containing terminal-related information, including the 'main'
-        key which refers to the file descriptor used for writing to and reading from
-        the terminal.
-    data : dict
-        A dictionary containing data to be written to the terminal. The 'input' key
-        is expected to contain the string data to be written.
-
-    Returns
-    -------
-    str or None
-        The output read from the terminal after writing the input, or an error message
-        if an exception occurs during execution.
-    """
-    # Write input to the terminal
-    try:
-        input_data = data.get('input', '')
-        os.write(terminal['main'], input_data.encode('utf-8'))
-
-        # Wait a bit for output
-        time.sleep(0.05)
-
-        # Read output
-        output = read_terminal_output(terminal['main'])
-        return output
-    except Exception as e:
-        return f"\r\nError: {str(e)}\r\n"
-
+def read_terminal_output(fd, max_read=4096):
+    """Legacy wrapper."""
+    # Find terminal by fd
+    for user_id, terminal in terminal_manager.terminals.items():
+        if terminal['main_fd'] == fd:
+            return terminal_manager.get_output(user_id)
+    return ""
 
 def resize_terminal(terminal, rows, cols):
-    """
-    Resize the terminal to specified dimensions.
-
-    This function resizes a terminal's viewport by setting its dimensions. It is commonly used
-    to adjust the display area for better readability or to fit specific layout requirements.
-    The function directly modifies the terminal object in-place and does not return any value.
-
-    Parameters
-    ----------
-    terminal : dict
-        A dictionary representing the terminal to be resized, containing a 'main' key with
-        another dictionary as its value. This nested dictionary should contain terminal-specific
-        configuration options, including viewport dimensions.
-    rows : int
-        The desired number of rows for the terminal's viewport. Should be a positive integer.
-    cols : int
-        The desired number of columns for the terminal's viewport. Should be a positive integer.
-
-    See Also
-    --------
-    set_terminal_size: Function used internally to set the terminal dimensions.
-    """
-    set_terminal_size(terminal['main'], rows, cols)
-
+    """Legacy wrapper."""
+    user_id = getattr(terminal, 'user_id', 'default')
+    terminal_manager.resize_terminal(user_id, rows, cols)
 
 def close_terminal(terminal):
-    """
-    Close a terminal session and its associated process.
-
-    This function is used to close a terminal session by terminating its
-    associated process and closing its file descriptors. It handles potential
-    exceptions gracefully, such as when the process is already dead.
-
-    Parameters
-    ----------
-    terminal : dict
-        A dictionary containing terminal information with keys 'pid' and 'main'. The
-        'pid' key holds the process ID of the associated process, and the 'main'
-        key holds the file descriptor to be closed.
-    """
-    try:
-        # Try to terminate the process gracefully
-        os.killpg(os.getpgid(terminal['pid']), signal.SIGTERM)
-        # Close the main fd
-        os.close(terminal['main'])
-    except:
-        pass  # The Process might already be dead
+    """Legacy wrapper."""
+    user_id = getattr(terminal, 'user_id', 'default')
+    terminal_manager.close_terminal(user_id)
