@@ -252,7 +252,7 @@ build_docker_image() {
   docker_cmd+=" -f \"docker/Dockerfile\""
   docker_cmd+=" ."  # Build context
 
-  # Print the build configutation options
+  # Print the build configuration options
   log_debug "Build configuration:"
   log_debug "- COLMAP_VERSION: ${COLMAP_VERSION}"
   log_debug "- CUDA_CC: ${CUDA_CC}"

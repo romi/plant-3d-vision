@@ -7,10 +7,12 @@ setup_colors() {
   RED="\033[0;31m"    # Define red color code
   GREEN="\033[0;32m"  # Define green color code
   YELLOW="\033[0;33m" # Define yellow color code
+  BLUE="\033[0;34m"   # Define blue color code for debug messages
   NC="\033[0m"        # No Color code to reset colors
   INFO="${GREEN}INFO${NC}    "    # Prefix for info messages
   WARNING="${YELLOW}WARNING${NC} " # Prefix for warning messages
   ERROR="${RED}$(bold ERROR)${NC}   " # Prefix for error messages using bold function
+  DEBUG="${BLUE}DEBUG${NC}   "   # Prefix for debug messages
 }
 
 bold() {
@@ -29,6 +31,12 @@ log_error() {
   echo -e "${ERROR}$1" # Print error message with ERROR prefix
 }
 
+log_debug() {
+  if [ "${DEBUG_MODE}" = true ]; then
+    echo -e "${DEBUG}$1" # Print debug message with DEBUG prefix if debug mode is enabled
+  fi
+}
+
 # --------------------------------
 # Functions for script initialization
 # --------------------------------
@@ -43,6 +51,8 @@ initialize_variables() {
   mount_option=""
   # Self-test flag (0/1 to indicate call to a test)
   self_test=0
+  # Debug mode is disabled by default
+  DEBUG_MODE=false
 
   # Define test commands
   unittest_cmd="python3 -m unittest discover -s plant-3d-vision/tests/unit/"
@@ -51,6 +61,7 @@ initialize_variables() {
   geom_pipeline_cmd="cd plant-3d-vision/ && ./tests/check_geom_pipe.sh"
   ml_pipeline_cmd="cd plant-3d-vision/ && ./tests/check_ml_pipe.sh"
   gpu_cmd="nvidia-smi"
+  webterm_cmd="gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:8080 plant3dvision.webterm.wsgi:application"
 
   # If the `ROMI_DB` variable is set, use it as the default database location; else set it to empty:
   if [ -z ${ROMI_DB+x} ]; then
@@ -88,8 +99,16 @@ show_usage() {
   echo "  -c, --cmd
     Defines the command to run at container startup." \
     "By default, start an interactive container with a bash shell."
+  echo "  --webterm
+    Starts the WebTerm application." \
+    "It will bind the host port 8080 to the container port 8080."
+  # -- Debug option:
+  echo "  --debug
+    Enable debug mode to print additional debug information."
+  # -- General options:
   echo "  -h, --help
     Output a usage message and exit."
+
   echo ""
 
   echo "$(bold TEST OPTIONS):"
@@ -204,9 +223,18 @@ parse_arguments() {
       self_test=1
       log_info "Running GPU self-test procedure..."
       ;;
+    --webterm)
+      cmd=${webterm_cmd}
+      docker_option="${docker_option} -p 8080:8080"
+      log_info "Starting WebTerm..."
+      ;;
     -v | --volume)
       shift
       mount_option="${mount_option} -v $1"
+      ;;
+    --debug)
+      DEBUG_MODE=true
+      log_debug "Debug mode enabled"
       ;;
     -h | --help)
       show_usage
@@ -218,10 +246,6 @@ parse_arguments() {
     esac
     shift
   done
-
-  if [ "${docker_option}" != "" ]; then
-    log_info "Extra docker arguments: '${docker_option}'!"
-  fi
 }
 
 # --------------------------------
@@ -239,31 +263,53 @@ check_terminal() {
 # Docker run functions
 # --------------------------------
 run_interactive_docker() {
-  # Start in interactive mode, using the `-i` flag (load `~/.bashrc`).
-  docker run --rm --gpus all ${mount_option} \
-    --user romi:${gid} \
-    --env PYOPENCL_CTX='0' \
-    ${docker_option} \
-    -i ${USE_TTY} \
-    "roboticsmicrofarms/plant-3d-vision:${VTAG}" \
-    "bash"
+  # Construct the docker run command
+  docker_cmd="docker run --rm --gpus all"
+  docker_cmd+=" ${mount_option}"
+  docker_cmd+=" --user romi:${gid}"
+  docker_cmd+=" ${docker_option}"
+  docker_cmd+=" -i"  # use the `-i` flag to load `~/.bashrc`.
+  docker_cmd+=" ${USE_TTY}"
+  docker_cmd+=" roboticsmicrofarms/plant-3d-vision:${VTAG}"
+  docker_cmd+=" bash"
+
+  # Print the build configuration options
+  log_debug "Build configuration:"
+  log_debug "- Docker image: roboticsmicrofarms/plant-3d-vision:${VTAG}"
+  log_debug "- Docker bind mount: ${mount_option}"
+  log_debug "- Docker options: ${docker_option}"
+  # Print the full command that will be executed
+  log_debug "Executing command: ${docker_cmd}"
+
+  # Execute the docker run command
+  eval ${docker_cmd}
 }
 
 run_docker_command() {
-  log_info "Running: '${cmd}'."
-  log_info "Bind mount: '${mount_option}'."
+  # Construct the docker run command
+  docker_cmd="docker run --rm --gpus all"
+  docker_cmd+=" ${mount_option}"
+  docker_cmd+=" --user romi:${gid}"
+  docker_cmd+=" ${docker_option}"
+  docker_cmd+=" -i"  # use the `-i` flag to load `~/.bashrc`.
+  docker_cmd+=" ${USE_TTY}"
+  docker_cmd+=" roboticsmicrofarms/plant-3d-vision:${VTAG}"
+  docker_cmd+=" \"${cmd}\""
+
+  # Print the build configuration options
+  log_debug "Build configuration:"
+  log_debug "- Docker image: roboticsmicrofarms/plant-3d-vision:${VTAG}"
+  log_debug "- Docker bind mount: ${mount_option}"
+  log_debug "- Docker options: ${docker_option}"
+  log_debug "- Command: ${cmd}"
+  # Print the full command that will be executed
+  log_debug "Executing command: ${docker_cmd}"
 
   # Get the date to estimate command execution time:
   start_time=$(date +%s)
 
-  # Start in interactive mode, using the `-i` flag (load `~/.bashrc`).
-  docker run --rm --gpus all ${mount_option} \
-    --user romi:${gid} \
-    --env PYOPENCL_CTX='0' \
-    ${docker_option} \
-    -i ${USE_TTY} \
-    "roboticsmicrofarms/plant-3d-vision:${VTAG}" \
-    "${cmd}"
+  # Execute the docker run command
+  eval ${docker_cmd}
 
   # Get command exit code:
   cmd_status=$?
