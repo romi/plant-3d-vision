@@ -15,22 +15,26 @@ allowing web servers like Gunicorn, uWSGI, or Apache with mod_wsgi to interact w
 
 ## Environment Variables
 
+### App Configuration Variables
 - SERVER_SECRET_KEY: Secret key for Flask sessions
-- SERVER_HOST: Host to bind to (default: 0.0.0.0)
-- SERVER_PORT: Port to bind to (default: 8080)
 - USERS_DB_PATH: Path to users CSV file (default: users.csv)
 - ROMI_DB: Path to ROMI database (default: /myapp/db)
 - ROMI_CFG: Path to configuration directory (default: /myapp/cfg/{username}/)
-- WEBTERM_PREFIX: Prefix for WebTerm routes (default: '')
 - WEBTERM_PROXY: Set to 'true' if behind a reverse proxy
+- WEBTERM_PREFIX: Prefix for WebTerm routes (default: '')
 - LOG_LEVEL: Logging level (default: INFO)
 
-## Usage with Gunicorn
+### Additional Environment Variables for development
+- SERVER_HOST: Host to bind to (default: 0.0.0.0)
+- SERVER_PORT: Port to bind to (default: 8080)
+- SERVER_DEBUG: Enable debug mode (default: False)
 
+## Usage with Gunicorn
 After installing Gunicorn, you can run the application using the following command:
 ```shell
 gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:8080 plant3dvision.webterm.wsgi:application
 ```
+This will start the application on port 8080.
 """
 
 import os
@@ -43,6 +47,7 @@ load_dotenv(verbose=False, override=True)
 # Disable eventlet multiple readers check for terminal operations
 try:
     from eventlet.debug import hub_prevent_multiple_readers
+
     hub_prevent_multiple_readers(False)
 except ImportError:
     pass
@@ -54,6 +59,7 @@ from romitask.log import DEFAULT_LOG_LEVEL
 # Get configuration from environment variables
 app_config = {
     'proxy': os.environ.get('WEBTERM_PROXY', 'false').lower() == 'true',
+    'url_prefix': os.environ.get("WEBTERM_PREFIX", ""),
     'users_db_path': os.environ.get('USERS_DB_PATH', 'users.csv'),
     'secret_key': os.environ.get('SERVER_SECRET_KEY'),
     'log_level': os.environ.get('LOG_LEVEL', DEFAULT_LOG_LEVEL),

@@ -43,6 +43,7 @@ import threading
 import time
 
 from dotenv import load_dotenv
+from flask import Blueprint
 from flask import Flask
 from flask import jsonify
 from flask import redirect
@@ -67,7 +68,7 @@ from romitask.log import get_logger
 load_dotenv(verbose=False, override=True)
 
 
-def create_webterm_app(proxy=False, users_db_path='users.csv', secret_key=None,
+def create_webterm_app(proxy=False, users_db_path='users.csv', secret_key=None, url_prefix="",
                        log_level=DEFAULT_LOG_LEVEL, async_mode='threading'):
     """Create and configure the WebTerm Flask application.
 
@@ -77,6 +78,8 @@ def create_webterm_app(proxy=False, users_db_path='users.csv', secret_key=None,
         Boolean flag indicating whether the application is behind a reverse proxy, by default False
     users_db_path : str, optional
         Path to the users database CSV file, by default 'users.csv'
+    url_prefix : str, optional
+        Prefix for all endpoints, by default ""
     secret_key : str, optional
         Secret key for session management, by default None
     log_level : str, optional
@@ -105,9 +108,10 @@ def create_webterm_app(proxy=False, users_db_path='users.csv', secret_key=None,
     app.secret_key = secret_key
 
     # Configure proxy settings if needed
+    prefix = ""
     if proxy:
         logger.info(f"Setting up Flask application with proxy support...")
-        prefix = os.environ.get("WEBTERM_PREFIX", "")
+        prefix = url_prefix
         logger.info(f"Using prefix '{prefix}' for all endpoints.")
         # App is behind one proxy that sets the -For and -Host headers.
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_host=1, x_proto=1)
@@ -117,12 +121,15 @@ def create_webterm_app(proxy=False, users_db_path='users.csv', secret_key=None,
             SESSION_COOKIE_SAMESITE='Lax'
         )
 
-    # Initialize Socket.IO server with better configuration
+    # Create a blueprint for all routes
+    bp = Blueprint('webterm', __name__, url_prefix=prefix)
+
+    # Initialize Socket.IO server with configuration
     socketio_config = {
         'async_mode': async_mode,
         'cors_allowed_origins': "*",
-        'ping_timeout': 60,
-        'ping_interval': 25,
+        'ping_timeout': 5,  # ping timeout, in seconds
+        'ping_interval': 2,  # ping timeout, in seconds
         'logger': False,  # Disable socketio logging to avoid conflicts with WSGI
         'engineio_logger': False
     }
@@ -261,13 +268,13 @@ def create_webterm_app(proxy=False, users_db_path='users.csv', secret_key=None,
         if username and username in terminal_manager.terminals:
             terminal_manager.terminals[username]['polling_active'] = False
 
-    @app.route('/')
+    @bp.route('/')
     def index():
         if 'username' in session:
-            return redirect(url_for('terminal'))
+            return redirect(url_for('webterm.terminal'))
         return render_template('login.html')
 
-    @app.route('/login', methods=['POST'])
+    @bp.route('/login', methods=['POST'])
     def login():
         username = request.form.get('username')
         password = request.form.get('password')
@@ -277,12 +284,12 @@ def create_webterm_app(proxy=False, users_db_path='users.csv', secret_key=None,
             session['username'] = username
             session['full_name'] = user['full_name']
             logger.info(f"User {username} logged in successfully")
-            return redirect(url_for('terminal'))
+            return redirect(url_for('webterm.terminal'))
 
         logger.warning(f"Failed login attempt for username: {username}")
         return render_template('login.html', error='Invalid credentials')
 
-    @app.route('/logout')
+    @bp.route('/logout')
     def logout():
         username = session.get('username')
         if username:
@@ -291,23 +298,23 @@ def create_webterm_app(proxy=False, users_db_path='users.csv', secret_key=None,
             logger.info(f"User {username} logged out")
 
         session.clear()
-        return redirect(url_for('index'))
+        return redirect(url_for('webterm.index'))
 
-    @app.route('/terminal')
+    @bp.route('/terminal')
     def terminal():
         if 'username' not in session:
-            return redirect(url_for('index'))
+            return redirect(url_for('webterm.index'))
         return render_template('terminal.html',
                                full_name=session.get('full_name'),
                                username=session.get('username'))
 
-    @app.route('/admin')
+    @bp.route('/admin')
     def admin_panel():
         if 'username' not in session or session.get('username') != 'admin':
-            return redirect(url_for('index'))
+            return redirect(url_for('webterm.index'))
         return render_template('admin.html')
 
-    @app.route('/admin/add_user', methods=['POST'])
+    @bp.route('/admin/add_user', methods=['POST'])
     def add_user():
         # Simple admin endpoint to add users
         if session.get('username') != 'admin':  # Basic admin check
@@ -330,7 +337,7 @@ def create_webterm_app(proxy=False, users_db_path='users.csv', secret_key=None,
         except Exception as e:
             return {'success': False, 'error': str(e)}, 500
 
-    @app.route('/api/scans', methods=['GET'])
+    @bp.route('/api/scans', methods=['GET'])
     def get_scans():
         try:
             db = FSDB(os.getenv('ROMI_DB', '/myapp/db'))
@@ -341,7 +348,7 @@ def create_webterm_app(proxy=False, users_db_path='users.csv', secret_key=None,
         except Exception as e:
             return jsonify({"error": str(e)}), 500
 
-    @app.route('/api/list-toml-files', methods=['GET'])
+    @bp.route('/api/list-toml-files', methods=['GET'])
     def list_toml_files():
         username = request.args.get('username', 'default')
 
@@ -367,7 +374,7 @@ def create_webterm_app(proxy=False, users_db_path='users.csv', secret_key=None,
                 'error': str(e)
             }), 500
 
-    @app.route('/api/load-toml-file', methods=['GET'])
+    @bp.route('/api/load-toml-file', methods=['GET'])
     def load_toml_file():
         filename = request.args.get('filename')
         username = request.args.get('username', 'default')
@@ -409,7 +416,7 @@ def create_webterm_app(proxy=False, users_db_path='users.csv', secret_key=None,
                 'error': str(e)
             }), 500
 
-    @app.route('/api/save-toml', methods=['POST'])
+    @bp.route('/api/save-toml', methods=['POST'])
     def save_toml():
         data = request.json
         filename = data.get('filename')
@@ -443,7 +450,7 @@ def create_webterm_app(proxy=False, users_db_path='users.csv', secret_key=None,
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
 
-    @app.route('/user/profile')
+    @bp.route('/user/profile')
     def user_profile():
         if 'username' not in session:
             return redirect(url_for('index'))
@@ -451,7 +458,7 @@ def create_webterm_app(proxy=False, users_db_path='users.csv', secret_key=None,
                                full_name=session.get('full_name'),
                                username=session.get('username'))
 
-    @app.route('/user/change_password', methods=['POST'])
+    @bp.route('/user/change_password', methods=['POST'])
     def change_password():
         if 'username' not in session:
             return {'success': False, 'error': 'Unauthorized'}, 403
@@ -489,6 +496,9 @@ def create_webterm_app(proxy=False, users_db_path='users.csv', secret_key=None,
             return {'success': True}, 200
         except Exception as e:
             return {'success': False, 'error': str(e)}, 500
+
+    # Register the blueprint with the app
+    app.register_blueprint(bp)
 
     # Error handlers
     @app.errorhandler(404)
@@ -529,6 +539,8 @@ def parsing():
                              help="the port of the webserver, defaults to '8080'.")
     server_args.add_argument('--proxy', action='store_true',
                              help="use this flag when this server sits behind a reverse proxy")
+    server_args.add_argument('--url-prefix', type=str, default=os.environ.get('WEBTERM_PREFIX', ''),
+                             help="prefix for the webserver URL, defaults to ''.")
     server_args.add_argument('--debug', action='store_true',
                              help="enable debug mode.")
 
@@ -548,7 +560,7 @@ def parsing():
 
 
 def webterm_server(host='0.0.0.0', port=8080, proxy=False, debug=False, users_db_path='users.csv', secret_key=None,
-                   log_level=DEFAULT_LOG_LEVEL):
+                   url_prefix="", log_level=DEFAULT_LOG_LEVEL):
     """Initialize and start the WebTerm server.
 
     Parameters
@@ -573,6 +585,7 @@ def webterm_server(host='0.0.0.0', port=8080, proxy=False, debug=False, users_db
         proxy=proxy,
         users_db_path=users_db_path,
         secret_key=secret_key,
+        url_prefix=url_prefix,
         log_level=log_level,
     )
 
@@ -593,6 +606,7 @@ def main():
         host=args.host,
         port=args.port,
         proxy=args.proxy,
+        url_prefix=args.url_prefix,
         debug=args.debug,
         users_db_path=args.users_db_path,
         secret_key=args.secret_key,
