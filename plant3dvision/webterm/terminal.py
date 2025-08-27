@@ -1,21 +1,73 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+"""Enhanced Terminal Manager Module
+
+A comprehensive Python module for creating and managing pseudo-terminal sessions with advanced features like multi-user support, resource management, and interactive shell capabilities.
+This module is particularly useful for web applications, remote terminal services, or any application requiring programmatic terminal control.
+
+## Key Features
+
+- Multi-user terminal session management with isolated environments
+- Pseudo-terminal (PTY) creation and control using Python's pty module
+- Non-blocking I/O operations with proper resource cleanup
+- Background output monitoring with threaded architecture
+- Terminal resizing and attribute configuration
+- Command history tracking and input processing
+- Automatic cleanup of inactive terminal sessions
+- Legacy function wrappers for backward compatibility
+- Support for special key sequences and tab completion
+- Configurable terminal environment (TERM, PS1, shell type)
+
+## Usage Examples
+
+### Basic terminal creation and interaction
+
+```python
+>>> from plant3dvision.webterm.terminal import terminal_manager
+>>> result = terminal_manager.create_terminal('user123')
+>>> if result['success']:
+...     print(result['initial_output'])
+...     terminal_manager.handle_input('user123', 'ls -la\n')
+...     output = terminal_manager.get_output('user123')
+...     print(output)
+```
+
+### Terminal management with cleanup
+
+```python
+>>> from plant3dvision.webterm.terminal import terminal_manager
+>>> # Create multiple terminals
+>>> terminal_manager.create_terminal('user1')
+>>> terminal_manager.create_terminal('user2')
+>>>
+>>> # Resize terminal
+>>> terminal_manager.resize_terminal('user1', 30, 120)
+>>>
+>>> # Clean up inactive sessions (older than 1 hour)
+>>> terminal_manager.cleanup_inactive_terminals(3600)
+>>>
+>>> # Close specific terminal
+>>> terminal_manager.close_terminal('user1')
+```
+"""
+
+import fcntl
+import logging
 import os
 import pty
-import select
-import subprocess
-import fcntl
-import termios
-import struct
-import signal
-import time
-import threading
 import queue
-import logging
-from typing import Dict, Optional, Tuple
+import select
+import signal
+import struct
+import subprocess
+import termios
+import threading
+import time
+from typing import Dict
 
 logger = logging.getLogger(__name__)
+
 
 class TerminalManager:
     """Enhanced terminal manager with better resource management and features."""
@@ -127,6 +179,7 @@ class TerminalManager:
 
     def _start_output_monitor(self, user_id: str):
         """Start background thread to monitor terminal output."""
+
         def monitor():
             terminal = self.terminals.get(user_id)
             if not terminal:
@@ -292,13 +345,16 @@ class TerminalManager:
             logger.info(f"Cleaning up inactive terminal for {user_id}")
             self.close_terminal(user_id)
 
+
 # Global terminal manager instance
 terminal_manager = TerminalManager()
+
 
 # Legacy function wrappers for compatibility
 def create_terminal():
     """Legacy wrapper - creates terminal for 'default' user."""
     return terminal_manager.create_terminal('default')
+
 
 def handle_terminal_input(terminal, data):
     """Legacy wrapper."""
@@ -308,6 +364,7 @@ def handle_terminal_input(terminal, data):
         return terminal_manager.get_output(user_id)
     return result.get('error', '')
 
+
 def read_terminal_output(fd, max_read=4096):
     """Legacy wrapper."""
     # Find terminal by fd
@@ -316,10 +373,12 @@ def read_terminal_output(fd, max_read=4096):
             return terminal_manager.get_output(user_id)
     return ""
 
+
 def resize_terminal(terminal, rows, cols):
     """Legacy wrapper."""
     user_id = getattr(terminal, 'user_id', 'default')
     terminal_manager.resize_terminal(user_id, rows, cols)
+
 
 def close_terminal(terminal):
     """Legacy wrapper."""
