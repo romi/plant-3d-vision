@@ -31,7 +31,7 @@ body {
     background-color: transparent;
     border: none;
     border-radius: 4px;
-    color: #ccc;
+    color: #F3F3F3;
     font-size: 1.2rem;
     margin-left: 8px;
     cursor: pointer;
@@ -45,7 +45,7 @@ body {
 }
 
 .terminal-header .profile-btn {
-    color: #ccc;
+    color: #F3F3F3;
     text-decoration: none;
 }
 
@@ -78,7 +78,7 @@ body {
 .actions button, .actions a {
     background: none;
     border: none;
-    color: #ccc;
+    color: #F3F3F3;
     cursor: pointer;
     padding: 5px;
     border-radius: 4px;
@@ -90,7 +90,7 @@ body {
 
 .actions button:hover, .actions a:hover {
     background-color: #333;
-    color: #fff;
+    color: #F3F3F3;
 }
 
 #terminal {
@@ -139,7 +139,7 @@ body {
 }
 
 .resize-handle {
-    width: 6px;
+    width: 5px;
     height: 100%;
     background-color: #444;
     cursor: col-resize;
@@ -157,7 +157,7 @@ body {
     overflow-y: auto;
     padding: 15px;
     border-bottom: 1px solid #444;
-    background-color: #222;
+    background-color: #1e1e1e;
 }
 
 .scan-grid {
@@ -167,7 +167,7 @@ body {
 }
 
 .scan-item {
-    background-color: #333;
+    background-color: #444;
     padding: 8px;
     border-radius: 4px;
     cursor: pointer;
@@ -175,7 +175,7 @@ body {
 }
 
 .scan-item:hover {
-    background-color: #444;
+    background-color: #555;
 }
 
 /* TOML Editor styles */
@@ -183,7 +183,7 @@ body {
     flex: 1; /* Grow to fill remaining space */
     overflow-y: auto;
     padding: 15px;
-    background-color: #1a1a1a;
+    background-color: #1e1e1e;
     display: flex;
     flex-direction: column;
     position: relative;
@@ -239,8 +239,8 @@ body {
     display: flex;
     align-items: center;
     gap: 5px;
-    background-color: #333;
-    color: #ddd;
+    background-color: #444;
+    color: #F3F3F3;
     border: none;
     border-radius: 4px;
     padding: 4px 8px;
@@ -250,15 +250,21 @@ body {
 }
 
 .action-btn:hover {
-    background-color: #444;
+    background-color: #555;
 }
 
 .load-btn {
-    background-color: #3a5a78;
-}
+    background-color: #00A960;
+    color: #F3F3F3;
+    border: 1px solid #00A960;
+    border-radius: 4px;
+    padding: 4px 12px;
+    cursor: pointer;
+    transition: background-color 0.2s;}
 
 .load-btn:hover {
-    background-color: #4a6a88;
+    background-color: #58659E;
+    border-color: #58659E;
 }
 
 .toml-filename-container {
@@ -267,12 +273,11 @@ body {
 }
 
 .toml-filename-input {
-    background-color: #333;
-    color: #ddd;
+    background-color: #444;
+    color: #F3F3F3;
     border: 1px solid #444;
     border-radius: 4px 0 0 4px;
     padding: 4px 8px;
-    font-size: 14px;
     outline: none;
     min-width: 150px;
 }
@@ -283,39 +288,45 @@ body {
 
 .save-btn {
     background-color: #00A960;
-    color: #fff;
-    border: none;
+    color: #F3F3F3;
+    border: 1px solid #00A960;
     border-radius: 0 4px 4px 0;
     padding: 4px 12px;
     cursor: pointer;
-    font-size: 14px;
     transition: background-color 0.2s;
 }
 
 .save-btn:hover {
-    background-color: #008f50;
+    background-color: #58659E;
+    border-color: #58659E;
 }
 
 .refresh-btn {
-    background-color: #333;
-    color: #ddd;
-    border: none;
+    background-color: #00A960;
+    color: #F3F3F3;
+    border: 1px solid #00A960;
     border-radius: 4px;
-    padding: 4px 8px;
-    margin-left: 10px;
+    padding: 4px 12px;
     cursor: pointer;
-    font-size: 12px;
     transition: background-color 0.2s;
 }
 
 .refresh-btn:hover {
-    background-color: #444;
+    background-color: #58659E;
+    border-color: #58659E;
 }
 
 .section-header {
     display: flex;
     align-items: center;
     margin-bottom: 15px;
+    justify-content: space-between;
+}
+
+.section-header h2 {
+    margin-bottom: 0;
+    text-align: left;
+    font-size: 1.2em;
 }
 
 /* File selector styles */
@@ -346,9 +357,9 @@ body {
 }
 
 .close-btn {
-    background: none;
+    background-color: #ff8400;
     border: none;
-    color: #ccc;
+    color: #222;
     font-size: 18px;
     cursor: pointer;
     display: flex;
@@ -361,8 +372,8 @@ body {
 }
 
 .close-btn:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-    color: #f44;
+    background-color: #d1495b;
+    color: #222;
 }
 
 .files-list {
@@ -372,7 +383,7 @@ body {
 }
 
 .file-item {
-    padding: 8px 10px;
+    padding: 3px 10px;
     border-radius: 4px;
     cursor: pointer;
     transition: background-color 0.2s;

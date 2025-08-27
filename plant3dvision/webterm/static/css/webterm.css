@@ -10,7 +10,7 @@
 
 body {
     font-family: "Nunito Sans", sans-serif;
-    background-color: #282c34;
+    background-color: #1a1a1a;
     color: #F3F3F3;
     height: 100vh;
     display: flex;
@@ -26,12 +26,12 @@ h1 {
 h2 {
     font-size: 1rem;
     font-weight: 400;
-    color: #aaa;
+    color: #F3F3F3;
     margin-bottom: 25px;
 }
 
 .error-message {
-    background-color: rgba(255, 87, 87, 0.2);
+    background-color: #a94442;
     border: 1px solid #ff5757;
     color: #ff5757;
     padding: 10px;
@@ -44,7 +44,7 @@ label {
     display: block;
     margin-bottom: 8px;
     font-size: 0.9rem;
-    color: #ddd;
+    color: #F3F3F3;
 }
 
 input {
@@ -53,7 +53,7 @@ input {
     border: 1px solid #444;
     border-radius: 4px;
     background-color: #2c313a;
-    color: white;
+    color: #F3F3F3;
     font-size: 16px;
     transition: border-color 0.3s;
 }
@@ -77,7 +77,7 @@ button {
 }
 
 button:hover {
-    background-color: #50b7e0;
+    background-color: #58659E;
 }
 
 button:active {
@@ -91,8 +91,8 @@ button:active {
 }
 
 .success {
-    background-color: #dff0d8;
-    color: #3c763d;
+    background-color: #F3F3F3;
+    color: #00A960;
 }
 
 .error {
@@ -127,7 +127,6 @@ h1, h2 {
 }
 
 h3 {
-    margin-top: 20px;
     text-align: center;
 }
 
@@ -157,7 +156,7 @@ h3 {
 }
 
 .nav-bar a {
-    color: #ccc;
+    color: #F3F3F3;
     text-decoration: none;
     transition: color 0.3s;
 }
@@ -181,7 +180,7 @@ h3 {
 
 .error {
     background-color: rgba(255, 76, 76, 0.2);
-    color: #ff4c4c;
+    color: #a94442;
 }
 
 /* Password input with toggle visibility */
@@ -216,7 +215,7 @@ h3 {
     border-radius: 8px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
     backdrop-filter: blur(10px);
-    color: #f0f0f0;
+    color: #F3F3F3;
     font-family: 'Ubuntu', sans-serif;
     z-index: 1000;
     max-width: 400px;
@@ -280,7 +279,6 @@ h3 {
     color: #FF8400;
     padding: 4px 8px;
     border-radius: 4px;
-    font-family: 'Ubuntu Mono', monospace;
     font-size: 12px;
     font-weight: bold;
     min-width: 80px;
@@ -295,9 +293,9 @@ h3 {
 }
 
 .close-btn {
-    background: none;
+    background-color: #FF8400;
     border: none;
-    color: #5c6370;
+    color: #F3F3F3;
     cursor: pointer;
     padding: 4px;
     border-radius: 4px;
@@ -305,13 +303,13 @@ h3 {
 }
 
 .close-btn:hover {
-    color: #e06c75;
+    background-color: #d1495b;
 }
 
 .help-btn {
     background: none;
     border: none;
-    color: #abb2bf;
+    color: #F3F3F3;
     cursor: pointer;
     padding: 8px;
     border-radius: 6px;
@@ -349,7 +347,7 @@ h3 {
 
 .error-icon {
     font-size: 4rem;
-    color: #ff4c4c;
+    color: #a94442;
     margin-bottom: 1rem;
 }
 
@@ -368,7 +366,7 @@ h3 {
 
 .error-description {
     font-size: 1rem;
-    color: #aaa;
+    color: #F3F3F3;
     margin-bottom: 2rem;
     line-height: 1.6;
 }
@@ -397,29 +395,27 @@ h3 {
 
 .btn-primary {
     background-color: #00A960;
-    color: #1e2127;
+    color: #F3F3F3;
 }
 
 .btn-primary:hover {
-    background-color: #50b7e0;
+    background-color: #58659E;
 }
 
 .btn-secondary {
-    background-color: transparent;
+    background-color: #ff8400;
     color: #F3F3F3;
     border: 1px solid #444;
 }
 
 .btn-secondary:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-    border-color: #00A960;
-    color: #00A960;
+    background-color: #d1495b;
 }
 
 .terminal-ascii {
     font-family: 'Lucida Console', monospace;
     font-size: 0.75rem;
-    color: #aaa;
+    color: #F3F3F3;
     margin-top: 2rem;
     white-space: pre;
     display: inline-block;
