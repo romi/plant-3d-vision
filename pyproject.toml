@@ -92,6 +92,8 @@ webterm = [
     "python-engineio",
     "python-socketio",
     "python-dotenv",
+    "gunicorn",
+    "eventlet"
 ]
 
 [tool.setuptools.package-data]
