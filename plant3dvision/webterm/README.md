@@ -12,8 +12,8 @@ It allows for remote command execution in a secure environment with user managem
 - **Secure Authentication**: User login with password hashing via bcrypt-SHA256
 - **Web Terminal**: Full-featured terminal emulation in the browser using xterm.js
 - **User Management**:
-  - Admin panel for adding new users
-  - User profile management with password change functionality
+    - Admin panel for adding new users
+    - User profile management with password change functionality
 
 - **ROMI Integration**: Access and manage ROMI scan datasets
 - **Responsive Design**: Resizable terminal interface with split view
@@ -25,11 +25,11 @@ It allows for remote command execution in a secure environment with user managem
 
 - Python 3.9+
 - The following Python packages:
-  - Flask
-  - Flask-SocketIO
-  - eventlet
-  - bcrypt
-  - plantdb.commons
+    - Flask
+    - Flask-SocketIO
+    - eventlet
+    - bcrypt
+    - plantdb.commons
 
 ### Setup
 
@@ -37,15 +37,11 @@ It allows for remote command execution in a secure environment with user managem
 
 1. Run the application with Gunicorn:
     ```bash
-    gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:8080 plant3dvision.webterm.wsgi:application
+   python plant3dvision/webterm/app.py
     ```
 1. Access the application in your browser at `http://localhost:8080`
 
-**Notes:**
-> Consider using an `.env` file to define these variables.
-
 #### Production mode
-
 
 1. Configure environment variables (optional):
     ```bash
@@ -61,7 +57,7 @@ It allows for remote command execution in a secure environment with user managem
     ```
 1. Run the application:
     ```bash
-    python plant3dvision/webterm/app.py
+    gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:8080 plant3dvision.webterm.wsgi:application
     ```
 1. Access the application in your browser at `http://localhost:8080`
 
