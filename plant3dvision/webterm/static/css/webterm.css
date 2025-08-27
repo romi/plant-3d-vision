@@ -2,6 +2,28 @@
 @import url('https://fonts.googleapis.com/css2?family=Nunito+Sans:ital,opsz,wght@0,6..12,200..1000;1,6..12,200..1000&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Ubuntu+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap');
 
+/* CSS Custom Properties for consistent theming */
+:root {
+    --color-primary: #00A960;
+    --color-primary-hover: #008F4F;
+    --color-primary-active: #007A40;
+    --color-secondary: #FF8400;
+    --color-secondary-hover: #E6750A;
+    --color-secondary-active: #CC6600;
+    --color-text: #F3F3F3;
+    --color-text-muted: #B8B8B8;
+    --color-background: #1E1E1E;
+    --color-background-secondary: #2A2A2A;
+    --color-background-tertiary: #222;
+    --color-border: #444;
+    --color-border-subtle: #333;
+    --color-shadow: #0000007F;
+    --color-danger: #e74c3c;
+    --color-danger-hover: #c0392b;
+    --color-warning: #f39c12;
+    --color-success: var(--color-primary);
+}
+
 * {
     box-sizing: border-box;
     margin: 0;
@@ -10,8 +32,8 @@
 
 body {
     font-family: "Nunito Sans", sans-serif;
-    background-color: #1a1a1a;
-    color: #F3F3F3;
+    background-color: var(--color-background);
+    color: var(--color-text);
     height: 100vh;
     display: flex;
     align-items: center;
@@ -19,21 +41,26 @@ body {
 }
 
 h1 {
-    color: #00A960;
+    color: var(--color-primary);
     margin-bottom: 5px;
 }
 
 h2 {
     font-size: 1rem;
     font-weight: 400;
-    color: #F3F3F3;
+    color: var(--color-text);
     margin-bottom: 25px;
 }
 
+h3 {
+    color: var(--color-text);
+    text-align: center;
+}
+
 .error-message {
-    background-color: #a94442;
-    border: 1px solid #ff5757;
-    color: #ff5757;
+    background-color: rgba(169, 68, 66, 0.1);
+    border: 1px solid var(--color-danger);
+    color: var(--color-danger);
     padding: 10px;
     border-radius: 4px;
     margin-bottom: 20px;
@@ -44,44 +71,105 @@ label {
     display: block;
     margin-bottom: 8px;
     font-size: 0.9rem;
-    color: #F3F3F3;
+    color: var(--color-text);
 }
 
 input {
     width: 100%;
     padding: 12px;
-    border: 1px solid #444;
+    border: 1px solid var(--color-border-subtle);
     border-radius: 4px;
-    background-color: #2c313a;
-    color: #F3F3F3;
+    background-color: var(--color-background-secondary);
+    color: var(--color-text);
     font-size: 16px;
-    transition: border-color 0.3s;
+    transition: border-color 0.3s, box-shadow 0.3s;
 }
 
 input:focus {
     outline: none;
-    border-color: #00A960;
-    box-shadow: 0 0 0 1px #00A960;
+    border-color: var(--color-primary);
 }
 
+/* Base button styles */
 button {
-    background-color: #00A960;
-    color: #1e2127;
     border: none;
     border-radius: 4px;
     padding: 12px;
     font-size: 16px;
     font-weight: 600;
     cursor: pointer;
-    transition: background-color 0.3s;
+    transition: all 0.3s ease;
+    font-family: "Nunito Sans", sans-serif;
 }
 
-button:hover {
-    background-color: #58659E;
+/* Primary button (default) */
+button,
+.btn-primary,
+.primary-button {
+    background-color: var(--color-primary);
+    color: var(--color-background);
 }
 
-button:active {
-    background-color: #3a9bca;
+button:hover,
+.btn-primary:hover,
+.primary-button:hover {
+    background-color: var(--color-primary-hover);
+}
+
+button:active,
+.btn-primary:active,
+.primary-button:active {
+    background-color: var(--color-primary-active);
+}
+
+/* Secondary button */
+.btn-secondary {
+    background-color: var(--color-secondary);
+    color: var(--color-background);
+}
+
+.btn-secondary:hover {
+    background-color: var(--color-secondary-hover);
+}
+
+.btn-secondary:active {
+    background-color: var(--color-secondary-active);
+}
+
+/* Neutral/tertiary button */
+.btn-neutral {
+    background-color: var(--color-border);
+    color: var(--color-text);
+}
+
+.btn-neutral:hover {
+    background-color: #555;
+}
+
+.btn-neutral:active {
+    background-color: #666;
+}
+
+/* Danger button */
+.btn-danger {
+    background-color: var(--color-danger);
+    color: var(--color-text);
+}
+
+.btn-danger:hover {
+    background-color: var(--color-danger-hover);
+}
+
+/* Outline buttons */
+.btn-outline {
+    background-color: transparent;
+    border: 1px solid var(--color-border);
+    color: var(--color-text);
+}
+
+.btn-outline:hover {
+    background-color: var(--color-background-secondary);
+    border-color: var(--color-primary);
 }
 
 .result {
@@ -91,13 +179,15 @@ button:active {
 }
 
 .success {
-    background-color: #F3F3F3;
-    color: #00A960;
+    background-color: rgba(0, 169, 96, 0.1);
+    color: var(--color-success);
+    border: 1px solid var(--color-success);
 }
 
 .error {
-    background-color: #f2dede;
-    color: #a94442;
+    background-color: rgba(231, 76, 60, 0.1);
+    color: var(--color-danger);
+    border: 1px solid var(--color-danger);
 }
 
 /* Common layout styles for centered form containers */
@@ -115,18 +205,15 @@ button:active {
 }
 
 .content-box {
-    background-color: #1e2127;
+    background-color: var(--color-background-tertiary);
     border-radius: 8px;
     padding: 30px;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 10px 25px var(--color-shadow);
+    border: 1px solid var(--color-border-subtle);
 }
 
 /* Header styles */
 h1, h2 {
-    text-align: center;
-}
-
-h3 {
     text-align: center;
 }
 
@@ -156,13 +243,13 @@ h3 {
 }
 
 .nav-bar a {
-    color: #F3F3F3;
+    color: var(--color-text);
     text-decoration: none;
     transition: color 0.3s;
 }
 
 .nav-bar a:hover {
-    color: #00A960;
+    color: var(--color-primary);
 }
 
 /* Result/feedback messages */
@@ -171,16 +258,6 @@ h3 {
     padding: 10px;
     border-radius: 4px;
     text-align: center;
-}
-
-.success {
-    background-color: rgba(0, 169, 96, 0.2);
-    color: #00A960;
-}
-
-.error {
-    background-color: rgba(255, 76, 76, 0.2);
-    color: #a94442;
 }
 
 /* Password input with toggle visibility */
@@ -199,10 +276,15 @@ h3 {
     position: absolute;
     right: 10px;
     top: 50%;
-    transform: translateY(-50%);
-    cursor: pointer;
+        cursor: pointer;
     user-select: none;
     z-index: 10;
+    color: var(--color-text-muted);
+    transition: color 0.3s;
+}
+
+.toggle-password:hover {
+    color: var(--color-primary);
 }
 
 /* Help tooltip styles */
@@ -210,15 +292,14 @@ h3 {
     position: fixed;
     top: 60px;
     right: 20px;
-    background: rgba(30, 30, 30, 0.98);
-    border: 1px solid #444;
+    background-color: var(--color-background-tertiary);
+    border: 1px solid var(--color-border);
     border-radius: 8px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 8px 32px var(--color-shadow);
     backdrop-filter: blur(10px);
-    color: #F3F3F3;
-    font-family: 'Ubuntu', sans-serif;
+    color: var(--color-text);
     z-index: 1000;
-    max-width: 400px;
+    max-width: 450px;
     min-width: 350px;
 }
 
@@ -231,13 +312,13 @@ h3 {
     justify-content: space-between;
     align-items: center;
     padding: 16px 20px 12px;
-    border-bottom: 1px solid #444;
+    border-bottom: 1px solid var(--color-border);
 }
 
 .help-tooltip-header h3 {
     margin: 0;
     font-size: 18px;
-    color: #61afef;
+    color: var(--color-primary);
 }
 
 .help-tooltip-content {
@@ -257,7 +338,7 @@ h3 {
 .shortcut-section h4 {
     margin: 0 0 12px 0;
     font-size: 14px;
-    color: #00A960;
+    color: var(--color-primary);
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
@@ -267,7 +348,7 @@ h3 {
     justify-content: space-between;
     align-items: center;
     padding: 8px 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid var(--color-border-subtle);
 }
 
 .shortcut-item:last-child {
@@ -275,8 +356,8 @@ h3 {
 }
 
 .shortcut-key {
-    background: #2d2d2d;
-    color: #FF8400;
+    background: var(--color-secondary);
+    color: var(--color-background);
     padding: 4px 8px;
     border-radius: 4px;
     font-size: 12px;
@@ -286,30 +367,30 @@ h3 {
 }
 
 .shortcut-desc {
-    color: #F3F3F3;
-    font-size: 13px;
+    color: var(--color-text);
+    font-size: 0.9em;
     flex: 1;
     margin-left: 16px;
 }
 
 .close-btn {
-    background-color: #FF8400;
+    background-color: var(--color-secondary);
     border: none;
-    color: #F3F3F3;
+    color: var(--color-background);
     cursor: pointer;
     padding: 4px;
     border-radius: 4px;
-    transition: color 0.2s;
+    transition: background-color 0.3s;
 }
 
 .close-btn:hover {
-    background-color: #d1495b;
+    background-color: var(--color-secondary-hover);
 }
 
 .help-btn {
     background: none;
     border: none;
-    color: #F3F3F3;
+    color: var(--color-text);
     cursor: pointer;
     padding: 8px;
     border-radius: 6px;
@@ -319,7 +400,7 @@ h3 {
 
 .help-btn:hover {
     background: rgba(255, 255, 255, 0.1);
-    color: #61afef;
+    color: var(--color-primary);
 }
 
 /* Responsive design for help tooltip */
@@ -340,33 +421,34 @@ h3 {
     text-align: center;
     max-width: 600px;
     padding: 30px;
-    background-color: #1e2127;
+    background-color: var(--color-background-tertiary);
     border-radius: 8px;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 10px 25px var(--color-shadow);
+    border: 1px solid var(--color-border-subtle);
 }
 
 .error-icon {
     font-size: 4rem;
-    color: #a94442;
+    color: var(--color-danger);
     margin-bottom: 1rem;
 }
 
 .error-code {
     font-size: 3rem;
     font-weight: bold;
-    color: #00A960;
+    color: var(--color-primary);
     margin-bottom: 0.5rem;
 }
 
 .error-title {
     font-size: 1.5rem;
-    color: #F3F3F3;
+    color: var(--color-text);
     margin-bottom: 2rem;
 }
 
 .error-description {
     font-size: 1rem;
-    color: #F3F3F3;
+    color: var(--color-text);
     margin-bottom: 2rem;
     line-height: 1.6;
 }
@@ -393,29 +475,10 @@ h3 {
     font-family: "Nunito Sans", sans-serif;
 }
 
-.btn-primary {
-    background-color: #00A960;
-    color: #F3F3F3;
-}
-
-.btn-primary:hover {
-    background-color: #58659E;
-}
-
-.btn-secondary {
-    background-color: #ff8400;
-    color: #F3F3F3;
-    border: 1px solid #444;
-}
-
-.btn-secondary:hover {
-    background-color: #d1495b;
-}
-
 .terminal-ascii {
     font-family: 'Lucida Console', monospace;
     font-size: 0.75rem;
-    color: #F3F3F3;
+    color: var(--color-text);
     margin-top: 2rem;
     white-space: pre;
     display: inline-block;

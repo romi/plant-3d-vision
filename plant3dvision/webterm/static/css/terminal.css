@@ -16,8 +16,8 @@ body {
     justify-content: space-between;
     align-items: center;
     padding: 10px 15px;
-    background-color: #1a1a1a;
-    border-bottom: 1px solid #444;
+    background-color: var(--color-background-tertiary);
+    border-bottom: 1px solid var(--color-border);
     height: 50px;
 }
 
@@ -31,7 +31,7 @@ body {
     background-color: transparent;
     border: none;
     border-radius: 4px;
-    color: #F3F3F3;
+    color: var(--color-text);
     font-size: 1.2rem;
     margin-left: 8px;
     cursor: pointer;
@@ -41,16 +41,20 @@ body {
 .terminal-header .actions a:hover,
 .terminal-header .actions button:hover {
     background-color: rgba(255, 255, 255, 0.1);
-    color: #00A960;
+    color: var(--color-primary);
 }
 
 .terminal-header .profile-btn {
-    color: #F3F3F3;
+    color: var(--color-text);
     text-decoration: none;
 }
 
 .terminal-header .admin-button {
-    color: #00A960;
+    color: var(--color-primary);
+}
+
+.terminal-header .admin-button:hover {
+    background-color: rgba(0, 169, 96, 0.1);
 }
 
 .user-info {
@@ -61,10 +65,11 @@ body {
 .welcome-text {
     font-weight: 500;
     margin-right: 5px;
+    color: var(--color-text);
 }
 
 .username {
-    color: #00A960;
+    color: var(--color-primary);
     font-weight: 600;
 }
 
@@ -78,7 +83,7 @@ body {
 .actions button, .actions a {
     background: none;
     border: none;
-    color: #F3F3F3;
+    color: var(--color-text);
     cursor: pointer;
     padding: 5px;
     border-radius: 4px;
@@ -89,13 +94,24 @@ body {
 }
 
 .actions button:hover, .actions a:hover {
-    background-color: #333;
-    color: #F3F3F3;
+    background-color: rgba(255, 255, 255, 0.1);
+    color: var(--color-primary);
+}
+
+/* Specific button hover states */
+.logout-btn:hover {
+    color: var(--color-danger) !important;
+    background-color: rgba(231, 76, 60, 0.1) !important;
+}
+
+.github-btn:hover {
+    color: var(--color-secondary) !important;
+    background-color: rgba(255, 132, 0, 0.1) !important;
 }
 
 #terminal {
     flex: 1;
-    background-color: #1e1e1e;
+    background-color: var(--color-background);
     padding: 5px;
     overflow: hidden;
 }
@@ -111,7 +127,7 @@ body {
 
 /* XTerm styling */
 .xterm .xterm-viewport {
-    background-color: #1e1e1e !important;
+    background-color: var(--color-background) !important;
 }
 
 /* Split layout styles */
@@ -141,14 +157,14 @@ body {
 .resize-handle {
     width: 5px;
     height: 100%;
-    background-color: #444;
+    background-color: var(--color-border);
     cursor: col-resize;
     transition: background-color 0.2s;
 }
 
 .resize-handle:hover,
 .resize-handle.active {
-    background-color: #00A960;
+    background-color: var(--color-primary);
 }
 
 .scan-list {
@@ -156,8 +172,8 @@ body {
     max-height: 50%; /* Maximum height */
     overflow-y: auto;
     padding: 15px;
-    border-bottom: 1px solid #444;
-    background-color: #1e1e1e;
+    border-bottom: 1px solid var(--color-border);
+    background-color: var(--color-background);
 }
 
 .scan-grid {
@@ -167,15 +183,18 @@ body {
 }
 
 .scan-item {
-    background-color: #444;
+    background-color: var(--color-background-secondary);
     padding: 8px;
     border-radius: 4px;
     cursor: pointer;
-    transition: background-color 0.2s;
+    transition: all 0.2s ease;
+    border: 1px solid var(--color-border-subtle);
+    color: var(--color-text);
 }
 
 .scan-item:hover {
-    background-color: #555;
+    background-color: var(--color-border);
+    border-color: var(--color-primary);
 }
 
 /* TOML Editor styles */
@@ -183,7 +202,7 @@ body {
     flex: 1; /* Grow to fill remaining space */
     overflow-y: auto;
     padding: 15px;
-    background-color: #1e1e1e;
+    background-color: var(--color-background);
     display: flex;
     flex-direction: column;
     position: relative;
@@ -192,15 +211,16 @@ body {
 .toml-editor-container {
     flex: 1;
     position: relative;
-    border: 2px dashed #444;
+    border: 2px dashed var(--color-border);
     border-radius: 4px;
     padding: 0;
-    background-color: #2a2a2a;
+    background-color: var(--color-background-secondary);
     transition: border-color 0.2s;
 }
 
 .toml-editor-container.drag-over {
-    border-color: #00A960;
+    border-color: var(--color-primary);
+    background-color: rgba(0, 169, 96, 0.05);
 }
 
 /* CodeMirror custom styles */
@@ -214,7 +234,7 @@ body {
 
 /* Style for the code area */
 .cm-s-monokai {
-    background-color: #2a2a2a !important;
+    background-color: var(--color-background-secondary) !important;
 }
 
 /* Style for syntax highlighting */
@@ -239,14 +259,13 @@ body {
     display: flex;
     align-items: center;
     gap: 5px;
-    background-color: #444;
-    color: #F3F3F3;
+    background-color: var(--color-border);
+    color: var(--color-text);
     border: none;
     border-radius: 4px;
     padding: 4px 8px;
     cursor: pointer;
-    font-size: 14px;
-    transition: background-color 0.2s;
+    transition: all 0.2s ease;
 }
 
 .action-btn:hover {
@@ -254,17 +273,22 @@ body {
 }
 
 .load-btn {
-    background-color: #00A960;
-    color: #F3F3F3;
-    border: 1px solid #00A960;
+    background-color: var(--color-primary);
+    color: var(--color-background);
     border-radius: 4px;
     padding: 4px 12px;
     cursor: pointer;
-    transition: background-color 0.2s;}
+    transition: all 0.2s ease;
+}
 
 .load-btn:hover {
-    background-color: #58659E;
-    border-color: #58659E;
+    background-color: var(--color-primary-hover);
+    border-color: var(--color-primary-hover);
+}
+
+.load-btn:active {
+    background-color: var(--color-primary-active);
+    border-color: var(--color-primary-active);
 }
 
 .toml-filename-container {
@@ -273,47 +297,57 @@ body {
 }
 
 .toml-filename-input {
-    background-color: #444;
-    color: #F3F3F3;
-    border: 1px solid #444;
+    background-color: var(--color-background-secondary);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
     border-radius: 4px 0 0 4px;
     padding: 4px 8px;
     outline: none;
     min-width: 150px;
+    transition: all 0.2s ease;
 }
 
 .toml-filename-input:focus {
-    border-color: #00A960;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px rgba(0, 169, 96, 0.2);
 }
 
 .save-btn {
-    background-color: #00A960;
-    color: #F3F3F3;
-    border: 1px solid #00A960;
+    background-color: var(--color-primary);
+    color: var(--color-background);
     border-radius: 0 4px 4px 0;
     padding: 4px 12px;
     cursor: pointer;
-    transition: background-color 0.2s;
+    transition: all 0.2s ease;
 }
 
 .save-btn:hover {
-    background-color: #58659E;
-    border-color: #58659E;
+    background-color: var(--color-primary-hover);
+    border-color: var(--color-primary-hover);
+}
+
+.save-btn:active {
+    background-color: var(--color-primary-active);
+    border-color: var(--color-primary-active);
 }
 
 .refresh-btn {
-    background-color: #00A960;
-    color: #F3F3F3;
-    border: 1px solid #00A960;
+    background-color: var(--color-primary);
+    color: var(--color-background);
     border-radius: 4px;
     padding: 4px 12px;
     cursor: pointer;
-    transition: background-color 0.2s;
+    transition: all 0.2s ease;
 }
 
 .refresh-btn:hover {
-    background-color: #58659E;
-    border-color: #58659E;
+    background-color: var(--color-primary-hover);
+    border-color: var(--color-primary-hover);
+}
+
+.refresh-btn:active {
+    background-color: var(--color-primary-active);
+    border-color: var(--color-primary-active);
 }
 
 .section-header {
@@ -327,6 +361,7 @@ body {
     margin-bottom: 0;
     text-align: left;
     font-size: 1.2em;
+    color: var(--color-text);
 }
 
 /* File selector styles */
@@ -335,9 +370,10 @@ body {
     top: 60px;
     left: 15px;
     right: 15px;
-    background-color: #2a2a2a;
+    background-color: var(--color-background-secondary);
+    border: 1px solid var(--color-border);
     border-radius: 4px;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 5px 15px var(--color-shadow);
     z-index: 10;
     max-height: 300px;
     display: flex;
@@ -353,13 +389,19 @@ body {
     justify-content: space-between;
     align-items: center;
     padding: 10px 15px;
-    border-bottom: 1px solid #444;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.file-selector-header h3 {
+    color: var(--color-text);
+    font-size: 16px;
+    margin: 0;
 }
 
 .close-btn {
-    background-color: #ff8400;
+    background-color: var(--color-secondary);
     border: none;
-    color: #222;
+    color: var(--color-background);
     font-size: 18px;
     cursor: pointer;
     display: flex;
@@ -368,12 +410,15 @@ body {
     width: 24px;
     height: 24px;
     border-radius: 50%;
-    transition: background-color 0.2s;
+    transition: all 0.2s ease;
 }
 
 .close-btn:hover {
-    background-color: #d1495b;
-    color: #222;
+    background-color: var(--color-secondary-hover);
+}
+
+.close-btn:active {
+    background-color: var(--color-secondary-active);
 }
 
 .files-list {
@@ -386,29 +431,30 @@ body {
     padding: 3px 10px;
     border-radius: 4px;
     cursor: pointer;
-    transition: background-color 0.2s;
+    transition: all 0.2s ease;
     display: flex;
     align-items: center;
     gap: 8px;
+    color: var(--color-text);
 }
 
 .file-item:hover {
-    background-color: #444;
+    background-color: var(--color-border);
 }
 
 .file-item i {
-    color: #00A960;
+    color: var(--color-primary);
     font-size: 16px;
 }
 
 .loading-indicator {
     text-align: center;
     padding: 15px;
-    color: #999;
+    color: var(--color-text-muted);
 }
 
 .no-files {
     text-align: center;
     padding: 15px;
-    color: #999;
+    color: var(--color-text-muted);
 }
