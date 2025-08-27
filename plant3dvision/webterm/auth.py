@@ -1,6 +1,38 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+"""Authentication Module for User Management System
+
+A secure authentication module that provides user credential management and verification functionality using bcrypt hashing.
+This module handles user data storage in CSV format and offers robust password hashing and verification mechanisms.
+
+## Key Features
+
+- Secure password hashing using bcrypt
+- User data management with CSV file storage
+- User authentication against stored credentials
+- Safe password verification
+- CSV formatting utilities for user data
+
+## Usage Examples
+
+```python
+>>> # Hash a new password
+>>> hashed_password = hash_password("mypassword123")
+
+>>> # Authenticate a user
+>>> user_info = authenticate_user("johndoe", "mypassword123")
+>>> if user_info:
+...     print(f"Welcome, {user_info['full_name']}!")
+... else:
+...     print("Authentication failed")
+
+>>> # Add a new user to CSV
+>>> csv_line = format_csv_line("John Doe", "johndoe", hashed_password)
+>>> with open('users.csv', 'a') as f:
+...     f.write(csv_line)
+```
+"""
 
 import csv
 import os
