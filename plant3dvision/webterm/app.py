@@ -1,6 +1,43 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+"""Web Terminal Interface with Authentication
+
+A Flask-based web application that provides a secure, interactive terminal interface accessible through a web browser.
+It enables remote terminal access with user authentication, session management, and real-time interaction using WebSocket technology.
+
+## Key Features
+
+- Secure user authentication and session management
+- Real-time terminal interaction via WebSocket (Socket.IO)
+- User profile management with password change functionality
+- Admin interface for user management
+- Support for reverse proxy configuration
+- Automatic terminal cleanup for inactive sessions
+- API endpoints for scan management and TOML file operations
+- Configurable logging and debugging options
+- Environment variable support for flexible deployment
+
+## Usage Examples
+
+>>> # Start the server with default settings
+>>> webterm_server()
+
+>>> # Start with custom configuration
+>>> webterm_server(
+...     host='localhost',
+...     port=5000,
+...     proxy=True,
+...     debug=True,
+...     users_db_path='custom_users.csv',
+...     log_level='DEBUG'
+... )
+
+>>> # Using command line interface
+>>> # python app.py --host localhost --port 5000 --proxy --debug --log-level DEBUG
+"""
+
+import argparse
 import os
 import threading
 import time
