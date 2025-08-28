@@ -17,7 +17,7 @@ allowing web servers like Gunicorn, uWSGI, or Apache with mod_wsgi to interact w
 
 ### App Configuration Variables
 - SERVER_SECRET_KEY: Secret key for Flask sessions
-- USERS_DB_PATH: Path to users CSV file (default: users.csv)
+- WEBTERM_USERS: Path to users CSV file (default: users.csv)
 - ROMI_DB: Path to ROMI database (default: /myapp/db)
 - ROMI_CFG: Path to configuration directory (default: /myapp/cfg/{username}/)
 - WEBTERM_PROXY: Set to 'true' if behind a reverse proxy
@@ -60,7 +60,7 @@ from romitask.log import DEFAULT_LOG_LEVEL
 app_config = {
     'proxy': os.environ.get('WEBTERM_PROXY', 'false').lower() == 'true',
     'url_prefix': os.environ.get("WEBTERM_PREFIX", ""),
-    'users_db_path': os.environ.get('USERS_DB_PATH', 'users.csv'),
+    'users_db_path': os.environ.get('WEBTERM_USERS', 'users.csv'),
     'secret_key': os.environ.get('SERVER_SECRET_KEY'),
     'log_level': os.environ.get('LOG_LEVEL', DEFAULT_LOG_LEVEL),
     'async_mode': 'eventlet'

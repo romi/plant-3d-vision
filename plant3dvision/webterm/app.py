@@ -546,7 +546,7 @@ def parsing():
 
     auth_args = parser.add_argument_group("authentication arguments")
     auth_args.add_argument('--users-db', dest='users_db_path', type=str,
-                           default=os.environ.get('USERS_DB_PATH', 'users.csv'),
+                           default=os.environ.get('WEBTERM_USERS', 'users.csv'),
                            help="path to the users database CSV file, defaults to 'users.csv'.")
     auth_args.add_argument('--secret-key', dest='secret_key', type=str,
                            default=os.environ.get('SERVER_SECRET_KEY'),
