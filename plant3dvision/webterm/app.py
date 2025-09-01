@@ -6,8 +6,8 @@
 A Flask-based web application that provides a secure, interactive terminal interface accessible through a web browser.
 It enables remote terminal access with user authentication, session management, and real-time interaction using WebSocket technology.
 
-## Key Features
-
+Key Features
+------------
 - Secure user authentication and session management
 - Real-time terminal interaction via WebSocket (Socket.IO)
 - User profile management with password change functionality
@@ -18,23 +18,25 @@ It enables remote terminal access with user authentication, session management, 
 - Configurable logging and debugging options
 - Environment variable support for flexible deployment
 
-## Usage Examples
+Usage Examples
+--------------
+Using Python API:
 
->>> # Start the server with default settings
->>> webterm_server()
+.. code-block:: python
+   :linenos:
 
->>> # Start with custom configuration
->>> webterm_server(
-...     host='localhost',
-...     port=5000,
-...     proxy=True,
-...     debug=True,
-...     users_db_path='custom_users.csv',
-...     log_level='DEBUG'
-... )
+   # Start the server with default settings
+   webterm_server()
+   # Start with custom configuration
+   webterm_server(host='localhost', port=5000, debug=True, users_db_path='custom_users.csv', log_level='DEBUG')
 
->>> # Using command line interface
->>> # python app.py --host localhost --port 5000 --proxy --debug --log-level DEBUG
+
+Using command line interface:
+
+.. code-block:: bash
+
+    python app.py --host localhost --port 5000 --proxy --debug --log-level DEBUG
+
 """
 
 import argparse

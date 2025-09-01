@@ -13,27 +13,33 @@
 This module serves as the Web Server Gateway Interface (WSGI) entry point for the WebTerm application,
 allowing web servers like Gunicorn, uWSGI, or Apache with mod_wsgi to interact with the application.
 
-## Environment Variables
+Environment Variables
+---------------------
 
-### App Configuration Variables
-- SERVER_SECRET_KEY: Secret key for Flask sessions
-- WEBTERM_USERS: Path to users CSV file (default: users.csv)
-- ROMI_DB: Path to ROMI database (default: /myapp/db)
-- ROMI_CFG: Path to configuration directory (default: /myapp/cfg/{username}/)
-- WEBTERM_PROXY: Set to 'true' if behind a reverse proxy
-- WEBTERM_PREFIX: Prefix for WebTerm routes (default: '')
-- LOG_LEVEL: Logging level (default: INFO)
+App Configuration Variables
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+- ``SERVER_SECRET_KEY``: Secret key for Flask sessions
+- ``WEBTERM_USERS``: Path to users CSV file (default: users.csv)
+- ``ROMI_DB``: Path to ROMI database (default: /myapp/db)
+- ``ROMI_CFG``: Path to configuration directory (default: /myapp/cfg/{username}/)
+- ``WEBTERM_PROXY``: Set to 'true' if behind a reverse proxy
+- ``WEBTERM_PREFIX``: Prefix for WebTerm routes (default: '')
+- ``LOG_LEVEL``: Logging level (default: INFO)
 
-### Additional Environment Variables for development
-- SERVER_HOST: Host to bind to (default: 0.0.0.0)
-- SERVER_PORT: Port to bind to (default: 8080)
-- SERVER_DEBUG: Enable debug mode (default: False)
+Additional Environment Variables for development
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+- ``SERVER_HOST``: Host to bind to (default: 0.0.0.0)
+- ``SERVER_PORT``: Port to bind to (default: 8080)
+- ``SERVER_DEBUG``: Enable debug mode (default: False)
 
-## Usage with Gunicorn
+Usage with Gunicorn
+-------------------
 After installing Gunicorn, you can run the application using the following command:
-```shell
-gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:8080 plant3dvision.webterm.wsgi:application
-```
+
+.. code-block:: bash
+
+   gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:8080 plant3dvision.webterm.wsgi:application
+
 This will start the application on port 8080.
 """
 
