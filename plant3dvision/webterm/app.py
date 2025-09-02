@@ -480,12 +480,12 @@ def create_webterm_app(proxy=False, users_db_path='users.csv', secret_key=None, 
                 return {'success': False, 'error': 'User not found'}, 404
 
             # Verify the current password
-            from auth import verify_password
+            from plant3dvision.webterm.auth import verify_password
             if not verify_password(users[username]['password_hash'], current_password):
                 return {'success': False, 'error': 'Current password is incorrect'}, 401
 
             # Update password in CSV
-            from auth import hash_password
+            from plant3dvision.webterm.auth import hash_password
             new_password_hash = hash_password(new_password)
             users[username]['password_hash'] = new_password_hash
 
