@@ -455,7 +455,7 @@ def create_webterm_app(proxy=False, users_db_path='users.csv', secret_key=None, 
     @bp.route('/user/profile')
     def user_profile():
         if 'username' not in session:
-            return redirect(url_for('index'))
+            return redirect(url_for('webterm.index'))
         return render_template('user_profile.html',
                                full_name=session.get('full_name'),
                                username=session.get('username'))
