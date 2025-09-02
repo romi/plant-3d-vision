@@ -37,12 +37,12 @@
     <div class="actions">
         <!-- Admin button only visible to admin users -->
         {% if username == 'admin' %}
-        <a href="{{ url_for('webterm.admin') }}" class="admin-button" title="Admin Panel">
+        <a href="{{ url_for('webterm.admin_panel') }}" class="admin-button" title="Admin Panel">
             <i class="bi bi-shield-lock"></i>
         </a>
         {% endif %}
         <!-- User profile button -->
-        <a href="/user/profile" class="profile-btn" title="User Profile">
+        <a href="{{ url_for('webterm.user_profile') }}" class="profile-btn" title="User Profile">
             <i class="bi bi-person-circle"></i>
         </a>
         <!-- Help button -->
