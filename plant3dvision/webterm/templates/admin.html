@@ -55,9 +55,9 @@
 
         <div class="nav-bar">
             <div>
-                <a href="/terminal"><i class="bi bi-terminal"></i> Back to Terminal</a>
+                <a href="{{ url_for('webterm.terminal') }}"><i class="bi bi-terminal"></i> Back to Terminal</a>
                 <br>
-                <a href="/logout"><i class="bi bi-box-arrow-right"></i> Logout</a>
+                <a href="{{ url_for('webterm.logout') }}"><i class="bi bi-box-arrow-right"></i> Logout</a>
             </div>
         </div>
 

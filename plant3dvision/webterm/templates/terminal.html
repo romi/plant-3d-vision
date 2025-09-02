@@ -37,7 +37,7 @@
     <div class="actions">
         <!-- Admin button only visible to admin users -->
         {% if username == 'admin' %}
-        <a href="/admin" class="admin-button" title="Admin Panel">
+        <a href="{{ url_for('webterm.admin') }}" class="admin-button" title="Admin Panel">
             <i class="bi bi-shield-lock"></i>
         </a>
         {% endif %}
@@ -58,7 +58,7 @@
             <i class="bi bi-arrows-fullscreen"></i>
         </button>
         <!-- Logout button -->
-        <a href="/logout" class="logout-btn" title="Logout">
+        <a href="{{ url_for('webterm.logout') }}" class="logout-btn" title="Logout">
             <i class="bi bi-box-arrow-right"></i>
         </a>
         <!-- GitHub link button -->

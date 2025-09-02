@@ -28,7 +28,7 @@
         {% endif %}
 
         <!-- Login form that sends a POST request to "/login" endpoint -->
-        <form action="/login" method="post">
+        <form action="{{ url_for('webterm.login') }}" method="post">
 
             <!-- Input group for username -->
             <div class="input-group">
