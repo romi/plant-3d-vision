@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.20/codemirror.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.20/theme/monokai.min.css">
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="/static/css/terminal.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/terminal.css') }}">
     <!-- XTerm.js JS -->
     <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.js"></script>
@@ -24,6 +24,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.20/mode/toml/toml.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.20/addon/edit/matchbrackets.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.20/addon/edit/closebrackets.min.js"></script>
+    <!-- Custom JS for client-side functionality, loaded after the page is parsed -->
+    <script src="{{ url_for('static', filename='js/terminal.js') }}" defer></script>
 </head>
 
 <body>
@@ -44,7 +46,7 @@
             <i class="bi bi-person-circle"></i>
         </a>
         <!-- Help button -->
-         <button id="btn-help" class="help-btn" title="Keyboard Shortcuts (Ctrl+?)">
+        <button id="btn-help" class="help-btn" title="Keyboard Shortcuts (Ctrl+?)">
             <i class="bi bi-question-circle"></i>
         </button>
         <!-- Documentation button -->
@@ -188,6 +190,5 @@
     </div>
 </div>
 
-<script src="/static/js/terminal.js"></script>
 </body>
 </html>

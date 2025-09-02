@@ -6,9 +6,9 @@
     <title>WebTerm - Login</title> <!-- Page title shown in browser tab -->
 
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="/static/css/webterm.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/webterm.css') }}">
     <!-- Custom JS for client-side functionality, loaded after the page is parsed -->
-    <script src="/static/js/login.js" defer></script>
+    <script src="{{ url_for('static', filename='js/login.js') }}" defer></script>
 </head>
 
 <body class="centered-layout">
@@ -17,7 +17,7 @@
     <div class="content-box">
         <!-- Logo section with image -->
         <div class="logo-container">
-            <img src="/static/img/ROMI_logo_green.svg" alt="P3DV Logo">
+            <img src="{{ url_for('static', filename='img/ROMI_logo_green.svg') }}" alt="P3DV Logo">
         </div>
         <h1>P3DV - WebTerm</h1>
         <h2>Secure Terminal Access</h2>
@@ -47,5 +47,6 @@
         </form>
     </div>
 </div>
+
 </body>
 </html>
