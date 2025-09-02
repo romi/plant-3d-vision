@@ -1,17 +1,14 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"> <!-- Responsive design settings -->
-    <title>WebTerm - Login</title> <!-- Page title shown in browser tab -->
+{% extends "base.html" %}
 
-    <!-- Custom CSS -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/webterm.css') }}">
-    <!-- Custom JS for client-side functionality, loaded after the page is parsed -->
+{% block title %}WebTerm - Login{% endblock %}
+
+{% block body_class %}centered-layout{% endblock %}
+
+{% block head_scripts %}
     <script src="{{ url_for('static', filename='js/login.js') }}" defer></script>
-</head>
+{% endblock %}
 
-<body class="centered-layout">
+{% block content %}
 <!-- Container for login form and logo -->
 <div class="form-container">
     <div class="content-box">
@@ -47,6 +44,4 @@
         </form>
     </div>
 </div>
-
-</body>
-</html>
+{% endblock %}

@@ -1,19 +1,8 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"> <!-- Responsive design settings -->
-    <title>WebTerm - User Profile</title> <!-- Page title shown in browser tab -->
+{% extends "base.html" %}
 
-    <!-- Bootstrap Icons CSS -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-    <!-- Custom CSS -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/webterm.css') }}">
-    <!-- Custom JS for client-side functionality, loaded after the page is parsed -->
-    <script src="{{ url_for('static', filename='js/user_profile.js') }}" defer></script>
-</head>
+{% block title %}WebTerm - User Profile{% endblock %}
 
-<body class="centered-layout">
+{% block content %}
 <div class="form-container">
     <div class="content-box">
         <div class="logo-container">
@@ -74,6 +63,9 @@
         <div id="result" class="result" style="display: none;"></div>
     </div>
 </div>
+{% endblock %}
 
-</body>
-</html>
+{% block scripts %}
+    <!-- Custom JS for client-side functionality, loaded after the page is parsed -->
+    <script src="{{ url_for('static', filename='js/user_profile.js') }}" defer></script>
+{% endblock %}
