@@ -98,7 +98,8 @@ def create_webterm_app(proxy=False, users_db_path='users.csv', secret_key=None, 
     # Initialize the Flask application with explicit template and static folders
     app = Flask("WebTerm",
                 template_folder=os.path.join(app_dir, 'templates'),
-                static_folder=os.path.join(app_dir, 'static'))
+                static_folder=os.path.join(app_dir, 'static'),
+                static_url_path=f"{url_prefix}/static")
 
     logger = get_logger("WebTerm", log_level=log_level)
 
