@@ -228,6 +228,7 @@ build_docker_image() {
   docker_cmd="docker build"
   docker_cmd+=" --build-arg NVIDIA_CUDA_VERSION=\"${NVIDIA_CUDA_VERSION}\""
   docker_cmd+=" --build-arg CUDA_ARCHITECTURES=\"${CUDA_CC}\""
+  docker_cmd+=" --build-arg UBUNTU_VERSION=\"${UBUNTU_VERSION}\""
   docker_cmd+=" -t \"roboticsmicrofarms/colmap:${vtag}-cuda_cc${CUDA_CC}\""
   docker_cmd+=" ${docker_opts}"  # Additional options like --no-cache, --pull, etc.
   docker_cmd+=" -f \"docker/colmap3.8/Dockerfile\""
