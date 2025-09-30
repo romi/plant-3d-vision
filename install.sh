@@ -183,15 +183,16 @@ install_package_source() {
     log_info "'${package_name}' sources installed in $(($(date +%s) - start_time)) s."
     # Check numpy version after installation.
     check_numpy_version
-
-    # Test import if there's a package to import (skip for some packages that may not have direct imports)
-    if [[ -n "${package_name}" && "${package_name}" != "." ]]; then
-      python3 -c "import ${package_name}" 2>/dev/null
-      test_import_status=$?
-      if [ ${test_import_status} -gt 0 ]; then
-        log_warning "'${package_name}' test import failed!"
-        python3 -c "import ${package_name}"
-      fi
+    # Test package installation
+    log_info "Testing '${package_name}' package installation with Python import..."
+    python3 -c "import ${package_name}" 2>/dev/null
+    test_import_status=$?
+    if [ ${test_import_status} -gt 0 ]; then
+      log_warning "Failure!"
+      # Re-run to show failure message:
+      python3 -c "import ${package_name}"
+    else
+      log_info "Successful!"
     fi
   else
     log_error "'${package_name}' sources install failed with code '${build_status}'!"
@@ -314,7 +315,11 @@ p3dv_optional_deps (){
     p3dv_opt_deps="${p3dv_opt_deps}nb,"
   fi
   # Remove trailing comma if present
-  p3dv_opt_deps="[${p3dv_opt_deps%,}]"
+  p3dv_opt_deps="${p3dv_opt_deps%,}"
+  # Add surrounding braces if not empty
+  if [ ${p3dv_opt_deps} != "" ]; then
+    p3dv_opt_deps="[${p3dv_opt_deps%}]"
+  fi
 }
 
 update_pip_tools(){
@@ -347,7 +352,6 @@ main() {
   else
     log_info "# - Skipping conda environment creation..."
   fi
-
 
   update_pip_tools
 
