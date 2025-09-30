@@ -50,7 +50,7 @@ initialize_variables() {
   # Volume mounting options:
   mount_option=""
   # Self-test flag (0/1 to indicate call to a test)
-  self_test=0
+  SELF_TEST=0
   # Debug mode is disabled by default
   DEBUG_MODE=false
 
@@ -133,7 +133,7 @@ show_usage() {
 # Database setup functions
 # --------------------------------
 check_database_environment() {
-  if [ -z ${ROMI_DB+x} ] && [ ${self_test} -eq 0 ]; then
+  if [ -z ${ROMI_DB+x} ] && [ ${SELF_TEST} -eq 0 ]; then
     log_warning "Environment variable 'ROMI_DB' is not defined, set it to use as default database location!"
   fi
 }
@@ -144,7 +144,7 @@ setup_database_mount() {
     log_info "Automatic bind mount of '${host_db}' (host) to '/myapp/db' (container)!"
   else
     # Only raise ERROR message if not a SELF-TEST:
-    if [ ${self_test} -eq 0 ]; then
+    if [ ${SELF_TEST} -eq 0 ]; then
       log_error "No local host database defined!"
       log_info "Set 'ROMI_DB' or use the '-db' | '--database' option to define it."
       exit 1
@@ -160,14 +160,14 @@ setup_user_group() {
       log_info "Using host database path group name '${group_name}' & '${gid}'."
     else
       # Only raise next ERROR message if not a SELF-TEST:
-      if [ ${self_test} -eq 0 ]; then
+      if [ ${SELF_TEST} -eq 0 ]; then
         log_error "Group name for host database '${host_db}' could not be retrieved!"
         exit 1
       fi
     fi
   else
     # Only raise WARNING message if not a SELF-TEST:
-    if [ ${self_test} -eq 0 ]; then
+    if [ ${SELF_TEST} -eq 0 ]; then
       log_warning "Using default group id '${gid}'."
     fi
   fi
@@ -195,32 +195,32 @@ parse_arguments() {
       ;;
     --unittest)
       cmd=${unittest_cmd}
-      self_test=1
+      SELF_TEST=1
       log_info "Running unitary tests..."
       ;;
     --test-integration)
       cmd=${integration_test_cmd}
-      self_test=1
+      SELF_TEST=1
       log_info "Running integration tests..."
       ;;
     --test-pipelines)
       cmd=${pipeline_cmd}
-      self_test=1
+      SELF_TEST=1
       log_info "Running reconstruction pipeline self-tests (geometric & machine-learning based)..."
       ;;
     --test-geom-pipeline)
       cmd=${geom_pipeline_cmd}
-      self_test=1
+      SELF_TEST=1
       log_info "Running reconstruction pipeline self-test using geometric based workflow..."
       ;;
     --test-ml-pipeline)
       cmd=${ml_pipeline_cmd}
-      self_test=1
+      SELF_TEST=1
       log_info "Running reconstruction pipeline self-test using machine-learning based workflow..."
       ;;
     --test-gpu)
       cmd=${gpu_cmd}
-      self_test=1
+      SELF_TEST=1
       log_info "Running GPU self-test procedure..."
       ;;
     --webterm)
@@ -273,8 +273,8 @@ run_interactive_docker() {
   docker_cmd+=" roboticsmicrofarms/plant-3d-vision:${VTAG}"
   docker_cmd+=" bash"
 
-  # Print the build configuration options
-  log_debug "Build configuration:"
+  # Print the run configuration options
+  log_debug "Run configuration:"
   log_debug "- Docker image: roboticsmicrofarms/plant-3d-vision:${VTAG}"
   log_debug "- Docker bind mount: ${mount_option}"
   log_debug "- Docker options: ${docker_option}"
@@ -296,8 +296,8 @@ run_docker_command() {
   docker_cmd+=" roboticsmicrofarms/plant-3d-vision:${VTAG}"
   docker_cmd+=" \"${cmd}\""
 
-  # Print the build configuration options
-  log_debug "Build configuration:"
+  # Print the run configuration options
+  log_debug "Run configuration:"
   log_debug "- Docker image: roboticsmicrofarms/plant-3d-vision:${VTAG}"
   log_debug "- Docker bind mount: ${mount_option}"
   log_debug "- Docker options: ${docker_option}"
