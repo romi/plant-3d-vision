@@ -34,9 +34,9 @@ log_error() {
 # --------------------------------
 initialize_variables() {
   # Image tag to use, '3.8' by default:
-  vtag="3.8"
+  VTAG="3.8"
   # String aggregating the docker build options to use:
-  docker_opts=""
+  DOCKER_OPTS=""
   # Default Ubuntu version
   UBUNTU_VERSION="22.04"
   # Default CUDA Compute Capability is empty (to enable automatic detection):
@@ -73,7 +73,7 @@ show_usage() {
   echo -e "$(bold OPTIONS):"
   echo "  -t, --tag
     Image tag to use. Note that a '-cuda_cc\${CUDA_CC}' suffix will be added." \
-    "By default, use the '${vtag}' tag."
+    "By default, use the '${VTAG}' tag."
   echo "  --cuda-cc
     The CUDA Compute Capability value to use to build Colmap." \
     "By default, try to guess it from the system."
@@ -103,7 +103,7 @@ parse_arguments() {
     case $1 in
     -t | --tag)
       shift
-      vtag=$1
+      VTAG=$1
       ;;
     --cuda-cc)
       shift
@@ -118,13 +118,13 @@ parse_arguments() {
       UBUNTU_VERSION=$1
       ;;
     --no-cache)
-      docker_opts="${docker_opts} --no-cache"
+      DOCKER_OPTS="${DOCKER_OPTS} --no-cache"
       ;;
     --pull)
-      docker_opts="${docker_opts} --pull"
+      DOCKER_OPTS="${DOCKER_OPTS} --pull"
       ;;
     --plain)
-      docker_opts="${docker_opts} --progress=plain"
+      DOCKER_OPTS="${DOCKER_OPTS} --progress=plain"
       ;;
     -h | --help)
       show_usage
@@ -167,14 +167,14 @@ setup_cuda_version() {
     # Check if nvidia-smi exists
     if ! command -v nvidia-smi &> /dev/null; then
       log_error "nvidia-smi command not found. Please install NVIDIA drivers."
-      NVIDIA_CUDA_VERSION="12.9.1" # Default fallback version
+      NVIDIA_CUDA_VERSION="11.8.0" # Default fallback version
       log_warning "Assuming default CUDA version: ${NVIDIA_CUDA_VERSION}."
     else
       # Extract CUDA version from nvidia-smi output
       NVIDIA_CUDA_VERSION=$(nvidia-smi -q 2>/dev/null | grep 'CUDA Version' | awk '{print $4}')
       if [ -z "${NVIDIA_CUDA_VERSION}" ]; then
         log_error "Failed to determine host NVIDIA CUDA Version using nvidia-smi!"
-        NVIDIA_CUDA_VERSION="12.9.1" # Default fallback version
+        NVIDIA_CUDA_VERSION="11.8.0" # Default fallback version
         log_warning "Assuming default host CUDA version: ${NVIDIA_CUDA_VERSION}."
       else
         log_info "Found host NVIDIA CUDA Version: ${NVIDIA_CUDA_VERSION}"
@@ -183,6 +183,20 @@ setup_cuda_version() {
   else
     log_info "Using provided NVIDIA CUDA Version: ${NVIDIA_CUDA_VERSION}"
   fi
+
+  # Check if the detected version is above 11.8.0
+  IFS='.' read -r -a cuda_version_array <<< "$NVIDIA_CUDA_VERSION"
+  IFS='.' read -r -a max_cuda_version_array <<< "11.8.0"
+
+  for ((i=0; i<${#cuda_version_array[@]}; i++)); do
+    if [ "${cuda_version_array[i]}" -gt "${max_cuda_version_array[i]}" ]; then
+      log_info "Colmap3.8 works with a max CUDA version of 11.8.0."
+      NVIDIA_CUDA_VERSION="11.8.0"
+      break
+    elif [ "${cuda_version_array[i]}" -lt "${max_cuda_version_array[i]}" ]; then
+      break
+    fi
+  done
 
   # Properly format version to ensure major.minor.patch format
   # Count the number of dots in the version string
@@ -228,8 +242,8 @@ build_docker_image() {
   docker_cmd+=" --build-arg NVIDIA_CUDA_VERSION=\"${NVIDIA_CUDA_VERSION}\""
   docker_cmd+=" --build-arg CUDA_ARCHITECTURES=\"${CUDA_CC}\""
   docker_cmd+=" --build-arg UBUNTU_VERSION=\"${UBUNTU_VERSION}\""
-  docker_cmd+=" -t \"roboticsmicrofarms/colmap:${vtag}-cuda_cc${CUDA_CC}\""
-  docker_cmd+=" ${docker_opts}"  # Additional options like --no-cache, --pull, etc.
+  docker_cmd+=" -t \"roboticsmicrofarms/colmap:${VTAG}-cuda_cc${CUDA_CC}\""
+  docker_cmd+=" ${DOCKER_OPTS}"  # Additional options like --no-cache, --pull, etc.
   docker_cmd+=" -f \"docker/colmap3.8/Dockerfile\""
   docker_cmd+=" ."  # Build context
 
