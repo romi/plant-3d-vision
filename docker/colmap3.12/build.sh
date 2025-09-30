@@ -37,6 +37,8 @@ initialize_variables() {
   VTAG="3.12.4"
   # String aggregating the docker build options to use:
   DOCKER_OPTS=""
+  # Default Ubuntu version
+  UBUNTU_VERSION="24.04"
   # Default CUDA Compute Capability is empty (to enable automatic detection):
   CUDA_CC=""
   # Default NVIDIA CUDA Version is empty (to enable automatic detection):
@@ -78,6 +80,9 @@ show_usage() {
   echo "  --cuda-version
     The CUDA version to use to build Colmap." \
     "By default, try to guess it from the system."
+  echo "  --ubuntu-version
+    The Ubuntu version to use to build Colmap." \
+    "By default, use '${UBUNTU_VERSION}'."
   # -- Docker options:
   echo "  --no-cache
     Do not use cache when building the image, (re)start from scratch."
@@ -107,6 +112,10 @@ parse_arguments() {
     --cuda-version)
       shift
       NVIDIA_CUDA_VERSION=$1
+      ;;
+    --ubuntu-version)
+      shift
+      UBUNTU_VERSION=$1
       ;;
     --no-cache)
       DOCKER_OPTS="${DOCKER_OPTS} --no-cache"
@@ -191,7 +200,7 @@ setup_cuda_version() {
 }
 
 check_and_fix_base_image() {
-  local ubuntu_version="24.04"
+  local ubuntu_version="${UBUNTU_VERSION}"
   local cuda_version="${NVIDIA_CUDA_VERSION}"
   local base_image="nvidia/cuda:${cuda_version}-devel-ubuntu${ubuntu_version}"
 
@@ -217,6 +226,7 @@ build_docker_image() {
   docker_cmd="docker build"
   docker_cmd+=" --build-arg NVIDIA_CUDA_VERSION=\"${NVIDIA_CUDA_VERSION}\""
   docker_cmd+=" --build-arg CUDA_ARCHITECTURES=\"${CUDA_CC}\""
+  docker_cmd+=" --build-arg UBUNTU_VERSION=\"${UBUNTU_VERSION}\""
   docker_cmd+=" -t \"roboticsmicrofarms/colmap:${VTAG}-cuda_cc${CUDA_CC}\""
   docker_cmd+=" ${DOCKER_OPTS}"  # Additional options like --no-cache, --pull, etc.
   docker_cmd+=" -f \"docker/colmap3.12/Dockerfile\""
