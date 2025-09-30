@@ -1,38 +1,67 @@
 #!/bin/bash
 
-# - Defines colors and message types:
-RED="\033[0;31m"
-GREEN="\033[0;32m"
-YELLOW="\033[0;33m"
-NC="\033[0m" # No Color
-INFO="${GREEN}INFO${NC}    "
-WARNING="${YELLOW}WARNING${NC} "
-ERROR="${RED}ERROR${NC}   "
-bold() { echo -e "\e[1m$*\e[0m"; }
+# --------------------------------
+# Functions for colors and messages
+# --------------------------------
+setup_colors() {
+  RED="\033[0;31m"    # Define red color code
+  GREEN="\033[0;32m"  # Define green color code
+  YELLOW="\033[0;33m" # Define yellow color code
+  NC="\033[0m"        # No Color code to reset colors
+  INFO="${GREEN}INFO${NC}    "    # Prefix for info messages
+  WARNING="${YELLOW}WARNING${NC} " # Prefix for warning messages
+  ERROR="${RED}$(bold ERROR)${NC}   " # Prefix for error messages using bold function
+}
 
-# Name of the conda environment to create:
-name="plant3dvision"
-# Python version to use when creating a conda environment:
-py_version="3.9"
-# Options to use with `pip`:
-pip_opt=""
-# Boolean to install webterm requirements:
-webterm=0
-# Boolean to install documentation requirements:
-doc=0
-# Boolean to install notebook requirements:
-notebook=0
-# Boolean to control environment creation:
-create_env=1
+bold() {
+  echo -e "\e[1m$*\e[0m" # Make text bold and reset
+}
 
+log_info() {
+  echo -e "${INFO}$1" # Print info message with INFO prefix
+}
+
+log_warning() {
+  echo -e "${WARNING}$1" # Print warning message with WARNING prefix
+}
+
+log_error() {
+  echo -e "${ERROR}$1" # Print error message with ERROR prefix
+}
+
+# --------------------------------
+# Functions for script initialization
+# --------------------------------
+initialize_variables() {
+  # Name of the conda environment to create:
+  name="plant3dvision"
+  # Python version to use when creating a conda environment:
+  py_version="3.9"
+  # Boolean flag to update pip tools:
+  update_pip_tools=0
+  # Options to use with `pip`:
+  pip_opt=""
+  # Boolean flag to install webterm requirements:
+  webterm=0
+  # Boolean flag to install documentation requirements:
+  doc=0
+  # Boolean flag to install notebook requirements:
+  notebook=0
+  # Boolean flag to control environment creation:
+  create_env=1
+}
+
+# --------------------------------
+# Check for required dependencies
+# --------------------------------
 # Function to check numpy version
 check_numpy_version() {
   numpy_version=$(python3 -c "import numpy; print(numpy.__version__)" 2>/dev/null)
   if [ $? -eq 0 ]; then
-    echo -e "${INFO}Numpy version installed: ${numpy_version}"
+    log_info "Numpy version installed: ${numpy_version}"
     echo "Numpy version installed: ${numpy_version}" >> numpy_versions.log
   else
-    echo -e "${WARNING}Numpy is not installed or could not be detected."
+    log_warning "Numpy is not installed or could not be detected."
     echo "Numpy is not installed or could not be detected." >> numpy_versions.log
   fi
 }
@@ -40,43 +69,9 @@ check_numpy_version() {
 # Check if conda is installed & available
 check_conda(){
   if ! command -v conda &>/dev/null; then
-    echo -e "${ERROR}Conda is not installed or not found in PATH. Please install Conda before running this script."
+    log_error "Conda is not installed or not found in PATH. Please install Conda before running this script."
     exit 1
   fi
-}
-
-# Function to create and activate conda environment
-create_conda_environment() {
-  check_conda  # Check if conda is installed & available
-  local env_name="$1"
-  local python_version="$2"
-
-  # Get the path to the environment to create:
-  CONDA_BASE_PATH=$(dirname "$(dirname $CONDA_EXE)")
-  CONDA_ENV_PATH=${CONDA_BASE_PATH}/envs/${env_name}
-
-  if [ -d "$CONDA_ENV_PATH" ]; then
-    echo -e "${WARNING}# - Using existing '${env_name}' conda environment..."
-  else
-    echo -e "${INFO}# - Creating '${env_name}' conda environment..."
-    start_time=$(date +%s)
-    # conda create -y -n "${env_name}" python="${python_version}" "numpy<2"  # add "numpy<2" for compatibility with pytorch < 2.6
-    conda create -y -n "${env_name}" python="${python_version}"
-    if [ $? -ne 0 ]; then
-      echo -e "${ERROR}Failed to create conda environment '${env_name}'."
-      return 1
-    fi
-    echo -e "${INFO}Conda environment creation done in $(($(date +%s) - start_time)) s."
-  fi
-
-  eval "$(conda shell.bash hook)"
-  conda activate ${env_name}
-  if [ $? -ne 0 ]; then
-    echo -e "${ERROR}Failed to activate conda environment '${env_name}'."
-    return 1
-  fi
-
-  return 0
 }
 
 get_installed_setuptools() {
@@ -108,13 +103,47 @@ except Exception as e:
 ')
 }
 
+# Function to create and activate conda environment
+create_conda_environment() {
+  check_conda  # Check if conda is installed & available
+  local env_name="$1"
+  local python_version="$2"
+
+  # Get the path to the environment to create:
+  CONDA_BASE_PATH=$(dirname "$(dirname $CONDA_EXE)")
+  CONDA_ENV_PATH=${CONDA_BASE_PATH}/envs/${env_name}
+
+  if [ -d "$CONDA_ENV_PATH" ]; then
+    log_warning "# - Using existing '${env_name}' conda environment..."
+  else
+    log_info "# - Creating '${env_name}' conda environment..."
+    start_time=$(date +%s)
+    # conda create -y -n "${env_name}" python="${python_version}" "numpy<2"  # add "numpy<2" for compatibility with pytorch < 2.6
+    conda create -y -n "${env_name}" python="${python_version}"
+    if [ $? -ne 0 ]; then
+      log_error "Failed to create conda environment '${env_name}'."
+      return 1
+    fi
+    log_info "Conda environment creation done in $(($(date +%s) - start_time)) s."
+  fi
+
+  eval "$(conda shell.bash hook)"
+  conda activate ${env_name}
+  if [ $? -ne 0 ]; then
+    log_error "Failed to activate conda environment '${env_name}'."
+    return 1
+  fi
+
+  return 0
+}
+
 # Function to install package sources
 install_package_source() {
   local package_name="$1"
   local source_path="$2"
   local extra_args="$3"  # Optional extra arguments like ".[io]"
 
-  echo -e "\n\n${INFO}# - Installing '${package_name}' sources..."
+  log_info "# - Installing '${package_name}' sources..."
 
   # Check required and installed setuptools if a pyproject.toml file exists
   if [[ -f "${source_path}/pyproject.toml" ]]; then
@@ -126,24 +155,24 @@ install_package_source() {
       # Check if both are valid numbers and compare them
       if [[ "${required_setuptools}" =~ ^[0-9]+$ && "${installed_setuptools}" =~ ^[0-9]+$ ]]; then
         if [[ ${required_setuptools} -gt ${installed_setuptools} ]]; then
-          echo -e "${WARNING}Required setuptools (${required_setuptools}) is greater than the one installed (${installed_setuptools})!"
-          echo -e "${INFO}Consider updating it with 'python3 -m pip install --upgrade setuptools'"
+          log_warning "Required setuptools (${required_setuptools}) is greater than the one installed (${installed_setuptools})!"
+          log_info "Consider updating it with 'python3 -m pip install --upgrade setuptools'"
         else
-          echo -e "${INFO}Found version of setuptools ${installed_setuptools} >= ${required_setuptools} (required)"
+          log_info "Found version of setuptools ${installed_setuptools} >= ${required_setuptools} (required)"
         fi
       else
-        echo -e "${WARNING}Could not compare setuptools versions. Required: ${required_setuptools}, Installed: ${installed_setuptools}"
+        log_warning "Could not compare setuptools versions. Required: ${required_setuptools}, Installed: ${installed_setuptools}"
       fi
     # Handle cases where one or both versions are missing
     elif [[ -z "${required_setuptools}" && -n "${installed_setuptools}" ]]; then
-      echo -e "${WARNING}Could not detect required version of setuptools (got ${required_setuptools})! Installed version: ${installed_setuptools}"
+      log_warning "Could not detect required version of setuptools (got ${required_setuptools})! Installed version: ${installed_setuptools}"
     elif [[ -n "${required_setuptools}" && -z "${installed_setuptools}" ]]; then
-      echo -e "${WARNING}Could not detect installed version of setuptools (got ${installed_setuptools})! Required version: ${required_setuptools}"
+      log_warning "Could not detect installed version of setuptools (got ${installed_setuptools})! Required version: ${required_setuptools}"
     else
-      echo -e "${WARNING}Could not detect required or installed version of setuptools!"
+      log_warning "Could not detect required or installed version of setuptools!"
     fi
   else
-    echo -e "${ERROR}Could not find TOML file at: ${source_path}/pyproject.toml"
+    log_error "Could not find TOML file at: ${source_path}/pyproject.toml"
   fi
 
   start_time=$(date +%s)
@@ -151,7 +180,7 @@ install_package_source() {
   build_status=$?
 
   if [ ${build_status} == 0 ]; then
-    echo -e "${INFO}'${package_name}' sources installed in $(($(date +%s) - start_time)) s."
+    log_info "'${package_name}' sources installed in $(($(date +%s) - start_time)) s."
     # Check numpy version after installation.
     check_numpy_version
 
@@ -160,18 +189,21 @@ install_package_source() {
       python3 -c "import ${package_name}" 2>/dev/null
       test_import_status=$?
       if [ ${test_import_status} -gt 0 ]; then
-        echo -e "${WARNING}'${package_name}' test import failed!"
+        log_warning "'${package_name}' test import failed!"
         python3 -c "import ${package_name}"
       fi
     fi
   else
-    echo -e "${ERROR}'${package_name}' sources install failed with code '${build_status}'!"
+    log_error "'${package_name}' sources install failed with code '${build_status}'!"
     exit ${build_status}
   fi
 }
 
 
-usage() {
+# --------------------------------
+# Usage information function
+# --------------------------------
+show_usage() {
   echo -e "$(bold USAGE):"
   echo -e "  ./install.sh [OPTIONS]"
   echo ""
@@ -183,9 +215,9 @@ usage() {
   echo -e "$(bold OPTIONS):"
   echo "  -n, --name
     Name of the conda environment to use, defaults to '${name}'."
-  echo "  --dev
+  echo "  -e, --dev
     Install the sources in developer mode."
-  echo "  --user
+  echo "  -u, --user
     Install to the Python user install directory for your platform."
   echo "  --webterm
     Install the packages required to run WebTerm."
@@ -196,6 +228,8 @@ usage() {
   echo "  --python
     Set the version of python to use, defaults to '${py_version}'.
     Only used if the conda environment is created."
+  echo "  -U, --update-tools
+    Update pip tools, like setuptools and packaging."
   echo "  --no-env
     Skip conda environment creation and activation."
   echo "  --no-cache-dir
@@ -212,142 +246,159 @@ usage() {
   echo "  $ ./install.sh -n romi"
 }
 
-while [ "$1" != "" ]; do
-  case $1 in
-  -n | --name)
+# --------------------------------
+# Command line parsing function
+# --------------------------------
+  parse_arguments() {
+  while [ "$1" != "" ]; do
+    case $1 in
+    -n | --name)
+      shift
+      name=$1
+      ;;
+    -e | --dev)
+      pip_opt="${pip_opt} -e"  # editable mode should always be the last pip option
+      ;;
+    -u | --user)
+      pip_opt="--user ${pip_opt}"
+      ;;
+    --update-tools)
+      update_pip_tools=1
+      ;;
+    --no-cache-dir)
+      pip_opt="--no-cache-dir ${pip_opt}"
+      ;;
+    --webterm)
+      webterm=1
+      ;;
+    --doc)
+      doc=1
+      ;;
+    --notebook)
+      notebook=1
+      ;;
+    --python)
+      shift
+      py_version=$1
+      ;;
+    --no-env)
+      create_env=0
+      ;;
+    -h | --help)
+      show_usage
+      exit
+      ;;
+    *)
+      show_usage
+      exit 1
+      ;;
+    esac
     shift
-    name=$1
-    ;;
-  --dev)
-    pip_opt="${pip_opt} -e"
-    ;;
-  --user)
-    pip_opt="${pip_opt} --user"
-    ;;
-  --no-cache-dir)
-    pip_opt="${pip_opt} --no-cache-dir"
-    ;;
-  --webterm)
-    webterm=1
-    ;;
-  --doc)
-    doc=1
-    ;;
-  --notebook)
-    notebook=1
-    ;;
-  --python)
-    shift
-    py_version=$1
-    ;;
-  --no-env)
-    create_env=0
-    ;;
-  -h | --help)
-    usage
-    exit
-    ;;
-  *)
-    usage
-    exit 1
-    ;;
-  esac
-  shift
-done
+  done
+}
 
-# Handle conda environment
-if [ ${create_env} == 1 ]; then
-  # Create and activate conda environment
-  create_conda_environment "${name}" "${py_version}"
-  if [ $? -ne 0 ]; then
-    exit 1
-  fi
-else
-  echo -e "${INFO}# - Skipping conda environment creation..."
-fi
-
-
-echo -e "\n\n${INFO}Using `python3 --version`"
-echo -e "${INFO}Using `python3 -m pip --version`"
-echo -e "${INFO}Using setuptools `get_installed_setuptools`"
-
-
-# Check numpy version after installation.
-check_numpy_version
-
-# Define packages to install as an array of arrays
-declare -a packages=(
-  "plantdb.commons|plantdb/src/commons/|[io]"
-  "plantdb.client|plantdb/src/client/|"
-  "plantdb.server|plantdb/src/server/|"
-  "romitask|romitask/|"
-  "skeleton_refinement|skeleton_refinement/|"
-  "romiseg|romiseg/|"
-  "romicgal|romicgal/|"
-  "dtw|dtw/|"
-  "plant3dvision|.|"
-)
-
-# Special pre-installation steps for some packages
-for package_info in "${packages[@]}"; do
-  IFS="|" read -r package_name source_path extra_args <<< "${package_info}"
-
-  # Special pre-installation steps for specific packages
-  if [[ "${package_name}" == "romiseg" ]]; then
-    echo -e "\n\n${INFO}# - Installing PyTorch dependencies for 'romiseg'..."
-    # python3 -m pip install torch==1.13.1 torchvision==0.14.1 --extra-index-url https://download.pytorch.org/whl/cu118
-    python3 -m pip install 'torch>=2.0.0' 'torchvision>=0.15.0' --extra-index-url 'https://download.pytorch.org/whl/cu118'
-  elif [[ "${package_name}" == "romicgal" ]]; then
-    echo -e "\n\n${INFO}# - Installing pybind11 dependency for 'romicgal'..."
-    python3 -m pip install pybind11
-  elif [[ "${package_name}" == "dtw" ]]; then
-    echo -e "\n\n${INFO}# - Installing requirements for 'dtw'..."
-    python3 -m pip install -r dtw/requirements.txt
+p3dv_optional_deps (){
+  p3dv_opt_deps=""
+  if [ "${webterm}" -eq 1 ]; then
+    log_info "Using WebTerm requirements..."
+    p3dv_opt_deps="${p3dv_opt_deps}webterm,"
   fi
 
-  # Install the package
-  install_package_source "${package_name}" "${source_path}" "${extra_args}"
-done
+  if [ "${doc}" -eq 1 ]; then
+    log_info "Using documentation requirements..."
+    p3dv_opt_deps="${p3dv_opt_deps}doc,"
+  fi
 
+  if [ "${notebook}" -eq 1 ]; then
+    log_info "Using notebook requirements..."
+    p3dv_opt_deps="${p3dv_opt_deps}nb,"
+  fi
+  # Remove trailing comma if present
+  p3dv_opt_deps="[${p3dv_opt_deps%,}]"
+}
 
-if [ "${webterm}" -eq 1 ]; then
-  echo -e "\n\n${INFO}# - Installing WebTerm requirements..."
-  start_time=$(date +%s)
-  python3 -m pip install .[webterm]
+update_pip_tools(){
+  if [ ${update_pip_tools} == 1 ]; then
+    # Upgrade setuptools to the latest version
+    log_info "Upgrading 'setuptools' to the latest version..."
+    python3 -m pip install --upgrade setuptools
+    # Upgrade packaging to the latest version
+    log_info "Upgrading 'packaging' to the latest version..."
+    python3 -m pip install --upgrade packaging
+  fi
+}
 
-  build_status=$?
-  if [ ${build_status} == 0 ]; then
-    echo -e "${INFO}WebTerm requirements installed in $(($(date +%s) - start_time)) s."
+# --------------------------------
+# Main script execution
+# --------------------------------
+main() {
+  setup_colors
+  initialize_variables
+  parse_arguments "$@"
+  p3dv_optional_deps
+
+  # Handle conda environment
+  if [ ${create_env} == 1 ]; then
+    # Create and activate conda environment
+    create_conda_environment "${name}" "${py_version}"
+    if [ $? -ne 0 ]; then
+      exit 1  # exit on failure
+    fi
   else
-    echo -e "${ERROR}WebTerm requirements install failed with code '${build_status}'!"
-    exit ${build_status}
+    log_info "# - Skipping conda environment creation..."
   fi
-fi
 
-if [ "${doc}" -eq 1 ]; then
-  echo -e "\n\n${INFO}# - Installing documentation requirements..."
-  start_time=$(date +%s)
-  python3 -m pip install .[doc]
 
-  build_status=$?
-  if [ ${build_status} == 0 ]; then
-    echo -e "${INFO}Documentation requirements installed in $(($(date +%s) - start_time)) s."
-  else
-    echo -e "${ERROR}Documentation requirements install failed with code '${build_status}'!"
-    exit ${build_status}
-  fi
-fi
+  update_pip_tools
 
-if [ "${notebook}" -eq 1 ]; then
-  echo -e "\n\n${INFO}# - Installing notebook requirements..."
-  start_time=$(date +%s)
-  python3 -m pip install .[nb]
+  log_info "Using `python3 --version`"
+  log_info "Using `python3 -m pip --version`"
+  log_info "Using setuptools `get_installed_setuptools`"
 
-  build_status=$?
-  if [ ${build_status} == 0 ]; then
-    echo -e "${INFO}Notebook requirements installed in $(($(date +%s) - start_time)) s."
-  else
-    echo -e "${ERROR}Notebook requirements install failed with code '${build_status}'!"
-    exit ${build_status}
-  fi
-fi
+  # Check numpy version after installation.
+  check_numpy_version
+
+  # Define packages to install as an array of arrays
+  declare -a packages=(
+    "plantdb.commons|plantdb/src/commons/|[io]"
+    "plantdb.client|plantdb/src/client/|"
+    "plantdb.server|plantdb/src/server/|"
+    "romitask|romitask/|"
+    "skeleton_refinement|skeleton_refinement/|"
+    "romiseg|romiseg/|"
+    "romicgal|romicgal/|"
+    "dtw|dtw/|"
+    "plant3dvision|.|${p3dv_opt_deps}"
+  )
+
+  # Special pre-installation steps for some packages
+  echo "Installing the following packages:"
+  for package_info in "${packages[@]}"; do
+    IFS="|" read -r package_name source_path extra_args <<< "${package_info}"
+    echo "  - '${package_name}' from '${source_path}' with optional arguments '${extra_args}'"
+  done
+
+  # Special pre-installation steps for some packages
+  for package_info in "${packages[@]}"; do
+    IFS="|" read -r package_name source_path extra_args <<< "${package_info}"
+
+    # Special pre-installation steps for specific packages
+    if [[ "${package_name}" == "romiseg" ]]; then
+      log_info "# - Installing PyTorch dependencies for 'romiseg'..."
+      # python3 -m pip install torch==1.13.1 torchvision==0.14.1 --extra-index-url https://download.pytorch.org/whl/cu118
+      python3 -m pip install 'torch>=2.0.0' 'torchvision>=0.15.0' --extra-index-url 'https://download.pytorch.org/whl/cu118'
+    elif [[ "${package_name}" == "romicgal" ]]; then
+      log_info "# - Installing pybind11 dependency for 'romicgal'..."
+      python3 -m pip install pybind11
+    elif [[ "${package_name}" == "dtw" ]]; then
+      log_info "# - Installing requirements for 'dtw'..."
+      python3 -m pip install -r dtw/requirements.txt
+    fi
+
+    # Install the package
+    install_package_source "${package_name}" "${source_path}" "${extra_args}"
+  done
+}
+
+# Execute main function with all arguments
+main "$@"
