@@ -32,7 +32,7 @@ max_blind_angle = 20.0  # Default: 20.0 (degrees)
 # Number of retries if the task fails
 retry_count = 10  # Default: 10
 # Additional command-line arguments to pass to COLMAP
-cli_args = ""  # Default: ""
+cli_args = "{}"  # Default: "{}"
 # Optional bounding box to limit reconstruction volume
 # Default: None
 #[Colmap.bounding_box]

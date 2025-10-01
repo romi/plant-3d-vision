@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
 import sys
+import os
 from os.path import join
 from os.path import splitext
 
 import luigi
 import numpy as np
+import json
 import toml
 from scipy.spatial.distance import euclidean
 
@@ -380,6 +381,34 @@ def use_precalibrated_poses(images_fileset, calibration_scan):
     return images_fileset
 
 
+def get_scan_config(scan_path):
+    """
+    Gets scan config from either `scan.toml` (v2) or the dataset metadata (v3)
+
+    Parameters
+    ----------
+    scan_path : str
+        Path to the dataset containing the scan
+    """
+    path = os.path.join(scan_path, SCAN_TOML)
+    if os.path.isfile(path):
+        try:
+            with open(path, "r") as f:
+                scan_config = toml.load(f)
+        except toml.TomlDecodeError:
+            logger.error(f"Could not load scan config from '{path}'!")
+            raise
+        else:
+            return scan_config
+    path = os.path.join(scan_path, "metadata/metadata.json")
+    if os.path.isfile(path):
+        with open(path, "r") as f:
+            scan_config = json.load(f)
+        return scan_config
+
+    raise FileNotFoundError(f"Could not load scan config from either 'scan.toml' or 'metadata.json'!")
+
+
 def check_scan_parameters(scan_to_calibrate, calibration_scan):
     """Check the calibration scan and scan to calibrate have the same scanning configuration.
 
@@ -411,11 +440,9 @@ def check_scan_parameters(scan_to_calibrate, calibration_scan):
     """
     import toml
     # Load acquisition config file for calibration scan:
-    with open(join(calibration_scan.path(), 'scan.toml'), 'r') as f:
-        calib_scan_cfg = toml.load(f)
+    calib_scan_cfg = get_scan_config(calibration_scan.path())
     # Load acquisition config file for scan to calibrate:
-    with open(join(scan_to_calibrate.path(), 'scan.toml'), 'r') as f:
-        scan2calib_cfg = toml.load(f)
+    scan2calib_cfg = get_scan_config(scan_to_calibrate.path())
 
     diff_keys = list(dict(
         set(calib_scan_cfg['ScanPath']['kwargs'].items()) ^ set(scan2calib_cfg['ScanPath']['kwargs'].items())).keys())
@@ -998,7 +1025,7 @@ class CameraPoseQC(object):
         """Get the scan configuration from the current scan."""
         try:
             # Load scan configuration from TOML file
-            scan_cfg = toml.load(join(current_scan.path(), SCAN_TOML))
+            scan_cfg = get_scan_config(current_scan.path())
         except FileNotFoundError:
             logger.warning("Could not find the `scan.toml` file!")
             return {}
