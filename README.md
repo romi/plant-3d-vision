@@ -247,6 +247,11 @@ You can have a look at the logs with:
 sudo journalctl -u romi-plant-3d.service
 ```
 
+#### 4. Enable the service
+``` bash
+sudo systemctl enable romi-plant-3d.service
+```
+
 #### Explanation of the Service File
 
 - `Unit` Section: Defines dependencies - this service will start after Docker service is running
