@@ -199,6 +199,73 @@ In any case, please avoid doing horrendous things like `chmod -R 777 $ROMI_DB`!
    Where `myuser` is your username.
 
 
+### Systemd Service
+
+Let's create a systemd service file that will run your Docker command at system startup.
+
+#### 1. Create a systemd service that calls the script
+
+``` bash
+sudo nano /etc/systemd/system/romi-plant-3d.service
+```
+
+Add the following content:
+``` ini
+[Unit]
+Description=ROMI Plant 3D Vision Service
+After=docker.service network.target
+Requires=docker.service
+
+[Service]
+Type=simple
+ExecStartPre=-docker stop %n
+ExecStartPre=-docker rm %n
+ExecStart=docker run --name %n --gpus all -v /data/ROMI/test_v2/:/myapp/db -v /data/ROMI/configs/:/myapp/cfg --user romi:1003 -p 8080:8080 -d roboticsmicrofarms/plant-3d-vision:latest-cuda_cc50 "gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:8080 plant3dvision.webterm.wsgi:application"
+ExecStop=docker stop %n
+ExecStopPost=docker rm %n
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+#### 2. Reload and restart the service
+``` bash
+sudo systemctl daemon-reload
+sudo systemctl restart romi-plant-3d.service
+```
+
+#### 3. Check the status
+``` bash
+sudo systemctl status romi-plant-3d.service
+docker ps | grep romi-plant-3d
+```
+
+You can have a look at the logs with:
+```bash
+sudo journalctl -u romi-plant-3d.service
+```
+
+#### Explanation of the Service File
+
+- `Unit` Section: Defines dependencies - this service will start after Docker service is running
+- `Service` Section:
+    - `ExecStartPre`: Removes any existing container with the same name
+    - `ExecStart`: Runs your Docker container
+    - `ExecStop`: Stop the Docker container
+    - `ExecStopPost`: Removes any existing container with the same name
+    - `Restart`: Automatically restarts the service if it fails
+- `Install` Section: Makes the service start at boot time 
+
+#### Managing the Service
+You can manage the service using these commands:
+
+- Check status: `sudo systemctl status romi-plant-3d.service`
+- View logs: `sudo journalctl -u romi-plant-3d.service`
+- Stop service: `sudo systemctl stop romi-plant-3d.service`
+- Restart service: `sudo systemctl restart romi-plant-3d.service`
+
 ## Install from sources
 
 ### Requirements
