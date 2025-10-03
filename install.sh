@@ -193,8 +193,8 @@ install_package_source() {
   fi
 
   start_time=$(date +%s)
-  log_debug "Running: python3 -m pip install ${pip_opt} \"${source_path}/${extra_args}\""
-  python3 -m pip install ${pip_opt} "${source_path}/${extra_args}"
+  log_debug "Running: python3 -m pip install ${pip_opt} \"${source_path}${extra_args}\""
+  python3 -m pip install ${pip_opt} "${source_path}${extra_args}"
   build_status=$?
 
   if [ ${build_status} == 0 ]; then
@@ -209,10 +209,10 @@ install_package_source() {
       log_warning "Failure!"
       # Re-run to show failure message:
       python3 -c "import ${package_name}"
+      exit ${test_import_status}
     else
       log_info "Successful!"
     fi
-    exit ${test_import_status}
   else
     log_error "'${package_name}' sources install failed with code '${build_status}'!"
     exit ${build_status}

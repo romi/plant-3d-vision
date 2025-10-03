@@ -1,3 +1,4 @@
+# syntax = docker/dockerfile:1.12
 ARG COLMAP_VERSION="3.8"
 ARG CUDA_CC="75"
 FROM roboticsmicrofarms/colmap:${COLMAP_VERSION}-cuda_cc${CUDA_CC}
@@ -83,15 +84,14 @@ COPY --chown=${USER_NAME} docker/.bashrc .bashrc
 # Copy the source files starting from the root folder (relative to context build):
 COPY --chown=${USER_NAME} ./ plant-3d-vision/
 
-RUN cd plant-3d-vision/ && \
+RUN --mount=type=cache,target=/home/${USER_NAME}/.cache/pip \
+    cd plant-3d-vision/ && \
     # Create a virtual environment
     python3 -m venv /home/${USER_NAME}/venv && \
     # Activate the virtual environment and install packages
     . /home/${USER_NAME}/venv/bin/activate && \
-    # Upgrade pip & setuptools to latest versions
-    /home/${USER_NAME}/venv/bin/pip install --upgrade pip setuptools && \
     # Install `plant-3d-vision` dependencies and sources:
-    ./install.sh --no-env --no-cache-dir --webterm && \
+    bash install.sh --no-env --webterm --update-tools && \
     # Download the trained CNN model file:
     ./get_model.sh
 
