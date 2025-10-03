@@ -34,8 +34,9 @@
     <!-- Common JavaScript -->
     <script src="{{ url_for('static', filename='js/commons.js') }}" defer></script>
     <script type="text/javascript">
-        window.URL_PREFIX = "{{URL_PREFIX}}";
-        // Expose the PLANTDB_API environment variable to JavaScript
+        // Expose the WEBTERM_PREFIX to JavaScript
+        window.WEBTERM_PREFIX = "{{WEBTERM_PREFIX}}";
+        // Expose the PLANTDB_API to JavaScript
         window.PLANTDB_API = "{{PLANTDB_API}}";
     </script>
     {% block head_scripts %} {% endblock %}
