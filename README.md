@@ -99,7 +99,7 @@ git clone https://github.com/romi/plant-3d-vision.git
 cd plant-3d-vision/
 git submodule init
 git submodule update
-./docker/build.sh
+./docker/build.sh -t colmap3.12.4 --colmap 3.12.4
 ```
 This will create a Docker image named `roboticsmicrofarms/plant-3d-vision:latest`.
 
