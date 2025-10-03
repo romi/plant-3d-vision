@@ -93,8 +93,18 @@ def cfg_toml_path(username):
     return Path(os.environ.get('ROMI_CFG', DEFAULT_ROMI_CFG)) / username
 
 
-def create_webterm_app(proxy=False, secret_key=None, url_prefix="",
-                       log_level=DEFAULT_LOG_LEVEL, async_mode='threading'):
+def get_url_plantdb():
+    return os.environ.get("PLANTDB_API", "/api")
+
+def get_url_prefix():
+    return os.environ.get('WEBTERM_PREFIX', "")
+
+
+def get_secret_key():
+    return os.environ.get('WEBTERM_SECRET_KEY', None)
+
+
+def create_webterm_app(proxy=False, log_level=DEFAULT_LOG_LEVEL, async_mode='threading'):
     """Create and configure the WebTerm Flask application.
 
     Parameters
@@ -103,10 +113,6 @@ def create_webterm_app(proxy=False, secret_key=None, url_prefix="",
         Boolean flag indicating whether the application is behind a reverse proxy, by default False
     users_db_path : str, optional
         Path to the users database CSV file, by default 'users.csv'
-    url_prefix : str, optional
-        Prefix for all endpoints, by default ""
-    secret_key : str, optional
-        Secret key for session management, by default None
     log_level : str, optional
         Logging level, by default DEFAULT_LOG_LEVEL
 
@@ -115,6 +121,9 @@ def create_webterm_app(proxy=False, secret_key=None, url_prefix="",
     SocketIO
         Configured SocketIO application instance
     """
+    webterm_prefix = get_url_prefix()
+    secret_key = get_secret_key()
+
     # Get the directory where this app.py file is located
     app_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -122,23 +131,21 @@ def create_webterm_app(proxy=False, secret_key=None, url_prefix="",
     app = Flask("WebTerm",
                 template_folder=os.path.join(app_dir, 'templates'),
                 static_folder=os.path.join(app_dir, 'static'),
-                static_url_path=f"{url_prefix}/static")
+                static_url_path=f"{webterm_prefix}/static")
 
     logger = get_logger("WebTerm", log_level=log_level)
 
     if not secret_key:
         logger.warning("No secret key found, using a random key.")
-        logger.warning("Please set the SERVER_SECRET_KEY environment variable.")
+        logger.warning("Please set the WEBTERM_SECRET_KEY environment variable.")
         secret_key = os.urandom(24)
 
     app.secret_key = secret_key
 
     # Configure proxy settings if needed
-    prefix = ""
     if proxy:
         logger.info(f"Setting up Flask application with proxy support...")
-        prefix = url_prefix
-        logger.info(f"Using prefix '{prefix}' for all endpoints.")
+        logger.info(f"Using prefix '{webterm_prefix}' for all endpoints.")
         # App is behind one proxy that sets the -For and -Host headers.
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_host=1, x_proto=1)
         # Set secure cookies
@@ -150,10 +157,10 @@ def create_webterm_app(proxy=False, secret_key=None, url_prefix="",
     # Create a blueprint for all routes
     bp = Blueprint('webterm',
                    __name__,
-                   url_prefix=prefix,
+                   url_prefix=webterm_prefix,
                    template_folder=os.path.join(app_dir, 'templates'),
                    static_folder=os.path.join(app_dir, 'static'),
-                   static_url_path=f"{url_prefix}/static")
+                   static_url_path=f"{webterm_prefix}/static")
 
     # Initialize Socket.IO server with configuration
     socketio_config = {
@@ -330,22 +337,18 @@ def create_webterm_app(proxy=False, secret_key=None, url_prefix="",
     @bp.route('/')
     def index():
         """
-        Flask route for the index page.
-
-        This function handles requests to the root URL ('/') of the application.
-        If a user is logged in (i.e., there is a 'username' key in the session),
-        the function redirects them to the terminal page. Otherwise, it renders
-        and returns the login.html template for user authentication.
+        Index of the web application (entry point).
 
         Returns
         -------
         flask.Response
-            The response object containing either a redirect to the terminal page or the rendered login.html template.
+            The response object containing a redirect to the terminal if aldready authenticated.
+            Otherwise, renders the 'login.html' template.
         """
         if 'username' in session:
             return redirect(url_for('webterm.terminal'))
         return render_template('login.html',
-                               URL_PREFIX=url_prefix)
+                               WEBTERM_PREFIX=get_url_prefix())
 
     @bp.route('/login', methods=['POST'])
     def login():
@@ -362,7 +365,7 @@ def create_webterm_app(proxy=False, secret_key=None, url_prefix="",
         Returns
         -------
         flask.Response
-            The response object containing either a redirect to the terminal if authentication is successful.
+            The response object containing redirect to the terminal if authentication is successful.
             Otherwise, renders the 'login.html' template with an error message.
         """
         # Retrieves the 'username' and 'password' from the request form data
@@ -379,7 +382,9 @@ def create_webterm_app(proxy=False, secret_key=None, url_prefix="",
 
         # Else returns an error if credentials are invalid
         logger.warning(f"Failed login attempt for username: {username}")
-        return render_template('login.html', error='Invalid credentials')
+        return render_template('login.html',
+                               error='Invalid credentials',
+                               WEBTERM_PREFIX=get_url_prefix())
 
     @bp.route('/logout')
     def logout():
@@ -405,14 +410,24 @@ def create_webterm_app(proxy=False, secret_key=None, url_prefix="",
 
     @bp.route('/terminal')
     def terminal():
+        """
+        Route for terminal page, handles requests to the '/terminal' endpoint.
+
+        Returns
+        -------
+        flask.Response
+            The response object containing a redirect to the index if not authenticated.
+            Otherwise, renders the 'terminal.html' template.
+        """
         # Pass PLANTDB_API environment variable to the template context
         # Default to local access to the PlantDB, see '/api/scans' route
-        plantdb_api = os.environ.get('PLANTDB_API', '/api')
+        plantdb_api = get_url_plantdb()
         if 'username' not in session:
             return redirect(url_for('webterm.index'))
         return render_template('terminal.html',
                                full_name=session.get('full_name'),
                                username=session.get('username'),
+                               WEBTERM_PREFIX=get_url_prefix(),
                                PLANTDB_API=plantdb_api)
 
     @bp.route('/api/admin')
@@ -430,7 +445,8 @@ def create_webterm_app(proxy=False, secret_key=None, url_prefix="",
             # If not, redirect to the index page
             return redirect(url_for('webterm.index'))
         # Render the admin panel template
-        return render_template('admin.html')
+        return render_template('admin.html',
+                               WEBTERM_PREFIX=get_url_prefix())
 
     @bp.route('/api/admin/add_user', methods=['POST'])
     def add_user():
@@ -479,12 +495,12 @@ def create_webterm_app(proxy=False, secret_key=None, url_prefix="",
             os.makedirs(save_dir, exist_ok=True)
 
             # Get all TOML files in the directory
-            files = [f for f in os.listdir(save_dir) if f.lower().endswith('.toml')]
+            files = [str(f) for f in os.listdir(save_dir) if f.lower().endswith('.toml')]
 
             return jsonify({
                 'success': True,
                 'files': files,
-                'directory': save_dir
+                'directory': str(save_dir)
             })
         except Exception as e:
             return jsonify({
@@ -568,7 +584,8 @@ def create_webterm_app(proxy=False, secret_key=None, url_prefix="",
             return redirect(url_for('webterm.index'))
         return render_template('user_profile.html',
                                full_name=session.get('full_name'),
-                               username=session.get('username'))
+                               username=session.get('username'),
+                               WEBTERM_PREFIX=get_url_prefix())
 
     @bp.route('/api/user/change_password', methods=['POST'])
     def change_password():
@@ -677,13 +694,16 @@ def parsing():
     parser = argparse.ArgumentParser(description='WebTerm - Web-based terminal interface with authentication.')
 
     server_args = parser.add_argument_group("webserver arguments")
-    server_args.add_argument('--host', type=str, default=os.environ.get('SERVER_HOST', '0.0.0.0'),
+    server_args.add_argument('--host', type=str,
+                             default=os.environ.get('SERVER_HOST', '0.0.0.0'),
                              help="the hostname to listen on, defaults to '0.0.0.0'.")
-    server_args.add_argument('--port', type=int, default=int(os.environ.get('SERVER_PORT', 8080)),
+    server_args.add_argument('--port', type=int,
+                             default=int(os.environ.get('SERVER_PORT', 8080)),
                              help="the port of the webserver, defaults to '8080'.")
     server_args.add_argument('--proxy', action='store_true',
                              help="use this flag when this server sits behind a reverse proxy")
-    server_args.add_argument('--url-prefix', type=str, default=os.environ.get('WEBTERM_PREFIX', ''),
+    server_args.add_argument('--url-prefix', type=str,
+                             default=os.environ.get('WEBTERM_PREFIX', ''),
                              help="prefix for the webserver URL, defaults to ''.")
     server_args.add_argument('--debug', action='store_true',
                              help="enable debug mode.")
@@ -693,18 +713,18 @@ def parsing():
                            default=os.environ.get('WEBTERM_USERS', 'users.csv'),
                            help="path to the users database CSV file, defaults to 'users.csv'.")
     auth_args.add_argument('--secret-key', dest='secret_key', type=str,
-                           default=os.environ.get('SERVER_SECRET_KEY'),
+                           default=os.environ.get('WEBTERM_SECRET_KEY'),
                            help="secret key for session management.")
 
     log_opt = parser.add_argument_group("logging options")
-    log_opt.add_argument("--log-level", dest="log_level", type=str, default=DEFAULT_LOG_LEVEL, choices=LOG_LEVELS,
+    log_opt.add_argument("--log-level", dest="log_level", type=str,
+                         default=DEFAULT_LOG_LEVEL, choices=LOG_LEVELS,
                          help="level of message logging, defaults to 'INFO'.")
 
     return parser
 
 
-def webterm_server(host='0.0.0.0', port=8080, proxy=False, debug=False, secret_key=None,
-                   url_prefix="", log_level=DEFAULT_LOG_LEVEL):
+def webterm_server(host='0.0.0.0', port=8080, proxy=False, debug=False, log_level=DEFAULT_LOG_LEVEL):
     """Initialize and start the WebTerm server.
 
     Parameters
@@ -717,8 +737,6 @@ def webterm_server(host='0.0.0.0', port=8080, proxy=False, debug=False, secret_k
         Boolean flag indicating whether the application is behind a reverse proxy, by default False
     debug : bool, optional
         Enable debug mode, by default False
-    secret_key : str, optional
-        Secret key for session management, by default None
     log_level : str, optional
         Logging level, by default DEFAULT_LOG_LEVEL
     """
@@ -726,8 +744,6 @@ def webterm_server(host='0.0.0.0', port=8080, proxy=False, debug=False, secret_k
     # Create the application using the factory function
     socketio_app, flask_app = create_webterm_app(
         proxy=proxy,
-        secret_key=secret_key,
-        url_prefix=url_prefix,
         log_level=log_level,
     )
 
@@ -744,13 +760,18 @@ def main():
     parser = parsing()
     args = parser.parse_args()
 
+    if args.webterm_prefix != os.environ.get('WEBTERM_PREFIX', ''):
+        os.environ['WEBTERM_PREFIX'] = args.webterm_prefix
+    if args.users_db != os.environ.get('WEBTERM_USERS', ''):
+        os.environ['WEBTERM_USERS'] = args.users_db
+    if args.secret_key != os.environ.get('WEBTERM_SECRET_KEY', ''):
+        os.environ['WEBTERM_SECRET_KEY'] = args.secret_key
+
     webterm_server(
         host=args.host,
         port=args.port,
         proxy=args.proxy,
-        url_prefix=args.url_prefix,
         debug=args.debug,
-        secret_key=args.secret_key,
         log_level=args.log_level
     )
 

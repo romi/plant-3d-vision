@@ -18,7 +18,7 @@ Environment Variables
 
 App Configuration Variables
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
-- ``SERVER_SECRET_KEY``: Secret key for Flask sessions
+- ``WEBTERM_SECRET_KEY``: Secret key for Flask sessions
 - ``WEBTERM_USERS``: Path to users CSV file (default: users.csv)
 - ``ROMI_DB``: Path to ROMI database (default: /myapp/db)
 - ``ROMI_CFG``: Path to configuration directory (default: /myapp/cfg/{username}/)
@@ -65,8 +65,6 @@ from romitask.log import DEFAULT_LOG_LEVEL
 # Get configuration from environment variables
 app_config = {
     'proxy': os.environ.get('WEBTERM_PROXY', 'false').lower() == 'true',
-    'url_prefix': os.environ.get("WEBTERM_PREFIX", ""),
-    'secret_key': os.environ.get('SERVER_SECRET_KEY'),
     'log_level': os.environ.get('LOG_LEVEL', DEFAULT_LOG_LEVEL),
     'async_mode': 'eventlet'
 }
