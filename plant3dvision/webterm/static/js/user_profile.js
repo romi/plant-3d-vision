@@ -17,7 +17,8 @@ document.getElementById('changePasswordForm').addEventListener('submit', functio
     formData.append('current_password', document.getElementById('current_password').value);
     formData.append('new_password', newPassword);
 
-    fetch('/user/change_password', {
+    const apiUrl = getApiUrl()
+    fetch(`${apiUrl}/user/change_password`, {
         method: 'POST',
         body: formData
     })

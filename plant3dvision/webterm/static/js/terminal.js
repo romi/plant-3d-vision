@@ -428,10 +428,13 @@ document.addEventListener('DOMContentLoaded', function () {
  * or rejects if an error occurs during the fetch operation.
  */
 function loadScanDatasets() {
-    fetch('/api/scans')
+    let apiUrl = getPlantdbUrl()
+    console.log('Fetching dataset from URL:', apiUrl);
+
+    fetch(`${apiUrl}/scans`)
         .then(response => response.json())
         .then(data => {
-            console.log('Got scans from API call:', data);
+            console.log('Got scans from PlantDB REST API call:', data);
             return data; // Return the data to the next .then()
         })
         .then(data => {
@@ -689,8 +692,9 @@ function loadTomlFilesList() {
         username = usernameText.startsWith('@') ? usernameText.substring(1) : usernameText;
     }
 
+    const apiUrl = getApiUrl()
     // Fetch the list of available TOML files
-    fetch(`/api/list-toml-files?username=${encodeURIComponent(username.trim())}`)
+    fetch(`${apiUrl}/list-toml-files?username=${encodeURIComponent(username.trim())}`)
         .then(response => {
             if (!response.ok) {
                 throw new Error('Failed to load files list');
@@ -737,7 +741,8 @@ function loadTomlFile(filename) {
         username = usernameText.startsWith('@') ? usernameText.substring(1) : usernameText;
     }
 
-    fetch(`/api/load-toml-file?filename=${encodeURIComponent(filename)}&username=${encodeURIComponent(username.trim())}`)
+    const apiUrl = getApiUrl()
+    fetch(`${apiUrl}/load-toml-file?filename=${encodeURIComponent(filename)}&username=${encodeURIComponent(username.trim())}`)
         .then(response => {
             if (!response.ok) {
                 throw new Error('Failed to load file');
@@ -777,7 +782,8 @@ function saveTomlFile(filename, content) {
         username = usernameText.startsWith('@') ? usernameText.substring(1) : usernameText;
     }
 
-    fetch('/api/save-toml', {
+    const apiUrl = getApiUrl()
+    fetch(`${apiUrl}/save-toml`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'

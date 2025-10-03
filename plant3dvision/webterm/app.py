@@ -344,7 +344,8 @@ def create_webterm_app(proxy=False, secret_key=None, url_prefix="",
         """
         if 'username' in session:
             return redirect(url_for('webterm.terminal'))
-        return render_template('login.html')
+        return render_template('login.html',
+                               URL_PREFIX=url_prefix)
 
     @bp.route('/login', methods=['POST'])
     def login():
@@ -411,9 +412,10 @@ def create_webterm_app(proxy=False, secret_key=None, url_prefix="",
             return redirect(url_for('webterm.index'))
         return render_template('terminal.html',
                                full_name=session.get('full_name'),
-                               username=session.get('username'))
+                               username=session.get('username'),
+                               PLANTDB_API=plantdb_api)
 
-    @bp.route('/admin')
+    @bp.route('/api/admin')
     def admin_panel():
         """
         Route for accessing the admin panel.
@@ -430,7 +432,7 @@ def create_webterm_app(proxy=False, secret_key=None, url_prefix="",
         # Render the admin panel template
         return render_template('admin.html')
 
-    @bp.route('/admin/add_user', methods=['POST'])
+    @bp.route('/api/admin/add_user', methods=['POST'])
     def add_user():
         # Simple admin endpoint to add users
         if session.get('username') != 'admin':  # Basic admin check
@@ -560,7 +562,7 @@ def create_webterm_app(proxy=False, secret_key=None, url_prefix="",
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
 
-    @bp.route('/user/profile')
+    @bp.route('/api/user/profile')
     def user_profile():
         if 'username' not in session:
             return redirect(url_for('webterm.index'))
@@ -568,7 +570,7 @@ def create_webterm_app(proxy=False, secret_key=None, url_prefix="",
                                full_name=session.get('full_name'),
                                username=session.get('username'))
 
-    @bp.route('/user/change_password', methods=['POST'])
+    @bp.route('/api/user/change_password', methods=['POST'])
     def change_password():
         if 'username' not in session:
             return {'success': False, 'error': 'Unauthorized'}, 403

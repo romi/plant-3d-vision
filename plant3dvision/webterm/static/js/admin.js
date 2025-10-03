@@ -11,7 +11,8 @@ function (e) {
     formData.append('username', document.getElementById('username').value);
     formData.append('password', document.getElementById('password').value);
 
-    fetch('/admin/add_user', {
+    const apiUrl = getApiUrl()
+    fetch(`${apiUrl}/admin/add_user`, {
         method: 'POST',
         body: formData
     })

@@ -28,12 +28,17 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <!-- Common CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/webterm.css') }}">
-
     <!-- Page specific CSS -->
     {% block styles %}{% endblock %}
 
     <!-- Common JavaScript -->
-    {% block head_scripts %}{% endblock %}
+    <script src="{{ url_for('static', filename='js/commons.js') }}" defer></script>
+    <script type="text/javascript">
+        window.URL_PREFIX = "{{URL_PREFIX}}";
+        // Expose the PLANTDB_API environment variable to JavaScript
+        window.PLANTDB_API = "{{PLANTDB_API}}";
+    </script>
+    {% block head_scripts %} {% endblock %}
 </head>
 <body class="{% block body_class %}{% endblock %}">
 {% block content %}{% endblock %}
