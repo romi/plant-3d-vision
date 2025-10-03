@@ -7,10 +7,12 @@ setup_colors() {
   RED="\033[0;31m"    # Define red color code
   GREEN="\033[0;32m"  # Define green color code
   YELLOW="\033[0;33m" # Define yellow color code
+  BLUE="\033[0;34m"   # Define blue color code for debug messages
   NC="\033[0m"        # No Color code to reset colors
   INFO="${GREEN}INFO${NC}    "    # Prefix for info messages
   WARNING="${YELLOW}WARNING${NC} " # Prefix for warning messages
   ERROR="${RED}$(bold ERROR)${NC}   " # Prefix for error messages using bold function
+  DEBUG="${BLUE}DEBUG${NC}   "   # Prefix for debug messages
 }
 
 bold() {
@@ -29,12 +31,18 @@ log_error() {
   echo -e "${ERROR}$1" # Print error message with ERROR prefix
 }
 
+log_debug() {
+  if [ "${DEBUG_MODE}" = true ]; then
+    echo -e "${DEBUG}$1" # Print debug message with DEBUG prefix if debug mode is enabled
+  fi
+}
+
 # --------------------------------
 # Functions for script initialization
 # --------------------------------
 initialize_variables() {
   # Name of the conda environment to create:
-  name="plant3dvision"
+  ENV_NAME="plant3dvision"
   # Python version to use when creating a conda environment:
   py_version="3.9"
   # Boolean flag to update pip tools:
@@ -49,6 +57,8 @@ initialize_variables() {
   notebook=0
   # Boolean flag to control environment creation:
   create_env=1
+  # Debug mode is disabled by default
+  DEBUG_MODE=false
 }
 
 # --------------------------------
@@ -126,14 +136,6 @@ create_conda_environment() {
     fi
     log_info "Conda environment creation done in $(($(date +%s) - start_time)) s."
   fi
-
-  eval "$(conda shell.bash hook)"
-  conda activate ${env_name}
-  if [ $? -ne 0 ]; then
-    log_error "Failed to activate conda environment '${env_name}'."
-    return 1
-  fi
-
   return 0
 }
 
@@ -144,6 +146,21 @@ install_package_source() {
   local extra_args="$3"  # Optional extra arguments like ".[io]"
 
   log_info "# - Installing '${package_name}' sources..."
+
+  # Debug information about the current Python environment
+  log_debug "Python environment debug information:"
+  log_debug "- Python executable: $(which python3)"
+  log_debug "- Python version: $(python3 --version)"
+  # Check if we're in a conda environment and print its ENV_NAME
+  if [[ -n "${CONDA_PREFIX}" ]]; then
+    log_debug "- Active conda environment: $(basename "${CONDA_PREFIX}")"
+  else
+    log_debug "- No conda environment is active"
+  fi
+  # Print pip path to verify which pip is being used
+  log_debug "- Pip executable: $(which pip)"
+  log_debug "- Pip version: $(python3 -m pip --version)"
+  log_debug "- setuptools `get_installed_setuptools`"
 
   # Check required and installed setuptools if a pyproject.toml file exists
   if [[ -f "${source_path}/pyproject.toml" ]]; then
@@ -176,6 +193,7 @@ install_package_source() {
   fi
 
   start_time=$(date +%s)
+  log_debug "Running: python3 -m pip install ${pip_opt} \"${source_path}/${extra_args}\""
   python3 -m pip install ${pip_opt} "${source_path}/${extra_args}"
   build_status=$?
 
@@ -215,7 +233,7 @@ show_usage() {
 
   echo -e "$(bold OPTIONS):"
   echo "  -n, --name
-    Name of the conda environment to use, defaults to '${name}'."
+    Name of the conda environment to use, defaults to '${ENV_NAME}'."
   echo "  -e, --dev
     Install the sources in developer mode."
   echo "  -u, --user
@@ -235,6 +253,9 @@ show_usage() {
     Skip conda environment creation and activation."
   echo "  --no-cache-dir
     Deactivate pip cache directory."
+  # -- Debug option:
+  echo "  --debug
+    Enable debug mode to print additional debug information."
   # General options:
   echo "  -h, --help
     Output a usage message and exit."
@@ -255,7 +276,7 @@ show_usage() {
     case $1 in
     -n | --name)
       shift
-      name=$1
+      ENV_NAME=$1
       ;;
     -e | --dev)
       pip_opt="${pip_opt} -e"  # editable mode should always be the last pip option
@@ -284,6 +305,10 @@ show_usage() {
       ;;
     --no-env)
       create_env=0
+      ;;
+    --debug)
+      DEBUG_MODE=true
+      log_debug "Debug mode enabled"
       ;;
     -h | --help)
       show_usage
@@ -317,7 +342,7 @@ p3dv_optional_deps (){
   # Remove trailing comma if present
   p3dv_opt_deps="${p3dv_opt_deps%,}"
   # Add surrounding braces if not empty
-  if [ ${p3dv_opt_deps} != "" ]; then
+  if [ "${p3dv_opt_deps}" != "" ]; then
     p3dv_opt_deps="[${p3dv_opt_deps%}]"
   fi
 }
@@ -344,10 +369,18 @@ main() {
 
   # Handle conda environment
   if [ ${create_env} == 1 ]; then
-    # Create and activate conda environment
-    create_conda_environment "${name}" "${py_version}"
+    # Create a conda environment
+    create_conda_environment "${ENV_NAME}" "${py_version}"
     if [ $? -ne 0 ]; then
       exit 1  # exit on failure
+    fi
+    # Ensure conda is available in the script context
+    eval "$(conda shell.bash hook)"
+    # Activate the conda environment
+    conda activate ${ENV_NAME}
+    if [ $? -ne 0 ]; then
+      log_error "Failed to activate conda environment '${ENV_NAME}'."
+      return 1
     fi
   else
     log_info "# - Skipping conda environment creation..."
@@ -355,9 +388,20 @@ main() {
 
   update_pip_tools
 
-  log_info "Using `python3 --version`"
-  log_info "Using `python3 -m pip --version`"
-  log_info "Using setuptools `get_installed_setuptools`"
+  # Debug information about the current Python environment
+  log_debug "Python environment debug information:"
+  log_debug "- Python executable: $(which python3)"
+  log_debug "- Python version: $(python3 --version)"
+  # Check if we're in a conda environment and print its ENV_NAME
+  if [[ -n "${CONDA_PREFIX}" ]]; then
+    log_debug "- Active conda environment: $(basename "${CONDA_PREFIX}")"
+  else
+    log_debug "- No conda environment is active"
+  fi
+  # Print pip path to verify which pip is being used
+  log_debug "- Pip executable: $(which pip)"
+  log_debug "- Pip version: $(python3 -m pip --version)"
+  log_debug "- setuptools `get_installed_setuptools`"
 
   # Check numpy version after installation.
   check_numpy_version
