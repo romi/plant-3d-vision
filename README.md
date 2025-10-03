@@ -83,33 +83,44 @@ To install the **NVIDIA Container Toolkit**, follow the official [Installation G
 ## Build a docker image (recommended)
 To avoid making a big mess while installing source code, it may be easier to build a Docker image and use it to performs reconstruction and analysis tasks.
 
-This strategy has been successfully tested on:
-`docker --version=19.03.6 | nvidia driver version=450.102.04 | CUDA version=11.0`
-
 ### Build the image
 To build a Docker image you have to:
 
 1. clone the `plant-3d-vision` git repository
 2. initialize & clone the submodules (`plantdb`, `romitask`, `romiseg`, `romicgal` & `dtw`)
-3. use the convenience build script `docker/build.sh`
+3. use the convenience build scripts
 
 This can be done as follows:
 ```bash
+# Clone the plant-3d-vision repository from GitHub
 git clone https://github.com/romi/plant-3d-vision.git
+
+# Change directory to the cloned repository
 cd plant-3d-vision/
+
+# Initialize and update git submodules (containing additional dependencies)
 git submodule init
 git submodule update
-./docker/build.sh -t colmap3.12.4 --colmap 3.12.4
-```
-This will create a Docker image named `roboticsmicrofarms/plant-3d-vision:latest`.
 
-If you want to tag your image with a specific one, here named `mytag`, just pass the tag argument as follows:
+# Build a Docker image for COLMAP version 3.8 using a convenience script in the docker/colmap3.8 directory
+./docker/colmap3.8/build.sh -t colmap3.8
+
+# Build the main Docker image with all dependencies, specifying the previously built COLMAP image to use
+./docker/build.sh -t colmap3.8 --colmap 3.8
+```
+
+This will create two Docker images:
+  - `roboticsmicrofarms/colmap:3.8-cuda_cc**`.
+  - `roboticsmicrofarms/plant-3d-vision:colmap3.8-cuda_cc**`.
+
+If you want to tag your image with a specific one, here named `mytag`, use the `docker tag` command:
 ```bash
-./docker/build.sh -t mytag
+docker tag roboticsmicrofarms/plant-3d-vision:colmap3.8-cuda_cc** roboticsmicrofarms/plant-3d-vision:mytag
 ```
-To show more options, just type `./docker/build.sh -h`.
+To show more options, use the help option `-h` with the convenience build scripts.
 
-Note that you must run the `build.sh` script from the root of the `plant-3d-vision` repository as it will copy the files to the filesystem of the container.
+**Important**:
+You must run the convenience build scripts from the root of the `plant-3d-vision` repository as it will copy the files to the filesystem of the container.
 
 ### Test the image
 In the `docker` folder, you will find a convenience script named `run.sh`.
@@ -139,11 +150,13 @@ To test if you can run the _machine learning pipeline_:
 
 ### Enable write access to local database with bind mount
 To avoid running the container app as `root` user, we created a non-root user named `romi` with an uid of `2020`.
-In turn, when you mount a local `plantdb` database, if the directory does not have an uid of `2020` you will not be able to write.
+In turn, when you bind mount a local `plantdb` database,  you will not be able to write if:
+  - the owner does not have an uid of `2020`
+  - the group is not set to `romi` or the
 
-In the `./docker/run.sh` convenience script, we added a few lines to automatically get the group id of the host database directory.
+In the `./docker/run.sh` convenience script, we added a few lines to automatically get the group id of the bind mounted host directory acting as the database location.
+
 To be a bit cleaner and go further in sharing the database with other users, we suggest to:
-
 
 1. create a group named `romi`,
 2. add all potential users of the docker image to this group
