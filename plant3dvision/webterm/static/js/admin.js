@@ -1,4 +1,9 @@
-document.getElementById('addUserForm').addEventListener('submit', function (e) {
+document.getElementById('addUserForm').addEventListener('submit', /**
+ * Handles the form submission event to add a new user.
+ *
+ * @param {Event} e - The event object from the form submission.
+ */
+function (e) {
     e.preventDefault();
 
     const formData = new FormData();

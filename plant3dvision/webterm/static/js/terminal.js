@@ -149,7 +149,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const text = await navigator.clipboard.readText();
             if (text) {
                 // Send pasted text to terminal
-                socket.emit('terminal_input', { input: text });
+                socket.emit('terminal_input', {input: text});
             }
         } catch (err) {
             console.warn('Could not read clipboard:', err);
@@ -160,7 +160,7 @@ document.addEventListener('DOMContentLoaded', function () {
     function handleMiddleClickPaste(event) {
         const selection = window.getSelection().toString();
         if (selection) {
-            socket.emit('terminal_input', { input: selection });
+            socket.emit('terminal_input', {input: selection});
         }
     }
 
@@ -168,20 +168,20 @@ document.addEventListener('DOMContentLoaded', function () {
     function handleWordNavigation(forward) {
         // Send appropriate escape sequences for word navigation
         const sequence = forward ? '\x1b[1;5C' : '\x1b[1;5D'; // Ctrl+Right : Ctrl+Left
-        socket.emit('terminal_input', { input: sequence });
+        socket.emit('terminal_input', {input: sequence});
     }
 
     // Handle command history navigation
     function handleHistoryNavigation(down) {
         // Send appropriate escape sequences for history navigation
         const sequence = down ? '\x1b[B' : '\x1b[A'; // Down : Up arrow
-        socket.emit('terminal_input', { input: sequence });
+        socket.emit('terminal_input', {input: sequence});
     }
 
     // Handle tab completion
     function handleTabCompletion() {
         // Send tab character to trigger shell completion
-        socket.emit('terminal_input', { input: '\t' });
+        socket.emit('terminal_input', {input: '\t'});
     }
 
     // Enhanced connection handling
@@ -243,7 +243,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const inputToSend = terminalState.inputBuffer + data;
         terminalState.inputBuffer = '';
 
-        socket.emit('terminal_input', { input: inputToSend });
+        socket.emit('terminal_input', {input: inputToSend});
 
         // Reset processing flag after a short delay
         setTimeout(() => {
@@ -253,13 +253,14 @@ document.addEventListener('DOMContentLoaded', function () {
             if (terminalState.inputBuffer) {
                 const bufferedInput = terminalState.inputBuffer;
                 terminalState.inputBuffer = '';
-                socket.emit('terminal_input', { input: bufferedInput });
+                socket.emit('terminal_input', {input: bufferedInput});
             }
         }, 10);
     });
 
     // Enhanced resize handling with debouncing
     let resizeTimeout;
+
     function handleResize() {
         clearTimeout(resizeTimeout);
         resizeTimeout = setTimeout(() => {
@@ -383,8 +384,8 @@ document.addEventListener('DOMContentLoaded', function () {
         if (event.ctrlKey && (event.code === 'Slash' || event.key === '?' || event.code === 'Comma' || event.key === ',')) {
             // Check if terminal is focused
             const terminalFocused = document.activeElement === terminal.textarea ||
-                                   terminal.element.contains(document.activeElement) ||
-                                   document.activeElement === terminal.element;
+                terminal.element.contains(document.activeElement) ||
+                document.activeElement === terminal.element;
 
             if (!terminalFocused) {
                 event.preventDefault();
@@ -420,7 +421,12 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 });
 
-// Function to fetch and display scan datasets
+/**
+ * Loads and displays scan datasets from the PlantDB REST API.
+ *
+ * @return {Promise<void>} A promise that resolves when the scan datasets are successfully loaded and displayed,
+ * or rejects if an error occurs during the fetch operation.
+ */
 function loadScanDatasets() {
     fetch('/api/scans')
         .then(response => response.json())
@@ -446,7 +452,7 @@ function loadScanDatasets() {
                     const socket = window.socket;
                     if (socket && socket.connected) {
                         // Send the scan name as terminal input so it becomes part of the command
-                        socket.emit('terminal_input', { input: scan });
+                        socket.emit('terminal_input', {input: scan});
                     }
                 });
                 scanContainer.appendChild(scanElement);
@@ -462,16 +468,16 @@ function loadScanDatasets() {
 // Load scan datasets when the page loads
 document.addEventListener('DOMContentLoaded', () => {
     // After the terminal is initialized
-    setTimeout(loadScanDatasets, 1000);
+    setTimeout(() => loadScanDatasets(), 1000);
 
     // Add refresh button functionality
-    document.getElementById('refresh-scans').addEventListener('click', loadScanDatasets);
+    document.getElementById('refresh-scans').addEventListener('click', () => loadScanDatasets());
 
     // Initialize TOML editor
     initTomlEditor();
 });
 
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     const resizeHandle = document.querySelector('.resize-handle');
     const terminalSide = document.querySelector('.terminal-side');
     const mainContainer = document.querySelector('.main-container');
@@ -479,7 +485,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let isResizing = false;
 
     // Mouse down event on the resize handle
-    resizeHandle.addEventListener('mousedown', function(e) {
+    resizeHandle.addEventListener('mousedown', function (e) {
         isResizing = true;
         resizeHandle.classList.add('active');
 
@@ -544,7 +550,11 @@ match_type = 'exhaustive'
 format = 'ply'
 save_intermediate = false`;
 
-// TOML Editor Functionality
+/**
+ * Initializes the TOML editor with CodeMirror and sets up event listeners for saving, loading,
+ * and dropping files.
+ *
+ * @return {void} This function does not return a value.*/
 function initTomlEditor() {
     const editorContainer = document.getElementById('toml-editor');
     const filenameInput = document.getElementById('toml-filename');
@@ -654,7 +664,17 @@ function initTomlEditor() {
     });
 }
 
-// Function to load the list of TOML files
+/**
+ * Fetches and displays the list of available TOML files for a given username.
+ *
+ * This function retrieves the username from the DOM, makes an API call to fetch
+ * the list of TOML files associated with that username, and updates the DOM to display
+ * the list of files. Each file in the list is clickable and triggers the loading of
+ * the selected TOML file.
+ *
+ * @return {void} This function does not return a value. It updates the DOM by populating
+ *                the 'toml-files-list' element with the fetched files or appropriate error messages.
+ */
 function loadTomlFilesList() {
     const filesList = document.getElementById('toml-files-list');
     filesList.innerHTML = '<div class="loading-indicator">Loading files...</div>';
@@ -700,7 +720,12 @@ function loadTomlFilesList() {
         });
 }
 
-// Function to load a specific TOML file
+/**
+ * Loads a TOML file from the server based on the given filename and the current username.
+ *
+ * @param {string} filename - The name of the TOML file to load.
+ * @return {void} This function does not return a value, it updates the content in CodeMirror with the loaded file content or shows an error alert if the file fails to load.
+ */
 function loadTomlFile(filename) {
     // Get the username from the DOM
     const usernameElement = document.querySelector('.username');
@@ -735,7 +760,12 @@ function loadTomlFile(filename) {
         });
 }
 
-// Function to save TOML file to server
+/**
+ * Saves a TOML file by sending a POST request to the server.
+ *
+ * @param {string} filename - The name of the file to be saved.
+ * @param {string} content - The content of the file to be saved.
+ * @return {void} This function does not return a value.*/
 function saveTomlFile(filename, content) {
     // Get the username from the DOM
     const usernameElement = document.querySelector('.username');

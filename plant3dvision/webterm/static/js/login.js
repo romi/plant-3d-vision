@@ -1,10 +1,10 @@
 // Simple form validation
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     const loginForm = document.querySelector('form');
     const usernameInput = document.getElementById('username');
     const passwordInput = document.getElementById('password');
 
-    loginForm.addEventListener('submit', function(e) {
+    loginForm.addEventListener('submit', function (e) {
         // Reset previous error styling
         usernameInput.style.borderColor = '';
         passwordInput.style.borderColor = '';
