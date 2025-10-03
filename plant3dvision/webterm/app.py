@@ -43,6 +43,7 @@ import argparse
 import os
 import threading
 import time
+from pathlib import Path
 
 from dotenv import load_dotenv
 from flask import Blueprint
@@ -55,6 +56,7 @@ from flask import session
 from flask import url_for
 from flask_socketio import SocketIO
 from werkzeug.middleware.proxy_fix import ProxyFix
+from plant3dvision.webterm.auth import users_csv_path
 
 from plant3dvision.webterm.auth import authenticate_user
 from plant3dvision.webterm.auth import format_csv_line
@@ -69,8 +71,29 @@ from romitask.log import get_logger
 # Load environment variables from .env file
 load_dotenv(verbose=False, override=True)
 
+DEFAULT_ROMI_CFG = "/myapp/cfg"
 
-def create_webterm_app(proxy=False, users_db_path='users.csv', secret_key=None, url_prefix="",
+
+def cfg_toml_path(username):
+    """
+    Get the configuration file directory for a given user.
+
+    Combine the ``ROMI_CFG`` environment variable, or default value, with the provided `username`.
+
+    Parameters
+    ----------
+    username : str
+        The name of the user whose configuration file directory is being requested.
+
+    Returns
+    -------
+    pathlib.Path
+        The full path to the specified user's configuration file directory.
+    """
+    return Path(os.environ.get('ROMI_CFG', DEFAULT_ROMI_CFG)) / username
+
+
+def create_webterm_app(proxy=False, secret_key=None, url_prefix="",
                        log_level=DEFAULT_LOG_LEVEL, async_mode='threading'):
     """Create and configure the WebTerm Flask application.
 
@@ -332,7 +355,7 @@ def create_webterm_app(proxy=False, users_db_path='users.csv', secret_key=None, 
                 return {'success': False, 'error': 'Missing required fields'}, 400
 
             # Add user to CSV
-            with open(users_db_path, 'a') as f:
+            with open(users_csv_path(), 'a') as f:
                 password_hash = hash_password(password)
                 f.write(format_csv_line(full_name, username, password_hash))
 
@@ -354,10 +377,8 @@ def create_webterm_app(proxy=False, users_db_path='users.csv', secret_key=None, 
     @bp.route('/api/list-toml-files', methods=['GET'])
     def list_toml_files():
         username = request.args.get('username', 'default')
-
-        # Get the directory from environment variable or use default
-        default_path = f'/myapp/cfg/{username}/'
-        save_dir = os.environ.get('ROMI_CFG', default_path)
+        # Get the directory from the environment variable or use default
+        save_dir = cfg_toml_path(username)
 
         try:
             # Ensure directory exists
@@ -380,7 +401,6 @@ def create_webterm_app(proxy=False, users_db_path='users.csv', secret_key=None, 
     @bp.route('/api/load-toml-file', methods=['GET'])
     def load_toml_file():
         filename = request.args.get('filename')
-        username = request.args.get('username', 'default')
 
         if not filename:
             return jsonify({
@@ -388,9 +408,10 @@ def create_webterm_app(proxy=False, users_db_path='users.csv', secret_key=None, 
                 'error': 'Filename is required'
             }), 400
 
-        # Get the directory from environment variable or use default
-        default_path = f'/myapp/cfg/{username}/'
-        save_dir = os.environ.get('ROMI_CFG', default_path)
+        # Get username from session
+        username = session.get('username')
+        # Get the directory from the environment variable or use default
+        save_dir = cfg_toml_path(username)
 
         try:
             # Construct a full file path
@@ -425,16 +446,10 @@ def create_webterm_app(proxy=False, users_db_path='users.csv', secret_key=None, 
         filename = data.get('filename')
         content = data.get('content')
 
-        # Get username from session or request
-        username = session.get('username')  # Assuming username is stored in session
-
-        # Get the save directory from environment variable or use default
-        if username:
-            default_path = f'/myapp/cfg/{username}/'
-        else:
-            default_path = '/myapp/cfg/'  # Fallback path if username is not available
-
-        save_dir = os.environ.get('ROMI_CFG', default_path)
+        # Get username from session
+        username = session.get('username')
+        # Get the directory from the environment variable or use default
+        save_dir = cfg_toml_path(username)
 
         # Ensure directory exists
         os.makedirs(save_dir, exist_ok=True)
@@ -491,7 +506,7 @@ def create_webterm_app(proxy=False, users_db_path='users.csv', secret_key=None, 
             users[username]['password_hash'] = new_password_hash
 
             # Write all users back to CSV
-            with open(users_db_path, 'w') as f:
+            with open(users_csv_path(), 'w') as f:
                 f.write('"full_name";"username";"password_hash"\n')  # Header
                 for user, data in users.items():
                     f.write(format_csv_line(data['full_name'], user, data['password_hash']))
@@ -514,9 +529,9 @@ def create_webterm_app(proxy=False, users_db_path='users.csv', secret_key=None, 
         return render_template('error.html', error_code=500, error_message="Internal server error"), 500
 
     # Create users.csv if it doesn't exist
-    if not os.path.exists(users_db_path):
+    if not os.path.exists(users_csv_path()):
         logger.warning("No existing users database found, creating a new one.")
-        with open(users_db_path, 'w') as f:
+        with open(users_csv_path(), 'w') as f:
             f.write(format_csv_line("full_name", "username", "password_hash"))
             # Add default admin user
             admin_hash = hash_password('admin')
@@ -562,7 +577,7 @@ def parsing():
     return parser
 
 
-def webterm_server(host='0.0.0.0', port=8080, proxy=False, debug=False, users_db_path='users.csv', secret_key=None,
+def webterm_server(host='0.0.0.0', port=8080, proxy=False, debug=False, secret_key=None,
                    url_prefix="", log_level=DEFAULT_LOG_LEVEL):
     """Initialize and start the WebTerm server.
 
@@ -576,17 +591,15 @@ def webterm_server(host='0.0.0.0', port=8080, proxy=False, debug=False, users_db
         Boolean flag indicating whether the application is behind a reverse proxy, by default False
     debug : bool, optional
         Enable debug mode, by default False
-    users_db_path : str, optional
-        Path to the users database CSV file, by default 'users.csv'
     secret_key : str, optional
         Secret key for session management, by default None
     log_level : str, optional
         Logging level, by default DEFAULT_LOG_LEVEL
     """
+
     # Create the application using the factory function
     socketio_app, flask_app = create_webterm_app(
         proxy=proxy,
-        users_db_path=users_db_path,
         secret_key=secret_key,
         url_prefix=url_prefix,
         log_level=log_level,
@@ -611,7 +624,6 @@ def main():
         proxy=args.proxy,
         url_prefix=args.url_prefix,
         debug=args.debug,
-        users_db_path=args.users_db_path,
         secret_key=args.secret_key,
         log_level=args.log_level
     )

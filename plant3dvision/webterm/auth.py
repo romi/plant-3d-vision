@@ -36,8 +36,28 @@ This module handles user data storage in CSV format and offers robust password h
 
 import csv
 import os
+from pathlib import Path
 
 import bcrypt
+
+DEFAULT_ROMI_USERS = "/myapp/users"
+
+
+def users_csv_path():
+    """
+    Return the path to the CSV file that contains user data.
+
+    The function checks for an environment variable `ROMI_USERS` and uses its value as
+    the base directory path. If the environment variable is not set, it defaults to a predefined
+    path. The resulting path points to a CSV file named 'users.csv' within the specified or default
+    directory.
+
+    Returns
+    -------
+    pathlib.Path
+        The absolute path to the users CSV file.
+    """
+    return Path(os.environ.get("ROMI_USERS", DEFAULT_ROMI_USERS)) / 'users.csv'
 
 
 def hash_password(password):
@@ -82,10 +102,10 @@ def load_users():
         If the file does not exist or cannot be read, it returns an empty dict.
     """
     users = {}
-    if not os.path.exists('users.csv'):
+    if not os.path.exists(users_csv_path()):
         return users
 
-    with open('users.csv', 'r') as f:
+    with open(users_csv_path(), 'r') as f:
         reader = csv.reader(f, delimiter=";")
         next(reader)  # Skip header
         for row in reader:

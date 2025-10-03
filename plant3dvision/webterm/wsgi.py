@@ -66,7 +66,6 @@ from romitask.log import DEFAULT_LOG_LEVEL
 app_config = {
     'proxy': os.environ.get('WEBTERM_PROXY', 'false').lower() == 'true',
     'url_prefix': os.environ.get("WEBTERM_PREFIX", ""),
-    'users_db_path': os.environ.get('WEBTERM_USERS', 'users.csv'),
     'secret_key': os.environ.get('SERVER_SECRET_KEY'),
     'log_level': os.environ.get('LOG_LEVEL', DEFAULT_LOG_LEVEL),
     'async_mode': 'eventlet'
