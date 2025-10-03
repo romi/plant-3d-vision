@@ -212,6 +212,7 @@ install_package_source() {
     else
       log_info "Successful!"
     fi
+    exit ${test_import_status}
   else
     log_error "'${package_name}' sources install failed with code '${build_status}'!"
     exit ${build_status}
@@ -349,6 +350,9 @@ p3dv_optional_deps (){
 
 update_pip_tools(){
   if [ ${update_pip_tools} == 1 ]; then
+    # Upgrade pip to the latest version
+    log_info "Upgrading 'pip' to the latest version..."
+    python3 -m pip install --upgrade pip
     # Upgrade setuptools to the latest version
     log_info "Upgrading 'setuptools' to the latest version..."
     python3 -m pip install --upgrade setuptools
