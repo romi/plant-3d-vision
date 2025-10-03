@@ -23,10 +23,16 @@ ENV PYTHONUNBUFFERED=1
 # Variables required by `pip`:
 ENV PATH="${PATH}:/home/${USER_NAME}/.local/bin"
 
+ENV APP_DIR="/myapp"
 # Required by `romi_run_task`:
-ENV ROMI_DB="/myapp/db"
-ENV ROMI_CFG="/myapp/cfg"
+ENV ROMI_DB="${APP_DIR}/db"
+# Required by `plant3dvision.colmap.ColmapRunner`
 ENV COLMAP_EXE='colmap'
+
+# Required by WebTerm
+ENV ROMI_CFG="${APP_DIR}/cfg"
+ENV ROMI_USERS="${APP_DIR}/users"
+ENV WEBTERM_USERS="${ROMI_USERS}/users.csv"
 
 ARG PYCUDA_NVCC_FLAGS=""
 ENV PYCUDA_NVCC_FLAGS="${PYCUDA_NVCC_FLAGS}"
@@ -53,12 +59,12 @@ RUN apt-get update && \
     # Create a non-root user named romi' and create a "home" folder wih proper rights:
     adduser --disabled-password --gecos '' --uid ${USER_ID} ${USER_NAME} && \
     chown -R ${USER_NAME}:${USER_NAME} /home/${USER_NAME} && \
-    # Create the folder used to mount the database:
+    # Create the folder used to store the app data:
+    mkdir -p ${APP_DIR} && \
     mkdir -p ${ROMI_DB} && \
-    chown -R ${USER_NAME}:${USER_NAME} ${ROMI_DB} && \
-    # Create the folder used to store the TOML configurations:
     mkdir -p ${ROMI_CFG} && \
-    chown -R ${USER_NAME}:${USER_NAME} ${ROMI_CFG} && \
+    mkdir -p ${ROMI_USERS} && \
+    chown -R ${USER_NAME}:${USER_NAME} ${APP_DIR} && \
     # Proper setup for OpenCL:
     # mkdir -p /etc/OpenCL/vendors && \
     # echo "libnvidia-opencl.so.1" > /etc/OpenCL/vendors/nvidia.icd && \
