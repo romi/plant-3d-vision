@@ -42,18 +42,3 @@ document.getElementById('changePasswordForm').addEventListener('submit', functio
             resultDiv.textContent = 'Error: ' + error.message;
         });
 });
-
-function togglePasswordVisibility(inputId) {
-    const passwordInput = document.getElementById(inputId);
-    const toggleIcon = passwordInput.nextElementSibling.querySelector('i');
-
-    if (passwordInput.type === "password") {
-        passwordInput.type = "text";
-        toggleIcon.classList.remove('bi-eye');
-        toggleIcon.classList.add('bi-eye-slash');
-    } else {
-        passwordInput.type = "password";
-        toggleIcon.classList.remove('bi-eye-slash');
-        toggleIcon.classList.add('bi-eye');
-    }
-}
