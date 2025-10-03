@@ -56,12 +56,12 @@ from flask import session
 from flask import url_for
 from flask_socketio import SocketIO
 from werkzeug.middleware.proxy_fix import ProxyFix
-from plant3dvision.webterm.auth import users_csv_path
 
 from plant3dvision.webterm.auth import authenticate_user
 from plant3dvision.webterm.auth import format_csv_line
 from plant3dvision.webterm.auth import hash_password
 from plant3dvision.webterm.auth import load_users
+from plant3dvision.webterm.auth import users_csv_path
 from plant3dvision.webterm.terminal import terminal_manager
 from plantdb.commons.fsdb import FSDB
 from romitask.log import DEFAULT_LOG_LEVEL
@@ -148,7 +148,12 @@ def create_webterm_app(proxy=False, secret_key=None, url_prefix="",
         )
 
     # Create a blueprint for all routes
-    bp = Blueprint('webterm', __name__, url_prefix=prefix)
+    bp = Blueprint('webterm',
+                   __name__,
+                   url_prefix=prefix,
+                   template_folder=os.path.join(app_dir, 'templates'),
+                   static_folder=os.path.join(app_dir, 'static'),
+                   static_url_path=f"{url_prefix}/static")
 
     # Initialize Socket.IO server with configuration
     socketio_config = {
@@ -196,6 +201,7 @@ def create_webterm_app(proxy=False, secret_key=None, url_prefix="",
             logger.warning("Connection rejected: No valid session")
             return False
 
+        # Get the username from session
         username = session.get('username')
         logger.info(f"User {username} connected")
 
@@ -217,6 +223,7 @@ def create_webterm_app(proxy=False, secret_key=None, url_prefix="",
 
     @socketio.on('disconnect')
     def handle_disconnect():
+        # Get the username from session
         username = session.get('username')
         if username:
             logger.info(f"User {username} disconnected")
@@ -225,6 +232,7 @@ def create_webterm_app(proxy=False, secret_key=None, url_prefix="",
     @socketio.on('resize')
     def handle_resize(data):
         """Handle terminal resize events from the client."""
+        # Get the username from session
         username = session.get('username')
         if not username:
             return
@@ -241,6 +249,7 @@ def create_webterm_app(proxy=False, secret_key=None, url_prefix="",
 
     @socketio.on('terminal_input')
     def socket_handle_terminal_input(data):
+        # Get the username from session
         username = session.get('username')
         if not username:
             return
@@ -261,6 +270,23 @@ def create_webterm_app(proxy=False, secret_key=None, url_prefix="",
 
     @socketio.on('start_output_polling')
     def start_output_polling():
+        """
+        Start output polling.
+
+        This function handles the 'start_output_polling' Socket.IO event, which is triggered when a client requests
+        to start polling for terminal output.
+        The function marks the polling as active for the session and initiates a background task to poll the terminal
+        output at regular intervals.
+        While the polling is active, the function continuously retrieves output from the terminal and emits it to
+        the client via a Socket.IO event.
+        The polling loop runs cooperatively using `eventlet.sleep` to avoid blocking other tasks.
+
+        Raises
+        ------
+        Exception
+            If there is an error retrieving or emitting the terminal output, an exception is logged and the polling loop breaks.
+        """
+        # Get the username from session
         username = session.get('username')
         if not username or username not in terminal_manager.terminals:
             return
@@ -290,33 +316,83 @@ def create_webterm_app(proxy=False, secret_key=None, url_prefix="",
 
     @socketio.on('stop_output_polling')
     def stop_output_polling():
+        """
+        Stops the output polling for a specific user's terminal.
+
+        This function is an event handler that listens for 'stop_output_polling' events from Socket.IO clients.
+        When triggered, it stops the output polling for the terminal associated with the username stored in the session.
+        """
+        # Get the username from session
         username = session.get('username')
         if username and username in terminal_manager.terminals:
             terminal_manager.terminals[username]['polling_active'] = False
 
     @bp.route('/')
     def index():
+        """
+        Flask route for the index page.
+
+        This function handles requests to the root URL ('/') of the application.
+        If a user is logged in (i.e., there is a 'username' key in the session),
+        the function redirects them to the terminal page. Otherwise, it renders
+        and returns the login.html template for user authentication.
+
+        Returns
+        -------
+        flask.Response
+            The response object containing either a redirect to the terminal page or the rendered login.html template.
+        """
         if 'username' in session:
             return redirect(url_for('webterm.terminal'))
         return render_template('login.html')
 
     @bp.route('/login', methods=['POST'])
     def login():
+        """
+        Login endpoint to authenticate users and start a session.
+
+        Parameters
+        ----------
+        request : flask.Request
+            Flask request object containing form data.
+        session : flask.Session
+            Flask session object to store user-specific data.
+
+        Returns
+        -------
+        flask.Response
+            The response object containing either a redirect to the terminal if authentication is successful.
+            Otherwise, renders the 'login.html' template with an error message.
+        """
+        # Retrieves the 'username' and 'password' from the request form data
         username = request.form.get('username')
         password = request.form.get('password')
-
+        # Try to authenticate the user, returning user info dict if successful
         user = authenticate_user(username, password)
+        # If successful, start a session and redirects to the terminal
         if user:
             session['username'] = username
             session['full_name'] = user['full_name']
             logger.info(f"User {username} logged in successfully")
             return redirect(url_for('webterm.terminal'))
 
+        # Else returns an error if credentials are invalid
         logger.warning(f"Failed login attempt for username: {username}")
         return render_template('login.html', error='Invalid credentials')
 
     @bp.route('/logout')
     def logout():
+        """
+        Logout Route
+
+        This route handles user logout, clearing the session and closing any open terminals associated with the user.
+
+        Returns
+        -------
+        flask.Response
+            A response object that redirects to the index page after logging out.
+        """
+        # Get the username from session
         username = session.get('username')
         if username:
             # Close the terminal when user logs out
@@ -328,6 +404,9 @@ def create_webterm_app(proxy=False, secret_key=None, url_prefix="",
 
     @bp.route('/terminal')
     def terminal():
+        # Pass PLANTDB_API environment variable to the template context
+        # Default to local access to the PlantDB, see '/api/scans' route
+        plantdb_api = os.environ.get('PLANTDB_API', '/api')
         if 'username' not in session:
             return redirect(url_for('webterm.index'))
         return render_template('terminal.html',
@@ -336,8 +415,19 @@ def create_webterm_app(proxy=False, secret_key=None, url_prefix="",
 
     @bp.route('/admin')
     def admin_panel():
+        """
+        Route for accessing the admin panel.
+
+        Returns
+        -------
+        flask.Response
+            The response object containing either a redirect to the index page or the rendered admin.html template.
+        """
+        # Checks if there is a logged user and it is an admin
         if 'username' not in session or session.get('username') != 'admin':
+            # If not, redirect to the index page
             return redirect(url_for('webterm.index'))
+        # Render the admin panel template
         return render_template('admin.html')
 
     @bp.route('/admin/add_user', methods=['POST'])
@@ -363,6 +453,7 @@ def create_webterm_app(proxy=False, secret_key=None, url_prefix="",
         except Exception as e:
             return {'success': False, 'error': str(e)}, 500
 
+    # Route to locally access the PlantDB database
     @bp.route('/api/scans', methods=['GET'])
     def get_scans():
         try:
@@ -376,7 +467,8 @@ def create_webterm_app(proxy=False, secret_key=None, url_prefix="",
 
     @bp.route('/api/list-toml-files', methods=['GET'])
     def list_toml_files():
-        username = request.args.get('username', 'default')
+        # Get the username from session
+        username = session.get('username')
         # Get the directory from the environment variable or use default
         save_dir = cfg_toml_path(username)
 
@@ -521,11 +613,43 @@ def create_webterm_app(proxy=False, secret_key=None, url_prefix="",
     # Error handlers
     @app.errorhandler(404)
     def not_found_error(error):
+        """
+        Handler for Not Found Error (HTTP 404) using a custom error page template (`error.html`)
+
+        Parameters
+        ----------
+        error : Exception
+            The exception object that was raised.
+            This parameter is automatically provided by Flask when using `@app.errorhandler`.
+
+        Returns
+        -------
+        flask.Response
+            The response object containing the rendered error.html template.
+        int
+           The HTTP status code 404.
+        """
+        logger.error(f"Not Found Error (404): {error}")
         return render_template('error.html', error_code=404, error_message="Page not found"), 404
 
     @app.errorhandler(500)
     def internal_error(error):
-        logger.error(f"Internal server error: {error}")
+        """
+        Handler for Internal Server Error (HTTP 500) errors using a custom error page template (`error.html`)
+        Parameters
+        ----------
+        error : Exception
+            The exception object that was raised.
+            This parameter is automatically provided by Flask when using `@app.errorhandler`.
+
+        Returns
+        -------
+        flask.Response
+            The response object containing the rendered error.html template.
+        int
+           The HTTP status code 500.
+        """
+        logger.error(f"Internal Server Error (500): {error}")
         return render_template('error.html', error_code=500, error_message="Internal server error"), 500
 
     # Create users.csv if it doesn't exist
