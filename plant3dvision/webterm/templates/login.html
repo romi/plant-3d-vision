@@ -19,11 +19,6 @@
         <h1>P3DV - WebTerm</h1>
         <h2>Secure Terminal Access</h2>
 
-        <!-- Conditional error message display if 'error' is defined in context -->
-        {% if error %}
-        <div class="error-message">{{ error }}</div>
-        {% endif %}
-
         <!-- Login form that sends a POST request to "/login" endpoint -->
         <form action="{{ url_for('webterm.login') }}" method="post">
 
@@ -42,6 +37,11 @@
             <!-- Submit button to send login form data -->
             <button type="submit" class="primary-button">Login</button>
         </form>
+
+        <!-- Conditional error message display if 'error' is defined in context -->
+        {% if error %}
+        <div class="error-message">{{ error }}</div>
+        {% endif %}
     </div>
 </div>
 {% endblock %}
