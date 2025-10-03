@@ -1,5 +1,5 @@
 /**
- * Retrieves the API prefix from the global `window.URL_PREFIX` variable.
+ * Retrieves the API prefix from the global `window.WEBTERM_PREFIX` variable.
  *
  * If the prefix is not set or empty, an empty string is returned. The function
  * ensures that the prefix starts with a leading '/' and does not end with a trailing '/'.
@@ -7,7 +7,8 @@
  * @return {string} The formatted app API prefix.
  */
 function getApiPrefix() {
-    let urlPrefix = window.URL_PREFIX || '';
+    // Get URL prefix from global variable or default to empty string
+    let urlPrefix = window.WEBTERM_PREFIX || '';
     if (!urlPrefix) {
         return ''
     }
@@ -18,8 +19,8 @@ function getApiPrefix() {
     if (urlPrefix.endsWith('/')) {
         urlPrefix = urlPrefix.slice(0, -1);
     }
-    console.log('Using URL prefix:', urlPrefix);
-    return urlPrefix;
+    //console.log('Using URL prefix:', urlPrefix);
+    return urlPrefix;  // Return the formatted API prefix
 }
 
 
@@ -29,10 +30,12 @@ function getApiPrefix() {
  * @return {string} The complete API URL including the prefix and '/api' suffix.
  */
 function getApiUrl() {
-    let urlPrefix = getApiPrefix()
-    urlPrefix = `${urlPrefix}/api`
-    console.log('Using API URL:', urlPrefix);
-    return urlPrefix;
+    // Get the formatted API prefix
+    let urlPrefix = getApiPrefix();
+    // Append '/api' to the URL prefix to form the full API URL
+    urlPrefix = `${urlPrefix}/api`;
+    //console.log('Using API URL:', urlPrefix);
+    return urlPrefix;  // Return the complete API URL
 }
 
 /**
@@ -41,17 +44,20 @@ function getApiUrl() {
  * @return {string} The constructed URL for the PlantDB REST API.
  */
 function getPlantdbUrl() {
-    // Try to get the
-    let baseUrl = window.PLANTDB_API || '';
+    // Try to get PLANTDB_API (URL pointing to a PlantDB REST API) or use local api (see '/api/scans' route)
+    let baseUrl = window.PLANTDB_API || getApiUrl();
+
+    // If baseUrl is not set, default to the local API URL
     if (!baseUrl) {
-        baseUrl = getApiUrl()
+        baseUrl = getApiUrl();
+        //console.log("Using local API:", baseUrl);
     } else {
-        let urlPrefix = getApiPrefix()
-        // Ensure no double slashes in URL
-        baseUrl = `${baseUrl.replace(/\/$/, '')}${urlPrefix}`.replace(/([^:]\/)\/+/g, '$1');
+        //console.log('Using PlantDB REST API URL:', baseUrl);
+        // Clean up URL by removing trailing slash and consecutive slashes (except for those after protocol)
+        baseUrl = `${baseUrl.replace(/\/$/, '')}`.replace(/([^:]\/)\/+/g, '$1');
     }
-    console.log('Using PlantDB REST API URL:', baseUrl);
-    return baseUrl;
+
+    return baseUrl;  // Return the cleaned PlantDB API URL
 }
 
 
