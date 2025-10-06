@@ -100,8 +100,14 @@ def get_url_prefix():
     return os.environ.get('WEBTERM_PREFIX', "")
 
 
-def get_secret_key():
-    return os.environ.get('WEBTERM_SECRET_KEY', None)
+def get_secret_key(logger):
+    secret_key = os.environ.get('WEBTERM_SECRET_KEY', None)
+    if not secret_key:
+        logger.warning("No secret key found, using a random key.")
+        logger.warning("Please set the `WEBTERM_SECRET_KEY` environment variable.")
+        secret_key = os.urandom(24)
+
+    return secret_key
 
 
 def create_webterm_app(proxy=False, log_level=DEFAULT_LOG_LEVEL, async_mode='threading'):
@@ -122,7 +128,6 @@ def create_webterm_app(proxy=False, log_level=DEFAULT_LOG_LEVEL, async_mode='thr
         Configured SocketIO application instance
     """
     webterm_prefix = get_url_prefix()
-    secret_key = get_secret_key()
 
     # Get the directory where this app.py file is located
     app_dir = os.path.dirname(os.path.abspath(__file__))
@@ -135,12 +140,7 @@ def create_webterm_app(proxy=False, log_level=DEFAULT_LOG_LEVEL, async_mode='thr
 
     logger = get_logger("WebTerm", log_level=log_level)
 
-    if not secret_key:
-        logger.warning("No secret key found, using a random key.")
-        logger.warning("Please set the WEBTERM_SECRET_KEY environment variable.")
-        secret_key = os.urandom(24)
-
-    app.secret_key = secret_key
+    app.secret_key = get_secret_key(logger)
 
     # Configure proxy settings if needed
     if proxy:
