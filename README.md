@@ -41,25 +41,6 @@ You will need to install:
  * the appropriate **NVIDIA driver**
  * and the **NVIDIA Container Toolkit** to benefit from GPU accelerated algorithms inside the docker container.
 
-### Getting Started
-Let's first install some useful tools like `git`, `curl`, `wget` & `nano`:
-```shell
-sudo apt update 
-sudo apt install -y git curl wget nano
-```
-
-For `matplotlib` in `romiseg` you will need:
-```shell
-sudo apt update 
-sudo apt install -y g++ gcc pkg-config libfreetype-dev libpng-dev
-```
-
-For `romicgal` you will need:
-```shell
-sudo apt update 
-sudo apt install -y python3-dev python3-pip gcc build-essential libeigen3-dev libcgal-dev
-```
-
 
 ### Docker Engine
 To install the **Docker Engine**, you can follow the official [instructions](https://docs.docker.com/engine/install/ubuntu/) or use the convenience script:
@@ -286,6 +267,21 @@ You can manage the service using these commands:
 
 ## Install from sources
 
+### System Requirements
+
+Let's first install some useful tools like `git`, `curl`, `wget` & `nano`:
+```shell
+sudo apt update 
+sudo apt install -y git curl wget nano
+```
+
+For `romicgal` you will need several system dependencies:
+```shell
+sudo apt update 
+sudo apt install -y build-essential gcc libcgal-dev libeigen3-dev libgmp-dev libmpfr-dev
+```
+
+
 ### Requirements
 
 #### Conda
@@ -304,16 +300,23 @@ rm Miniconda3-latest-Linux-x86_64.sh
 
 You have two options:
 
-1. use the `roboticsmicrofarms/colmap:3.7` available from our [docker hub](https://hub.docker.com/repository/docker/roboticsmicrofarms/colmap) [recommended]
+1. use the `roboticsmicrofarms/colmap:3.8` available from our [docker hub](https://hub.docker.com/repository/docker/roboticsmicrofarms/colmap) [recommended]
 2. follow the official install instructions to install COLMAP for linux [here](https://colmap.github.io/install.html#linux).
 
+
+#### CUDA
+To use the CUDA implementation of the _backprojection_ algorithm, you will need `nvidia-cuda-toolkit`:
+
+On Debian and Ubuntu, you can install it with:
+```shell
+sudo apt update 
+sudo apt install -y nvidia-cuda-toolkit
+```
+
 #### Python OpenCL
-This library use `pyopencl` and thus require the following system libraries:
+To use the OpenCL implementation of the _backprojection_ algorithm, you will need `ocl-icd-libopencl1` & `opencl-headers`.
 
-- `ocl-icd-libopencl1`
-- `opencl-headers`
-
-On Debian and Ubuntu, you can install all these dependencies with:
+On Debian and Ubuntu, you can install these dependencies with:
 ```bash
 sudo apt-get update && sudo apt-get install -y ocl-icd-libopencl1 opencl-headers
 ```
