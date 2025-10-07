@@ -129,24 +129,8 @@ To test if you can run the _machine learning pipeline_:
 ./docker/run.sh --test-ml-pipeline
 ```
 
-### Enable write access to local database with bind mount
-To avoid running the container app as `root` user, we created a non-root user named `romi` with an uid of `2020`.
-In turn, when you bind mount a local `plantdb` database,  you will not be able to write if:
-  - the owner does not have an uid of `2020`
-  - the group is not set to `romi` or the
-
-In the `./docker/run.sh` convenience script, we added a few lines to automatically get the group id of the bind mounted host directory acting as the database location.
-
-To be a bit cleaner and go further in sharing the database with other users, we suggest to:
-
-1. create a group named `romi`,
-2. add all potential users of the docker image to this group
-3. change the group of the local `plantdb` database to the `romi` group
-4. start the docker container with the `--user romi:$romi_gid` option, where `$romi_gid` is the group id (gid) of the `romi` group
-
-This will also allow all users from the `romi` group to access the files within the database, effectively making this a shared database.
-
-#### Initialise and register a local `plantdb` database
+## Shared Database
+### Initialise and register a local `plantdb` database
 Assuming you want to put your local `plantdb` database under `/Data/ROMI/DB`.
 
 Let's start by setting an environment variable named `$ROMI_DB` to the end of our `.bashrc` file:
@@ -191,6 +175,31 @@ In any case, please avoid doing horrendous things like `chmod -R 777 $ROMI_DB`!
    -rw-rw-r--  1 myuser romi        0 nov.  21 12:00 romidb
    ```
    Where `myuser` is your username.
+
+### Enable write access to local database with bind mount
+To avoid running the container app as `root` user, we created a non-root user named `romi` with an uid of `2020`.
+In turn, when you bind mount a local `plantdb` database,  you will not be able to write if:
+  - the owner does not have an uid of `2020`
+  - the group is not set to `romi` or the
+
+In the `./docker/run.sh` convenience script, we added a few lines to automatically get the group id of the bind mounted host directory acting as the database location.
+
+To be a bit cleaner and go further in sharing the database with other users, we suggest to:
+
+1. create a group named `romi`,
+2. add all potential users of the docker image to this group
+3. change the group of the local `plantdb` database to the `romi` group
+4. start the docker container with the `--user romi:$romi_gid` option, where `$romi_gid` is the group id (gid) of the `romi` group
+
+This will also allow all users from the `romi` group to access the files within the database, effectively making this a shared database.
+
+### Setgid on Directories
+A directory that has ‘setgid’ on it will cause all files that are created in that directory to be owned by the group of the directory as opposed to the group of the owner.
+This proves useful when sharing a database between multiple users belonging to the same group.
+
+```shell
+chmod -R g+s /data/ROMI/
+```
 
 
 ### Systemd Service
