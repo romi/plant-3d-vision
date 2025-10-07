@@ -41,8 +41,8 @@ log_debug() {
 # Functions for script initialization
 # --------------------------------
 initialize_variables() {
-  # Image tag to use, 'latest' by default:
-  VTAG="latest"
+  # Image tag to use, 'colmapX.X-cuda_ccXX' by default:
+  VTAG=""
   # String aggregating the docker build options to use:
   DOCKER_OPTS=""
   # Default Colmap version to use:
@@ -83,7 +83,7 @@ show_usage() {
   echo -e "$(bold OPTIONS):"
   echo "  -t, --tag
     Image tag to use." \
-    "By default, use the '${VTAG}' tag."
+    "By default, use the 'colmapX.X-cuda_ccXX' tag."
   echo "  --colmap
     The version of Colmap to use." \
     "By default, use '${COLMAP_VERSION}'."
@@ -242,12 +242,16 @@ setup_cuda_nvcc_flags() {
 # Build Docker image
 # --------------------------------
 build_docker_image() {
+  if [ -z "${VTAG}" ]; then
+    VTAG="colmap${COLMAP_VERSION}-cuda_cc${CUDA_CC}"
+  fi
+
   # Construct the docker build command
   docker_cmd="docker build"
   docker_cmd+=" --build-arg COLMAP_VERSION=\"${COLMAP_VERSION}\""
   docker_cmd+=" --build-arg CUDA_CC=\"${CUDA_CC}\""
   docker_cmd+=" --build-arg PYCUDA_NVCC_FLAGS=\"${PYCUDA_NVCC_FLAGS}\""
-  docker_cmd+=" -t \"roboticsmicrofarms/plant-3d-vision:${VTAG}-cuda_cc${CUDA_CC}\""
+  docker_cmd+=" -t \"roboticsmicrofarms/plant-3d-vision:${VTAG}\""
   docker_cmd+=" ${DOCKER_OPTS}"  # Additional options like --no-cache, --pull, etc.
   docker_cmd+=" -f \"docker/Dockerfile\""
   docker_cmd+=" ."  # Build context
@@ -257,7 +261,7 @@ build_docker_image() {
   log_debug "- COLMAP_VERSION: ${COLMAP_VERSION}"
   log_debug "- CUDA_CC: ${CUDA_CC}"
   log_debug "- PYCUDA_NVCC_FLAGS: ${PYCUDA_NVCC_FLAGS}"
-  log_debug "- Docker tag: roboticsmicrofarms/plant-3d-vision:${VTAG}-cuda_cc${CUDA_CC}"
+  log_debug "- Docker tag: roboticsmicrofarms/plant-3d-vision:${VTAG}"
   log_debug "- Docker options: ${DOCKER_OPTS}"
   # Print the full command that will be executed
   log_debug "Executing command: ${docker_cmd}"
@@ -276,7 +280,7 @@ build_docker_image() {
 
   # Print build time if successful (code 0), else print exit code
   if [ ${docker_build_status} -eq 0 ]; then
-    log_debug "Docker image successfully created with tag: roboticsmicrofarms/plant-3d-vision:${VTAG}-cuda_cc${CUDA_CC}"
+    log_debug "Docker image successfully created with tag: roboticsmicrofarms/plant-3d-vision:${VTAG}"
     log_info "Docker build SUCCEEDED in ${elapsed_time}s!"
   else
     log_error "Docker build FAILED after ${elapsed_time}s with code ${docker_build_status}!"
