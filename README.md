@@ -87,16 +87,16 @@ git submodule update
 ./docker/colmap3.8/build.sh -t colmap3.8
 
 # Build the main Docker image with all dependencies, specifying the previously built COLMAP image to use
-./docker/build.sh -t colmap3.8 --colmap 3.8
+./docker/build.sh --colmap 3.8
 ```
 
 This will create two Docker images:
-  - `roboticsmicrofarms/colmap:3.8-cuda_cc**`.
-  - `roboticsmicrofarms/plant-3d-vision:colmap3.8-cuda_cc**`.
+  - `roboticsmicrofarms/colmap:3.8-cuda_ccXX`.
+  - `roboticsmicrofarms/plant-3d-vision:colmap3.8-cuda_ccXX`.
 
 If you want to tag your image with a specific one, here named `mytag`, use the `docker tag` command:
 ```bash
-docker tag roboticsmicrofarms/plant-3d-vision:colmap3.8-cuda_cc** roboticsmicrofarms/plant-3d-vision:mytag
+docker tag roboticsmicrofarms/plant-3d-vision:colmap3.8-cuda_ccXX roboticsmicrofarms/plant-3d-vision:mytag
 ```
 To show more options, use the help option `-h` with the convenience build scripts.
 
