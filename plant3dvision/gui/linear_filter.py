@@ -2,14 +2,23 @@
 # -*- coding: utf-8 -*-
 
 import sys
+
 import numpy as np
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
-                             QHBoxLayout, QSlider, QLabel, QDoubleSpinBox, QPushButton,
-                             QFileDialog)
-from PyQt5.QtCore import Qt
-import matplotlib.pyplot as plt
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QDoubleSpinBox
+from PyQt6.QtWidgets import QFileDialog
+from PyQt6.QtWidgets import QHBoxLayout
+from PyQt6.QtWidgets import QLabel
+from PyQt6.QtWidgets import QMainWindow
+from PyQt6.QtWidgets import QPushButton
+from PyQt6.QtWidgets import QSlider
+from PyQt6.QtWidgets import QVBoxLayout
+from PyQt6.QtWidgets import QWidget
+
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
+
 from plant3dvision.proc2d import linear
 
 
@@ -23,6 +32,10 @@ class RGBFilterApp(QMainWindow):
         self.original_img = None
         self.filtered_img = None
         self.mask = None
+
+        self.red_value = None
+        self.green_value = None
+        self.blue_value = None
 
         # Initialize UI
         self.initUI()
@@ -43,9 +56,11 @@ class RGBFilterApp(QMainWindow):
         # Red slider
         red_layout = QHBoxLayout()
         red_label = QLabel("Red:")
-        self.red_slider = QSlider(Qt.Horizontal)
+        self.red_slider = QSlider()
+        self.red_slider.setOrientation(Qt.Orientation.Horizontal)
         self.red_slider.setRange(0, 100)
         self.red_slider.setValue(50)
+        self.red_slider.setMinimumWidth(200)  # Added minimum width
         self.red_value = QLabel("0.5")
         red_layout.addWidget(red_label)
         red_layout.addWidget(self.red_slider)
@@ -55,9 +70,11 @@ class RGBFilterApp(QMainWindow):
         # Green slider
         green_layout = QHBoxLayout()
         green_label = QLabel("Green:")
-        self.green_slider = QSlider(Qt.Horizontal)
+        self.green_slider = QSlider()
+        self.green_slider.setOrientation(Qt.Orientation.Horizontal)
         self.green_slider.setRange(0, 100)
         self.green_slider.setValue(100)
+        self.green_slider.setMinimumWidth(200)  # Added minimum width
         self.green_value = QLabel("1.0")
         green_layout.addWidget(green_label)
         green_layout.addWidget(self.green_slider)
@@ -67,15 +84,18 @@ class RGBFilterApp(QMainWindow):
         # Blue slider
         blue_layout = QHBoxLayout()
         blue_label = QLabel("Blue:")
-        self.blue_slider = QSlider(Qt.Horizontal)
+        self.blue_slider = QSlider()
+        self.blue_slider.setOrientation(Qt.Orientation.Horizontal)
         self.blue_slider.setRange(0, 100)
         self.blue_slider.setValue(50)
+        self.blue_slider.setMinimumWidth(200)  # Added minimum width
         self.blue_value = QLabel("0.5")
         blue_layout.addWidget(blue_label)
         blue_layout.addWidget(self.blue_slider)
         blue_layout.addWidget(self.blue_value)
         sliders_layout.addLayout(blue_layout)
 
+        # Add rest of the existing layout code...
         # Threshold control
         threshold_layout = QHBoxLayout()
         threshold_label = QLabel("Threshold:")
@@ -194,4 +214,4 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = RGBFilterApp()
     window.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
