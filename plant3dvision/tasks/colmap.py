@@ -723,7 +723,10 @@ class Colmap(RomiTask):
         if "feature_extractor" not in self.cli_args:
             self.cli_args["feature_extractor"] = {}
         # - Define the camera model:
-        self.cli_args["feature_extractor"]["--ImageReader.single_camera"] = str(self.single_camera)
+        if self.single_camera:
+            self.cli_args["feature_extractor"]["--ImageReader.single_camera"] = str(self.single_camera)
+        else:
+            self.cli_args["feature_extractor"]["--ImageReader.single_camera_per_folder"] = "1"
 
     def set_camera_model(self):
         """Configure COLMAP CLI parameters to defines camera model."""
@@ -880,6 +883,7 @@ class Colmap(RomiTask):
             align_pcd=bool(self.align_pcd),
             use_calibration=extrinsic_calibration,  # impact the ``poses.txt`` file: use calibrated instead of cnc poses
             bounding_box=bounding_box,
+            multiple_cameras=not self.single_camera,
         )
 
         # Perform reconstruction and get results

@@ -5,7 +5,7 @@ upstream_task = "ImagesFilesetExists"  # Default: "ImagesFilesetExists"
 query = "{}"  # Default: "{}"  (empty dictionary, no filtering)
 # Type of matcher to use with COLMAP
 # Options: "exhaustive" (matches every image against every other) or "sequential" (matches successive images)
-matcher = "exhaustive"  # Default: "exhaustive"
+matcher = "sequential"  # Default: "exhaustive"
 # Whether to compute a dense point cloud after sparse reconstruction
 compute_dense = false  # Default: false
 # Align and scale point clouds using CNC coordinates
@@ -22,7 +22,7 @@ camera_model = "SIMPLE_RADIAL"  # Default: "SIMPLE_RADIAL"
 # Use GPU for feature extraction and matching when available
 use_gpu = true  # Default: true
 # Whether images were taken with a single camera (shared intrinsics)
-single_camera = true  # Default: true
+single_camera = false  # Default: true
 # Maximum alignment error allowed during model alignment
 alignment_max_error = 10  # Default: 10
 # Maximum 3D Euclidean distance to CNC pose to validate COLMAP pose estimation
