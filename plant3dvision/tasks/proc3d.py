@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import json
+import sys
 
 import luigi
 import numpy as np
 import open3d as o3d
+from tqdm import tqdm
+
+from plant3dvision.proc2d import plant_detection
+from plant3dvision.tasks.proc2d import Undistort
 from plantdb.commons import io
 
 from plant3dvision import proc3d
@@ -13,10 +19,412 @@ from plant3dvision.tasks.colmap import Colmap
 from plant3dvision.tasks.proc2d import Segmentation2D
 from romitask import RomiTask
 from romitask.log import get_logger
+from romitask.task import ImagesFilesetExists
 from skeleton_refinement.stochastic_registration import knn_mst
 
 logger = get_logger(__name__)
 
+class BoundingBox3D(RomiTask):
+    """
+    Detects a plant in multiple images and computes its 3D bounding box via triangulation.
+
+    This task uses an object detection model (e.g., YOLO) to find 2D bounding boxes of a plant
+    in a series of images. The corners of these 2D bounding boxes from different viewpoints
+    are then triangulated to generate a 3D point cloud that envelops the plant.
+    Finally, it computes the axis-aligned 3D bounding box of this point cloud.
+
+    The result is stored in a JSON file in the output fileset.
+    """
+
+    upstream_task = luigi.TaskParameter(default=Undistort)
+    query = luigi.DictParameter(default={})
+
+    model_id = luigi.Parameter("yolo11l.pt")
+    confidence_threshold = luigi.FloatParameter(default=0.4)
+    plant_label = luigi.Parameter(default='potted plant')
+
+    camera_metadata = luigi.Parameter(default='colmap_camera')
+
+    def requires(self):
+        """Determines the dependencies required for the task execution."""
+        tasks = {
+            "images": self.upstream_task(),
+        }
+        # If camera metadata comes from COLMAP, add COLMAP task
+        if str(self.camera_metadata).lower() == 'colmap_camera':
+            tasks.update({"colmap": Colmap()})
+        return tasks
+
+    def run(self):
+        """Executes the 3D bounding box computation workflow using triangulation."""
+        try:
+            from ultralytics import YOLO
+        except ImportError:
+            logger.error("The 'ultralytics' package is required for BoundingBox3D task. Please install it.")
+            sys.exit("Missing dependency: ultralytics")
+
+        images_fileset = self.input()['images'].get()
+        images_files = images_fileset.get_files(query=self.query)
+
+        model = YOLO(str(self.model_id), 'detect')  # load YOLO model for detection
+
+        detection_results = []
+        logger.info(f"Processing {len(images_files)} images for plant detection...")
+        for fi in tqdm(images_files, unit="file"):
+            # Find the largest bounding box matching the plant label
+            try:
+                largest_box = plant_detection(model, fi.path(), float(self.confidence_threshold), str(self.plant_label))
+            except ValueError:
+                logger.warning(f"No plant detected in image {fi.id}")
+                continue
+
+            # Retrieve camera parameters needed for triangulation
+            cam = fi.get_metadata(self.camera_metadata, default=None)
+            if cam is None:
+                logger.warning(f"Could not get camera params from '{self.camera_metadata}' for {fi.id}, skipping...")
+                continue
+
+            # Store detection info for later triangulation
+            detection_results.append({
+                "file_id": fi.id,
+                "box": largest_box,
+                "camera": cam,
+            })
+
+        # Need at least 5 views to compute a 3D bounding box
+        if len(detection_results) < 5:
+            logger.critical("Need at least 5 views with detections to compute a 3D bounding box.")
+            outfile = self.output_file(filename="plant_3d_bounding_box.json", create=True)
+            with open(outfile.path(), 'w') as f:
+                json.dump({}, f)
+            return
+
+        # Triangulate all corner points from the detected boxes
+        all_3d_points = self._triangulate_all_corners(detection_results)
+        if not all_3d_points:
+            logger.warning("Triangulation resulted in no 3D points. Could not compute a bounding box.")
+            bbox_3d = {}
+        else:
+            points = np.array(all_3d_points)
+            min_coords = points.min(axis=0) / 1000
+            max_coords = points.max(axis=0) / 1000
+            bbox_3d = {
+                "x": [float(min_coords[0]), float(max_coords[0])],
+                "y": [float(min_coords[1]), float(max_coords[1])],
+                "z": [float(min_coords[2]), float(max_coords[2])],
+            }
+
+        logger.info(f"Computed 3D bounding box: {bbox_3d}")
+
+        outfile = self.output_file(filename="plant_3d_bounding_box.json", create=True)
+        with open(outfile.path(), 'w') as f:
+            json.dump(bbox_3d, f, indent=4)
+
+        outfile.set_metadata({
+            'bounding_box_3d': bbox_3d,
+            'model_id': self.model_id,
+        })
+
+    def _get_projection_matrix(self, cam_meta):
+        """
+        Computes the projection matrix for a camera based on its metadata.
+
+        This method calculates the camera's projection matrix, which is a
+        combination of its intrinsic parameters (describing its optical
+        properties) and extrinsic parameters (describing its position and
+        orientation in the world). The result is used to map 3D points from
+        world space to the camera's image plane.
+
+        Parameters
+        ----------
+        cam_meta : dict
+            A dictionary containing camera metadata. This includes:
+                - `camera_model` : dict with key `'params'`, where `params` is a list
+                  containing intrinsic parameters `[fx, fy, cx, cy]`.
+                - `rotmat` : list or array containing the 3x3 rotation matrix for
+                  the camera.
+                - `tvec` : list or array containing the translation vector (size 3).
+
+        Returns
+        -------
+        numpy.ndarray
+            A 3x4 projection matrix, which is the product of the camera's intrinsic
+            matrix and its extrinsic transformation (rotation and translation).
+        """
+        intrinsics_params = cam_meta["camera_model"]['params']
+        fx, fy, cx, cy = intrinsics_params[0:4]
+        k = np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])  # intrinsic matrix
+        rot_mat = np.array(cam_meta['rotmat'])
+        tvec = np.array(cam_meta['tvec']).reshape(3, 1)
+        return k @ np.hstack((rot_mat, tvec))  # 3x4 projection matrix
+
+    def _triangulate_point(self, p1, p2, m1, m2):
+        """
+        Triangulate a 3D point from two image projections.
+
+        Parameters
+        ----------
+        p1 : array_like
+            The (u, v) pixel coordinates of the point in the first image.
+        p2 : array_like
+            The (u, v) pixel coordinates of the point in the second image.
+        m1 : array_like, shape (3, 4)
+            The projection matrix of the first camera.
+        m2 : array_like, shape (3, 4)
+            The projection matrix of the second camera.
+
+        Returns
+        -------
+        p_3d : ndarray
+            The 3‑D point in inhomogeneous coordinates, shape (3,).
+
+        Notes
+        -----
+        The method builds a linear system from the cross‑product constraints
+        imposed by each image point.  Singular value decomposition is then
+        used to find the null‑space of this system, and the last column of
+        the right‑singular matrix gives the homogeneous solution.  The
+        homogeneous coordinate is normalised to produce the inhomogeneous
+        3‑D point that is returned.
+        """
+        u1, v1 = p1
+        u2, v2 = p2
+
+        # Build linear system A * X = 0 from cross‑product constraints
+        a = np.array([
+            u1 * m1[2, :] - m1[0, :],
+            v1 * m1[2, :] - m1[1, :],
+            u2 * m2[2, :] - m2[0, :],
+            v2 * m2[2, :] - m2[1, :]
+        ])
+
+        _, _, vh = np.linalg.svd(a)
+        p_3d_h = vh[-1]  # solution in homogeneous coordinates
+        return p_3d_h[:3] / p_3d_h[3]  # convert to inhomogeneous
+
+    def _triangulate_all_corners(self, detection_results):
+        """
+        Triangulate all corner points from pairs of detection results.
+
+        This method iterates over all unique pairs of detection results, obtains the projection matrices for the cameras involved, and triangulates every corner pair between the two bounding boxes. Any pair for which the projection matrix cannot be retrieved is skipped, with a warning logged. The result is a list of 3‑D points corresponding to the triangulated corners.
+
+        Parameters
+        ----------
+        detection_results : list[dict]
+            A list of detection dictionaries. Each dictionary must contain a ``'camera'`` key used to obtain the projection matrix, a ``'file_id'`` key used for logging, and a ``'box'`` key which is a 4‑tuple or list ``(x_min, y_min, x_max, y_max)`` describing the bounding box of the detection.
+
+        Returns
+        -------
+        list[np.ndarray]
+            A list of 3‑D points (homogeneous coordinates) obtained by triangulating each corner pair. Each point is returned as a NumPy array of shape (4,).
+
+        Notes
+        -----
+        If the projection matrix for a camera cannot be retrieved due to missing data or an invalid format, that camera pair is skipped and a warning is logged. The function does not raise exceptions for such cases; it continues processing the remaining pairs.
+        """
+        import itertools
+
+        all_3d_points = []
+
+        for r1, r2 in itertools.combinations(detection_results, 2):
+            try:
+                m1 = self._get_projection_matrix(r1['camera'])
+                m2 = self._get_projection_matrix(r2['camera'])
+            except (KeyError, TypeError, ValueError) as e:
+                logger.warning(f"Could not get projection matrix for a camera, "
+                               f"skipping pair ({r1['file_id']}, {r2['file_id']}). Error: {e}")
+                continue
+
+            b1 = r1['box']
+            b2 = r2['box']
+            # Extract the four corners of each bounding box
+            corners1 = [(b1[0], b1[1]), (b1[2], b1[1]), (b1[0], b1[3]), (b1[2], b1[3])]
+            corners2 = [(b2[0], b2[1]), (b2[2], b2[1]), (b2[0], b2[3]), (b2[2], b2[3])]
+
+            for p1 in corners1:
+                for p2 in corners2:
+                    point_3d = self._triangulate_point(p1, p2, m1, m2)
+                    all_3d_points.append(point_3d)
+
+        return all_3d_points
+
+class BoundingBox3DBP(RomiTask):
+    """
+    Detects a plant in multiple images using a CNN and computes its 3D bounding box.
+
+    This task uses an object detection model (e.g., YOLO) to find 2D bounding boxes of a plant
+    in a series of images. These 2D detections, along with camera poses, are then used
+    to reconstruct a 3D representation of the plant using voxel carving. Finally,
+    it computes the axis-aligned 3D bounding box of the reconstructed plant.
+
+    The result is stored in a JSON file in the output fileset.
+    """
+
+    upstream_task = luigi.TaskParameter(default=Undistort)
+    query = luigi.DictParameter(default={})
+
+    model_id = luigi.Parameter("yolo11n.pt")
+    plant_label = luigi.Parameter(default='plant')
+    confidence_threshold = luigi.FloatParameter(default=0.5)
+
+    camera_metadata = luigi.Parameter(default='colmap_camera')
+    voxel_size = luigi.FloatParameter(default=10.0)
+
+    bounding_box = luigi.DictParameter(default=None)
+    bounding_box_edit = luigi.DictParameter(default=None)
+
+    def requires(self):
+        """Determines the dependencies required for the task execution."""
+        tasks = {
+            "images": self.upstream_task(),
+        }
+        if str(self.camera_metadata).lower() == 'colmap_camera':
+            tasks.update({"colmap": Colmap()})
+        return tasks
+
+    def run(self):
+        """Executes the 3D bounding box computation workflow."""
+        try:
+            from ultralytics import YOLO
+        except ImportError:
+            logger.error("The 'ultralytics' package is required for BoundingBox3D task. Please install it.")
+            sys.exit("Missing dependency: ultralytics")
+
+        images_fileset = self.input()['images'].get()
+        images_files = images_fileset.get_files(query=self.query)
+
+        model = YOLO(str(self.model_id))
+
+        detection_results = []
+
+        logger.info(f"Processing {len(images_files)} images for plant detection...")
+        for fi in tqdm(images_files, unit="file"):
+            img = io.read_image(fi)
+            results = model(img, verbose=False)
+
+            plant_boxes = []
+            if results:
+                for r in results:
+                    for box in r.boxes:
+                        if r.names[int(box.cls)] == self.plant_label and box.conf > self.confidence_threshold:
+                            plant_boxes.append(box.xyxy[0].cpu().numpy())
+
+            if not plant_boxes:
+                logger.warning(f"No plant detected in image {fi.id}")
+                continue
+
+            largest_box = max(plant_boxes, key=lambda b: (b[2] - b[0]) * (b[3] - b[1]))
+
+            h, w = img.shape[:2]
+            mask = np.zeros((h, w), dtype=np.float32)
+            x1, y1, x2, y2 = map(int, largest_box)
+            mask[y1:y2, x1:x2] = 1.0
+
+            cam = fi.get_metadata(self.camera_metadata, default=None)
+            if cam is None:
+                logger.warning(f"Could not get camera params from '{self.camera_metadata}' for {fi.id}, skipping...")
+                continue
+
+            intrinsics = np.array(cam["camera_model"]['params'][0:4], dtype=np.float32)
+            rot_mat = np.array(sum(cam['rotmat'], []), dtype=np.float32)
+            tvec = np.array(cam['tvec'], dtype=np.float32)
+
+            detection_results.append({
+                "mask": mask,
+                "intrinsics": intrinsics,
+                "rot_mat": rot_mat,
+                "tvec": tvec
+            })
+
+        if not detection_results:
+            logger.critical("No plants were detected in any of the images. Cannot compute 3D bounding box.")
+            outfile = self.output_file(filename="plant_3d_bounding_box.json", create=True)
+            with open(outfile.path(), 'w') as f:
+                json.dump({}, f)
+            return
+
+        # Voxel carving part, adapted from Voxels task
+        if self.bounding_box is None:
+            self.bounding_box = self.output().get().scan.get_metadata("bounding_box", default=None)
+        if self.bounding_box is None and str(self.camera_metadata).lower() == 'colmap_camera':
+            self.bounding_box = self.input()['colmap'].get().get_metadata("bounding_box", default=None)
+        if self.bounding_box is None:
+            self.bounding_box = ImagesFilesetExists().output().get().get_metadata("bounding_box", default=None)
+
+        if self.bounding_box is None:
+            logger.critical(f"Could not obtain valid bounding-box for {self.scan_id}!")
+            sys.exit("Error with bounding-box definition!")
+
+        if self.bounding_box_edit is not None:
+            for axis in ['x', 'y', 'z']:
+                edit = self.bounding_box_edit.get(axis, [0., 0.])
+                self.bounding_box[axis][0] += edit[0]
+                self.bounding_box[axis][1] += edit[1]
+
+        logger.info(f"Using reconstruction bounding-box: {self.bounding_box}")
+
+        x_min, x_max = sorted(self.bounding_box["x"])
+        y_min, y_max = sorted(self.bounding_box["y"])
+        z_min, z_max = sorted(self.bounding_box["z"])
+
+        try:
+            scan = images_fileset.scan
+            displacement = scan.get_metadata("displacement", default=None)
+            if displacement:
+                x_min += displacement["dx"]
+                x_max += displacement["dx"]
+                y_min += displacement["dy"]
+                y_max += displacement["dy"]
+                z_min += displacement["dz"]
+                z_max += displacement["dz"]
+        except AttributeError:
+            logger.warning("No 'displacement' found in scan metadata!")
+
+        nx = int((x_max - x_min) / self.voxel_size) + 1
+        ny = int((y_max - y_min) / self.voxel_size) + 1
+        nz = int((z_max - z_min) / self.voxel_size) + 1
+        origin = np.array([x_min, y_min, z_min])
+
+        bp = Backprojection(shape=[nx, ny, nz], origin=origin, voxel_size=float(self.voxel_size), type="carving")
+
+        logger.info("Performing voxel carving based on 2D detections...")
+        for res in detection_results:
+            bp.process_view(res["intrinsics"], res["rot_mat"], res["tvec"], res["mask"])
+
+        vol = bp.get_values()
+        voxel_coords = np.argwhere(vol > 0)
+
+        if voxel_coords.size == 0:
+            logger.warning("Voxel carving resulted in an empty volume. The 2D detections might not overlap in 3D space.")
+            bbox_3d = {}
+        else:
+            min_indices = voxel_coords.min(axis=0)
+            max_indices = voxel_coords.max(axis=0)
+
+            min_x_world = origin[0] + min_indices[0] * self.voxel_size
+            max_x_world = origin[0] + max_indices[0] * self.voxel_size
+            min_y_world = origin[1] + min_indices[1] * self.voxel_size
+            max_y_world = origin[1] + max_indices[1] * self.voxel_size
+            min_z_world = origin[2] + min_indices[2] * self.voxel_size
+            max_z_world = origin[2] + max_indices[2] * self.voxel_size
+
+            bbox_3d = {
+                "x": [min_x_world, max_x_world],
+                "y": [min_y_world, max_y_world],
+                "z": [min_z_world, max_z_world]
+            }
+
+        logger.info(f"Computed 3D bounding box: {bbox_3d}")
+
+        outfile = self.output_file(filename="plant_3d_bounding_box.json", create=True)
+        with open(outfile.path(), 'w') as f:
+            json.dump(bbox_3d, f, indent=4)
+
+        outfile.set_metadata({
+            'bounding_box_3d': bbox_3d,
+            'voxel_size': self.voxel_size,
+            'model_id': self.model_id
+        })
 
 class PointCloud(RomiTask):
     """Generate a 3D point cloud from volumetric/voxel data.
