@@ -218,3 +218,50 @@ def dilation(img, n):
     """
     img = binary_dilation(img, footprint=disk(n, decomposition='sequence'))
     return img
+
+
+def plant_detection(model, image, confidence_threshold=0.4, label="potted plant"):
+    """
+    Detects and identifies a plant in an image based on a provided model and label.
+
+    This function filters bounding boxes based on a confidence threshold and returns the largest detected plant box.
+
+    Parameters
+    ----------
+    model : YOLO
+        The pre-trained detection model used for inference.
+    image : str or pathlib.Path
+        The input image to perform detection on.
+    confidence_threshold : float, optional
+        The minimum confidence score required to consider a detected bounding box. Defaults to 0.4.
+    label : str, optional
+        The label of the plant to identify in the image. Defaults to "potted plant".
+
+    Returns
+    -------
+    numpy.ndarray
+        The coordinates of the largest bounding box detected for the specified label in the format
+        [x_min, y_min, x_max, y_max].
+
+    Examples
+    --------
+    >>> from ultralytics import YOLO
+    >>> from plant3dvision import test_db_path
+    >>> from plant3dvision.proc2d import plant_detection
+    >>> from imageio.v3 import imread
+    >>> path = test_db_path()
+    >>> img_path = path.joinpath('real_plant/images/00000_rgb.jpg')
+    >>> model = YOLO("yolo11l.pt")
+    >>> bbox = plant_detection(model, img_path)
+
+    """
+    results = model(image, verbose=False)
+
+    plant_boxes = []
+    if results:
+        for r in results:
+            for box in r.boxes:
+                if r.names[int(box.cls)] == label and box.conf > confidence_threshold:
+                    plant_boxes.append(box.xyxy[0].cpu().numpy())
+
+    return max(plant_boxes, key=lambda b: (b[2] - b[0]) * (b[3] - b[1]))
