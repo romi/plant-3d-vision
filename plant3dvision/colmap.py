@@ -23,6 +23,7 @@ from weakref import finalize
 import imageio
 import numpy as np
 import open3d as o3d
+import requests
 from packaging import version
 
 from plant3dvision import proc3d
@@ -671,6 +672,9 @@ class ColmapRunner(object):
         # -- Initialize COLMAP directories, poses file & log file:
         # - Get / create a temporary COLMAP working directory
         self.colmap_workdir = Path(os.environ.get("COLMAP_WD", tempfile.mkdtemp(prefix='colmap_')))
+        response = requests.get("https://github.com/colmap/colmap/releases/download/3.11.1/vocab_tree_faiss_flickr100K_words32K.bin")
+        with open(self.colmap_workdir/"vocab_tree_faiss_flickr100K_words32K.bin", "wb") as f:
+            f.write(response.content)
         if self.single_cam_per_directory:
             self.imgs_dir = self.colmap_workdir / 'images'
         else:
@@ -734,7 +738,7 @@ class ColmapRunner(object):
             counter = image_counters[camera]
             if match:
                 new_name = f"{camera}/image{counter:0>5}.{extension}"
-                image_counters[camera]+= 1
+                image_counters[camera] += 1
                 image_names[path.name] = new_name
                 shutil.copy(path, image_dir / new_name)
             else:
@@ -783,7 +787,8 @@ class ColmapRunner(object):
                 p = img_f.get_metadata(pose_md, default=None)
                 # - If a pose metadata was found for the file, add it to COLMAP's 'poses.txt' file:
                 if p is not None:
-                    s = f"{img_f.filename} {p[0]} {p[1]} {p[2]}\n"
+                    image_name = self.image_names[img_f.filename]
+                    s = f"{image_name} {p[0]} {p[1]} {p[2]}\n"
                     pose_file.write(s)
                 else:
                     missing_pose.append(img_f.id)
@@ -1028,14 +1033,14 @@ class ColmapRunner(object):
                                         environment=varenv, volumes=volumes,
                                         stdout=True, stderr=True,
                                         stream=True, detach=True,
-                                        device_requests=[gpu_device])
+                                        device_requests=[gpu_device], working_dir=str(self.colmap_workdir))
         else:
             container = client.containers.run(self.colmap_exe, cmd,
                                         user=workdir_uid,
                                         #group_add=["colmap_users"],
                                         environment=varenv, volumes=volumes,
                                         stdout=True, stderr=True,
-                                        stream=True, detach=True)
+                                        stream=True, detach=True, working_dir=str(self.colmap_workdir))
         # Return the container logs decoded:
         out = ""
         if to_log:
@@ -1121,6 +1126,10 @@ class ColmapRunner(object):
         else:
             use_gpu_opt = {"--SiftMatching.use_gpu": '0'}
         cli_args.update(**use_gpu_opt)
+
+        if matcher_method == 'sequential':
+            cli_args["--SequentialMatching.loop_detection"] = "1"
+            cli_args["--SequentialMatching.vocab_tree_path"] = f"{self.colmap_workdir}/vocab_tree_faiss_flickr100K_words32K.bin"
 
         logger.info(f"Running colmap '{matcher_method}_matcher'...")
         logger.debug(f"args: {args}")
