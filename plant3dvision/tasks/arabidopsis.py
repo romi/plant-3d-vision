@@ -43,7 +43,7 @@ class TreeGraph(RomiTask):
     -----
     The task reads a skeleton from the upstream task and converts it into a graph
     structure representing the plant's architecture. The root node is determined
-    based on the specified z_axis parameter.
+    based on the specified ``z_axis`` parameter.
 
     The task works with skeleton data that contains points (vertices) and lines (edges)
     representing the plant structure.
@@ -174,10 +174,10 @@ class AnglesAndInternodes(RomiTask):
         from plant3dvision.arabidopsis import compute_angles_and_internodes_from_directions
 
         # Load input tree graph
-        t = io.read_graph(self.input_file())
+        tree = io.read_graph(self.input_file())
 
         # Calculate directions and measurements
-        dirs = compute_stem_and_fruit_directions(t,
+        dirs = compute_stem_and_fruit_directions(tree,
                                                max_node_dist=float(self.node_sampling_dist),
                                                min_fruit_length=float(self.min_fruit_size))
         fruit_dirs, stem_dirs, bp_coords, fruit_pts = dirs
