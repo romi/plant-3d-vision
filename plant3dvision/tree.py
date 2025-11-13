@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import networkx
 import networkx as nx
 import numpy as np
 from scipy.spatial.distance import euclidean
@@ -289,3 +290,55 @@ def select_stem_nodes_by_euclidean_distance(tree, bp_node_id, max_node_dist=10.)
     backward_nodes = select_by_path_distance(tree, backward_nodes, max_node_dist)[::-1]
 
     return backward_nodes + [bp_node_id] + forward_nodes
+
+
+def stem_length(tree: networkx.Graph) -> float:
+    """
+    Computes the length of the stem of a tree by summing distances between consecutive stem nodes.
+
+    Parameters
+    ----------
+    tree : networkx.Graph
+        A graph representing the tree structure.
+        Each node is expected to have a 'position' attribute containing coordinate information
+        used for distance calculations.
+
+    Returns
+    -------
+    float
+        Total length of the stem in Euclidean units.
+
+    Examples
+    --------
+    >>> from plant3dvision.tree import stem_length
+    >>> from plant3dvision.utils import locate_task_filesets
+    >>> from plantdb.commons.fsdb import FSDB
+    >>> from plantdb.commons.io import read_graph
+    >>> db_path = '/data/ROMI/shared_fsdb'
+    >>> db = FSDB(db_path)
+    >>> db.connect()
+    >>> scan = db.get_scan('real_plant_analyzed')
+    >>> fileset_names = locate_task_filesets(scan, ["TreeGraph", "AnglesAndInternodes"])
+    >>> tree_fs = scan.get_fileset(fileset_names['TreeGraph'])
+    >>> tree = read_graph(tree_fs.get_file('TreeGraph'))
+    >>> stem_len = stem_length(tree)
+    >>> print(stem_len)
+    326.9808550394107
+    """
+    from scipy.spatial import distance
+
+    # Get the ordered nodes indexes, from root to top
+    stem_nodes_idx = get_ordered_stem_nodes(tree)
+    # Create pairs of consecutive stem nodes:
+    stem_node_pairs = list(zip(stem_nodes_idx[:-1], stem_nodes_idx[1:]))
+
+    # Compute the length of the stem by summing all distances between paris of nodes
+    stem_len = 0
+    for n_i, n_j in stem_node_pairs:
+        # Get the node coordinates from the tree
+        coords_i = tree.nodes[n_i]["position"]
+        coords_j = tree.nodes[n_j]["position"]
+        # Compute the distance between them, then add them to the stem length
+        stem_len += distance.euclidean(coords_i, coords_j)
+
+    return stem_len
