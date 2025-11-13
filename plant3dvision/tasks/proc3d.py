@@ -197,7 +197,7 @@ class PointCloud(RomiTask):
         out = proc3d.vol2pcd(voxels, origin, voxel_size, self.level_set_value)
         # Write the point cloud to file and attach metadata
         io.write_point_cloud(self.output_file(create=True), out)
-        self.output_file(create=True).set_metadata({'voxel_size': voxel_size})
+        self.output_file().set_metadata({'voxel_size': voxel_size})
 
     def run(self):
         """Process a volumetric data file into a point cloud representation.
