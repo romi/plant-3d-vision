@@ -275,3 +275,38 @@ class AnglesAndInternodes(RomiTask):
         # Save results to JSON
         io.write_json(self.output_file(create=True), measures)
         return
+
+
+class StemLength(RomiTask):
+    """
+    Compute the stem length of a tree graph and store the result in a JSON file.
+
+    The task reads a tree graph from the input file, calculates the total length of
+    the stem, and writes the resulting numeric value to the output location in JSON format.
+    The stem length is defined as the sum of the edge lengths that form the vertical axis of the tree.
+
+    Parameters
+    ----------
+    upstream_task : luigi.TaskParameter, optional
+        Upstream task that generate the tree graph, organ segmented mesh or organ segmented point-cloud.
+        Defaults to ``TreeGraph``.
+
+    See Also
+    --------
+    plant3dvision.tree.stem_length
+
+    Notes
+    -----
+    The stem length is defined as the sum of the edge lengths that form the vertical axis of the tree.
+    """
+    upstream_task = luigi.TaskParameter(default=TreeGraph)  # override default attribute from ``RomiTask``
+
+    def run(self):
+        from plant3dvision.tree import stem_length
+        # Load input tree graph
+        tree = io.read_graph(self.input_file())
+        # Compute the stem length
+        stem_length = stem_length(tree)
+        # Save stem length to JSON
+        stem_size_file = self.output_file("stem_length", create=True)
+        io.write_json(stem_size_file, {'stem_length': stem_length})
