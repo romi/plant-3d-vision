@@ -5,9 +5,11 @@ import luigi
 import open3d as o3d
 
 from plant3dvision.tasks.proc3d import CurveSkeleton
+from plant3dvision.tasks.proc3d import PointCloud
 from plantdb.commons import io
 from romitask import RomiTask
 from romitask.log import get_logger
+from romitask.task import ImagesFilesetExists
 
 logger = get_logger(__name__)
 
@@ -277,36 +279,63 @@ class AnglesAndInternodes(RomiTask):
         return
 
 
-class StemLength(RomiTask):
+class PlantMetrics(RomiTask):
     """
-    Compute the stem length of a tree graph and store the result in a JSON file.
-
-    The task reads a tree graph from the input file, calculates the total length of
-    the stem, and writes the resulting numeric value to the output location in JSON format.
-    The stem length is defined as the sum of the edge lengths that form the vertical axis of the tree.
+    Compute some metrics about the plant and store the results in a JSON file.
 
     Parameters
     ----------
     upstream_task : luigi.TaskParameter, optional
-        Upstream task that generate the tree graph, organ segmented mesh or organ segmented point-cloud.
-        Defaults to ``TreeGraph``.
+        Upstream task that generates the data required by the task to compute the metrics.
+        Defaults to ``ImagesFilesetExists``.
 
     See Also
     --------
     plant3dvision.tree.stem_length
+    plant3dvision.proc3d.pcd_convex_hull_volume
 
     Notes
     -----
     The stem length is defined as the sum of the edge lengths that form the vertical axis of the tree.
     """
-    upstream_task = luigi.TaskParameter(default=TreeGraph)  # override default attribute from ``RomiTask``
+    upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)
+    metrics_list = luigi.ListParameter(default=["stem_length", "q_hull_volume"])
 
-    def run(self):
+    def requires(self):
+        reqs = {}
+        if "stem_length" in self.metrics_list:
+            reqs["stem_length"] = TreeGraph()
+
+        if "q_hull_volume" in self.metrics_list:
+            reqs["q_hull_volume"] = PointCloud()
+
+        return reqs
+
+    def compute_stem_length(self):
         from plant3dvision.tree import stem_length
         # Load input tree graph
-        tree = io.read_graph(self.input_file())
+        tree = io.read_graph(self.input()["stem_length"].get().get_file("TreeGraph"))
         # Compute the stem length
-        stem_length = stem_length(tree)
+        return stem_length(tree)
+
+    def compute_pcd_convex_hull_volume(self):
+        from plant3dvision.proc3d import pcd_convex_hull_volume
+        # Load input tree graph
+        pcd = io.read_point_cloud(self.input()["q_hull_volume"].get().get_file("PointCloud"))
+        # Compute the stem length
+        return pcd_convex_hull_volume(pcd)
+
+    def run(self):
+        metrics = {}
+
+        if "stem_length" in self.metrics_list:
+            # Compute the stem length
+            metrics['stem_length'] = self.compute_stem_length()
+
+        if "q_hull_volume" in self.metrics_list:
+            # Compute the stem length
+            metrics['q_hull_volume'] = self.compute_pcd_convex_hull_volume()
+
         # Save stem length to JSON
-        stem_size_file = self.output_file("stem_length", create=True)
-        io.write_json(stem_size_file, {'stem_length': stem_length})
+        stem_size_file = self.output_file("plant_stats", create=True)
+        io.write_json(stem_size_file, metrics)
