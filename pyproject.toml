@@ -59,12 +59,12 @@ keywords = [
 ]
 
 [project.scripts]
-check_measures = "bin.check_measures:main"
-colmap_poses = "bin.colmap_poses:main"
-create_charuco_board = "bin.create_charuco_board:main"
-volume_viewer = "bin.volume_viewer:main"
-robustness_evaluation = "bin.robustness_evaluation:main"
-voronoi_texture_generator = "bin.voronoi_texture_generator:main"
+check_measures = "plant3dvision.cli.check_measures:main"
+colmap_poses = "plant3dvision.gui.colmap_poses:main"
+create_charuco_board = "plant3dvision.cli.create_charuco_board:main"
+volume_viewer = "plant3dvision.gui.volume_viewer:main"
+robustness_evaluation = "plant3dvision.cli.robustness_evaluation:main"
+voronoi_texture_generator = "plant3dvision.cli.voronoi_texture_generator:main"
 linear_filter = "plant3dvision.gui.linear_filter:main"
 pcd_to_mesh = "plant3dvision.gui.pcd_to_mesh:main"
 
