@@ -195,6 +195,12 @@ stem_axis_inverted = false  # Default: false
 # Used with ClusteredMesh or OrganSegmentation as upstream task
 min_elongation_ratio = 2.0  # Default: 2.0
 
+[PlantMetrics]
+# The upstream task that provides the input files
+upstream_task = "ImagesFilesetExists"  # Default: "ImagesFilesetExists"
+# The list of matrics to compute
+metrics = ["stem_length", "q_hull_volume"]
+
 [Clean]
 # Whether NOT to ask for confirmation prior to cleaning a dataset
 no_confirm = false  # Default: false

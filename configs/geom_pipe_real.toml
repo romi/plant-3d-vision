@@ -113,6 +113,12 @@ node_sampling_dist = 10.0  # Default: 10.0
 # Type of organs to analyze when using ClusteredMesh or OrganSegmentation as upstream task
 organ_type = "fruit"  # Default: "fruit"
 
+[PlantMetrics]
+# The upstream task that provides the input files
+upstream_task = "ImagesFilesetExists"  # Default: "ImagesFilesetExists"
+# The list of matrics to compute
+metrics = ["stem_length", "q_hull_volume"]
+
 # --------------- Evaluation --------------- #
 [AnglesAndInternodesEvaluation]
 upstream_task = "AnglesAndInternodes"
