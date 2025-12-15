@@ -37,9 +37,12 @@ RUN apt-get update && \
         libcgal-dev \
         libceres-dev \
         libcurl4-openssl-dev \
-        libmkl-full-dev
+        libmkl-full-dev \
+        python3-full \
+        python3-venv
 
 # Build and install COLMAP.
+ENV CMAKE_INSTALL_PREFIX=/colmap-install
 RUN git clone https://github.com/colmap/colmap.git
 RUN cd colmap && \
     git fetch --tags https://github.com/colmap/colmap.git && \
@@ -52,6 +55,14 @@ RUN cd colmap && \
         -DCMAKE_INSTALL_PREFIX=/colmap-install \
         -DBLA_VENDOR=Intel10_64lp && \
     ninja install
+ENV CMAKE_PREFIX_PATH=/colmap-install
+RUN apt-get install -y python3-dev
+RUN python3 -m venv /home/root/colmap_env && \
+    . /home/root/colmap_env/bin/activate && \
+    pip install --upgrade pip && \
+    cd colmap && \
+    pip install .
+
 
 # -----------------------------------------------------------------------------
 # Docker runtime stage.
@@ -81,9 +92,17 @@ RUN apt-get update && \
         libmkl-locale \
         libmkl-intel-lp64 \
         libmkl-intel-thread \
-        libmkl-core && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+        libmkl-core \
+        python3-full  \
+        python3-venv \
+        git && \
+    apt-get clean
+
+# Add to python path to virtual env
+ENV VIRTUAL_ENV=/home/root/colmap-venv
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+# Install Python and create virtual environment
+RUN python3 -m venv $VIRTUAL_ENV
 
 # Copy all files from /colmap-install/ in the builder stage to /usr/local/ in
 # the runtime stage. This simulates installing COLMAP in the default location
@@ -92,6 +111,7 @@ RUN apt-get update && \
 # a library. For instance, CMake will be able to find COLMAP easily with the
 # command: find_package(COLMAP REQUIRED).
 COPY --from=builder /colmap-install/ /usr/local/
+COPY --from=builder /home/root/colmap_env/lib $VIRTUAL_ENV/lib
 
 RUN groupadd -g 1001 colmap_users && \
     # Make COLMAP files group-readable and executable
