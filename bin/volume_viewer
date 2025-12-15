@@ -36,7 +36,7 @@ def main(args):
     scan_name = dataset_path.name
 
     db = FSDB(db_location)
-    db.connect(unsafe=True)
+    db.connect()
 
     dataset = db.get_scan(scan_name)
     # List all filesets and get the one corresponding to the 'Voxels' task:
