@@ -20,7 +20,6 @@ from pathlib import Path
 import re
 from weakref import finalize
 
-import imageio
 import numpy as np
 import open3d as o3d
 import requests
@@ -721,15 +720,15 @@ class ColmapRunner(object):
         image_dir.mkdir(parents=True, exist_ok=True)
         image_pattern = r"(.+)-([0-9]{5})\.(jpe?g)"
         image_regex = re.compile(image_pattern)
-        camera_names = list(set(
+        self.camera_names = list(set(
             re.match(image_pattern, f.name).group(1)
             for f in image_files
         ))
-        for cam_name in camera_names:
+        for cam_name in self.camera_names:
             cam_dir = image_dir / cam_name
             cam_dir.mkdir(parents=True, exist_ok=True)
         # generating names for images
-        image_counters = {cam_name: 0 for cam_name in camera_names}
+        image_counters = {cam_name: 0 for cam_name in self.camera_names}
         image_names = {} # original name -> new name
         for path in sorted(image_files, key=lambda p: p.name):
             match = image_regex.match(path.name)
@@ -788,8 +787,10 @@ class ColmapRunner(object):
                 # - If a pose metadata was found for the file, add it to COLMAP's 'poses.txt' file:
                 if p is not None:
                     image_name = self.image_names[img_f.filename]
-                    s = f"{image_name} {p[0]} {p[1]} {p[2]}\n"
-                    pose_file.write(s)
+                    camera_name = image_name.split('/')[0]
+                    if camera_name == self.camera_names[0]:
+                        s = f"{image_name} {p[0]} {p[1]} {p[2]}\n"
+                        pose_file.write(s)
                 else:
                     missing_pose.append(img_f.id)
 
