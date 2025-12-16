@@ -67,7 +67,7 @@ if __name__ == '__main__':
         for file in image_files
     ))
     n_pose = {
-        cname: len([iname for iname in results["image_names"] if iname.startswith(cname)])
+        cname: len([iname for iname in results["image_names"] if iname.split("/")[0] == cname])
         for cname in camera_names
     }
     points = {cname: np.zeros((n_pose[cname], 3), dtype=float) for cname in camera_names}
@@ -93,7 +93,7 @@ if __name__ == '__main__':
         z = points[cname][:, 2]
         ax.scatter3D(x, y, z, label=cname)
 
-    ax.legend()
+
     plt.ioff()
     #plt.show()
     # plot theoretical
@@ -114,5 +114,6 @@ if __name__ == '__main__':
             label=f"{cname} (expected)",
         )
     ax.axis('equal')
+    ax.legend()
     plt.show()
 
