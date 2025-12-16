@@ -1242,3 +1242,56 @@ def test_cam_planes(pcd, cameras, images, imgdir, X0=None, n=None, scaling=100):
     # Normalize intensity to [0,1] range
     res = rescale_intensity(res, out_range=(0, 1))
     return res
+
+
+def pcd_convex_hull_volume(pcd):
+    """
+    Computes the volume of the convex hull of a point cloud.
+
+    Parameters
+    ----------
+    pcd : open3d.geometry.PointCloud or numpy.ndarray
+        Input point cloud. If a numpy.ndarray, it will be converted to ``open3d.geometry.PointCloud``.
+
+    Returns
+    -------
+    float
+        The volume of the convex hull.
+
+    Raises
+    ------
+    TypeError
+        If the input pcd is neither an ``open3d.geometry.PointCloud`` nor a ``numpy.ndarray``.
+    ValueError
+        If the point cloud contains fewer than 4 points, as a convex hull volume cannot be computed.
+
+    Examples
+    --------
+    >>> from plant3dvision.proc3d import pcd_convex_hull_volume
+    >>> from plantdb.commons.io import read_point_cloud
+    >>> from plantdb.server.rest_api import compute_fileset_matches
+    >>> from plantdb.commons.test_database import test_database
+    >>> db = test_database()
+    >>> db.connect()
+    >>> scan = db.get_scan("real_plant_analyzed")
+    >>> pcd_fs_id = compute_fileset_matches(scan)["PointCloud"]
+    >>> pcd_fs = scan.get_fileset(pcd_fs_id)
+    >>> pcd = read_point_cloud(pcd_fs.get_file("PointCloud"))
+    >>> hull_volume = pcd_convex_hull_volume(pcd)
+    >>> print(hull_volume)
+    396330.30594273726
+    """
+    if isinstance(pcd, np.ndarray):
+        if pcd.shape[0] < 4:
+            raise ValueError("Point cloud must contain at least 4 points to compute a convex hull volume.")
+        temp_pcd = o3d.geometry.PointCloud()
+        temp_pcd.points = o3d.utility.Vector3dVector(pcd)
+        pcd = temp_pcd
+    elif not isinstance(pcd, o3d.geometry.PointCloud):
+        raise TypeError("Input 'pcd' must be an `open3d.geometry.PointCloud` or a `numpy.ndarray`.")
+
+    if len(pcd.points) < 4:
+        raise ValueError("Point cloud must contain at least 4 points to compute a convex hull volume.")
+
+    convex_hull, _ = pcd.compute_convex_hull()
+    return convex_hull.get_volume()

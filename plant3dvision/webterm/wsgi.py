@@ -1,12 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# ------------------------------------------------------------------------------
-#  Copyright (c) 2022 Univ. Lyon, ENS de Lyon, UCB Lyon 1, CNRS, INRAe, Inria
-#  All rights reserved.
-#  This file is part of the TimageTK library, and is released under the "GPLv3"
-#  license. Please see the LICENSE.md file that should have been included as
-#  part of this package.
-# ------------------------------------------------------------------------------
 
 """WSGI Application Entry Point for WebTerm
 
@@ -18,19 +11,19 @@ Environment Variables
 
 App Configuration Variables
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
-- ``WEBTERM_SECRET_KEY``: Secret key for Flask sessions
-- ``WEBTERM_USERS``: Path to users CSV file (default: users.csv)
-- ``ROMI_DB``: Path to ROMI database (default: /myapp/db)
-- ``ROMI_CFG``: Path to configuration directory (default: /myapp/cfg/{username}/)
-- ``WEBTERM_PROXY``: Set to 'true' if behind a reverse proxy
-- ``WEBTERM_PREFIX``: Prefix for WebTerm routes (default: '')
-- ``LOG_LEVEL``: Logging level (default: INFO)
+- ``WEBTERM_SECRET_KEY``: Secret key for Flask sessions (default: randomly generated)
+- ``WEBTERM_USERS``: Path to users CSV file (default: ``/myapp/users``)
+- ``ROMI_DB``: Path to ROMI database (default: ``/myapp/db``)
+- ``ROMI_CFG``: Path to configuration directory (default: ``/myapp/cfg/``)
+- ``WEBTERM_PROXY``: Set to 'true' if behind a reverse proxy, (default ``False``)
+- ``WEBTERM_PREFIX``: Prefix for WebTerm routes (default: ``''``)
+- ``LOG_LEVEL``: Logging level (default: ``INFO``)
 
 Additional Environment Variables for development
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-- ``SERVER_HOST``: Host to bind to (default: 0.0.0.0)
-- ``SERVER_PORT``: Port to bind to (default: 8080)
-- ``SERVER_DEBUG``: Enable debug mode (default: False)
+- ``SERVER_HOST``: Host to bind to (default: ``0.0.0.0``)
+- ``SERVER_PORT``: Port to bind to (default: ``8080``)
+- ``SERVER_DEBUG``: Enable debug mode (default: ``False``)
 
 Usage with Gunicorn
 -------------------
@@ -38,9 +31,9 @@ After installing Gunicorn, you can run the application using the following comma
 
 .. code-block:: bash
 
-   gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:8080 plant3dvision.webterm.wsgi:application
+   gunicorn --worker-class eventlet -w 1 --bind ${SERVER_HOST:-0.0.0.0}:${SERVER_PORT:-8080} plant3dvision.webterm.wsgi:application
 
-This will start the application on port 8080.
+This will start the application on port ``SERVER_HOST:SERVER_PORT`` or ``0.0.0.0:8080`` by default.
 """
 
 import os

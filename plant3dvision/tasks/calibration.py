@@ -72,7 +72,7 @@ class CreateCharucoBoard(RomiTask):
                                   self.aruco_pattern)
         width = self.n_squares_x * self.square_length
         height = self.n_squares_y * self.square_length
-        imboard = board.draw((int(width * 100), int(height * 100)))
+        imboard = board.generateImage((int(width * 100), int(height * 100)))
         board_file = self.output_file("charuco_board", create=True)
         io.write_image(board_file, imboard, ext="png")
         md = {

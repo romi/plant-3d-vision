@@ -9,6 +9,7 @@ These functions should be used in notebooks.
 import numpy as np
 import open3d as o3d
 import plotly.graph_objects as go
+import pyvista as pv
 from matplotlib import pyplot as plt
 from matplotlib.widgets import Slider
 from packaging import version
@@ -190,7 +191,7 @@ def plt_volume_slice_viewer(array, cmap="viridis", **kwargs):
     Parameters
     ----------
     array : numpy.ndarray
-        The volume array to slide trough.
+        The volume array to slide through.
     cmap : str
         A valid matplotlib colormap.
 
@@ -229,6 +230,93 @@ def plt_volume_slice_viewer(array, cmap="viridis", **kwargs):
     plt.show()
     return zs
 
+def opacity_func(low_threshold: int = 100,
+                 high_threshold: int = 255,
+                 *,
+                 kind: str = "linear",
+                 n: int = 255,
+                 sigmoid_edge: float = 0.02) -> list[float]:
+    """
+    Opacity transfer function on an 8-bit range with selectable shape.
+
+    Parameters
+    ----------
+    low_threshold : int, optional
+        Lower bound of the opacity ramp (TF=0 below this value).
+    high_threshold : int, optional
+        Upper bound of the opacity ramp (TF=1 above this value).
+    kind : {'linear', 'sigmoid'}, optional
+        Shape of the transfer function.
+        - 'linear': 0 -> 1 ramp between thresholds.
+        - 'sigmoid': smooth logistic transition centered between thresholds.
+    n : int, optional
+        Number of samples in the LUT (default 255).
+    sigmoid_edge : float, optional
+        For 'sigmoid' only: TF(low_threshold) = sigmoid_edge
+        and TF(high_threshold) = 1 - sigmoid_edge.
+
+    Returns
+    -------
+    list[float]
+        Opacity LUT of length `n`, with values in [0, 1].
+
+    Examples
+    --------
+    >>> op = opacity_func(low_threshold=80, high_threshold=160, kind='linear')
+    >>> len(op)
+    255
+    """
+    xs = np.arange(n, dtype=float)
+    low = int(np.clip(low_threshold, 0, n - 1))
+    high = int(np.clip(high_threshold, 0, n - 1))
+    if high < low:
+        high = low
+
+    kind = kind.lower()
+    tf = np.zeros(n, dtype=float)
+
+    if kind == "linear":
+        if high > low:
+            # Linear ramp between thresholds
+            mask = (xs >= low) & (xs <= high)
+            tf[mask] = (xs[mask] - low) / (high - low)
+        tf[xs > high] = 1.0
+        np.clip(tf, 0.0, 1.0, out=tf)
+        return tf.tolist()
+
+    elif kind == "sigmoid":
+        # Fit k such that TF(low)=sigmoid_edge and TF(high)=1-sigmoid_edge
+        e = float(np.clip(sigmoid_edge, 1e-6, 0.499999))
+        width = max(float(high - low), 1e-6)
+        k = (2.0 * np.log((1.0 - e) / e)) / width
+        c = (low + high) / 2.0
+        tf = 1.0 / (1.0 + np.exp(-k * (xs - c)))
+        np.clip(tf, 0.0, 1.0, out=tf)
+        return tf.tolist()
+
+    else:
+        raise ValueError("kind must be 'linear' or 'sigmoid'")
+
+def pyvista_volume(volume):
+    """A PyVista-based volume viewer with an opacity function inverse to the values.
+
+    Parameters
+    ----------
+    volume : numpy.ndarray
+        The 3D volume array to visualize.
+    """
+    if not isinstance(volume, np.ndarray) or volume.ndim != 3:
+        raise ValueError("Input 'array' must be a 3D NumPy array.")
+
+    # Create a PyVista ImageData object from the NumPy array
+    # Get image dimensions and add 1 to account for cell-centered data
+    sh = np.array(volume.shape) + 1
+    # Create PyVista ImageData object with specified dimensions
+    vol_data = pv.ImageData(dimensions=sh)
+    # Add intensity values as cell data, flattened in Fortran order (column-major)
+    vol_data.cell_data["values"] = volume.flatten(order="F")
+
+    return vol_data
 
 def plotly_volume_slicer(array, cmap="viridis", height=900, width=900, title="Volume", layout_kwargs=None):
     """A Plotly representation for the volume array as a 2D slider.
@@ -924,7 +1012,8 @@ def plotly_sequences(sequences, height=900, width=900, title="Sequences",
     return fig
 
 
-def plotly_vert_sequences(sequences, y_axis=None, y_axis_label=None, line_kwargs=None, marker_kwargs=None, layout_kwargs=None):
+def plotly_vert_sequences(sequences, y_axis=None, y_axis_label=None, line_kwargs=None, marker_kwargs=None,
+                          layout_kwargs=None):
     """Plot the obtained sequences.
 
     Parameters
@@ -972,18 +1061,18 @@ def plotly_vert_sequences(sequences, y_axis=None, y_axis_label=None, line_kwargs
     for name in names:
         fig_idx = 0 if "angles" in name else 1
         if 'gt' in name:
-            suffix="GT "
+            suffix = "GT "
             line_style['color'] = 'blue'
         else:
-            suffix=""
+            suffix = ""
             line_style['color'] = 'firebrick'
         # Create the hover template & x-axis label:
         if "angles" in name:
-            ht = [suffix+"Angle: %{x:.2f}°<br>" + f"Fruits: {organ} - {organ + 1}" for organ in range(n_idx)]
-            xaxis_label = suffix+"Angle (degrees)"
+            ht = [suffix + "Angle: %{x:.2f}°<br>" + f"Fruits: {organ} - {organ + 1}" for organ in range(n_idx)]
+            xaxis_label = suffix + "Angle (degrees)"
         else:
-            ht = [suffix+"Distance: %{x:.2f}mm<br>" + f"Fruits: {organ} - {organ + 1}" for organ in range(n_idx)]
-            xaxis_label = suffix+"Distance (mm)"
+            ht = [suffix + "Distance: %{x:.2f}mm<br>" + f"Fruits: {organ} - {organ + 1}" for organ in range(n_idx)]
+            xaxis_label = suffix + "Distance (mm)"
         sc = go.Scatter(x=sequences[name], y=y_values, name="",
                         mode='lines+markers', line=line_style, marker=marker_style, hovertemplate=ht)
         fig.add_trace(sc, row=1, col=fig_idx + 1)

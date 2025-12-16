@@ -56,8 +56,9 @@ def get_charuco_board(n_squares_x, n_squares_y, square_length, marker_length, ar
     (2000, 2800)
 
     """
-    aruco_dict = aruco.Dictionary_get(getattr(aruco, aruco_pattern, ARUCO_PATTERN))
-    return aruco.CharucoBoard_create(n_squares_x, n_squares_y, square_length, marker_length, aruco_dict)
+    aruco_dict = aruco.getPredefinedDictionary(getattr(aruco, aruco_pattern, ARUCO_PATTERN))
+    board = aruco.CharucoBoard((n_squares_x, n_squares_y), square_length, marker_length, aruco_dict)
+    return board
 
 
 def generate_charuco(dirpath, n_squares_x, n_squares_y, square_length, marker_length, aruco_pattern,
@@ -106,7 +107,7 @@ def generate_charuco(dirpath, n_squares_x, n_squares_y, square_length, marker_le
         image_format = image_format.replace('.', '')
 
     board = get_charuco_board(n_squares_x, n_squares_y, square_length, marker_length, aruco_pattern)
-    imboard = board.draw((int(N_SQUARES_X * SQUARE_LENGTH * 100), int(N_SQUARES_Y * SQUARE_LENGTH * 100)))
+    imboard = board.generateImage((int(N_SQUARES_X * SQUARE_LENGTH * 100), int(N_SQUARES_Y * SQUARE_LENGTH * 100)))
     board_path = f"{dirpath}/charuco_board.{image_format}"
     cv2.imwrite(board_path, imboard)
 

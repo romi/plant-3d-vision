@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools >=75"]
+requires = ["setuptools >=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -31,7 +31,7 @@ dependencies = [
 description = "3D reconstruction & quantification of single potted plants from RGB scans."
 readme = "README.md"
 requires-python = ">=3.8"
-license = { 'text' = "LGPL-3.0-or-later" }   # to replace by "LGPL-3.0-or-later" only in next release, pending deprecation
+license = "LGPL-3.0-or-later"
 authors = [
     { name = "Peter Hanappe", email = "peter.hanappe@sony.com" },
     { name = "Timothée Wintz", email = "timothee@timwin.fr" },
@@ -59,12 +59,14 @@ keywords = [
 ]
 
 [project.scripts]
-check_measures = "bin.check_measures:main"
-colmap_poses = "bin.colmap_poses:main"
-create_charuco_board = "bin.create_charuco_board:main"
-volume_viewer = "bin.volume_viewer:main"
-robustness_evaluation = "bin.robustness_evaluation:main"
-voronoi_texture_generator = "bin.voronoi_texture_generator:main"
+check_measures = "plant3dvision.cli.check_measures:main"
+colmap_poses = "plant3dvision.gui.colmap_poses:main"
+create_charuco_board = "plant3dvision.cli.create_charuco_board:main"
+volume_viewer = "plant3dvision.gui.volume_viewer:main"
+robustness_evaluation = "plant3dvision.cli.robustness_evaluation:main"
+voronoi_texture_generator = "plant3dvision.cli.voronoi_texture_generator:main"
+linear_filter = "plant3dvision.gui.linear_filter:main"
+pcd_to_mesh = "plant3dvision.gui.pcd_to_mesh:main"
 
 [project.urls]
 homepage = "https://romi-project.eu/"
@@ -73,6 +75,7 @@ source = "https://github.com/romi/plant-3d-vision"
 issues = "https://github.com/romi/plant-3d-vision/issues"
 
 [project.optional-dependencies]
+gui = ["pyqt6"]
 doc = [
     "mkdocs",
     "mkdocs-material",

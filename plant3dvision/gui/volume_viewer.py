@@ -6,10 +6,7 @@ Visualize a volume from Voxels tasks.
 """
 
 import argparse
-from os.path import join
 from pathlib import Path
-
-import imageio
 
 from plant3dvision.visu import plt_volume_slice_viewer
 from plantdb.commons import io
@@ -23,14 +20,22 @@ def parsing():
     parser.add_argument("dataset",
                         help="Path of the dataset.")
 
-    clust_args = parser.add_argument_group('View options')
-    clust_args.add_argument('--cmap', type=str, default='viridis',
+    view_args = parser.add_argument_group('View options')
+    view_args.add_argument('--cmap', type=str, default='viridis',
                             help="The colormap to use.")
 
     return parser
 
 
-def main(args):
+def volume_slider(volume, scan_name, cmap):
+    zs = plt_volume_slice_viewer(volume[:, :, ::-1], cmap=cmap, dataset=str(scan_name))
+    return
+
+
+def main():
+    # - Parse the input arguments to variables:
+    parser = parsing()
+    args = parser.parse_args()
     dataset_path = Path(args.dataset)
     db_location = dataset_path.parent
     scan_name = dataset_path.name
@@ -48,20 +53,17 @@ def main(args):
 
     voxels_file = dataset.get_fileset(voxels_fs).get_files()[0]
     if voxels_file.filename.endswith(".npz"):
-        vol = io.read_npz(voxels_file)
+        vol = io.read_npz(voxels_file).astype(float)
     else:
-        vol = io.read_volume(voxels_file)
+        vol = io.read_volume(voxels_file).astype(float)
     db.disconnect()
 
-    zs = plt_volume_slice_viewer(vol[:, :, ::-1], cmap=args.cmap, dataset=str(scan_name))
-    return
+    min_val, max_val = vol.min(), vol.max()
+    if max_val - min_val == 0.:
+        raise ValueError("Empty volume (same value everywhere)!")
 
-def run():
-    # - Parse the input arguments to variables:
-    parser = parsing()
-    args = parser.parse_args()
-    main(args)
+    volume_slider(vol, scan_name, args.cmap)
 
 
 if __name__ == '__main__':
-    run()
+    main()
