@@ -8,7 +8,11 @@ Visualize a volume from Voxels tasks.
 import argparse
 from pathlib import Path
 
+import numpy as np
+import pyvista
+
 from plant3dvision.visu import plt_volume_slice_viewer
+from plant3dvision.visu import pyvista_volume
 from plantdb.commons import io
 from plantdb.commons.fsdb import FSDB
 
@@ -29,6 +33,24 @@ def parsing():
 
 def volume_slider(volume, scan_name, cmap):
     zs = plt_volume_slice_viewer(volume[:, :, ::-1], cmap=cmap, dataset=str(scan_name))
+    return
+
+
+def volume_viewer(volume, scan_name, cmap):
+    import pyvista as pv
+    from plant3dvision.visu import opacity_func
+    plotter = pv.Plotter()
+    plotter.add_title(str(scan_name))
+
+    vol_grid = pyvista_volume(volume)
+    plotter.add_volume(vol_grid, cmap=cmap, n_colors=len(np.unique(volume)), opacity='foreground')
+    #def low_opacity_threshold(value):
+    #    plotter.add_volume(vol_grid, cmap=cmap, opacity=opacity_func(low_threshold=int(value)))
+    #    return
+    ## Get the min and max scalar values from the array
+    #min_val, max_val = volume.min(), volume.max()
+    #plotter.add_slider_widget(low_opacity_threshold, [min_val, max_val], title='Low opacity threshold')
+    plotter.show()
     return
 
 
@@ -62,7 +84,10 @@ def main():
     if max_val - min_val == 0.:
         raise ValueError("Empty volume (same value everywhere)!")
 
-    volume_slider(vol, scan_name, args.cmap)
+    if args.slider:
+        volume_slider(vol, scan_name, args.cmap)
+    else:
+        volume_viewer(vol, scan_name, args.cmap)
 
 
 if __name__ == '__main__':
