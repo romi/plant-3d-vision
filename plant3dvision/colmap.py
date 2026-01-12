@@ -716,6 +716,14 @@ class ColmapRunner(object):
         -------
         dict of str
             A dictionary mapping the original file names to their corresponding new file names.
+        
+        Notes
+        -----
+        The routine expects every image file to follow this exact pattern: `<camera_name>-<5_digit_counter>.<jpg|jpeg>`
+
+          - `<camera_name>` – Any sequence of characters (letters, digits, dashes, underscores, etc.) that uniquely identifies a camera.
+          - `<5_digit_counter>` – A five‑digit number, padded with leading zeros (e.g., 00001, 00002, ...).
+          - `.jpg` or `.jpeg` – The file extension, case‑insensitive.
         """
         image_dir.mkdir(parents=True, exist_ok=True)
         image_pattern = r"(.+)-([0-9]{5})\.(jpe?g)"
