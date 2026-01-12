@@ -273,19 +273,19 @@ def prepare(
         f.write(response.content)
 
     base_dir = Path(mount_path)
-    assert base_dir.exists(follow_symlinks=True), "mount_path is not a path to an existing directory"
+    assert base_dir.exists(), "mount_path is not a path to an existing directory"
 
     image_dir = base_dir / Path(IMAGE_PATH)
     image_dir.mkdir(parents=True, exist_ok=True)
-    camera_names = list(set(
+    camera_names = list({
         image_regex.match(os.path.basename(fname)).group(1)
         for fname in image_files
-    ))
+    })
     for cam_name in camera_names:
         cam_dir = image_dir / cam_name
         cam_dir.mkdir(parents=True, exist_ok=True)
     # generating names for images
-    image_counters = {cam_name: 0 for cam_name in camera_names}
+    image_counters = dict.fromkeys(camera_names, 0)
     image_names = {}  # original name -> new name
     for path in sorted(image_files, key=lambda p: os.path.basename(p)):
         name = os.path.basename(path)
@@ -342,7 +342,6 @@ if __name__ == "__main__":
 
         db: pycolmap.Database = pycolmap.Database(DATABASE_PATH)
         # prior poses
-        priors = []
         db.clear_pose_priors()
         for image_name, pose in params["pose_priors"].items():
             img: pycolmap.Image = db.read_image_with_name(image_name)
@@ -351,22 +350,11 @@ if __name__ == "__main__":
                 db.update_pose_prior(img.image_id, prior)
             else:
                 db.write_pose_prior(img.image_id, prior)
-            priors.append(db.read_pose_prior(img.image_id).position)
 
-        import matplotlib.pyplot as plt
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        ax.set_xlabel('x')
-        ax.set_ylabel('y')
-        ax.set_zlabel('z')
-        ax.set_title('Pose priors')
-        priors = np.asarray(priors)
-        ax.scatter3D(priors[:, 0], priors[:, 1], priors[:, 2])
-        plt.show()
 
         if params["matcher"] == "SequentialMatcher":
             matching_options = pycolmap.SiftMatchingOptions()
-            matching_options.use_gpu = False
+            matching_options.use_gpu = True
             matching_options.mergedict(params["matcher_options"])
             pairing_options = pycolmap.SequentialMatchingOptions()
             pairing_options.loop_detection = True
@@ -411,16 +399,18 @@ if __name__ == "__main__":
             "image_names": [],
             "positions": {},
             "rotations": {},
+            "viewing_direction": {},
         }
         for image in reconstruction.images.values():
             image: pycolmap.Image
-            #pose = alignment.transform_camera_world(pose)
+            pose = image.cam_from_world()
 
-            translation: np.ndarray[(3,), float] = image.projection_center()
+            translation: np.ndarray = image.projection_center()
             rotation: pycolmap.Rotation3d = pose.rotation
             results["image_names"].append(image.name)
             results["positions"][image.name] = translation.tolist()
             results["rotations"][image.name] = rotation.quat.tolist()
+            results["viewing_direction"][image.name] = image.viewing_direction().tolist()
 
         with open(RESULTS_PATH, "w") as f:
             json.dump(results, f, indent=4, sort_keys=True)
