@@ -4,19 +4,20 @@
 import sys
 
 import numpy as np
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QApplication
-from PyQt6.QtWidgets import QDoubleSpinBox
-from PyQt6.QtWidgets import QFileDialog
-from PyQt6.QtWidgets import QHBoxLayout
-from PyQt6.QtWidgets import QLabel
-from PyQt6.QtWidgets import QMainWindow
-from PyQt6.QtWidgets import QPushButton
-from PyQt6.QtWidgets import QSlider
-from PyQt6.QtWidgets import QVBoxLayout
-from PyQt6.QtWidgets import QWidget
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QDoubleSpinBox
+from PySide6.QtWidgets import QFileDialog
+from PySide6.QtWidgets import QHBoxLayout
+from PySide6.QtWidgets import QLabel
+from PySide6.QtWidgets import QMainWindow
+from PySide6.QtWidgets import QPushButton
+from PySide6.QtWidgets import QSlider
+from PySide6.QtWidgets import QVBoxLayout
+from PySide6.QtWidgets import QWidget
 
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+# Switched to backend_qtagg for Qt6 compatibility (PySide6)
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
 from plant3dvision.proc2d import linear
