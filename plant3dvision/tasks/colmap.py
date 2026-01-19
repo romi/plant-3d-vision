@@ -714,9 +714,9 @@ class Colmap(RomiTask):
         if matcher_str not in self.cli_args:
             self.cli_args[matcher_str] = {}
         # - Set it for feature extraction step:
-        self.cli_args["feature_extractor"]["--SiftExtraction.use_gpu"] = str(int(self.use_gpu))
+        self.cli_args["feature_extractor"]["--FeatureExtraction.use_gpu"] = str(int(self.use_gpu))
         # - Set it for feature matching step:
-        self.cli_args[matcher_str]["--SiftMatching.use_gpu"] = str(int(self.use_gpu))
+        self.cli_args[matcher_str]["--FeatureMatching.use_gpu"] = str(int(self.use_gpu))
 
     def set_single_camera(self):
         """Configure COLMAP CLI parameters to use one or more cameras."""

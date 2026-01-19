@@ -33,7 +33,7 @@ from romitask.log import get_logger
 logger = get_logger(__name__)
 
 #: Default colmap executable:
-DEFAULT_COLMAP = 'colmap/colmap'
+DEFAULT_COLMAP = 'colmap/colmap:20251107.4118'  # 3.13.0
 #: List of valid colmap executable values:
 COLMAP_DOCKER = ['geki/colmap', 'colmap/colmap', 'roboticsmicrofarms/colmap']
 # - Try to get colmap executable to use from '$COLMAP_EXE' environment variable, or set it to use docker container by default:
@@ -1103,9 +1103,9 @@ class ColmapRunner(object):
         ]
         # - Check if GPU is available:
         if _has_nvidia_gpu():
-            use_gpu_opt = {"--SiftExtraction.use_gpu": '1'}
+            use_gpu_opt = {"--FeatureExtraction.use_gpu": '1'}
         else:
-            use_gpu_opt = {"--SiftExtraction.use_gpu": '0'}
+            use_gpu_opt = {"--FeatureExtraction.use_gpu": '0'}
         cli_args = self.all_cli_args.get('feature_extractor', use_gpu_opt)
         logger.info("Running colmap 'feature_extractor'...")
         logger.debug(f"args: {args}")
@@ -1123,9 +1123,9 @@ class ColmapRunner(object):
         args = ['--database_path', f'{self.colmap_workdir}/database.db']
         # - Check if GPU is available:
         if _has_nvidia_gpu():
-            use_gpu_opt = {"--SiftMatching.use_gpu": '1'}
+            use_gpu_opt = {"--FeatureMatching.use_gpu": '1'}
         else:
-            use_gpu_opt = {"--SiftMatching.use_gpu": '0'}
+            use_gpu_opt = {"--FeatureMatching.use_gpu": '0'}
         cli_args.update(**use_gpu_opt)
 
         if matcher_method == 'sequential':
