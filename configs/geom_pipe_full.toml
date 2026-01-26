@@ -63,15 +63,21 @@ upstream_task = "Undistort"  # Default: "Undistort"
 # Query to filter files from upstream task by metadata
 query = "{\"channel\":\"rgb\"}"  # Default: "{\"channel\":\"rgb\"}"  (only RGB images)
 # The type of image transformation algorithm to use prior to masking
-# Options: "linear" (linear combination of RGB channels), "excess_green" (excess green index)
+# Options: "linear" (linear combination of the channels (RGB, HSV, YCbCr), "excess_green" (excess green index)
 type = "linear"  # Default: "linear"
-# Linear coefficients to apply to each RGB channel of the original image
+# The colorspace to use for the filtering
+# Options: "RGB", "HSV", "YCbCr"
+colorspace = "YCbCr"  # Default: "RGB"
+# Linear coefficients to apply to each channel of the original image in the selected colorspace
 # Used only when type="linear"
-parameters = "[0,1,0]"  # Default: [0, 1, 0] (using only the green channel)
+parameters = "[0.0, 1, 0.0]"  # Default: [0, 1, 0] (using only the green channel in RGB)
 # Binarization threshold applied after transforming the image
-threshold = 0.2 # Default: 0.3
+min_threshold = 0.08 # Default: 0.0
+max_threshold = 0.47 # Default: 0.4
+# Invert the filter
+invert = false  # Default: false
 # Dilation factor for the binary mask images (morphological dilation)
-dilation = 1 # Default: 0 (no dilation)
+dilation = 0 # Default: 0 (no dilation)
 
 [Voxels]
 # Task that provides the masked images as input
