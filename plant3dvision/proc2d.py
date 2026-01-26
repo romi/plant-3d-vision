@@ -8,12 +8,14 @@ plant3dvision.proc2d
 This module contains all functions for processing of 2D image data.
 
 """
+from typing import Literal
 
 import cv2
 import numpy as np
 from skimage.exposure import rescale_intensity
 from skimage.morphology import binary_dilation
 from skimage.morphology import disk
+from skimage.color import convert_colorspace
 
 from romitask.log import get_logger
 
@@ -66,53 +68,43 @@ def undistort(img, camera_mtx, distortion_vect):
     return undistorted_data
 
 
-def linear(img, coefs):
-    """Apply linear coefficients to an RGB array.
+def linear(img, coefs, colorspace: Literal["RGB", "HSV", "YCbCr"]="RGB"):
+    """
+    Applies a linear transformation to the given image based on specified coefficients and colorspace.
+
+    This function performs a linear combination of the color channels of an image according to the specified
+    coefficients. The image is optionally converted to a different colorspace before the transformation. The
+    color channel intensity values are normalized to the range [0, 1] to ensure consistency during the operation.
 
     Parameters
     ----------
     img : numpy.ndarray
-        An RGB image as an NxMx3 array.
-    coefs : list
-        A len-3 list of coefficients to apply to the image.
-        They are applied to the corresponding RBG channel of the 2D array, *e.g.* `coefs[0]` to the red channel.
+        The input image as a NumPy array with shape (H, W, C), where H is the height, W is the width,
+        and C is the number of color channels. The input image can either be of dtype `uint8` or `float`.
+        This image is expected to be in the RGB colorspace
+    coefs : list or tuple of float
+        A sequence of three coefficients that represent the weights for each color channel's contribution
+        to the result. The coefficients should correspond to the order of the color channels in the input
+        image, such as [R, G, B] or [H, S, V] depending on the colorspace.
+    colorspace : Literal["RGB", "HSV", "YCbCr"], optional
+        The colorspace of the input image. If the colorspace is not "RGB", the image will be converted
+        to the specified colorspace before processing. Defaults to "RGB".
 
     Returns
     -------
     numpy.ndarray
-        The filtered image.
-
-    Examples
-    --------
-    >>> import matplotlib.pyplot as plt
-    >>> from imageio.v3 import imread
-    >>> from plant3dvision import test_db_path
-    >>> from plant3dvision.proc2d import linear, dilation
-    >>> path = test_db_path()
-    >>> img = imread(path.joinpath('real_plant/images/00000_rgb.jpg'))
-    >>> filter_img = linear(img, [0.1, 1., 0.1])  # apply `linear` filter
-    >>> threshold = 0.3
-    >>> mask = filter_img > threshold  # convert to binary mask using a threshold
-    >>> radius = 2
-    >>> dilated_mask = dilation(mask, radius)  # apply a dilation to binary mask
-    >>> fig, axes = plt.subplots(2, 2, figsize=(8, 7))
-    >>> axes[0, 0].imshow(img)
-    >>> axes[0, 0].set_title("Original image")
-    >>> axes[0, 1].imshow(filter_img, cmap='gray')
-    >>> axes[0, 1].set_title("Mask image (linear filter)")
-    >>> axes[1, 0].imshow(mask, cmap='gray')
-    >>> axes[1, 0].set_title(f"Binary mask image (threshold={threshold})")
-    >>> axes[1, 1].imshow(dilated_mask, cmap='gray')
-    >>> axes[1, 1].set_title(f"Dilated binary mask image (radius={radius})")
-    >>> [ax.set_axis_off() for ax in axes.flatten()]
-    >>> plt.tight_layout()
-    >>> plt.show()
-
+        A 2D NumPy array representing the result of the linear transformation. The resulting array has
+        the same height and width as the input image, with pixel intensity values normalized to the
+        range [0, 1].
     """
     if not img.dtype == "float":
         img = np.asarray(img, dtype=float)  # transform the uint8 RGB image into a float RGB numpy array
+
     img = rescale_intensity(img, out_range=(0., 1.))
-    return coefs[0] * img[:, :, 0] + coefs[1] * img[:, :, 1] + coefs[2] * img[:, :, 2]
+    if colorspace != "RGB":
+        img = convert_colorspace(img, "RGB", colorspace)
+        img = rescale_intensity(img, out_range=(0., 1.))
+    return (coefs[0] * img[:, :, 0] + coefs[1] * img[:, :, 1] + coefs[2] * img[:, :, 2]) / sum(coefs)
 
 
 def excess_green(img):

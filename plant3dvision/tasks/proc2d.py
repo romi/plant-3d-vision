@@ -20,7 +20,7 @@ from romitask.task import FileByFileTask
 from romitask.task import ModelFilesetExists
 from romitask.task import ImagesFilesetExists
 
-logger = get_logger(__name__)
+logger = get_logger(__name__, log_level="INFO")
 
 
 class Undistort(FileByFileTask):
@@ -243,7 +243,7 @@ class Masks(FileByFileTask):
     This task applies image transformation techniques to RGB images followed by
     thresholding to create binary masks. The output is a fileset of binary mask images.
     The class supports different types of filtering methods including linear combination
-    of RGB channels and excess green index.
+    of channels in different colorspace and excess green index.
 
     Parameters
     ----------
@@ -263,12 +263,19 @@ class Masks(FileByFileTask):
         The type of image tranformation algorithm to use prior to masking by thresholding.
         Can be "linear" or "excess_green". Defaults to `'linear'`.
         Have a look at the documentation [mask_type]_ for more details.
+    colorspace : luigi.ChoiceParameter
+        The colorspace to use for the linear filtering ('RGB', 'HSV' or 'YCbCr')
     parameters : luigi.ListParameter, optional
         List of parameters, only used if `type` is `"linear"`.
-        They are the linear coefficient to apply to each RGB channel of the original image.
+        They are the linear coefficient to apply to each channel of the image in the selected colorspace
+        ('RGB', 'HSV' or 'YCbCr').
         Defaults to `[0, 1, 0]` (using only the green channel).
-    threshold : luigi.FloatParameter, optional
-        Binarization threshold applied after transforming the image. Defaults to ``0.3``.
+    min_threshold : luigi.FloatParameter, optional
+        Binarization threshold applied after transforming the image. Defaults to ``0.0``.
+    max_threshold : luigi.FloatParameter, optional
+        Binarization threshold applied after transforming the image. Defaults to ``0.4``.
+    invert : luigi.BoolParameter
+        Invert the mask
     dilation : luigi.IntParameter, optional
         Dilation factor for the binary mask images. Applies morphological dilation
         to expand the masked regions. Defaults to 0 (no dilation).
@@ -315,8 +322,11 @@ class Masks(FileByFileTask):
     """
     upstream_task = luigi.TaskParameter(default=Undistort)  # override default attribute from ``RomiTask``
     type = luigi.Parameter("linear")
+    colorspace = luigi.ChoiceParameter(str, choices=["RGB", "HSV", "YCbCr"], default="RGB")
     parameters = luigi.ListParameter(default=[0, 1, 0])
-    threshold = luigi.FloatParameter(default=0.3)
+    min_threshold = luigi.FloatParameter(default=0.0)
+    max_threshold = luigi.FloatParameter(default=0.4)
+    invert = luigi.BoolParameter(default=False)
     dilation = luigi.IntParameter(default=0)
 
     def f_raw(self, img: numpy.ndarray) -> numpy.ndarray:
@@ -340,7 +350,7 @@ class Masks(FileByFileTask):
         from plant3dvision import proc2d
         logger.debug(f"Image shape: {img.shape}")
         if self.type == "linear":
-            return proc2d.linear(img, list(self.parameters))
+            return proc2d.linear(img, list(self.parameters), colorspace=self.colorspace)
         elif self.type == "excess_green":
             return proc2d.excess_green(img)
         else:
@@ -367,7 +377,9 @@ class Masks(FileByFileTask):
         # Apply the filter:
         img = self.f_raw(img)
         # Threshold the filtered image to make a binary mask:
-        img = img > self.threshold
+        img = (img >= self.min_threshold) & (img <= self.max_threshold)
+        if self.invert:
+            img = not img
         # Apply dilation to the binary mask, if any:
         if self.dilation > 0:
             img = proc2d.dilation(img, self.dilation)
@@ -377,8 +389,15 @@ class Masks(FileByFileTask):
         outfi = outfs.create_file(fi.id)
         io.write_image(outfi, img)
         # Add metadata to the binary mask image:
-        md = {'upstream_task': str(self.upstream_task.get_task_family()), 'filter': str(self.type), 'threshold': self.threshold,
-              'dilation': self.dilation}
+        md = {
+            'upstream_task': str(self.upstream_task.get_task_family()),
+            'filter': str(self.type),
+            'colorspace': str(self.colorspace),
+            'min_threshold': self.min_threshold,
+            'max_threshold': self.max_threshold,
+            'invert': self.invert,
+            'dilation': self.dilation
+        }
         if self.type == "linear":
             md.update({'linear_coeff': list(self.parameters)})
         if self.query != {}:
