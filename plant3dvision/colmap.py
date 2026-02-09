@@ -12,22 +12,22 @@ Using docker image requires the docker engine to be available on your system and
 """
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
-import re
 from weakref import finalize
 
 import numpy as np
 import open3d as o3d
 import requests
 from packaging import version
-
 from plant3dvision import proc3d
 from plant3dvision.thirdparty import read_model
-from plantdb.commons import io
+from plant3dvision.utils import docker_pull
+from plantdb.commons.fsdb.core import File
 from romitask.log import get_logger
 
 logger = get_logger(__name__)
@@ -659,7 +659,7 @@ class ColmapRunner(object):
 
         """
         # -- Initialize attributes:
-        self.image_files: list[plantdb.commons.plantdb.commons.fsdb.core.File] = img_files  # list of plantdb.commons.fsdb.File
+        self.image_files: list[File] = img_files  # list of plantdb.commons.fsdb.File
         self.matcher_method = matcher_method if matcher_method in MATCHER_METHODS else DEF_MATCHER_METHODS
         self.compute_dense = compute_dense
         self.all_cli_args = all_cli_args
@@ -671,28 +671,133 @@ class ColmapRunner(object):
         # -- Initialize COLMAP directories, poses file & log file:
         # - Get / create a temporary COLMAP working directory
         self.colmap_workdir = Path(os.environ.get("COLMAP_WD", tempfile.mkdtemp(prefix='colmap_')))
-        response = requests.get("https://github.com/colmap/colmap/releases/download/3.11.1/vocab_tree_faiss_flickr100K_words32K.bin")
-        with open(self.colmap_workdir/"vocab_tree_faiss_flickr100K_words32K.bin", "wb") as f:
+        response = requests.get(
+            "https://github.com/colmap/colmap/releases/download/3.11.1/vocab_tree_faiss_flickr100K_words32K.bin")
+        with open(self.colmap_workdir / "vocab_tree_faiss_flickr100K_words32K.bin", "wb") as f:
             f.write(response.content)
         if self.single_cam_per_directory:
             self.imgs_dir = self.colmap_workdir / 'images'
         else:
             self.imgs_dir = self.colmap_workdir / 'images'  # COLMAP's 'images' directory
-        self.sparse_dir = self.colmap_workdir / 'sparse'  # COLMAP's 'sparse reconstruction' directory
-        self.dense_dir = self.colmap_workdir / 'dense'  # COLMAP's 'dense reconstruction' directory
+        self.sparse_dir: Path = self.colmap_workdir / 'sparse'  # COLMAP's 'sparse reconstruction' directory
+        self.dense_dir: Path = self.colmap_workdir / 'dense'  # COLMAP's 'dense reconstruction' directory
         # - Make sure those directories exist & create them otherwise:
-        self.image_names = self._init_temp_dir(self.imgs_dir, [f.path() for f in img_files])
+        self.camera_names: list[str] = []  # list of camera names, initialized by `self._init_temp_dir`
+        self.image_names: dict[str, str] = self._init_temp_dir(self.imgs_dir, [f.path() for f in img_files])
         # - Initialize the `poses.txt` file required by COLMAP:
         self._init_poses()
         # - Initialize a log file to gather COLMAP outputs:
         self.log_file = f"{self.colmap_workdir}/colmap.log"
         logger.info(f"See {self.log_file} for a detailed log about COLMAP jobs...")
         # - Check the COLMAP executable to use:
-        self.colmap_exe = None
-        self.colmap_version = None
-        self._header = None
+        self.colmap_exe: str = None
+        self.colmap_version: str = None
+        self._header: str = None
         self._init_exe(kwargs.get('colmap_exe', COLMAP_EXE))
         finalize(self, self.clean_up)
+
+    def _image_pattern(self, image_files):
+        # Get an image file path to test the patterns:
+        image_file = image_files[0]
+
+        # Test the new pattern with camera id, e.g. 'picamera1-00000.jpg'
+        try:
+            image_pattern = r"(.+)-([0-9]{5})\.(jpe?g)"  # new pattern (with camera id)
+            re.match(image_pattern, image_file.name).group(1)
+        except AttributeError:
+            logger.warning(f"Image pattern based on camera ID not found!")
+        else:
+            return True, image_pattern
+
+        # Test the legacy pattern, e.g. '00000_rgb.jpg'
+        try:
+            image_pattern = r"([0-9]{5})_rgb\.(jpe?g)"  # legacy pattern
+            re.match(image_pattern, image_file.name).group(1)
+        except AttributeError:
+            logger.warning(f"Legacy image pattern based on camera ID not found!")
+        else:
+            return False, image_pattern
+
+        raise Exception("Could not determine image pattern to use!")
+
+    def _init_temp_dir_legacy(self, image_dir: pathlib.Path, image_files: list[pathlib.Path]) -> dict[str, str]:
+        """Initialize COLMAP's 'images' directory.
+
+        It is required by COLMAP to perform its magic!
+        """
+        n_rgb_im = 0  # Count the number of RGB images
+        n_cp_im = 0  # Count the number of copied RGB images
+        self.camera_names = ["legacy"]
+        image_names = {}
+        for img_f in sorted(image_files, key=lambda p: p.name):
+            # Check the image file exists in COLMAP's 'images' directory, if not create it:
+            filepath = os.path.join(image_dir, img_f.name)
+            image_exists = os.path.isfile(filepath)
+            if not image_exists:
+                # im = io.read_image(img_f)  # load the image (from DB)
+                # im = im[:, :, :3]  # remove the alpha channel, if any
+                # imageio.imwrite(filepath, im)  # write the image to COLMAP's 'images' directory
+                shutil.copy(img_f, image_dir / img_f.name)
+                image_names[img_f.name] = img_f.name
+                n_cp_im += 1
+        logger.info(f"Copied {n_cp_im} images out of {n_rgb_im} RGB images found in the 'images' Fileset!")
+
+        # - Check that COLMAP's 'images' directory is not EMPTY!
+        n_img_workdir = [os.path.isfile(f) for f in os.listdir(image_dir)]
+        if n_img_workdir == 0:
+            logger.critical("No image could be found in COLMAP's 'images' directory after initialization!")
+            sys.exit("Check you have a set of images with an 'rgb' value for metadata 'channel'!")
+
+        return image_names
+
+    def _init_temp_dir_cam_id(self, image_dir: pathlib.Path, image_files: list[pathlib.Path]) -> dict[str, str]:
+        """
+        Initializes a temporary directory for organizing and renaming image files based on
+        a specified naming pattern.
+
+        This function creates a structure of directories and renames input image files
+        according to their camera name and an incremental counter. The renamed images are
+        stored in the specified directory. The function supports grouping of images by camera
+        name extracted from their filenames. It also validates and enforces a specific naming
+        pattern for the input image files.
+
+        Parameters
+        ----------
+        image_dir : pathlib.Path
+            Directory where the organized images and folder structure will be created.
+        image_files : list of pathlib.Path
+            A list of image file paths to be processed and organized.
+
+        Returns
+        -------
+        dict of str
+            A dictionary mapping the original file names to their corresponding new file names.
+        """
+        image_pattern = r"(.+)-([0-9]{5})\.(jpe?g)"
+        image_regex = re.compile(image_pattern)
+        self.camera_names = list(set(
+            re.match(image_pattern, f.name).group(1)
+            for f in image_files
+        ))
+        for cam_name in self.camera_names:
+            cam_dir = image_dir / cam_name
+            cam_dir.mkdir(parents=True, exist_ok=True)
+        # generating names for images
+        image_counters = {cam_name: 0 for cam_name in self.camera_names}
+        image_names = {}  # original name -> new name
+        for path in sorted(image_files, key=lambda p: p.name):
+            match = image_regex.match(path.name)
+            camera = match.group(1)
+            extension = match.group(3)
+            counter = image_counters[camera]
+            if match:
+                new_name = f"{camera}/image{counter:0>5}.{extension}"
+                image_counters[camera] += 1
+                image_names[path.name] = new_name
+                shutil.copy(path, image_dir / new_name)
+            else:
+                raise ValueError(f"Image file name {path.name} does not match the expected pattern {image_pattern}")
+        return image_names
 
     def _init_temp_dir(self, image_dir: pathlib.Path, image_files: list[pathlib.Path]) -> dict[str, str]:
         """
@@ -718,30 +823,12 @@ class ColmapRunner(object):
             A dictionary mapping the original file names to their corresponding new file names.
         """
         image_dir.mkdir(parents=True, exist_ok=True)
-        image_pattern = r"(.+)-([0-9]{5})\.(jpe?g)"
-        image_regex = re.compile(image_pattern)
-        self.camera_names = list(set(
-            re.match(image_pattern, f.name).group(1)
-            for f in image_files
-        ))
-        for cam_name in self.camera_names:
-            cam_dir = image_dir / cam_name
-            cam_dir.mkdir(parents=True, exist_ok=True)
-        # generating names for images
-        image_counters = {cam_name: 0 for cam_name in self.camera_names}
-        image_names = {} # original name -> new name
-        for path in sorted(image_files, key=lambda p: p.name):
-            match = image_regex.match(path.name)
-            camera = match.group(1)
-            extension = match.group(3)
-            counter = image_counters[camera]
-            if match:
-                new_name = f"{camera}/image{counter:0>5}.{extension}"
-                image_counters[camera] += 1
-                image_names[path.name] = new_name
-                shutil.copy(path, image_dir / new_name)
-            else:
-                raise ValueError(f"Image file name {path.name} does not match the expected pattern {image_pattern}")
+        has_cam_id, image_pattern = self._image_pattern(image_files)
+        # Determines camera identifiers, creates per‑camera directories, defaults to single camera
+        if has_cam_id:
+            image_names = self._init_temp_dir_cam_id(image_dir, image_files)
+        else:
+            image_names = self._init_temp_dir_legacy(image_dir, image_files)
 
         self.sparse_dir.mkdir(parents=True, exist_ok=True)
         self.dense_dir.mkdir(parents=True, exist_ok=True)
@@ -789,6 +876,11 @@ class ColmapRunner(object):
                     image_name = self.image_names[img_f.filename]
                     camera_name = image_name.split('/')[0]
                     if camera_name == self.camera_names[0]:
+                        # Pattern with camera ID in image filename
+                        s = f"{image_name} {p[0]} {p[1]} {p[2]}\n"
+                        pose_file.write(s)
+                    elif self.camera_names[0] == 'legacy':
+                        # Legacy pattern without camera ID in image filename
                         s = f"{image_name} {p[0]} {p[1]} {p[2]}\n"
                         pose_file.write(s)
                 else:
@@ -1029,19 +1121,19 @@ class ColmapRunner(object):
         if _has_nvidia_gpu():
             gpu_device = docker.types.DeviceRequest(count=-1, capabilities=[['gpu']])
             container = client.containers.run(self.colmap_exe, cmd,
-                                        user=workdir_uid,
-                                        #group_add=["colmap_users"],
-                                        environment=varenv, volumes=volumes,
-                                        stdout=True, stderr=True,
-                                        stream=True, detach=True,
-                                        device_requests=[gpu_device], working_dir=str(self.colmap_workdir))
+                                              user=workdir_uid,
+                                              # group_add=["colmap_users"],
+                                              environment=varenv, volumes=volumes,
+                                              stdout=True, stderr=True,
+                                              stream=True, detach=True,
+                                              device_requests=[gpu_device], working_dir=str(self.colmap_workdir))
         else:
             container = client.containers.run(self.colmap_exe, cmd,
-                                        user=workdir_uid,
-                                        #group_add=["colmap_users"],
-                                        environment=varenv, volumes=volumes,
-                                        stdout=True, stderr=True,
-                                        stream=True, detach=True, working_dir=str(self.colmap_workdir))
+                                              user=workdir_uid,
+                                              # group_add=["colmap_users"],
+                                              environment=varenv, volumes=volumes,
+                                              stdout=True, stderr=True,
+                                              stream=True, detach=True, working_dir=str(self.colmap_workdir))
         # Return the container logs decoded:
         out = ""
         if to_log:
@@ -1130,7 +1222,8 @@ class ColmapRunner(object):
 
         if matcher_method == 'sequential':
             cli_args["--SequentialMatching.loop_detection"] = "1"
-            cli_args["--SequentialMatching.vocab_tree_path"] = f"{self.colmap_workdir}/vocab_tree_faiss_flickr100K_words32K.bin"
+            cli_args[
+                "--SequentialMatching.vocab_tree_path"] = f"{self.colmap_workdir}/vocab_tree_faiss_flickr100K_words32K.bin"
 
         logger.info(f"Running colmap '{matcher_method}_matcher'...")
         logger.debug(f"args: {args}")
