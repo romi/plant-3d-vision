@@ -402,7 +402,7 @@ def plotly_pointcloud_data(pcd, n_pts=9000, marker_kwargs=None, **kwargs):
     --------
     >>> from plant3dvision.visu import plotly_pointcloud_data
     >>> from plant3dvision.utils import locate_task_filesets
-    >>> from plantdb.commons.fsdb import FSDB
+    >>> from plantdb.commons.fsdb.core import FSDB
     >>> from plantdb.commons.io import read_point_cloud
     >>> from os import environ
     >>> db = FSDB(environ.get('ROMI_DB', "/data/ROMI/DB/"))

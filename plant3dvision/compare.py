@@ -18,7 +18,7 @@ from plant3dvision.metrics import volume_ratio
 from plant3dvision.tasks.colmap import compute_camera_poses_from_colmap
 from plant3dvision.tasks.colmap import get_cnc_poses
 from plant3dvision.tasks.colmap import get_image_poses
-from plantdb.commons.fsdb import FSDB
+from plantdb.commons.fsdb.core import FSDB
 from plantdb.commons.io import read_json
 from plantdb.commons.io import read_npz
 from plantdb.commons.io import read_point_cloud
@@ -116,7 +116,7 @@ def pairwise_heatmap(pw_dict, scans_list, task_name, metrics, db, **kwargs):
 
     Examples
     --------
-    >>> from plantdb.commons.fsdb import FSDB
+    >>> from plantdb.commons.fsdb.core import FSDB
     >>> # - Connect to a ROMI databse to access an 'images' fileset to reconstruct with COLMAP:
     >>> db = FSDB("/data/ROMI/repeat_test_organseg")
     >>> db.connect()
@@ -273,7 +273,7 @@ def compare_intrinsic_params(db, task_name, scans_list):
     Examples
     --------
     >>> from plant3dvision.compare import compare_intrinsic_params
-    >>> from plantdb.commons.fsdb import FSDB
+    >>> from plantdb.commons.fsdb.core import FSDB
     >>> db = FSDB('/data/ROMI/intrinsic_calib_experiments/2024.02.08_00.07_Eval_Colmap_auto_opencv/')
     >>> task_name = 'Colmap'
     >>> db.connect()
@@ -615,7 +615,7 @@ def compare_to_calibrated_poses(db, task_name, scans_list):
     Examples
     --------
     >>> from plant3dvision.compare import compare_to_calibrated_poses
-    >>> from plantdb.commons.fsdb import FSDB
+    >>> from plantdb.commons.fsdb.core import FSDB
     >>> db = FSDB('/data/ROMI/intrinsic_calib_experiments/2024.02.08_00.07_Eval_Colmap_auto_opencv/')
     >>> task_name = 'Colmap'
     >>> db.connect()

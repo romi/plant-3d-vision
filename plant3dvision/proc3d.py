@@ -201,7 +201,7 @@ def skeletonize(mesh):
     >>> from plant3dvision.proc3d import skeletonize
     >>> from plantdb.commons.io import read_triangle_mesh
     >>> from plantdb.server.rest_api import compute_fileset_matches
-    >>> from plantdb.commons.fsdb import FSDB
+    >>> from plantdb.commons.fsdb.core import FSDB
     >>> db = FSDB(os.environ['ROMI_DB'])  # requires definition of this environment variable!
     >>> db = FSDB('/data/ROMI/test_owner')
     >>> db.connect()

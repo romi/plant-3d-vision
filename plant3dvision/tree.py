@@ -312,7 +312,7 @@ def stem_length(tree: networkx.Graph) -> float:
     --------
     >>> from plant3dvision.tree import stem_length
     >>> from plant3dvision.utils import locate_task_filesets
-    >>> from plantdb.commons.fsdb import FSDB
+    >>> from plantdb.commons.fsdb.core import FSDB
     >>> from plantdb.commons.io import read_graph
     >>> db_path = '/data/ROMI/shared_fsdb'
     >>> db = FSDB(db_path)

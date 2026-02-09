@@ -930,7 +930,7 @@ class ColmapRunner(object):
         Examples
         --------
         >>> from plant3dvision.colmap import ColmapRunner
-        >>> from plantdb.commons.fsdb import FSDB
+        >>> from plantdb.commons.fsdb.core import FSDB
         >>> # - Connect to a ROMI databse to access an 'images' fileset to reconstruct with COLMAP:
         >>> db = FSDB("/data/ROMI/DB")
         >>> db.connect()

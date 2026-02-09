@@ -17,7 +17,7 @@ from plant3dvision.camera import format_camera_params
 from plant3dvision.tasks.colmap import compute_colmap_poses_from_camera_json
 from plant3dvision.tasks.colmap import get_cnc_poses
 from plant3dvision.tasks.colmap import pose_estimation_figure
-from plantdb.commons.fsdb import FSDB
+from plantdb.commons.fsdb.core import FSDB
 from romitask import SCAN_TOML
 from romitask.log import get_logger
 

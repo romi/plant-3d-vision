@@ -24,7 +24,7 @@ from plant3dvision.visu import plotly_mesh_data
 from plant3dvision.visu import plotly_pointcloud_data
 from plant3dvision.visu import plotly_treegraph_data
 from plant3dvision.visu import plotly_vert_sequences
-from plantdb.commons.fsdb import FSDB
+from plantdb.commons.fsdb.core import FSDB
 from plantdb.commons.io import read_graph
 from plantdb.commons.io import read_json
 from plantdb.commons.io import read_point_cloud

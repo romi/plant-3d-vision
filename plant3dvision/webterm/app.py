@@ -63,7 +63,7 @@ from plant3dvision.webterm.auth import hash_password
 from plant3dvision.webterm.auth import load_users
 from plant3dvision.webterm.auth import users_csv_path
 from plant3dvision.webterm.terminal import terminal_manager
-from plantdb.commons.fsdb import FSDB
+from plantdb.commons.fsdb.core import FSDB
 from romitask.log import DEFAULT_LOG_LEVEL
 from romitask.log import LOG_LEVELS
 from romitask.log import get_logger

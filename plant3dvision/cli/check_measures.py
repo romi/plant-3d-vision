@@ -11,7 +11,7 @@ import glob
 import sys
 from pathlib import Path
 
-from plantdb.commons.fsdb import FSDB
+from plantdb.commons.fsdb.core import FSDB
 from romitask.log import get_logger
 
 

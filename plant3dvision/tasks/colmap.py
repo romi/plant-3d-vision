@@ -171,7 +171,7 @@ def get_image_poses(scan_dataset, md="calibrated_pose", default=None):
     Examples
     --------
     >>> import os
-    >>> from plantdb.commons.fsdb import FSDB
+    >>> from plantdb.commons.fsdb.core import FSDB
     >>> from plant3dvision.tasks.colmap import get_image_poses
     >>> db = FSDB(os.environ.get('ROMI_DB', '/data/ROMI/DB'))
     >>> # Use the calibrated poses from/on a calibration scan:
@@ -204,7 +204,7 @@ def compute_camera_poses_from_colmap(scan_dataset):
     Examples
     --------
     >>> import os
-    >>> from plantdb.commons.fsdb import FSDB
+    >>> from plantdb.commons.fsdb.core import FSDB
     >>> from plant3dvision.tasks.colmap import compute_colmap_poses_from_camera_json
     >>> db = FSDB(os.environ.get('ROMI_DB', '/data/ROMI/DB'))
     >>> # Example 1 - Compute & use the calibrated poses from/on a calibration scan:
@@ -246,7 +246,7 @@ def compute_colmap_poses_from_camera_json(scan_dataset):
     Examples
     --------
     >>> import os
-    >>> from plantdb.commons.fsdb import FSDB
+    >>> from plantdb.commons.fsdb.core import FSDB
     >>> from plant3dvision.tasks.colmap import compute_colmap_poses_from_camera_json
     >>> db = FSDB(os.environ.get('ROMI_DB', '/data/ROMI/DB'))
     >>> # Example 1 - Compute & use the calibrated poses from/on a calibration scan:
@@ -327,7 +327,7 @@ def use_precalibrated_poses(images_fileset, calibration_scan):
     Examples
     --------
     >>> import os
-    >>> from plantdb.commons.fsdb import FSDB
+    >>> from plantdb.commons.fsdb.core import FSDB
     >>> from plant3dvision.tasks.colmap import use_precalibrated_poses
     >>> db = FSDB(os.environ.get('ROMI_DB', '/data/ROMI/DB'))
     >>> # Example 1 - Try to use the calibrated poses on a scan with different acquisition parameters:
@@ -427,7 +427,7 @@ def check_scan_parameters(scan_to_calibrate, calibration_scan):
     Examples
     --------
     >>> import os
-    >>> from plantdb.commons.fsdb import FSDB
+    >>> from plantdb.commons.fsdb.core import FSDB
     >>> from plant3dvision.tasks.colmap import check_scan_parameters
     >>> db = FSDB(os.environ.get('ROMI_DB', '/data/ROMI/DB'))
     >>> db.connect()

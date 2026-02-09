@@ -46,7 +46,6 @@ load_dotenv(verbose=False, override=True)
 # Disable eventlet multiple readers check for terminal operations
 try:
     from eventlet.debug import hub_prevent_multiple_readers
-
     hub_prevent_multiple_readers(False)
 except ImportError:
     pass
@@ -68,7 +67,7 @@ socketio_app, flask_app = create_webterm_app(**app_config)
 application = flask_app
 
 if __name__ == '__main__':
-    socketio_app, flask_app = create_webterm_app(**app_config)
+    #socketio_app, flask_app = create_webterm_app(**app_config)
     run_config = {
         'host': os.environ.get('SERVER_HOST', '0.0.0.0'),
         'port': int(os.environ.get('SERVER_PORT', 8080)),

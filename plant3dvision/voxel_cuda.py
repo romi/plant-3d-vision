@@ -68,7 +68,7 @@ class Backprojection:
     Examples
     --------
     >>> import numpy as np
-    >>> from plantdb.commons.fsdb import FSDB
+    >>> from plantdb.commons.fsdb.core import FSDB
     >>> from plantdb.commons.test_database import test_database
     >>> from plantdb.server.rest_api import compute_fileset_matches
     >>> from plant3dvision.voxel_cuda import Backprojection
