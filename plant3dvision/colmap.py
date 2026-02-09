@@ -961,7 +961,7 @@ class ColmapRunner(object):
                 client.images.get(self.colmap_exe)
             except ImageNotFound:
                 logger.warning(f"Could not find '{self.colmap_exe}' image locally...")
-                client.images.pull(colmap_exe, tag=tag)
+                docker_pull(colmap_exe, tag=tag)
             else:
                 logger.info(f"Found '{self.colmap_exe}' image locally...")
 
