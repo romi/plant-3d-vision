@@ -1,6 +1,6 @@
 ARG COLMAP_VERSION="3.8"
 ARG CUDA_CC="75"
-ARG P3DV_BASE_IMG='roboticsmicrofarms/colmap:${COLMAP_VERSION}-cuda_cc${CUDA_CC}'
+ARG P3DV_BASE_IMG="roboticsmicrofarms/colmap:${COLMAP_VERSION}-cuda_cc${CUDA_CC}"
 FROM ${P3DV_BASE_IMG}
 
 LABEL maintainer="Jonathan LEGRAND <jonathan.legrand@ens-lyon.fr>"
