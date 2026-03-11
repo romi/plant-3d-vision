@@ -95,7 +95,7 @@ class Backprojection(object):
     Examples
     --------
     >>> import numpy as np
-    >>> from plantdb.commons.fsdb import FSDB
+    >>> from plantdb.commons.fsdb.core import FSDB
     >>> from plantdb.server.rest_api import compute_fileset_matches
     >>> from plant3dvision.cl import Backprojection
     >>> from plant3dvision.visu import plt_volume_slice_viewer

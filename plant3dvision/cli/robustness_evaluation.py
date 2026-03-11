@@ -17,7 +17,7 @@ from tqdm import tqdm
 
 from plant3dvision.compare import *
 from plant3dvision.compare import _get_task_fileset
-from plantdb.commons.fsdb import FSDB
+from plantdb.commons.fsdb.core import FSDB
 from plantdb.commons.fsdb.core import LOCK_FILE_NAME
 from plantdb.commons.fsdb.core import MARKER_FILE_NAME
 from romitask.log import get_logger

@@ -41,7 +41,7 @@ from pathlib import Path
 from plant3dvision.visu import plt_volume_slice_viewer
 from plant3dvision.visu import pyvista_volume
 from plantdb.commons import io
-from plantdb.commons.fsdb import FSDB
+from plantdb.commons.fsdb.core import FSDB
 
 
 def parsing():

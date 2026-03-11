@@ -305,7 +305,7 @@ class Masks(FileByFileTask):
     --------
     >>> import luigi
     >>> from plant3dvision import test_db_path
-    >>> from plantdb.commons.fsdb import FSDB
+    >>> from plantdb.commons.fsdb.core import FSDB
     >>> db = FSDB(test_db_path())
     >>> global db
     >>> db.connect()
