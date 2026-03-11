@@ -14,7 +14,7 @@ from pathlib import Path
 import toml
 
 from plant3dvision.camera import format_camera_params
-from plant3dvision.tasks.colmap import compute_colmap_poses_from_camera_json
+from plant3dvision.tasks.colmap import compute_colmap_poses_from_images_json
 from plant3dvision.tasks.colmap import get_cnc_poses
 from plant3dvision.tasks.colmap import pose_estimation_figure
 from plantdb.commons.fsdb.core import FSDB
@@ -46,7 +46,7 @@ def main(dataset_path):
     # - Get the CNC poses:
     cnc_poses = get_cnc_poses(current_scan)
     # - Get the COLMAP poses:
-    colmap_poses = compute_colmap_poses_from_camera_json(current_scan)
+    colmap_poses = compute_colmap_poses_from_images_json(current_scan)
 
     fs = current_scan.get_filesets()
     fs_names = [f.id for f in fs]
