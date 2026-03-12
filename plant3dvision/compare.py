@@ -15,7 +15,7 @@ from plant3dvision.metrics import chamfer_distance
 from plant3dvision.metrics import point_cloud_registration_fitness
 from plant3dvision.metrics import surface_ratio
 from plant3dvision.metrics import volume_ratio
-from plant3dvision.tasks.colmap import compute_camera_poses_from_colmap
+from plant3dvision.tasks.colmap import compute_camera_poses_from_images_metadata
 from plant3dvision.tasks.colmap import get_cnc_poses
 from plant3dvision.tasks.colmap import get_image_poses
 from plantdb.commons.fsdb.core import FSDB
@@ -530,7 +530,8 @@ def compare_to_cnc_poses(db, task_name, scans_list):
     camera_poses_by_scan = {}  # {scan_id: {img_id: [x, y, z, pan, tilt, roll]}}
     for scan in scans_list:
         if task_name.startswith("Colmap"):
-            camera_poses_by_scan[scan.id] = compute_camera_poses_from_colmap(scan)  # {img_id: [x, y, z, pan, tilt, roll]}
+            camera_poses_by_scan[scan.id] = compute_camera_poses_from_images_metadata(
+                scan)  # {img_id: [x, y, z, pan, tilt, roll]}
         elif "Calibration" in task_name:
             camera_poses_by_scan[scan.id] = get_image_poses(scan, "calibrated_pose")  # {img_id: [x, y, z, pan, tilt, roll]}
         else:
@@ -643,7 +644,8 @@ def compare_to_calibrated_poses(db, task_name, scans_list):
     # - Get all poses estimated by COLMAP indexed by image id and by replicate id:
     camera_poses_by_scan = {}  # {scan_id: {img_id: [x, y, z, pan, tilt, roll]}}
     for scan in scans_list:
-        camera_poses_by_scan[scan.id] = compute_camera_poses_from_colmap(scan)  # {img_id: [x, y, z, pan, tilt, roll]}
+        camera_poses_by_scan[scan.id] = compute_camera_poses_from_images_metadata(
+            scan)  # {img_id: [x, y, z, pan, tilt, roll]}
         pose_estimation_figure(calibrated_poses, camera_poses_by_scan[scan.id], add_image_id=False, pred_scan_id=scan.id,
                                ref_scan_id="ExtrinsicCalibration", ref_label="Calibrated", pred_label="Estimated",
                                path=db.basedir, prefix=f"{scan.id}-")

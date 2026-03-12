@@ -314,8 +314,8 @@ def estimate_camera_pose(rot_matrix, tvec):
     >>> x, y, z, pan, tilt, roll = estimate_camera_pose(rot_matrix, tvec)
     >>> print([x, y, z])
     [24.305643496725597, 374.51438596370315, 109.2341875074113]
-    >>> print(pan, tilt)
-    265.2846760236354 59.063102235084784
+    >>> print(pan, tilt, roll)
+    265.2846760236354 59.063102235084784 177.53547406846363
     """
     from scipy.spatial.transform import Rotation as R
     # Compute the camera position in world coordinates

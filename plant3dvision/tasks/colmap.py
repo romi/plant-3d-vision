@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import sys
+import json
 import os
+import sys
 from os.path import join
 from os.path import splitext
+from pathlib import Path
+from typing import Any
 
 import luigi
 import numpy as np
-import json
 import toml
 from scipy.spatial.distance import euclidean
 
@@ -24,6 +26,8 @@ from plant3dvision.filenames import COLMAP_IMAGES_ID
 from plant3dvision.filenames import COLMAP_POINTS_ID
 from plant3dvision.filenames import COLMAP_SPARSE_ID
 from plantdb.commons import io
+from plantdb.commons.fsdb.core import File
+from plantdb.commons.fsdb.core import Scan
 from romitask import SCAN_TOML
 from romitask import ScanConfiguration
 from romitask.log import get_logger
@@ -33,7 +37,7 @@ from romitask.task import RomiTask
 logger = get_logger(__name__)
 
 
-def get_cnc_poses_from_files(image_files, axes='xyzpt'):
+def get_cnc_poses_from_files(image_files: File, axes: str = 'xyzpt') -> dict[str, list[float]]:
     """Extract CNC machine poses from image fileset metadata.
 
     Retrieves pose information from image fileset metadata, using either 'pose' or 'approximate_pose'
@@ -49,7 +53,7 @@ def get_cnc_poses_from_files(image_files, axes='xyzpt'):
 
     Returns
     -------
-    dict
+     dict[str, list[float]]
         The dictionary mapping image IDs to their pose coordinates.
         Values are lists of float coordinates in the order specified by `axes` parameter.
 
@@ -113,7 +117,7 @@ def get_cnc_poses_from_files(image_files, axes='xyzpt'):
     return cnc_poses
 
 
-def get_cnc_poses(scan_dataset, axes='xyzpt'):
+def get_cnc_poses(scan_dataset: Scan, axes: str = 'xyzpt') -> dict[str, list[float]]:
     """Get the CNC poses from the 'images' fileset using "pose" or "approximate_pose" metadata.
 
     Parameters
@@ -123,7 +127,7 @@ def get_cnc_poses(scan_dataset, axes='xyzpt'):
 
     Returns
     -------
-    dict
+    dict[str, list[float]]
         The dictionary mapping image IDs to their pose coordinates.
         Values are lists of float coordinates in the order specified by `axes` parameter.
 
@@ -140,82 +144,86 @@ def get_cnc_poses(scan_dataset, axes='xyzpt'):
     --------
     >>> from plant3dvision.tasks.colmap import get_cnc_poses
     >>> from plantdb.commons.test_database import test_database
-    >>> db = test_database('real_plant')
+    >>> # Initialize a test database with a dataset that has the Colmap task
+    >>> db = test_database(dataset='real_plant_analyzed')
     >>> db.connect()
-    >>> # - Select the dataset to reconstruct:
-    >>> scan = db.get_scan('real_plant')
+    >>> db.login("guest", "guest")
+    >>> scan_id = "real_plant_analyzed"
+    >>> scan = db.get_scan(scan_id)
+    >>> # Get the CNC camera poses (extrinsic) from the 'images' fileset:
     >>> cnc_poses = get_cnc_poses(scan)
     >>> print(cnc_poses['00000_rgb'])  # X, Y, Z, pan, tilt coordinates
+    [75.0, 375.0, 80, 270.0, 0]
     >>> xyz_cnc_poses = get_cnc_poses(scan, axes='xyz')
     >>> print(xyz_cnc_poses['00000_rgb'])  # X, Y, Z coordinates
+    [75.0, 375.0, 80]
     >>> db.disconnect()
-
     """
     img_fs = scan_dataset.get_fileset('images').get_files()
     return get_cnc_poses_from_files(img_fs, axes)
 
 
-def get_image_poses(scan_dataset, md="calibrated_pose", default=None):
+def get_image_poses(scan_dataset: Scan, md: str = "calibrated_pose", default: Any = None) -> dict[str, list[float]]:
     """Get the calibrated camera poses, estimated by colmap, from the 'images' fileset using "calibrated_pose" metadata.
 
     Parameters
     ----------
-    scan_dataset : plantdb.commons.db.Scan
+    scan_dataset : plantdb.commons.fsdb.core.Scan
         Get the calibrated poses from this scan dataset.
 
     Returns
     -------
-    dict
+    dict[str, list[float]]
         Image-id indexed dictionary of camera poses as X, Y, Z.
 
     Examples
     --------
-    >>> import os
-    >>> from plantdb.commons.fsdb import FSDB
     >>> from plant3dvision.tasks.colmap import get_image_poses
-    >>> db = FSDB(os.environ.get('ROMI_DB', '/data/ROMI/DB'))
-    >>> # Use the calibrated poses from/on a calibration scan:
+    >>> from plantdb.commons.test_database import test_database
+    >>> # Initialize a test database with a dataset that has the Colmap task
+    >>> db = test_database(dataset='real_plant_analyzed')
     >>> db.connect()
-    >>> db.list_scans()
-    >>> scan_id = "sango36"
+    >>> db.login("guest", "guest")
+    >>> scan_id = "real_plant_analyzed"
     >>> scan = db.get_scan(scan_id)
-    >>> colmap_poses = get_image_poses(scan)
-    >>> print(colmap_poses)
+    >>> # Get the estimated camera poses (extrinsic) from the 'images' fileset:
+    >>> colmap_poses = get_image_poses(scan, 'estimated_pose')
+    >>> print(colmap_poses['00000_rgb'])
+    [75.13817987259904, 378.32946425921693, 77.70216061126882]
     >>> db.disconnect()
-
     """
     images_fileset = scan_dataset.get_fileset('images')
     return {im.id: im.get_metadata(md, default) for im in images_fileset.get_files()}
 
 
-def compute_camera_poses_from_colmap(scan_dataset):
-    """Get the camera poses estimated by colmap from a 'Colmap*' fileset using "rotmat" & "tvec" metadata.
+def compute_camera_poses_from_images_metadata(scan_dataset: Scan) -> dict[str, list[float]]:
+    """Compute the camera poses estimated by Colmap from the metadata of each file in the 'images' fileset.
 
     Parameters
     ----------
-    scan_dataset : plantdb.commons.db.Scan
-        The scan to get the colmap poses from.
+    scan_dataset : plantdb.commons.fsdb.core.Scan
+        The scan to compute the colmap estimated poses for.
 
     Returns
     -------
-    dict
-        Image-id indexed dictionary of camera poses as X, Y, Z.
+    dict[str, list[float]]
+        Image-id indexed dictionary of camera poses as X, Y, Z, Pan, Tilt, Roll.
 
     Examples
     --------
-    >>> import os
-    >>> from plantdb.commons.fsdb import FSDB
-    >>> from plant3dvision.tasks.colmap import compute_colmap_poses_from_camera_json
-    >>> db = FSDB(os.environ.get('ROMI_DB', '/data/ROMI/DB'))
-    >>> # Example 1 - Compute & use the calibrated poses from/on a calibration scan:
+    >>> from plant3dvision.tasks.colmap import compute_camera_poses_from_images_metadata
+    >>> from plantdb.commons.test_database import test_database
+    >>> # Initialize a test database with a dataset that has the Colmap task
+    >>> db = test_database(dataset='real_plant_analyzed')
     >>> db.connect()
-    >>> db.list_scans()
-    >>> scan_id = "sgk_300_90_36"
+    >>> db.login("guest", "guest")
+    >>> scan_id = "real_plant_analyzed"
     >>> scan = db.get_scan(scan_id)
-    >>> colmap_poses = compute_colmap_poses_from_camera_json(scan)
-    >>> print(colmap_poses)
+    >>> # Get the camera poses (extrinsic) from the metadata of each file in the 'images' fileset:
+    >>> colmap_poses = compute_camera_poses_from_images_metadata(scan)
+    >>> print(colmap_poses['00000_rgb'])
+    [75.13817987259904, 378.32946425921693, 77.70216061126882, 279.70087343697384, 69.88307357761366, 173.6289009619148]
     >>> db.disconnect()
-
     """
     images_fileset = scan_dataset.get_fileset('images')
 
@@ -225,39 +233,41 @@ def compute_camera_poses_from_colmap(scan_dataset):
         rotmat = md_i['colmap_camera']['rotmat']
         tvec = md_i['colmap_camera']['tvec']
         # - Compute the 'calibrated_pose' from COLMAP's rotation and translation matrix:
-        colmap_poses[fi.id] = estimate_camera_pose(np.array(rotmat), np.array(tvec))
+        camera_pose = estimate_camera_pose(np.array(rotmat), np.array(tvec))
+        colmap_poses[fi.id] = list(map(float, camera_pose))
 
     return colmap_poses
 
 
-def compute_colmap_poses_from_camera_json(scan_dataset):
-    """Get the camera poses estimated by colmap from a 'Colmap*' fileset using "rotmat" & "tvec" metadata.
+def compute_colmap_poses_from_images_json(scan_dataset: Scan) -> dict[str, list[float]]:
+    """Compute the camera poses estimated by colmap from a 'Colmap*' fileset using "rotmat" & "tvec" metadata.
 
     Parameters
     ----------
-    scan_dataset : plantdb.commons.db.Scan
-        The scan to get the colmap poses from.
+    scan_dataset : plantdb.commons.fsdb.core.Scan
+        The scan to compute the colmap estimated poses for.
+        Should contain a 'Colmap*' fileset with an `images.json` file.
 
     Returns
     -------
-    dict
-        Image-id indexed dictionary of camera poses as X, Y, Z.
+    dict[str, list[float]]
+        Image-id indexed dictionary of camera poses as X, Y, Z, Pan, Tilt, Roll.
 
     Examples
     --------
-    >>> import os
-    >>> from plantdb.commons.fsdb import FSDB
-    >>> from plant3dvision.tasks.colmap import compute_colmap_poses_from_camera_json
-    >>> db = FSDB(os.environ.get('ROMI_DB', '/data/ROMI/DB'))
-    >>> # Example 1 - Compute & use the calibrated poses from/on a calibration scan:
+    >>> from plant3dvision.tasks.colmap import compute_colmap_poses_from_images_json
+    >>> from plantdb.commons.test_database import test_database
+    >>> # Initialize a test database with a dataset that has the Colmap task
+    >>> db = test_database(dataset='real_plant_analyzed')
     >>> db.connect()
-    >>> db.list_scans()
-    >>> scan_id = "sango36"
+    >>> db.login("guest", "guest")
+    >>> scan_id = "real_plant_analyzed"
     >>> scan = db.get_scan(scan_id)
-    >>> colmap_poses = compute_colmap_poses_from_camera_json(scan)
-    >>> print(colmap_poses)
+    >>> # Get the camera poses (extrinsic) from the `images.json` file in the 'Colmap_***' fileset:
+    >>> colmap_poses = compute_colmap_poses_from_images_json(scan)
+    >>> print(colmap_poses['00000_rgb'])
+    [75.13817987259904, 378.32946425921693, 77.70216061126882, 279.70087343697384, 69.88307357761366, 173.6289009619148]
     >>> db.disconnect()
-
     """
     scan_name = scan_dataset.id
     # List all filesets and get the one corresponding to the 'Colmap' task:
@@ -279,28 +289,29 @@ def compute_colmap_poses_from_camera_json(scan_dataset):
     colmap_fs = [f for f in fs if f.id.startswith("Colmap")][0]
     images_fileset = scan_dataset.get_fileset('images')
 
-    # - Read the JSON file with colmap estimated poses:
+    # - Read the JSON file with colmap estimated rotation and translation matrix:
     poses = io.read_json(colmap_fs.get_file(COLMAP_IMAGES_ID))
 
     colmap_poses = {}
     for i, fi in enumerate(images_fileset.get_files()):
-        # - Search the calibrated poses (from JSON) matching the calibration image id:
+        # - Search the matching the image id:
         key = None
         for k in poses.keys():
             if splitext(poses[k]['name'])[0] == fi.id:
                 key = k
                 break
-        # - Log an error if previous search failed!
         if key is None:
+            # - Log an error if the previous search failed!
             logger.error(f"Missing camera pose of image '{fi.id}' in scan '{scan_name}'!")
         else:
-            # - Compute the 'calibrated_pose' from COLMAP's rotation and translation matrix:
-            colmap_poses[fi.id] = estimate_camera_pose(np.array(poses[key]['rotmat']), np.array(poses[key]['tvec']))
+            # - Compute the estimated pose from COLMAP's rotation and translation matrix:
+            camera_pose = estimate_camera_pose(np.array(poses[key]['rotmat']), np.array(poses[key]['tvec']))
+            colmap_poses[fi.id] = list(map(float, camera_pose))
 
     return colmap_poses
 
 
-def use_precalibrated_poses(images_fileset, calibration_scan):
+def use_precalibrated_poses(images_fileset: list[File], calibration_scan: Scan):
     """Use a calibration scan to add its 'calibrated_pose' to an 'images' fileset.
 
     Parameters
@@ -326,9 +337,9 @@ def use_precalibrated_poses(images_fileset, calibration_scan):
 
     Examples
     --------
-    >>> import os
-    >>> from plantdb.commons.fsdb import FSDB
     >>> from plant3dvision.tasks.colmap import use_precalibrated_poses
+    >>> import os
+    >>> from plantdb.commons.fsdb.core import FSDB
     >>> db = FSDB(os.environ.get('ROMI_DB', '/data/ROMI/DB'))
     >>> # Example 1 - Try to use the calibrated poses on a scan with different acquisition parameters:
     >>> db.connect()
@@ -381,14 +392,18 @@ def use_precalibrated_poses(images_fileset, calibration_scan):
     return images_fileset
 
 
-def get_scan_config(scan_path):
-    """
-    Gets scan config from either `scan.toml` (v2) or the dataset metadata (v3)
+def get_scan_config(scan_path: str | Path) -> dict:
+    """Gets scan config from either `scan.toml` (v2) or the dataset metadata (v3)
 
     Parameters
     ----------
-    scan_path : str
-        Path to the dataset containing the scan
+    scan_path : str | Path
+        The path to the dataset containing the scan.
+
+    Returns
+    -------
+    dict
+        The loaded scan configuration dictionary.
     """
     path = os.path.join(scan_path, SCAN_TOML)
     if os.path.isfile(path):
@@ -426,9 +441,9 @@ def check_scan_parameters(scan_to_calibrate, calibration_scan):
 
     Examples
     --------
-    >>> import os
-    >>> from plantdb.commons.fsdb import FSDB
     >>> from plant3dvision.tasks.colmap import check_scan_parameters
+    >>> import os
+    >>> from plantdb.commons.fsdb.core import FSDB
     >>> db = FSDB(os.environ.get('ROMI_DB', '/data/ROMI/DB'))
     >>> db.connect()
     >>> db.list_scans()
