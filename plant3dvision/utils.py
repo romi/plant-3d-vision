@@ -366,14 +366,15 @@ def angular_distance(angle1, angle2):
 
     Examples
     --------
+    >>> from plant3dvision.utils import angular_distance
     >>> angular_distance(10, 350)
-    20.0
+    20
     >>> angular_distance(0, 180)
-    180.0
+    180
     >>> angular_distance(270, 90)
-    180.0
+    180
     >>> angular_distance(359, 1)
-    2.0
+    2
     """
     # Ensure angles are in the range [0, 360)
     angle1 = angle1 % 360
@@ -382,3 +383,51 @@ def angular_distance(angle1, angle2):
     diff = abs(angle1 - angle2)
     # Return the smaller angle between direct difference and going the other way around the circle
     return min(diff, 360 - diff)
+
+def signed_angular_distance(angle1, angle2):
+    """Return the signed minimum angular distance from *angle1* to *angle2*.
+
+    The sign indicates the direction you must rotate from *angle1* to reach
+    *angle2* using the shortest path:
+
+    * **>0** – rotate counter‑clockwise (mathematical positive direction)
+    * **<0** – rotate clockwise
+
+    The magnitude is always ≤180°.  The result is in the range ``(-180, 180]``.
+
+    Parameters
+    ----------
+    angle1 : float or int
+        Starting angle in degrees.
+    angle2 : float or int
+        Target angle in degrees.
+
+    Returns
+    -------
+    float
+        Signed minimal angular distance in degrees.
+
+    Examples
+    --------
+    >>> from plant3dvision.utils import signed_angular_distance
+    >>> signed_angular_distance(10, 350)
+    -20
+    >>> signed_angular_distance(350, 10)
+    20
+    >>> signed_angular_distance(0, 180)
+    -180
+    >>> signed_angular_distance(180, 0)
+    -180
+    """
+    # Normalize both angles to [0, 360)
+    a1 = angle1 % 360
+    a2 = angle2 % 360
+
+    # Compute raw difference (target – source)
+    diff = a2 - a1
+
+    # Wrap it into (-180, 180] using modular arithmetic
+    # Adding 540 (= 360 + 180) ensures the value is positive before the final modulo.
+    signed_diff = ((diff + 540) % 360) - 180
+
+    return signed_diff
