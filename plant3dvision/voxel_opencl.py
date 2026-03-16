@@ -96,11 +96,11 @@ class Backprojection(object):
     --------
     >>> import numpy as np
     >>> from plantdb.commons.fsdb.core import FSDB
-    >>> from plantdb.server.rest_api import compute_fileset_matches
+    >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plant3dvision.cl import Backprojection
     >>> from plant3dvision.visu import plt_volume_slice_viewer
     >>> db = FSDB('/data/ROMI/test_owner')
-    >>> db.connect(unsafe=True)
+    >>> db.connect()
     >>> scan = db.get_scan("Col-0_E1_1")
     >>> mask_fs_id = compute_fileset_matches(scan)["Masks"]
     >>> mask_fs = scan.get_fileset(mask_fs_id)

@@ -70,13 +70,13 @@ class Backprojection:
     >>> import numpy as np
     >>> from plantdb.commons.fsdb.core import FSDB
     >>> from plantdb.commons.test_database import test_database
-    >>> from plantdb.server.rest_api import compute_fileset_matches
+    >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plant3dvision.voxel_cuda import Backprojection
     >>> from plant3dvision.visu import plt_volume_slice_viewer
     >>>
     >>> # Set up the database and scan
     >>> db = test_database('real_plant_analyzed')
-    >>> db.connect(unsafe=True)
+    >>> db.connect()
     >>> scan = db.get_scan("real_plant_analyzed")
     >>> mask_fs_id = compute_fileset_matches(scan)["Masks"]
     >>> mask_fs = scan.get_fileset(mask_fs_id)

@@ -1378,7 +1378,7 @@ class ColmapRunner(object):
         # - AUTOMATIC estimation of bounding-box from dense (if any) or sparse point cloud if not manually defined:
         if self.bounding_box is None:
             if dense_pcd is not None:
-                points_array = np.asarray(sparse_pcd.points)
+                points_array = np.asarray(dense_pcd.points)
             else:
                 points_array = np.asarray(sparse_pcd.points)
             # Get the bounding-box using min & max in each direction +/- 5% of the range in each direction
