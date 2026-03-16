@@ -326,6 +326,52 @@ def estimate_camera_pose(rot_matrix, tvec):
     pan = (180 - pan) % 360  # change rotation orientation and range from [-180, 180] to [0, 360]
     return list(camera_position) + [pan, tilt, roll]
 
+def estimate_rotation_translation_mat(x, y, z, pan, tilt, roll):
+    """Estimate the rotation (3×3) and translation (3,) matrices from the camera pose (position & orientation).
+
+    Parameters
+    ----------
+    x, y, z : float
+        Camera center in world coordinates.
+    pan, tilt, roll : float
+        Angles (in degrees) in world coordinates.
+        *pan* should be remapped with ``(180‑pan) % 360``.
+
+    Returns
+    -------
+    rot_matrix : np.ndarray, shape (3, 3)
+        COLMAP rotation matrix.
+    tvec : np.ndarray, shape (3,)
+        COLMAP translation vector.
+
+    Notes
+    -----
+    This does the exact opposite of `estimate_camera_pose`.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from plant3dvision.colmap import estimate_rotation_translation_mat
+    >>> from plant3dvision.colmap import estimate_camera_pose
+    >>> # Sample rotation matrix (3x3) and translation vector (3x1)
+    >>> rot_matrix = np.array([[0.04537058362671326, -0.998725595306853, 0.022106456530704977], [-0.5123537456733758, -0.042261105904542295, -0.8577340136791751], [0.8575751567272887, 0.027589566990035286, -0.5136182106949377]])
+    >>> tvec = np.array([370.51956102391097, 121.97435769625103, 24.928062162932385])
+    >>> x, y, z, pan, tilt, roll = estimate_camera_pose(rot_matrix, tvec)
+    >>> rot_rec, tvec_rec = estimate_rotation_translation_mat(x, y, z, 180.0 - pan, tilt, roll)
+    >>> print("rot diff  :", np.max(np.abs(rot_matrix - rot_rec)))   # ≈ 0
+    >>> print("tvec diff :", np.max(np.abs(tvec - tvec_rec)))       # ≈ 0
+    """
+    from scipy.spatial.transform import Rotation as R
+    # Build the rotation matrix from the (pan, tilt, roll)
+    rot = R.from_euler('zxy', [pan, tilt, roll], degrees=True)
+    rot_matrix = rot.as_matrix()                     # shape (3, 3)
+
+    # Recover the translation vector (COLMAP’s “tvec”)
+    #    camera_position = -R.T @ tvec -> tvec = -R @ camera_position
+    camera_position = np.array([x, y, z], dtype=float)
+    tvec = -rot_matrix @ camera_position           # shape (3,)
+
+    return rot_matrix, tvec
 
 def export_camera_parameters(image_files, intrinsics, extrinsics):
     """Export camera intrinsics and extrinsic to images metadata.
