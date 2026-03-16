@@ -451,8 +451,9 @@ class Backprojection:
         ----------
         fs : plantdb.commons.db.Fileset or list of plantdb.commons.db.File
             The images `Fileset` or list of images `File` to process.
-        camera_metadata : str
-            The key in file metadata used to retrieve camera parameters.
+        camera_metadata : str or dict[str, dict]
+            If a string, the key in file metadata used to retrieve camera parameters.
+            Else, a dictionary with the file ID as keys and a dictionary with camera parameters.
         label : str, optional
             The label to filter files by channel. If None, no filtering is performed.
         invert : bool, default=False
@@ -481,33 +482,32 @@ class Backprojection:
             if label is not None and fi.get_metadata("channel") != label:
                 continue
             logger.debug(f"Processing file {fi.id}")
-            try:
-                # Get camera parameters from metadata
+            # Get camera parameters from metadata
+            if isinstance(camera_metadata, str):
                 cam = fi.get_metadata(camera_metadata, default=None)
-                if cam is None:
-                    logger.warning(f"Could not get camera params from '{camera_metadata}' for {fi.id}, skipping...")
-                    skipped_count += 1
-                    continue
+            else:
+                cam = camera_metadata.get(fi.id, None)
 
-                # Extract intrinsics, rotation matrix and translation vector from camera parameters
-                intrinsics = np.array(cam["camera_model"]['params'][0:4], dtype=np.float32)
-                rot = np.array(sum(cam['rotmat'], []), dtype=np.float32)
-                tvec = np.array(cam['tvec'], dtype=np.float32)
-
-                # Load mask image
-                mask = io.read_image(fi)
-                if invert:
-                    # Invert the mask if requested
-                    mask = np.invert(mask)
-
-                # Process view with extracted parameters and mask
-                self.process_view(intrinsics, rot, tvec, mask)
-                processed_count += 1
-
-            except Exception as e:
-                logger.error(f"Error processing file {fi.id}: {e}")
+            if cam is None:
+                logger.warning(f"Could not get camera params from '{camera_metadata}' for {fi.id}, skipping...")
                 skipped_count += 1
                 continue
+
+            # Extract intrinsics, rotation matrix and translation vector from camera parameters
+            assert cam["camera_model"]['model'] == 'OPENCV'
+            intrinsics = np.array(cam["camera_model"]['params'][0:4], dtype=np.float32)
+            rot = np.array(cam['rotmat'], dtype=np.float32).flatten()
+            tvec = np.array(cam['tvec'], dtype=np.float32)
+
+            # Load mask image
+            mask = io.read_image(fi)
+            if invert:
+                # Invert the mask if requested
+                mask = np.invert(mask)
+
+            # Process view with extracted parameters and mask
+            self.process_view(intrinsics, rot, tvec, mask)
+            processed_count += 1
 
         logger.info(f"Processed {processed_count} files, skipped {skipped_count} files")
         return self.get_values()
