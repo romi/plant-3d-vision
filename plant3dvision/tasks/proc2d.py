@@ -483,7 +483,7 @@ class Segmentation2D(Masks):
         }
 
     def run(self):
-        from romiseg.segmentation_2d import fileset_segmentation
+        from romiseg.predict.segmentation import fileset_segmentation
         from plant3dvision import proc2d
 
         # Get the 'image' `Fileset` to segment and filter by `query`:
