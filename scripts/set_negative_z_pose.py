@@ -15,12 +15,20 @@ Usage example
 import fnmatch
 
 import click
+import toml
+from toml import TomlDecodeError
 
 from plantdb.commons.fsdb.core import FSDB
 
 
 def set_negative_z_pose(image_f):
-    """Make the *z* component of an image pose negative (if it is positive)."""
+    """Make the *z* component of an image pose negative (if it is positive).
+
+    Parameters
+    ----------
+    image_f : plantdb.commons.fsdb.core.Fileset
+        The image file with metadata to update to negative z-values.
+    """
     pose = image_f.get_metadata('approximate_pose')
     if len(pose) == 5:
         x, y, z, pan, tilt = pose
@@ -34,6 +42,26 @@ def set_negative_z_pose(image_f):
     image_f.set_metadata('approximate_pose', [x, y, z, pan, tilt, roll])
 
 
+def lower_z_bbox(toml_dict):
+    """Lower the Z‑axis bounding box limits in a configuration dictionary.
+
+    Parameters
+    ----------
+    toml_dict : dict
+        Dictionary parsed from a TOML file that contains a ``Voxels`` key.
+
+    Returns
+    -------
+    dict
+        The dictionary with the updated Z bounding box values.
+    """
+    if "bounding_box" in toml_dict["Voxels"]:
+        z_bbox = toml_dict["Voxels"]["bounding_box"]["z"]
+        toml_dict["Voxels"]["bounding_box"]["z"] = sorted([z_bbox[0] - 250, z_bbox[1] - 210])
+
+    return toml_dict
+
+
 @click.command()
 @click.argument('db_path', type=click.Path(exists=True, file_okay=False, resolve_path=True))
 @click.option('--scan', 'scan_patterns', multiple=True, default=('*',),
@@ -42,8 +70,7 @@ def set_negative_z_pose(image_f):
 @click.option('--db-user', 'db_user', default='guest', help='FSDB username (optional).')
 @click.option('--db-password', 'db_password', default='guest', help='FSDB password (optional).')
 def main(db_path, scan_patterns, db_user, db_password):
-    """
-    Connect to the FSDB, optionally filter scans, and apply the negative‑z fix.
+    """Connect to the FSDB, optionally filter scans, and apply the negative‑z fix.
 
     Parameters
     ----------
@@ -82,9 +109,27 @@ def main(db_path, scan_patterns, db_user, db_password):
     # Process each selected scan
     for scan in selected_scans:
         click.echo(f"Processing scan: {getattr(scan, 'name', 'unknown')}")
+
         images_fs = scan.get_fileset('images')
         for image_f in images_fs.get_files():
             set_negative_z_pose(image_f)
+
+        try:
+            toml_dict = toml.load(scan.path() / "pipeline.toml")
+        except FileNotFoundError:
+            click.echo(f"No such pipeline.toml file for scan: {scan_id}")
+            continue
+        except TomlDecodeError:
+            click.echo(f"Could not decode pipeline.toml file for scan: {scan_id}")
+            continue
+        except Exception as e:
+            click.echo(f"Unexpected error: {e}")
+            continue
+
+        toml_dict = lower_z_bbox(toml_dict)
+
+        with open(scan.path() / "pipeline.toml", "w") as f:
+            toml.dump(toml_dict, f)
 
     click.echo("All done!")
 
