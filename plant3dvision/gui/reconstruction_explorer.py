@@ -1,5 +1,15 @@
 import os
 
+import toml
+from PySide6.QtWidgets import QSpinBox
+from matplotlib import pyplot as plt
+
+from plant3dvision.visu import pyvista_mesh
+from plant3dvision.visu import pyvista_volume
+from plantdb.commons.fsdb.exceptions import FilesetNotFoundError
+from plantdb.commons.io import read_triangle_mesh
+from plantdb.commons.io import read_volume
+
 if os.getenv("QT_QPA_PLATFORM") is None:
     os.environ["QT_QPA_PLATFORM"] = "xcb"
 
@@ -71,10 +81,24 @@ class ReconstructionExplorer(QMainWindow):
         self._db.login('guest', 'guest')
 
         # State
-        self._cloud_actor = None
+        self._pcd_actor = None
+        self._vol_actor = None
+        self._mesh_actor = None
+        self._vol = None
+        self._pcd = None
+        self._mesh = None
+        self._origin = None
+        self._spacing = None
+        self._vol_path = None
+        self._pcd_path = None
+        self._mesh_path = None
         self._images_fs = None
         self._image_files = []
-        self._point_color = "dodgerblue"
+        self._voxel_colormap = "inferno"
+        self._pcd_color = "dodgerblue"
+        self._pcd_opacity = 1.0  # fully opaque
+        self._pcd_point_size = 2  # default point size
+        self._mesh_color = "neon"
         self._grid_visible = True
         self._current_cam_params = None  # (pos, focal, up, fov)
 
@@ -142,14 +166,64 @@ class ReconstructionExplorer(QMainWindow):
         scan_vbox.addWidget(self._scan_combo)
         right_layout.addWidget(scan_group)
 
-        # Point-cloud color
-        color_group = QGroupBox("Point Cloud Color")
-        color_vbox = QVBoxLayout(color_group)
-        self._color_btn = QPushButton("Pick color")
-        self._color_btn.setEnabled(False)
-        self._color_btn.clicked.connect(self._on_pick_color)
-        color_vbox.addWidget(self._color_btn)
-        right_layout.addWidget(color_group)
+        # Voxels data
+        voxel_group = QGroupBox("Voxels")
+        voxel_vbox = QVBoxLayout(voxel_group)
+        self._voxel_checkbox = QCheckBox("Show voxels")
+        self._voxel_checkbox.setEnabled(False)
+        self._voxel_checkbox.stateChanged.connect(self._on_voxel_toggled)
+        # Dropdown that lists all PyVista colormaps
+        self._voxel_cmap_combo = QComboBox()
+        self._voxel_cmap_combo.setEnabled(False)
+        # Populate with the names of the available colormaps
+        self._voxel_cmap_combo.addItems(plt.colormaps)
+        self._voxel_cmap_combo.setCurrentText(self._voxel_colormap)
+        self._voxel_cmap_combo.currentTextChanged.connect(self._on_voxel_cmap_changed)
+        voxel_vbox.addWidget(self._voxel_checkbox)
+        voxel_vbox.addWidget(self._voxel_cmap_combo)
+        right_layout.addWidget(voxel_group)
+
+        # Point-cloud data
+        pcd_group = QGroupBox("Point Cloud")
+        pcd_vbox = QVBoxLayout(pcd_group)
+        self._pcd_checkbox = QCheckBox("Show point cloud")
+        self._pcd_checkbox.setEnabled(False)
+        self._pcd_checkbox.stateChanged.connect(self._on_pcd_toggled)
+        self._pcd_color_btn = QPushButton("Pick color")
+        self._pcd_color_btn.setEnabled(False)
+        self._pcd_color_btn.clicked.connect(self._on_pick_pcd_color)
+        # Opacity slider (0‑100 → 0.0‑1.0)
+        self._pcd_opacity_slider = QSlider(Qt.Orientation.Horizontal)
+        self._pcd_opacity_slider.setRange(0, 100)
+        self._pcd_opacity_slider.setValue(100)  # fully opaque by default
+        self._pcd_opacity_slider.setEnabled(False)
+        self._pcd_opacity_slider.valueChanged.connect(self._on_pcd_opacity_changed)
+        # Point‑size spin box (1‑50)
+        self._pcd_point_spin = QSpinBox()
+        self._pcd_point_spin.setRange(1, 50)
+        self._pcd_point_spin.setValue(2)  # matches the default in _render_point_cloud
+        self._pcd_point_spin.setEnabled(False)
+        self._pcd_point_spin.valueChanged.connect(self._on_pcd_point_size_changed)
+        pcd_vbox.addWidget(self._pcd_checkbox)
+        pcd_vbox.addWidget(self._pcd_color_btn)
+        pcd_vbox.addWidget(QLabel("Opacity"))
+        pcd_vbox.addWidget(self._pcd_opacity_slider)
+        pcd_vbox.addWidget(QLabel("Point size"))
+        pcd_vbox.addWidget(self._pcd_point_spin)
+        right_layout.addWidget(pcd_group)
+
+        # Triangular Mesh data
+        mesh_group = QGroupBox("Triangular Mesh")
+        mesh_vbox = QVBoxLayout(mesh_group)
+        self._mesh_checkbox = QCheckBox("Show mesh")
+        self._mesh_checkbox.setEnabled(False)
+        self._mesh_checkbox.stateChanged.connect(self._on_mesh_toggled)
+        self._mesh_color_btn = QPushButton("Pick color")
+        self._mesh_color_btn.setEnabled(False)
+        self._mesh_color_btn.clicked.connect(self._on_pick_mesh_color)
+        mesh_vbox.addWidget(self._mesh_checkbox)
+        mesh_vbox.addWidget(self._mesh_color_btn)
+        right_layout.addWidget(mesh_group)
 
         # Grid toggle
         grid_group = QGroupBox("Display")
@@ -196,6 +270,61 @@ class ReconstructionExplorer(QMainWindow):
         self._scan_combo.blockSignals(False)
 
     # ------------------------------------------------------------------
+    # Toggle slots
+    # ------------------------------------------------------------------
+
+    def _on_voxel_toggled(self, state):
+        if state == Qt.CheckState.Checked.value:
+            if self._vol is None and self._vol_path is not None:
+                vol = read_volume(self._vol_path)
+                self._vol = pyvista_volume(vol, origin=self._origin, spacing=self._spacing)
+            if self._vol is not None:
+                self._vol_actor = self.plotter.add_mesh(self._vol)
+                self._render_volume(self._voxel_colormap)
+            self._voxel_cmap_combo.setEnabled(True)
+            # Update the combo box to reflect the current colormap
+        else:
+            if self._vol_actor is not None:
+                self.plotter.remove_actor(self._vol_actor)
+                self._vol_actor = None
+                self.plotter.render()
+            self._voxel_cmap_combo.setEnabled(False)
+
+    def _on_pcd_toggled(self, state):
+        if state == Qt.CheckState.Checked.value:
+            if self._pcd is None and self._pcd_path is not None:
+                pcd = read_point_cloud(self._pcd_path)
+                self._pcd = pv.PolyData(np.asarray(pcd.points))
+            if self._pcd is not None:
+                self._render_point_cloud(self._pcd_color)
+            self._pcd_color_btn.setEnabled(True)
+            self._pcd_opacity_slider.setEnabled(True)
+            self._pcd_point_spin.setEnabled(True)
+        else:
+            if self._pcd_actor is not None:
+                self.plotter.remove_actor(self._pcd_actor)
+                self._pcd_actor = None
+                self.plotter.render()
+            self._pcd_color_btn.setEnabled(False)
+            self._pcd_opacity_slider.setEnabled(False)
+            self._pcd_point_spin.setEnabled(False)
+
+    def _on_mesh_toggled(self, state):
+        if state == Qt.CheckState.Checked.value:
+            if self._mesh is None and self._mesh_path is not None:
+                mesh = read_triangle_mesh(self._mesh_path)
+                self._mesh = pyvista_mesh(mesh)
+            if self._mesh is not None:
+                self._render_mesh(self._pcd_color)
+            self._mesh_color_btn.setEnabled(True)
+        else:
+            if self._mesh_actor is not None:
+                self.plotter.remove_actor(self._mesh_actor)
+                self._mesh_actor = None
+                self.plotter.render()
+            self._mesh_color_btn.setEnabled(True)
+
+    # ------------------------------------------------------------------
     # Slots
     # ------------------------------------------------------------------
 
@@ -212,16 +341,38 @@ class ReconstructionExplorer(QMainWindow):
         self._slider_label.setText(f"Image: {image_f.id}")
         self._apply_image(image_f)
 
-    def _on_pick_color(self):
+    def _on_voxel_cmap_changed(self, cmap_name: str):
+        self._voxel_colormap = cmap_name
+        self._apply_vol_color(cmap_name)
+
+    def _on_pick_pcd_color(self):
         color = QColorDialog.getColor(parent=self)
         if color.isValid():
             hex_color = color.name()  # e.g. "#ff8800"
-            self._point_color = hex_color
-            self._apply_point_color(hex_color)
+            self._pcd_color = hex_color
+            self._apply_pcd_color(hex_color)
 
-    def _on_reset_color(self):
-        self._point_color = "dodgerblue"
-        self._apply_point_color("dodgerblue")
+    def _on_pcd_opacity_changed(self, value: int):
+        """Slider gives 0‑100 → map to 0.0‑1.0."""
+        opacity = value / 100.0
+        self._pcd_opacity = opacity
+        if self._pcd_actor is not None:
+            self._pcd_actor.GetProperty().SetOpacity(opacity)
+            self.plotter.render()
+
+    def _on_pcd_point_size_changed(self, size: int):
+        """Spin box directly gives the desired point size."""
+        self._pcd_point_size = size
+        if self._pcd_actor is not None:
+            self._pcd_actor.GetProperty().SetPointSize(size)
+            self.plotter.render()
+
+    def _on_pick_mesh_color(self):
+        color = QColorDialog.getColor(parent=self)
+        if color.isValid():
+            hex_color = color.name()  # e.g. "#ff8800"
+            self._mesh_color = hex_color
+            self._apply_mesh_color(hex_color)
 
     def _on_grid_toggled(self, state):
         if state == Qt.CheckState.Checked.value:
@@ -256,13 +407,43 @@ class ReconstructionExplorer(QMainWindow):
         scan = self._db.get_scan(scan_id)
         fs_matches = compute_fileset_matches(scan)
 
-        # Point cloud
-        pcd_fs = scan.get_fileset(fs_matches['PointCloud'])
-        pcd_f = pcd_fs.get_file('PointCloud')
-        pcd = read_point_cloud(pcd_f.path())
-        pcd_arr = np.asarray(pcd.points)
+        # Store scan references for lazy loading
+        self._vol = None
+        self._pcd = None
+        self._mesh = None
 
-        self._cloud = pv.PolyData(pcd_arr)
+        # Voxels - store file path for lazy loading
+        try:
+            vol_fs = scan.get_fileset(fs_matches['Voxels'])
+            self._vol_path = vol_fs.get_file('Voxels').path()
+        except (FilesetNotFoundError, KeyError):
+            self._vol_path = None
+        self._voxel_checkbox.setEnabled(self._vol_path is not None)
+        self._voxel_checkbox.blockSignals(True)
+        self._voxel_checkbox.setChecked(False)
+        self._voxel_checkbox.blockSignals(False)
+
+        # Point cloud - store file path for lazy loading
+        try:
+            pcd_fs = scan.get_fileset(fs_matches['PointCloud'])
+            self._pcd_path = pcd_fs.get_file('PointCloud').path()
+        except (FilesetNotFoundError, KeyError):
+            self._pcd_path = None
+        self._pcd_checkbox.setEnabled(self._pcd_path is not None)
+        self._pcd_checkbox.blockSignals(True)
+        self._pcd_checkbox.setChecked(False)
+        self._pcd_checkbox.blockSignals(False)
+
+        # Triangular Mesh - store file path for lazy loading
+        try:
+            mesh_fs = scan.get_fileset(fs_matches['TriangleMesh'])
+            self._mesh_path = mesh_fs.get_file('TriangleMesh').path()
+        except (FilesetNotFoundError, KeyError):
+            self._mesh_path = None
+        self._mesh_checkbox.setEnabled(self._mesh_path is not None)
+        self._mesh_checkbox.blockSignals(True)
+        self._mesh_checkbox.setChecked(False)
+        self._mesh_checkbox.blockSignals(False)
 
         # Images fileset
         self._images_fs = scan.get_fileset('images')
@@ -270,9 +451,9 @@ class ReconstructionExplorer(QMainWindow):
 
         # Reset plotter
         self.plotter.clear()
-        self._cloud_actor = None
-
-        self._render_point_cloud(self._point_color)
+        self._vol_actor = None
+        self._pcd_actor = None
+        self._mesh_actor = None
 
         if self._grid_visible:
             self.plotter.show_grid(color='white')
@@ -290,32 +471,62 @@ class ReconstructionExplorer(QMainWindow):
             self._apply_image(self._image_files[0])
 
         # Enable controls
-        self._color_btn.setEnabled(True)
         self._reset_cam_btn.setEnabled(True)
         self._snapshot_btn.setEnabled(True)
 
-    def _render_point_cloud(self, color):
+        # Load the origin of the bounding box
+        pipelne_cfg = toml.load(scan.path() / "pipeline.toml")
+        bbox = pipelne_cfg["Voxels"]["bounding_box"]
+        self._origin = (sorted(bbox["x"])[0], sorted(bbox["y"])[0], sorted(bbox["z"])[0])
+        # self._origin = (0., 0., 0.)
+        self._spacing = pipelne_cfg["Voxels"].get("voxel_size", 1.0)
+
+    def _render_volume(self, colormap):
         """Add (or replace) the point cloud actor."""
-        if self._cloud_actor is not None:
-            self.plotter.remove_actor(self._cloud_actor)
-            self._cloud_actor = None
+        if self._vol_actor is not None:
+            self.plotter.remove_actor(self._vol_actor)
+            self._vol_actor = None
 
-        common = dict(point_size=2, render_points_as_spheres=False, style="points")
-
-        c = color
-        self._cloud_actor = self.plotter.add_mesh(self._cloud, color=c, **common)
-
+        common = dict(reset_camera=False)
+        self._vol_actor = self.plotter.add_volume(self._vol, cmap=colormap, **common)
         self.plotter.render()
 
-    def _apply_point_color(self, color):
+    def _apply_vol_color(self, colormap):
+        self._render_volume(colormap)
+
+    def _render_point_cloud(self, color):
+        """Add (or replace) the point cloud actor."""
+        if self._pcd_actor is not None:
+            self.plotter.remove_actor(self._pcd_actor)
+            self._pcd_actor = None
+
+        common = dict(point_size=self._pcd_point_size, render_points_as_spheres=False, style="points",
+                      opacity=self._pcd_opacity, reset_camera=False)
+        self._pcd_actor = self.plotter.add_mesh(self._pcd, color=color, **common)
+        self.plotter.render()
+
+    def _apply_pcd_color(self, color):
         self._render_point_cloud(color)
 
+    def _render_mesh(self, color):
+        """Add (or replace) the triangular mesh actor."""
+        if self._mesh_actor is not None:
+            self.plotter.remove_actor(self._mesh_actor)
+            self._mesh_actor = None
+
+        common = dict(style="surface", lighting=True, reset_camera=False)
+        self._mesh_actor = self.plotter.add_mesh(self._mesh, color=color, **common)
+        self.plotter.render()
+
+    def _apply_mesh_color(self, color):
+        self._render_mesh(color)
+
     def _apply_image(self, image_f):
-        """Update background image and camera to match the selected image."""
+        """Update the background image and camera to match the selected image."""
         try:
             cam_pos, focal_point, up_world, fov_y_deg = _camera_params_from_file(image_f)
         except Exception:
-            # Metadata missing – just show the image, skip camera update
+            # Metadata missing - just show the image, skip camera update
             cam_pos = focal_point = up_world = fov_y_deg = None
 
         try:
