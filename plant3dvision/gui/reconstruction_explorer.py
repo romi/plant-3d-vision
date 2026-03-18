@@ -376,7 +376,7 @@ class ReconstructionExplorer(QMainWindow):
 
     def _on_grid_toggled(self, state):
         if state == Qt.CheckState.Checked.value:
-            self.plotter.show_grid(color='white')
+            self._render_grid()
         else:
             self.plotter.remove_bounds_axes()
         self.plotter.render()
@@ -455,9 +455,6 @@ class ReconstructionExplorer(QMainWindow):
         self._pcd_actor = None
         self._mesh_actor = None
 
-        if self._grid_visible:
-            self.plotter.show_grid(color='white')
-
         # Setup slider
         n = len(self._image_files)
         self._image_slider.blockSignals(True)
@@ -468,7 +465,9 @@ class ReconstructionExplorer(QMainWindow):
         self._image_slider.blockSignals(False)
 
         if n > 0:
-            self._apply_image(self._image_files[0])
+            # Call the same slot used when the user moves the slider.
+            # This updates the label, background image, camera, etc.
+            self._on_slider_changed(0)
 
         # Enable controls
         self._reset_cam_btn.setEnabled(True)
@@ -487,8 +486,17 @@ class ReconstructionExplorer(QMainWindow):
             self.plotter.remove_actor(self._vol_actor)
             self._vol_actor = None
 
+        scalar_bar_args = dict(
+            vertical=True,  # make the bar vertical
+            color='white',  # title & tick labels in white
+            title_font_size=20,
+            label_font_size=16,
+            fmt='{0:.1f}',
+        )
+
         common = dict(reset_camera=False)
-        self._vol_actor = self.plotter.add_volume(self._vol, cmap=colormap, **common)
+        self._vol_actor = self.plotter.add_volume(self._vol, cmap=colormap, scalar_bar_args=scalar_bar_args, **common)
+        self._render_grid()
         self.plotter.render()
 
     def _apply_vol_color(self, colormap):
@@ -503,6 +511,7 @@ class ReconstructionExplorer(QMainWindow):
         common = dict(point_size=self._pcd_point_size, render_points_as_spheres=False, style="points",
                       opacity=self._pcd_opacity, reset_camera=False)
         self._pcd_actor = self.plotter.add_mesh(self._pcd, color=color, **common)
+        self._render_grid()
         self.plotter.render()
 
     def _apply_pcd_color(self, color):
@@ -516,10 +525,21 @@ class ReconstructionExplorer(QMainWindow):
 
         common = dict(style="surface", lighting=True, reset_camera=False)
         self._mesh_actor = self.plotter.add_mesh(self._mesh, color=color, **common)
+        self._render_grid()
         self.plotter.render()
 
     def _apply_mesh_color(self, color):
         self._render_mesh(color)
+
+    def _render_grid(self):
+        if self._vol_actor is not None:
+            bounds = self._vol.bounds
+            # PyVista ImageData provides .bounds as (xmin, xmax, ymin, ymax, zmin, zmax)
+            self.plotter.show_grid(color='white', bounds=bounds)
+        elif self._pcd_actor is not None:
+            # PyVista PolyData provides .bounds as (xmin, xmax, ymin, ymax, zmin, zmax)
+            bounds = self._pcd.bounds
+            self.plotter.show_grid(color='white', bounds=bounds)
 
     def _apply_image(self, image_f):
         """Update the background image and camera to match the selected image."""
@@ -536,8 +556,8 @@ class ReconstructionExplorer(QMainWindow):
             self.plotter.add_background_image(image_f.path(), as_global=False)
 
         self.plotter.add_text(
-            f"Camera: {image_f.id}",
-            position="upper_left",
+            f"Image: {image_f.id}",
+            position="upper_edge",
             font_size=10,
             color="white",
             name="cam_label",
