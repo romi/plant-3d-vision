@@ -307,6 +307,9 @@ class ReconstructionExplorer(QMainWindow):
 
         self.plotter.render()
 
+    def _apply_point_color(self, color):
+        self._render_point_cloud(color)
+
     def _apply_image(self, image_f):
         """Update background image and camera to match the selected image."""
         try:
