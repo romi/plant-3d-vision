@@ -665,6 +665,7 @@ class Colmap(RomiTask):
     upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)  # override default attribute from ``RomiTask``
     query = luigi.DictParameter(default={})
     matcher = luigi.Parameter(default="exhaustive")
+    colmap_exe = luigi.Parameter(default="roboticsmicrofarms/colmap:3.8")
     compute_dense = luigi.BoolParameter(default=False)
     align_pcd = luigi.BoolParameter(default=True)
     intrinsic_calibration_scan_id = luigi.Parameter(default="")
@@ -792,9 +793,9 @@ class Colmap(RomiTask):
         return {"images": self.upstream_task()}
 
     def run(self):
-        """Execute COLMAP reconstruction pipeline with specified configuration.
+        """Execute the COLMAP reconstruction pipeline with a specified configuration.
 
-        This method performs a complete COLMAP reconstruction workflow including:
+        This method performs a complete COLMAP reconstruction workflow, including
         - Setting up COLMAP parameters
         - Handling calibration (intrinsic and extrinsic)
         - Processing image files
@@ -804,13 +805,13 @@ class Colmap(RomiTask):
         Raises
         ------
         FileNotFoundError
-            If `scan.toml` configuration file is not found.
+            If the `scan.toml` configuration file is not found.
         KeyError
             If required metadata is missing in `scan.toml`.
 
         Notes
         -----
-        - Saves multiple output files including:
+        - Saves multiple output files, including
             - Points cloud data (sparse and dense)
             - Camera parameters
             - Image information
@@ -855,7 +856,7 @@ class Colmap(RomiTask):
             logger.info(f"Got an intrinsic calibration scan: '{self.intrinsic_calibration_scan_id}'.")
             self.set_camera_params(self.intrinsic_calibration_scan_id, 'intrinsic')
 
-        # Determine bounding box - either from workspace metadata or manual definition
+        # Determine the bounding box - either from workspace metadata or manual definition
         if self.bounding_box is None:
             logger.info("Did not get a manually defined cropping bounding-box...")
             bounding_box = self._workspace_as_bounding_box()
@@ -895,6 +896,7 @@ class Colmap(RomiTask):
             align_pcd=bool(self.align_pcd),
             use_calibration=extrinsic_calibration,  # impact the ``poses.txt`` file: use calibrated instead of cnc poses
             bounding_box=bounding_box,
+            colmap_exe=str(self.colmap_exe)
         )
 
         # Perform reconstruction and get results
@@ -923,7 +925,7 @@ class Colmap(RomiTask):
         self.output().get().set_metadata("bounding_box", bounding_box)
 
         from pathlib import Path
-        # - Copy all log files from COLMAP working directory:
+        # - Copy all log files from the COLMAP working directory:
         workdir = Path(colmap_runner.colmap_workdir)
         for log_path in workdir.glob('*.log'):
             outfile = self.output_file(log_path.stem)
@@ -971,7 +973,7 @@ class Colmap(RomiTask):
                     logger.info(f"Check the `euclidean_distances_try_*.json` files for more details.")
                     raise Exception(f"Max retries ({self.retry_count}) reached - Failed to estimate camera poses!")
 
-        # Clean-up the temporary working directory created by the ColmapRunner instance:
+        # Clean up the temporary working directory created by the ColmapRunner instance:
         colmap_runner.clean_up()
         return
 
