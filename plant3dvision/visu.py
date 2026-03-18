@@ -297,13 +297,88 @@ def opacity_func(low_threshold: int = 100,
     else:
         raise ValueError("kind must be 'linear' or 'sigmoid'")
 
-def pyvista_volume(volume):
+def pyvista_mesh(triangle_mesh):
+    """Generate a PyVista triangular mesh from an Open3D triangle mesh.
+
+    Parameters
+    ----------
+    triangle_mesh : open3d.geometry.TriangleMesh
+        Triangular mesh object.
+
+    Returns
+    -------
+    pyvista.PolyData
+        A pyvista PolyData object.
+
+    Examples
+    --------
+    >>> import pyvista as pv
+    >>> from plant3dvision.visu import pyvista_mesh
+    >>> from plantdb.commons.test_database import test_database
+    >>> from plantdb.commons.io import read_triangle_mesh
+    >>> from plantdb.server.core.utils import compute_fileset_matches
+    >>> db = test_database()
+    >>> db.connect()
+    >>> db.login('guest', 'guest')
+    >>> scan = db.get_scan("real_plant_analyzed")
+    >>> mesh_fs_id = compute_fileset_matches(scan)["TriangleMesh"]
+    >>> mesh_fs = scan.get_fileset(mesh_fs_id)
+    >>> mesh = read_triangle_mesh(mesh_fs.get_file("TriangleMesh"))
+    >>> pv_mesh = pyvista_mesh(mesh)
+    >>> plotter = pv.Plotter()
+    >>> _ = plotter.add_mesh(pv_mesh)
+    >>> plotter.show()
+    """
+    # - Extract vertices & triangles
+    vertices = np.asarray(triangle_mesh.vertices)
+    triangles = np.asarray(triangle_mesh.triangles)
+
+    # - Prepare the faces array for PyVista
+    # PyVista faces are [n_points, p1, p2, p3, n_points, p1, p2, p3, ...]
+    # Since they are all triangles, we prepend a column of 3s
+    faces = np.column_stack([np.full(triangles.shape[0], 3), triangles])
+
+    # - Create & return the PyVista PolyData object
+    return pv.PolyData(vertices, faces)
+
+def pyvista_volume(volume, origin=None, spacing=None, downsample_factor=None, **kwargs):
     """A PyVista-based volume viewer with an opacity function inverse to the values.
 
     Parameters
     ----------
     volume : numpy.ndarray
         The 3D volume array to visualize.
+    origin : tuple(float, float, float)
+        The len-3 tuple setting the volume origin.
+    spacing : float | tuple(float, float, float)
+        The spacing of the voxels in the rendered volume.
+    downsample_factor : float, optional
+        The factor by which to downsample the volume.
+        For example, `2` will reduce the resolution by half in each dimension.
+    
+    Returns
+    -------
+    pyvista.ImageData
+        The 3D volume image object.
+    
+    Examples
+    --------
+    >>> import pyvista as pv
+    >>> from plant3dvision.visu import pyvista_volume
+    >>> from plantdb.commons.test_database import test_database
+    >>> from plantdb.commons.io import read_volume
+    >>> from plantdb.server.core.utils import compute_fileset_matches
+    >>> db = test_database()
+    >>> db.connect()
+    >>> db.login('guest', 'guest')
+    >>> scan = db.get_scan("real_plant_analyzed")
+    >>> vol_fs_id = compute_fileset_matches(scan)["Voxels"]
+    >>> vol_fs = scan.get_fileset(vol_fs_id)
+    >>> vol = read_volume(vol_fs.get_file("Voxels"))
+    >>> pv_vol = pyvista_volume(vol, downsample_factor=2)
+    >>> plotter = pv.Plotter()
+    >>> _ = plotter.add_volume(pv_vol, cmap='viridis')
+    >>> plotter.show()
     """
     if not isinstance(volume, np.ndarray) or volume.ndim != 3:
         raise ValueError("Input 'array' must be a 3D NumPy array.")
@@ -311,10 +386,23 @@ def pyvista_volume(volume):
     # Create a PyVista ImageData object from the NumPy array
     # Get image dimensions and add 1 to account for cell-centered data
     sh = np.array(volume.shape) + 1
+
+    if not spacing:
+        spacing = 1.0
+    if isinstance(spacing, (int, float)):
+        spacing = tuple([spacing] * 3)
+
     # Create PyVista ImageData object with specified dimensions
-    vol_data = pv.ImageData(dimensions=sh)
+    vol_data = pv.ImageData(dimensions=sh, origin=np.array(origin), spacing=spacing)
     # Add intensity values as cell data, flattened in Fortran order (column-major)
     vol_data.cell_data["values"] = volume.flatten(order="F")
+
+    if 'interpolation' not in kwargs:
+        kwargs['interpolation'] = 'nearest'
+
+    if downsample_factor is not None and downsample_factor > 1.0:
+        # Use the 'resample' filter to downsample the volume
+        vol_data = vol_data.resample(1/float(downsample_factor), **kwargs)
 
     return vol_data
 
