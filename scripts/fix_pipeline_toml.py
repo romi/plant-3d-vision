@@ -86,7 +86,6 @@ def fix_mask(toml_dict):
     ----------
     None
     """
-    print(toml_dict['Masks'])
     if 'Masks' in toml_dict and 'threshold' in toml_dict['Masks']:
         toml_dict['Masks']['min_threshold'] = float(toml_dict['Masks']['threshold']) / sum(map(float, eval(toml_dict['Masks']['parameters'])))
         toml_dict['Masks']['max_threshold'] = 1.
