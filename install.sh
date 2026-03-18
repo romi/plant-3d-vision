@@ -44,7 +44,7 @@ initialize_variables() {
   # Name of the conda environment to create:
   ENV_NAME="plant3dvision"
   # Python version to use when creating a conda environment:
-  py_version="3.9"
+  py_version="3.10"
   # Boolean flag to update pip tools:
   update_pip_tools=0
   # Options to use with `pip`:
@@ -291,6 +291,9 @@ show_usage() {
     --no-cache-dir)
       pip_opt="--no-cache-dir ${pip_opt}"
       ;;
+    --gui)
+      gui=1
+      ;;
     --webterm)
       webterm=1
       ;;
@@ -326,6 +329,11 @@ show_usage() {
 
 p3dv_optional_deps (){
   p3dv_opt_deps=""
+  if [ "${gui}" -eq 1 ]; then
+    log_info "Using GUI requirements..."
+    p3dv_opt_deps="${p3dv_opt_deps}gui,"
+  fi
+
   if [ "${webterm}" -eq 1 ]; then
     log_info "Using WebTerm requirements..."
     p3dv_opt_deps="${p3dv_opt_deps}webterm,"
