@@ -58,8 +58,6 @@ voxel_size = 1.0  # Default: 1.0
 # Type of backprojection algorithm to use
 # Options: "carving", "averaging"
 type = "averaging"  # Default: "averaging"
-# Threshold for the number of missing images allowed in the reconstruction
-missing_images_threshold = 2  # Default: 2
 
 [Voxels.bounding_box]
 # 3D bounding box defining the region of interest for reconstruction
@@ -74,6 +72,8 @@ z = [-125, 100]
 upstream_task = "Voxels"  # Default: "Voxels"
 # Distance of the level set on which the points are sampled
 level_set_value = 1.0  # Default: 1.0
+# Threshold for the number of missing images allowed in the reconstruction
+missing_images_threshold = 2  # Default: 2
 
 [TriangleMesh]
 # Task that provides the point cloud as input

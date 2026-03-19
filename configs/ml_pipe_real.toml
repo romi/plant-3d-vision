@@ -38,7 +38,6 @@ upstream_task = "Segmentation2D"
 voxel_size = 1
 type = "averaging"
 invert = true
-threshold = -100.0
 labels = "[\"background\"]"
 
 [Voxels.bounding_box]
@@ -50,6 +49,7 @@ z = [ -300, 60,]
 [PointCloud]
 upstream_task = "Voxels"
 labels = "[\"background\"]"
+missing_images_threshold = 2
 level_set_value = 0.5 # default to 1.0
 log = false
 background_prior= 1.0
