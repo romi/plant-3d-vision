@@ -769,7 +769,7 @@ def vol2pcd(volume, origin, voxel_size, level_set_value=0):
     Parameters
     ----------
     volume : numpy.ndarray
-        ``NxMxP`` 3D numpy array
+        ``NxMxP`` 3D binary numpy array
     origin : numpy.ndarray
         Origin of the volume
     voxel_size : float
@@ -806,11 +806,6 @@ def vol2pcd(volume, origin, voxel_size, level_set_value=0):
     """
     import time
     start_time = time.time()
-
-    logger.info("Volume binarization...")
-    # Binarize volume using a threshold of 0.5
-    volume = 1.0 * (volume > 0.5)
-    logger.info(f"Volume binarization... Done in {time.time() - start_time:.2f}s")
 
     step_start = time.time()
     logger.info("Distance transform...")
