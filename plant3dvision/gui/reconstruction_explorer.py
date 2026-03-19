@@ -89,16 +89,17 @@ class ReconstructionExplorer(QMainWindow):
         self._mesh = None
         self._origin = None
         self._spacing = None
-        self._vol_path = None
-        self._pcd_path = None
-        self._mesh_path = None
+        self._vol_fs = None
+        self._pcd_fs = None
+        self._mesh_fs = None
         self._images_fs = None
         self._image_files = []
         self._voxel_colormap = "inferno"
+        self._vol_opacity = 'linear'
         self._pcd_color = "dodgerblue"
         self._pcd_opacity = 1.0  # fully opaque
         self._pcd_point_size = 2  # default point size
-        self._mesh_color = "neon"
+        self._mesh_color = "orangered"
         self._grid_visible = True
         self._current_cam_params = None  # (pos, focal, up, fov)
 
@@ -183,8 +184,24 @@ class ReconstructionExplorer(QMainWindow):
         self._voxel_cmap_combo.addItems(plt.colormaps)
         self._voxel_cmap_combo.setCurrentText(self._voxel_colormap)
         self._voxel_cmap_combo.currentTextChanged.connect(self._on_voxel_cmap_changed)
+        # Opacity mapping
+        self._vol_opacity_combo = QComboBox()
+        opacity_options = [
+            'linear', 'linear_r', 'geom', 'geom_r',
+            'sigmoid', 'sigmoid_1', 'sigmoid_2', 'sigmoid_3',
+            'sigmoid_4', 'sigmoid_5', 'sigmoid_6', 'sigmoid_7',
+            'sigmoid_8', 'sigmoid_9', 'sigmoid_10',
+            'sigmoid_15', 'sigmoid_20', 'foreground'
+        ]
+        self._vol_opacity_combo.addItems(opacity_options)
+        self._vol_opacity_combo.setCurrentText('linear')   # default
+        self._vol_opacity_combo.setEnabled(False)
+        self._vol_opacity_combo.currentTextChanged.connect(self._on_vol_opacity_changed)
+
         voxel_vbox.addWidget(self._voxel_checkbox)
         voxel_vbox.addWidget(self._voxel_cmap_combo)
+        voxel_vbox.addWidget(QLabel("Opacity mapping"))
+        voxel_vbox.addWidget(self._vol_opacity_combo)
         right_layout.addWidget(voxel_group)
 
         # Point-cloud data
@@ -279,33 +296,32 @@ class ReconstructionExplorer(QMainWindow):
 
     def _on_voxel_toggled(self, state):
         if state == Qt.CheckState.Checked.value:
-            if self._vol is None and self._vol_path is not None:
-                # Load the origin of the bounding box & the voxel spacing value
-                bbox = self._pipeline_cfg["Voxels"].get("bounding_box", None)
-                self._origin = (sorted(bbox["x"])[0], sorted(bbox["y"])[0], sorted(bbox["z"])[0])
-                self._spacing = self._pipeline_cfg["Voxels"].get("voxel_size", 1.0)
+            if self._vol is None and self._vol_fs is not None:
+                self._origin = self._vol_fs.get_metadata("origin", default=(0., 0., 0.))
+                self._spacing = self._vol_fs.get_metadata("voxel_size", default=1.0)
                 # Load the volume file
-                logger.info(f"Loading the volume file at: {self._vol_path}...")
-                vol = read_volume(self._vol_path)
+                logger.info(f"Loading the volume file at: {self._vol_fs.path()}...")
+                vol = read_volume(self._vol_fs.path())
                 logger.info("Creating a PyVista object...")
                 self._vol = pyvista_volume(vol, origin=self._origin, spacing=self._spacing)
             if self._vol is not None:
-                self._vol_actor = self.plotter.add_mesh(self._vol)
+                self._vol_actor = self.plotter.add_mesh(self._vol, scalars="values")
                 self._render_volume(self._voxel_colormap)
             self._voxel_cmap_combo.setEnabled(True)
-            # Update the combo box to reflect the current colormap
+            self._vol_opacity_combo.setEnabled(True)
         else:
             if self._vol_actor is not None:
                 self.plotter.remove_actor(self._vol_actor)
                 self._vol_actor = None
                 self.plotter.render()
             self._voxel_cmap_combo.setEnabled(False)
+            self._vol_opacity_combo.setEnabled(False)
 
     def _on_pcd_toggled(self, state):
         if state == Qt.CheckState.Checked.value:
-            if self._pcd is None and self._pcd_path is not None:
-                logger.info(f"Loading the point cloud file at: {self._pcd_path}...")
-                pcd = read_point_cloud(self._pcd_path)
+            if self._pcd is None and self._pcd_fs is not None:
+                logger.info(f"Loading the point cloud file at: {self._pcd_fs.path()}...")
+                pcd = read_point_cloud(self._pcd_fs.path())
                 logger.info("Creating a PyVista object...")
                 self._pcd = pv.PolyData(np.asarray(pcd.points))
             if self._pcd is not None:
@@ -324,9 +340,9 @@ class ReconstructionExplorer(QMainWindow):
 
     def _on_mesh_toggled(self, state):
         if state == Qt.CheckState.Checked.value:
-            if self._mesh is None and self._mesh_path is not None:
-                logger.info(f"Loading the mesh file at: {self._mesh_path}...")
-                mesh = read_triangle_mesh(self._mesh_path)
+            if self._mesh is None and self._mesh_fs is not None:
+                logger.info(f"Loading the mesh file at: {self._mesh_fs.path()}...")
+                mesh = read_triangle_mesh(self._mesh_fs.path())
                 logger.info("Creating a PyVista object...")
                 self._mesh = pyvista_mesh(mesh)
             if self._mesh is not None:
@@ -359,6 +375,13 @@ class ReconstructionExplorer(QMainWindow):
     def _on_voxel_cmap_changed(self, cmap_name: str):
         self._voxel_colormap = cmap_name
         self._apply_vol_color(cmap_name)
+
+    def _on_vol_opacity_changed(self, opacity_name: str):
+        """Called when the user selects a different opacity transfer function."""
+        self._vol_opacity = opacity_name
+        if self._vol_actor is not None:
+            # Re‑draw the volume with the new opacity setting
+            self._render_volume(self._voxel_colormap)
 
     def _on_pick_pcd_color(self):
         color = QColorDialog.getColor(parent=self)
@@ -427,41 +450,41 @@ class ReconstructionExplorer(QMainWindow):
         self._pcd = None
         self._mesh = None
 
-        # Voxels - store file path for lazy loading
+        # Voxels - store fileset for lazy loading
         try:
             vol_fs = scan.get_fileset(fs_matches['Voxels'])
-            self._vol_path = vol_fs.get_file('Voxels').path()
+            self._vol_fs = vol_fs.get_file('Voxels')
             logger.info(f"Found the 'Voxels' associated to scan dataset '{scan_id}'...")
         except (FilesetNotFoundError, KeyError):
             logger.error(f"Could not find a 'Voxels' associated to scan dataset '{scan_id}'!")
-            self._vol_path = None
-        self._voxel_checkbox.setEnabled(self._vol_path is not None)
+            self._vol_fs = None
+        self._voxel_checkbox.setEnabled(self._vol_fs is not None)
         self._voxel_checkbox.blockSignals(True)
         self._voxel_checkbox.setChecked(False)
         self._voxel_checkbox.blockSignals(False)
 
-        # Point cloud - store file path for lazy loading
+        # Point cloud - store fileset for lazy loading
         try:
             pcd_fs = scan.get_fileset(fs_matches['PointCloud'])
-            self._pcd_path = pcd_fs.get_file('PointCloud').path()
+            self._pcd_fs = pcd_fs.get_file('PointCloud')
             logger.info(f"Found the 'PointCloud' associated to scan dataset '{scan_id}'...")
         except (FilesetNotFoundError, KeyError):
             logger.error(f"Could not find a 'PointCloud' associated to scan dataset '{scan_id}'!")
-            self._pcd_path = None
-        self._pcd_checkbox.setEnabled(self._pcd_path is not None)
+            self._pcd_fs = None
+        self._pcd_checkbox.setEnabled(self._pcd_fs is not None)
         self._pcd_checkbox.blockSignals(True)
         self._pcd_checkbox.setChecked(False)
         self._pcd_checkbox.blockSignals(False)
 
-        # Triangular Mesh - store file path for lazy loading
+        # Triangular Mesh - store fileset for lazy loading
         try:
             mesh_fs = scan.get_fileset(fs_matches['TriangleMesh'])
-            self._mesh_path = mesh_fs.get_file('TriangleMesh').path()
+            self._mesh_fs = mesh_fs.get_file('TriangleMesh')
             logger.info(f"Found the 'TriangleMesh' associated to scan dataset '{scan_id}'...")
         except (FilesetNotFoundError, KeyError):
             logger.error(f"Could not find a 'TriangleMesh' associated to scan dataset '{scan_id}'!")
-            self._mesh_path = None
-        self._mesh_checkbox.setEnabled(self._mesh_path is not None)
+            self._mesh_fs = None
+        self._mesh_checkbox.setEnabled(self._mesh_fs is not None)
         self._mesh_checkbox.blockSignals(True)
         self._mesh_checkbox.setChecked(False)
         self._mesh_checkbox.blockSignals(False)
@@ -518,7 +541,8 @@ class ReconstructionExplorer(QMainWindow):
         )
 
         common = dict(reset_camera=False)
-        self._vol_actor = self.plotter.add_volume(self._vol, cmap=colormap, scalar_bar_args=scalar_bar_args, **common)
+        self._vol_actor = self.plotter.add_volume(self._vol, cmap=colormap, opacity=self._vol_opacity,
+                                                  scalar_bar_args=scalar_bar_args, **common)
         self._render_grid()
         self.plotter.render()
 
