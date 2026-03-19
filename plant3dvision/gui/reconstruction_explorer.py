@@ -142,6 +142,10 @@ class ReconstructionExplorer(QMainWindow):
         self._slider_label.setFixedWidth(160)
         self._image_slider = QSlider(Qt.Orientation.Horizontal)
         self._image_slider.setEnabled(False)
+        # Show tick marks below the slider (you can also use TicksAbove / TicksBothSides)
+        self._image_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        # One tick per step to match the integer range of the slider
+        self._image_slider.setTickInterval(1)
         self._image_slider.valueChanged.connect(self._on_slider_changed)
         slider_row.addWidget(self._slider_label)
         slider_row.addWidget(self._image_slider)
@@ -276,7 +280,14 @@ class ReconstructionExplorer(QMainWindow):
     def _on_voxel_toggled(self, state):
         if state == Qt.CheckState.Checked.value:
             if self._vol is None and self._vol_path is not None:
+                # Load the origin of the bounding box & the voxel spacing value
+                bbox = self._pipeline_cfg["Voxels"].get("bounding_box", None)
+                self._origin = (sorted(bbox["x"])[0], sorted(bbox["y"])[0], sorted(bbox["z"])[0])
+                self._spacing = self._pipeline_cfg["Voxels"].get("voxel_size", 1.0)
+                # Load the volume file
+                logger.info(f"Loading the volume file at: {self._vol_path}...")
                 vol = read_volume(self._vol_path)
+                logger.info("Creating a PyVista object...")
                 self._vol = pyvista_volume(vol, origin=self._origin, spacing=self._spacing)
             if self._vol is not None:
                 self._vol_actor = self.plotter.add_mesh(self._vol)
@@ -293,7 +304,9 @@ class ReconstructionExplorer(QMainWindow):
     def _on_pcd_toggled(self, state):
         if state == Qt.CheckState.Checked.value:
             if self._pcd is None and self._pcd_path is not None:
+                logger.info(f"Loading the point cloud file at: {self._pcd_path}...")
                 pcd = read_point_cloud(self._pcd_path)
+                logger.info("Creating a PyVista object...")
                 self._pcd = pv.PolyData(np.asarray(pcd.points))
             if self._pcd is not None:
                 self._render_point_cloud(self._pcd_color)
@@ -312,10 +325,12 @@ class ReconstructionExplorer(QMainWindow):
     def _on_mesh_toggled(self, state):
         if state == Qt.CheckState.Checked.value:
             if self._mesh is None and self._mesh_path is not None:
+                logger.info(f"Loading the mesh file at: {self._mesh_path}...")
                 mesh = read_triangle_mesh(self._mesh_path)
+                logger.info("Creating a PyVista object...")
                 self._mesh = pyvista_mesh(mesh)
             if self._mesh is not None:
-                self._render_mesh(self._pcd_color)
+                self._render_mesh(self._mesh_color)
             self._mesh_color_btn.setEnabled(True)
         else:
             if self._mesh_actor is not None:
@@ -407,7 +422,7 @@ class ReconstructionExplorer(QMainWindow):
         scan = self._db.get_scan(scan_id)
         fs_matches = compute_fileset_matches(scan)
 
-        # Store scan references for lazy loading
+        # Reset lazy loading path references
         self._vol = None
         self._pcd = None
         self._mesh = None
@@ -416,7 +431,9 @@ class ReconstructionExplorer(QMainWindow):
         try:
             vol_fs = scan.get_fileset(fs_matches['Voxels'])
             self._vol_path = vol_fs.get_file('Voxels').path()
+            logger.info(f"Found the 'Voxels' associated to scan dataset '{scan_id}'...")
         except (FilesetNotFoundError, KeyError):
+            logger.error(f"Could not find a 'Voxels' associated to scan dataset '{scan_id}'!")
             self._vol_path = None
         self._voxel_checkbox.setEnabled(self._vol_path is not None)
         self._voxel_checkbox.blockSignals(True)
@@ -427,7 +444,9 @@ class ReconstructionExplorer(QMainWindow):
         try:
             pcd_fs = scan.get_fileset(fs_matches['PointCloud'])
             self._pcd_path = pcd_fs.get_file('PointCloud').path()
+            logger.info(f"Found the 'PointCloud' associated to scan dataset '{scan_id}'...")
         except (FilesetNotFoundError, KeyError):
+            logger.error(f"Could not find a 'PointCloud' associated to scan dataset '{scan_id}'!")
             self._pcd_path = None
         self._pcd_checkbox.setEnabled(self._pcd_path is not None)
         self._pcd_checkbox.blockSignals(True)
@@ -438,7 +457,9 @@ class ReconstructionExplorer(QMainWindow):
         try:
             mesh_fs = scan.get_fileset(fs_matches['TriangleMesh'])
             self._mesh_path = mesh_fs.get_file('TriangleMesh').path()
+            logger.info(f"Found the 'TriangleMesh' associated to scan dataset '{scan_id}'...")
         except (FilesetNotFoundError, KeyError):
+            logger.error(f"Could not find a 'TriangleMesh' associated to scan dataset '{scan_id}'!")
             self._mesh_path = None
         self._mesh_checkbox.setEnabled(self._mesh_path is not None)
         self._mesh_checkbox.blockSignals(True)
@@ -451,15 +472,23 @@ class ReconstructionExplorer(QMainWindow):
 
         # Reset plotter
         self.plotter.clear()
+        # Reset actors & world parameters
         self._vol_actor = None
         self._pcd_actor = None
         self._mesh_actor = None
+        self._origin = None
+        self._spacing = None
+
+        # Load the reconstruction pipeline configuration
+        self._pipeline_cfg = toml.load(scan.path() / "pipeline.toml")
 
         # Setup slider
         n = len(self._image_files)
         self._image_slider.blockSignals(True)
         self._image_slider.setMinimum(0)
         self._image_slider.setMaximum(max(0, n - 1))
+        # Keep the tick interval in sync with the new range
+        self._image_slider.setTickInterval(1 if n > 1 else 0)
         self._image_slider.setValue(0)
         self._image_slider.setEnabled(n > 0)
         self._image_slider.blockSignals(False)
@@ -473,12 +502,6 @@ class ReconstructionExplorer(QMainWindow):
         self._reset_cam_btn.setEnabled(True)
         self._snapshot_btn.setEnabled(True)
 
-        # Load the origin of the bounding box
-        pipelne_cfg = toml.load(scan.path() / "pipeline.toml")
-        bbox = pipelne_cfg["Voxels"]["bounding_box"]
-        self._origin = (sorted(bbox["x"])[0], sorted(bbox["y"])[0], sorted(bbox["z"])[0])
-        # self._origin = (0., 0., 0.)
-        self._spacing = pipelne_cfg["Voxels"].get("voxel_size", 1.0)
 
     def _render_volume(self, colormap):
         """Add (or replace) the point cloud actor."""
