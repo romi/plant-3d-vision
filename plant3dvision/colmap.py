@@ -1399,7 +1399,8 @@ class ColmapRunner(object):
             # - Replace the dense point cloud with a cropped version only if it is not empty:
             if len(crop_dense_pcd.points) == 0:
                 logger.critical("Empty dense point cloud after cropping by bounding box!")
-                logger.critical("Using non-cropped version!")
+                logger.info(f"Used bounding box: {self.bounding_box}")
+                logger.info("Using non-cropped version")
                 self.bounding_box = None
             else:
                 dense_pcd = crop_dense_pcd
@@ -1409,7 +1410,8 @@ class ColmapRunner(object):
             # - Replace the sparse point cloud with a cropped version only if it is not empty:
             if len(crop_sparse_pcd.points) == 0:
                 logger.critical("Empty sparse point cloud after cropping by bounding box!")
-                logger.critical("Using non-cropped version!")
+                logger.info(f"Used bounding box: {self.bounding_box}")
+                logger.info("Using non-cropped version")
                 # Check if we have a DENSE pcd that may contain points inside the bounding-box...
                 # else set to `None` to try automatic
                 if dense_pcd is None:
