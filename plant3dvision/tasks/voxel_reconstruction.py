@@ -22,7 +22,6 @@ import numpy as np
 from plant3dvision.tasks.colmap import Colmap
 from plant3dvision.tasks.proc2d import Masks
 from plant3dvision.voxel_cuda import Backprojection
-
 from plantdb.commons import io
 from romitask import RomiTask
 from romitask.log import get_logger
@@ -123,9 +122,6 @@ class Voxels(RomiTask):
     voxel_size = luigi.FloatParameter(default=1.0)
     type = luigi.Parameter(default="averaging")
     log = luigi.BoolParameter(default=True)
-
-    threshold = luigi.FloatParameter(default=-100.)
-    missing_images_threshold = luigi.IntParameter(default=2)
 
     invert = luigi.BoolParameter(default=False)
     labels = luigi.ListParameter(default=[])
@@ -247,41 +243,60 @@ class Voxels(RomiTask):
         if len(np.unique(vol)) == 1:
             logger.warning("There is something WRONG with the volume!")
 
-        # If "averaging" method was requested, apply thresholding:
-        if self.type == "averaging":
-            uniq = np.unique(vol)
-            n_imgs = len(masks_files)
-            try:
-                nimg_val_map = dict(zip(list(range(-n_imgs, 1))[::-1], uniq[::-1]))
-            except:
-                logger.warning("Could not create a mapping from image number to unique values!")
-                logger.info(f"Using threshold value of {self.threshold} instead.")
-                logger.info(f"Found these unique values in the volume: {uniq}.")
-            else:
-                logger.info(f"Found this mapping between image number and unique values: {nimg_val_map}.")
-                try:
-                    self.threshold = nimg_val_map[-int(self.missing_images_threshold)]
-                except KeyError:
-                    logger.warning("Could not find a threshold value corresponding to the missing images threshold ({self.missing_images_threshold})!")
-                else:
-                    logger.info(f"Using threshold value of {self.threshold} according to missing images threshold of {self.missing_images_threshold} image.")
-            vol = vol >= self.threshold
-
+        n_imgs = len(masks_files)
+        # Prepare the metadata dictionary
+        md = {
+            'voxel_size': float(self.voxel_size),
+            'origin': origin.tolist(),
+            'method': str(self.type),
+            'n_img': n_imgs
+        }
         if labels is not None:
             for i, label in enumerate(labels):
+                # Get the volume corresponding to the label
                 out = vol[i, :]
+                # Apply value remapping
+                out = self._remap(out, n_imgs)
+                # Write the volume file corresponding to the label
                 logger.debug(f"Writing volume file for label: {label}")
                 outfile = self.output_file(suffix=f"_{label}", create=True)
                 io.write_volume(outfile, out)
-                outfile.set_metadata({
-                    'voxel_size': self.voxel_size,
-                    'origin': origin.tolist(),
-                    'label': label,
-                })
+                # Save the volume metadata corresponding to the label
+                md['label'] = label
+                outfile.set_metadata(md)
         else:
             outfile = self.output_file(create=True)
+            # Apply value remapping
+            vol = self._remap(vol, n_imgs)
+            # Write the volume file
             io.write_volume(outfile, vol)
-            outfile.set_metadata({
-                'voxel_size': self.voxel_size,
-                'origin': origin.tolist()
-            })
+            # Save the volume metadata
+            outfile.set_metadata(md)
+
+    def _remap(self, vol, n_imgs):
+        if self.type == "averaging":
+            # If the "averaging" method, apply value remapping to get the number of agreeing images per voxel:
+            return self._remap_averaging(vol, n_imgs)
+        else:
+            # If the "carving" method, "apply thresholding" to get a binary outfile
+            return np.array(vol >= 1.0).astype(np.uint8)
+
+    @staticmethod
+    def _remap_averaging(vol, n_imgs):
+        # Sorted list of unique values:
+        uniq = np.unique(vol)
+        # Build the lookup table (integer → float)
+        int_labels = np.arange(max(-n_imgs, -len(uniq)), 1)
+
+        # - Bin the volume values
+        # `np.digitize` expects the right‑most edge to be exclusive, so we append a tiny epsilon
+        # to the last edge so that a value exactly equal to the maximum lands in the last bin.
+        eps = np.finfo(vol.dtype).eps
+        bins = np.append(uniq, uniq[-1] + eps)
+        # `bin_idx` is in the range 1 ... len(bins)-1
+        bin_idx = np.digitize(vol, bins, right=False)
+        # Convert to a 0‑based index that matches `int_labels`: (bin 1 → index 0, bin 2 → index 1, ...)
+        int_idx = bin_idx - 1  # shape == vol.shape
+
+        # Remap the whole volume, shifting to non‑negative indices
+        return int_labels[int_idx] + n_imgs
