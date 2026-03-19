@@ -230,6 +230,7 @@ def plt_volume_slice_viewer(array, cmap="viridis", **kwargs):
     plt.show()
     return zs
 
+
 def opacity_func(low_threshold: int = 100,
                  high_threshold: int = 255,
                  *,
@@ -297,7 +298,8 @@ def opacity_func(low_threshold: int = 100,
     else:
         raise ValueError("kind must be 'linear' or 'sigmoid'")
 
-def pyvista_mesh(triangle_mesh):
+
+def pyvista_mesh(triangle_mesh : o3d.geometry.TriangleMesh) -> pv.PolyData:
     """Generate a PyVista triangular mesh from an Open3D triangle mesh.
 
     Parameters
@@ -341,16 +343,21 @@ def pyvista_mesh(triangle_mesh):
     # - Create & return the PyVista PolyData object
     return pv.PolyData(vertices, faces)
 
-def pyvista_volume(volume, origin=None, spacing=None, downsample_factor=None, **kwargs):
+
+def pyvista_volume(volume: np.ndarray,
+                   origin: tuple[float, float, float] = None,
+                   spacing: float | tuple[float, float, float] = None,
+                   downsample_factor: float = None,
+                   **kwargs) -> pv.ImageData:
     """A PyVista-based volume viewer with an opacity function inverse to the values.
 
     Parameters
     ----------
     volume : numpy.ndarray
         The 3D volume array to visualize.
-    origin : tuple(float, float, float)
+    origin : tuple[float, float, float] | None
         The len-3 tuple setting the volume origin.
-    spacing : float | tuple(float, float, float)
+    spacing : float | tuple[float, float, float] | None
         The spacing of the voxels in the rendered volume.
     downsample_factor : float, optional
         The factor by which to downsample the volume.
@@ -392,7 +399,7 @@ def pyvista_volume(volume, origin=None, spacing=None, downsample_factor=None, **
     if isinstance(spacing, (int, float)):
         spacing = tuple([spacing] * 3)
 
-    # Create PyVista ImageData object with specified dimensions
+    # Create a PyVista ImageData object with specified dimensions
     vol_data = pv.ImageData(dimensions=sh, origin=np.array(origin), spacing=spacing)
     # Add intensity values as cell data, flattened in Fortran order (column-major)
     vol_data.cell_data["values"] = volume.flatten(order="F")
@@ -402,9 +409,10 @@ def pyvista_volume(volume, origin=None, spacing=None, downsample_factor=None, **
 
     if downsample_factor is not None and downsample_factor > 1.0:
         # Use the 'resample' filter to downsample the volume
-        vol_data = vol_data.resample(1/float(downsample_factor), **kwargs)
+        vol_data = vol_data.resample(1 / float(downsample_factor), **kwargs)
 
     return vol_data
+
 
 def plotly_volume_slicer(array, cmap="viridis", height=900, width=900, title="Volume", layout_kwargs=None):
     """A Plotly representation for the volume array as a 2D slider.
