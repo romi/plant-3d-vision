@@ -68,39 +68,31 @@ class Backprojection:
     Examples
     --------
     >>> import numpy as np
-    >>> from plantdb.commons.fsdb.core import FSDB
     >>> from plantdb.commons.test_database import test_database
     >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plant3dvision.voxel_cuda import Backprojection
-    >>> from plant3dvision.visu import plt_volume_slice_viewer
-    >>>
+    >>> from plant3dvision.tasks.voxel_reconstruction import remap_averaging
+    >>> from plant3dvision.tasks.voxel_reconstruction import origin_from_bounding_box
+    >>> from plant3dvision.tasks.voxel_reconstruction import shape_from_bounding_box
+    >>> from plant3dvision.visu.matplotlib import plt_volume_slice_viewer
     >>> # Set up the database and scan
     >>> db = test_database('real_plant_analyzed')
     >>> db.connect()
+    >>> db.login('guest', 'guest')
     >>> scan = db.get_scan("real_plant_analyzed")
     >>> mask_fs_id = compute_fileset_matches(scan)["Masks"]
     >>> mask_fs = scan.get_fileset(mask_fs_id)
-    >>>
     >>> # List of input mask files (2D images) to process
     >>> mask_files = mask_fs.get_files(query={"channel": "rgb"})
-    >>>
     >>> # Example setup: define a bounding box and voxel configuration
-    >>> bounding_box = {"x": [300, 435], "y": [300, 435], "z": [-300, 60]}
+    >>> bounding_box = {"x": [300, 435], "y": [300, 435], "z": [-200, 100]}
     >>> voxel_size = 0.6
-    >>>
-    >>> # Calculate the shape of the voxel array
-    >>> (x_min, x_max) = bounding_box["x"]
-    >>> (y_min, y_max) = bounding_box["y"]
-    >>> (z_min, z_max) = bounding_box["z"]
-    >>> nx = int((x_max - x_min) / voxel_size) + 1
-    >>> ny = int((y_max - y_min) / voxel_size) + 1
-    >>> nz = int((z_max - z_min) / voxel_size) + 1
-    >>> shape = (nx, ny, nz)
-    >>> origin = (x_min, y_min, z_min)
-    >>>
+    >>> # Calculate the shape & origin of the voxel array
+    >>> shape = shape_from_bounding_box(bounding_box, voxel_size)
+    >>> origin = origin_from_bounding_box(bounding_box)  # in real units
     >>> camera_md = "colmap_camera"  # The camera metadata key in the fileset that provides intrinsic & pose data
     >>> invert_masks = False  # Whether to invert the mask values
-    >>>
+
     >>> # EXAMPLE 1 - Carving mode
     >>> bp_carving = Backprojection(shape, origin, voxel_size, type="carving", labels=None)
     >>> volume = bp_carving.process_fileset(mask_files, camera_md, invert_masks)
@@ -117,16 +109,20 @@ class Backprojection:
     >>> print(f"Unique values in the volume: {vol_values}")
     >>> # Map the volume values to the number of missing images for each mask
     >>> dict(zip(list(range(-len(mask_files), 1))[::-1], vol_values[::-1]))
+    >>> volume = remap_averaging(volume, len(mask_files))
     >>> # Show the histogram of the volume values
     >>> import matplotlib.pyplot as plt
     >>> plt.hist(volume.flatten(), bins=len(mask_files)+1)
+    >>> plt.xlabel("Number of agreeing images")
+    >>> plt.ylabel("Number of voxels")
     >>> plt.show()
     >>> # Show the volume slice viewer
     >>> plt_volume_slice_viewer(volume, cmap="viridis")
     >>> # Threshold the volume & show the result
-    >>> vol = volume > -100.
+    >>> vol = volume > 55.
     >>> plt_volume_slice_viewer(vol, cmap="viridis")
 
+    >>> db.disconnect()
     """
 
     def __init__(self, shape, origin, voxel_size, type="carving", default_value=0, labels=None, log=False):

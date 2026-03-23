@@ -158,7 +158,7 @@ def pcd2vol(pcd, voxel_size, zero_padding=0):
     >>> vol, origin = pcd2vol(pcd, 1.0)
     >>> print(vol.shape)
     (80, 60, 277)
-    >>> from plant3dvision.visu import plotly_volume_slicer
+    >>> from plant3dvision.visu.plotly import plotly_volume_slicer
     >>> plotly_volume_slicer(vol)
     >>> db.disconnect()
 
@@ -202,7 +202,6 @@ def skeletonize(mesh):
     >>> from plantdb.commons.io import read_triangle_mesh
     >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plantdb.commons.fsdb.core import FSDB
-    >>> db = FSDB(os.environ['ROMI_DB'])  # requires definition of this environment variable!
     >>> db = FSDB('/data/ROMI/test_owner')
     >>> db.connect()
     >>> scan = db.get_scan("Col-0_E1_1")
@@ -238,7 +237,8 @@ def knn_graph(pcd, k):
 
     Examples
     --------
-    >>> from plant3dvision.visu import draw_pcd_graph    >>> from plant3dvision.proc3d import knn_graph
+    >>> from plant3dvision.visu.open3d import draw_pcd_graph
+    >>> from plant3dvision.proc3d import knn_graph
     >>> from plantdb.commons.io import read_point_cloud
     >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plantdb.commons.test_database import test_database
@@ -305,7 +305,7 @@ def radius_graph(pcd, r):
     >>> pcd_fs = scan.get_fileset(pcd_fs_id)
     >>> pcd = read_point_cloud(pcd_fs.get_file("PointCloud"))
     >>> neighbours_graph = radius_graph(pcd, 5)
-    >>> from plant3dvision.visu import draw_pcd_graph
+    >>> from plant3dvision.visu.open3d import draw_pcd_graph
     >>> draw_pcd_graph(neighbours_graph)
     >>> db.disconnect()
     """

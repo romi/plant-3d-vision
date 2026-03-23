@@ -6,8 +6,9 @@ from PySide6.QtWidgets import QDoubleSpinBox
 from PySide6.QtWidgets import QSpinBox
 from matplotlib import pyplot as plt
 
-from plant3dvision.visu import pyvista_mesh
-from plant3dvision.visu import pyvista_volume
+from plant3dvision.camera import camera_params_from_file
+from plant3dvision.visu.pyvista import o3d_mesh_to_polydata
+from plant3dvision.visu.pyvista import volume_to_imagedata
 from plantdb.commons.fsdb.exceptions import FilesetNotFoundError
 from plantdb.commons.io import read_triangle_mesh
 from plantdb.commons.io import read_volume
@@ -22,7 +23,6 @@ import numpy as np
 import pyvista as pv
 import pyvistaqt as pvqt
 from vtk import vtkPiecewiseFunction
-from PIL import Image
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 from PySide6.QtWidgets import QCheckBox
@@ -44,27 +44,6 @@ from plantdb.server.core.utils import compute_fileset_matches
 from romitask.log import get_logger
 
 logger = get_logger(__file__.split('/')[-1].split('.')[0])
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _camera_params_from_file(image_f):
-    """Return (cam_pos, focal_point, up, fov_y_deg) from a ROMI image file."""
-    img_md = image_f.get_metadata('colmap_camera')
-    x, y, z, _, _, _ = image_f.get_metadata('estimated_pose')
-    rot_mat = np.array(img_md['rotmat'])
-    fy = img_md['camera_model']['params'][1]
-    img_height = img_md.get('height') or Image.open(image_f.path()).size[1]
-
-    rot_mat_inv = rot_mat.T
-    cam_pos = (x, y, z)
-    forward_world = rot_mat_inv[:, 2]
-    up_world = -rot_mat_inv[:, 1]
-    focal_point = np.array(cam_pos) + forward_world
-    fov_y_deg = np.degrees(2.0 * np.arctan(img_height / (2.0 * fy)))
-    return cam_pos, tuple(focal_point), tuple(up_world), fov_y_deg
 
 
 # ---------------------------------------------------------------------------
@@ -337,7 +316,7 @@ class ReconstructionExplorer(QMainWindow):
                 logger.info(f"Loading the volume file at: {self._vol_fs.path()}...")
                 vol = read_volume(self._vol_fs.path())
                 logger.info("Creating a PyVista object...")
-                self._vol = pyvista_volume(vol, origin=self._origin, spacing=self._spacing)
+                self._vol = volume_to_imagedata(vol, origin=self._origin, spacing=self._spacing)
             if self._vol is not None:
                 # Initialize opacity‑range widgets from the data
                 scalar_min, scalar_max = self._vol.get_data_range()
@@ -394,7 +373,7 @@ class ReconstructionExplorer(QMainWindow):
                 logger.info(f"Loading the mesh file at: {self._mesh_fs.path()}...")
                 mesh = read_triangle_mesh(self._mesh_fs.path())
                 logger.info("Creating a PyVista object...")
-                self._mesh = pyvista_mesh(mesh)
+                self._mesh = o3d_mesh_to_polydata(mesh)
             if self._mesh is not None:
                 self._render_mesh(self._mesh_color)
             self._mesh_color_btn.setEnabled(True)
@@ -760,7 +739,7 @@ class ReconstructionExplorer(QMainWindow):
     def _apply_image(self, image_f):
         """Update the background image and camera to match the selected image."""
         try:
-            cam_pos, focal_point, up_world, fov_y_deg = _camera_params_from_file(image_f)
+            cam_pos, focal_point, up_world, fov_y_deg = camera_params_from_file(image_f)
         except Exception:
             # Metadata missing - just show the image, skip camera update
             cam_pos = focal_point = up_world = fov_y_deg = None

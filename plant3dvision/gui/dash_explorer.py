@@ -19,11 +19,11 @@ from dash_iconify import DashIconify
 
 from plant3dvision.utils import is_radians
 from plant3dvision.utils import locate_task_filesets
-from plant3dvision.visu import plotly_direction_data
-from plant3dvision.visu import plotly_mesh_data
-from plant3dvision.visu import plotly_pointcloud_data
-from plant3dvision.visu import plotly_treegraph_data
-from plant3dvision.visu import plotly_vert_sequences
+from plant3dvision.visu.plotly import plotly_direction_data
+from plant3dvision.visu.plotly import plotly_mesh_data
+from plant3dvision.visu.plotly import plotly_pointcloud_data
+from plant3dvision.visu.plotly import plotly_treegraph_data
+from plant3dvision.visu.plotly import plotly_vert_sequences
 from plantdb.commons.fsdb.core import FSDB
 from plantdb.commons.io import read_graph
 from plantdb.commons.io import read_json

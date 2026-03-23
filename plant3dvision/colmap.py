@@ -310,8 +310,8 @@ def estimate_camera_pose(rot_matrix, tvec):
     >>> from plant3dvision.colmap import estimate_camera_pose
     >>> # Sample rotation matrix (3x3) and translation vector (3x1)
     >>> rot_matrix = np.array([[0.04537058362671326, -0.998725595306853, 0.022106456530704977], [-0.5123537456733758, -0.042261105904542295, -0.8577340136791751], [0.8575751567272887, 0.027589566990035286, -0.5136182106949377]])
-    >>> tvec = np.array([370.51956102391097, 121.97435769625103, 24.928062162932385])
-    >>> x, y, z, pan, tilt, roll = estimate_camera_pose(rot_matrix, tvec)
+    >>> t_vec = np.array([370.51956102391097, 121.97435769625103, 24.928062162932385])
+    >>> x, y, z, pan, tilt, roll = estimate_camera_pose(rot_matrix, t_vec)
     >>> print([x, y, z])
     [24.305643496725597, 374.51438596370315, 109.2341875074113]
     >>> print(pan, tilt, roll)
