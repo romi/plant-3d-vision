@@ -1,6 +1,8 @@
 import os
 
 import toml
+from PySide6.QtCore import QTimer
+from PySide6.QtWidgets import QDoubleSpinBox
 from PySide6.QtWidgets import QSpinBox
 from matplotlib import pyplot as plt
 
@@ -96,12 +98,19 @@ class ReconstructionExplorer(QMainWindow):
         self._image_files = []
         self._voxel_colormap = "inferno"
         self._vol_opacity = 'linear'
+        self._vol_opacity_range = (0.0, 0.0)
         self._pcd_color = "dodgerblue"
         self._pcd_opacity = 1.0  # fully opaque
         self._pcd_point_size = 2  # default point size
         self._mesh_color = "orangered"
         self._grid_visible = True
         self._current_cam_params = None  # (pos, focal, up, fov)
+
+        # Debounce timer for opacity‑range changes
+        self._opacity_range_timer = QTimer(self)
+        self._opacity_range_timer.setSingleShot(True)  # fire only once per start
+        self._opacity_range_timer.setInterval(800)  # in milliseconds
+        self._opacity_range_timer.timeout.connect(self._on_vol_opacity_range_changed)
 
         self._build_ui()
         self._populate_scan_list()
@@ -194,14 +203,31 @@ class ReconstructionExplorer(QMainWindow):
             'sigmoid_15', 'sigmoid_20', 'foreground'
         ]
         self._vol_opacity_combo.addItems(opacity_options)
-        self._vol_opacity_combo.setCurrentText('linear')   # default
+        self._vol_opacity_combo.setCurrentText('linear')  # default
         self._vol_opacity_combo.setEnabled(False)
         self._vol_opacity_combo.currentTextChanged.connect(self._on_vol_opacity_changed)
+        # Opacity range selectors (min / max)
+        self._vol_opacity_min_spin = QDoubleSpinBox()
+        self._vol_opacity_min_spin.setDecimals(0)
+        self._vol_opacity_min_spin.setEnabled(False)
+        self._vol_opacity_min_spin.valueChanged.connect(self._schedule_vol_opacity_range_update)
+        self._vol_opacity_max_spin = QDoubleSpinBox()
+        self._vol_opacity_max_spin.setDecimals(0)
+        self._vol_opacity_max_spin.setEnabled(False)
+        self._vol_opacity_max_spin.valueChanged.connect(self._schedule_vol_opacity_range_update)
+
+        # Layout for the range controls
+        range_layout = QHBoxLayout()
+        range_layout.addWidget(QLabel("Opacity min"))
+        range_layout.addWidget(self._vol_opacity_min_spin)
+        range_layout.addWidget(QLabel("max"))
+        range_layout.addWidget(self._vol_opacity_max_spin)
 
         voxel_vbox.addWidget(self._voxel_checkbox)
         voxel_vbox.addWidget(self._voxel_cmap_combo)
         voxel_vbox.addWidget(QLabel("Opacity mapping"))
         voxel_vbox.addWidget(self._vol_opacity_combo)
+        voxel_vbox.addLayout(range_layout)
         right_layout.addWidget(voxel_group)
 
         # Point-cloud data
@@ -271,6 +297,16 @@ class ReconstructionExplorer(QMainWindow):
         right_layout.addStretch()
         root.addWidget(right, stretch=2)
 
+    def _schedule_vol_opacity_range_update(self, _):
+        """Restart the debounce timer every time a spin‑box changes.
+        The underscore argument receives the new value, which we ignore
+        because the actual work is done by `_on_vol_opacity_range_changed`.
+        """
+        # If the timer is already running, restart it
+        if self._opacity_range_timer.isActive():
+            self._opacity_range_timer.stop()
+        self._opacity_range_timer.start()
+
     def _populate_scan_list(self):
         self._scan_combo.blockSignals(True)
         self._scan_combo.addItem("- select a scan -", userData=None)
@@ -307,15 +343,30 @@ class ReconstructionExplorer(QMainWindow):
             if self._vol is not None:
                 self._vol_actor = self.plotter.add_mesh(self._vol, scalars="values")
                 self._render_volume(self._voxel_colormap)
-            self._voxel_cmap_combo.setEnabled(True)
-            self._vol_opacity_combo.setEnabled(True)
+                # Initialize opacity‑range widgets from the data
+                scalar_min, scalar_max = self._vol.get_data_range()
+                self._vol_opacity_range = (scalar_min, scalar_max)  # store the full range as the default
+                # configure the spin boxes
+                self._vol_opacity_min_spin.setRange(scalar_min, scalar_max)
+                self._vol_opacity_max_spin.setRange(scalar_min, scalar_max)
+                # start with the full range selected
+                self._vol_opacity_min_spin.setValue(scalar_min)
+                self._vol_opacity_max_spin.setValue(scalar_max)
+                # Enable widgets
+                self._voxel_cmap_combo.setEnabled(True)
+                self._vol_opacity_combo.setEnabled(True)
+                self._vol_opacity_min_spin.setEnabled(True)
+                self._vol_opacity_max_spin.setEnabled(True)
         else:
             if self._vol_actor is not None:
                 self.plotter.remove_actor(self._vol_actor)
                 self._vol_actor = None
                 self.plotter.render()
+            # Disable widgets
             self._voxel_cmap_combo.setEnabled(False)
             self._vol_opacity_combo.setEnabled(False)
+            self._vol_opacity_min_spin.setEnabled(False)
+            self._vol_opacity_max_spin.setEnabled(False)
 
     def _on_pcd_toggled(self, state):
         if state == Qt.CheckState.Checked.value:
@@ -382,6 +433,31 @@ class ReconstructionExplorer(QMainWindow):
         if self._vol_actor is not None:
             # Re‑draw the volume with the new opacity setting
             self._render_volume(self._voxel_colormap)
+
+    def _on_vol_opacity_range_changed(self, _unused=None):
+        """Called when either the min or max opacity spin box changes after a debounce."""
+        # Guard against the case where the volume is not yet loaded
+        if self._vol is None:
+            return
+
+        # Ensure min ≤ max – Qt will already clamp the values, but we keep it safe
+        min_val = self._vol_opacity_min_spin.value()
+        max_val = self._vol_opacity_max_spin.value()
+        if min_val > max_val:
+            # swap to keep a sane range
+            min_val, max_val = max_val, min_val
+            self._vol_opacity_min_spin.blockSignals(True)
+            self._vol_opacity_max_spin.blockSignals(True)
+            self._vol_opacity_min_spin.setValue(min_val)
+            self._vol_opacity_max_spin.setValue(max_val)
+            self._vol_opacity_min_spin.blockSignals(False)
+            self._vol_opacity_max_spin.blockSignals(False)
+
+        self._vol_opacity_range = (min_val, max_val)
+        self._vol_opacity = 'linear'
+        self._vol_opacity_combo.setCurrentText('linear')
+        # Re‑render the volume with the new opacity list
+        self._render_volume(self._voxel_colormap)
 
     def _on_pick_pcd_color(self):
         color = QColorDialog.getColor(parent=self)
@@ -525,7 +601,6 @@ class ReconstructionExplorer(QMainWindow):
         self._reset_cam_btn.setEnabled(True)
         self._snapshot_btn.setEnabled(True)
 
-
     def _render_volume(self, colormap):
         """Add (or replace) the point cloud actor."""
         if self._vol_actor is not None:
@@ -539,6 +614,24 @@ class ReconstructionExplorer(QMainWindow):
             label_font_size=16,
             fmt='{0:.1f}',
         )
+
+        # Compute the opacity transfer function
+        if self._vol is not None:
+            data_min, data_max = self._vol.get_data_range()
+            min_val, max_val = self._vol_opacity_range
+            # Guard against a degenerate range (min == max)
+            if max_val > min_val and (max_val != data_max or min_val != data_min):
+                # Number of colors in the selected colormap (default 256)
+                n_colors = 256
+                # Sample scalar positions uniformly across the data range
+                sample_scalars = np.linspace(data_min, data_max, n_colors)
+                # Piece‑wise linear definition:
+                #   opacity = 0   for scalar < min_val
+                #   opacity ramps linearly from 0 → 1 between min_val and max_val
+                #   opacity = 0   for scalar > max_val
+                xp = [data_min, min_val, max_val, data_max]
+                fp = [0.0, 0.0, 1.0, 0.0]
+                self._vol_opacity = np.interp(sample_scalars, xp, fp)
 
         common = dict(reset_camera=False)
         self._vol_actor = self.plotter.add_volume(self._vol, cmap=colormap, opacity=self._vol_opacity,
