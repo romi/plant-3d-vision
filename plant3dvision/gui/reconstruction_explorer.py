@@ -98,7 +98,8 @@ class ReconstructionExplorer(QMainWindow):
         self._images_fs = None
         self._image_files = []
         self._voxel_colormap = "inferno"
-        self._vol_opacity = 'linear'
+        self._vol_opacity_tf_name = 'linear'
+        self._vol_opacity_tf = None
         self._vol_opacity_range = (0.0, 0.0)
         self._pcd_color = "dodgerblue"
         self._pcd_opacity = 1.0  # fully opaque
@@ -197,16 +198,12 @@ class ReconstructionExplorer(QMainWindow):
         # Opacity mapping
         self._vol_opacity_combo = QComboBox()
         opacity_options = [
-            'linear', 'linear_r', 'geom', 'geom_r',
-            'sigmoid', 'sigmoid_1', 'sigmoid_2', 'sigmoid_3',
-            'sigmoid_4', 'sigmoid_5', 'sigmoid_6', 'sigmoid_7',
-            'sigmoid_8', 'sigmoid_9', 'sigmoid_10',
-            'sigmoid_15', 'sigmoid_20', 'foreground'
+            'linear', 'geom', 'none'
         ]
         self._vol_opacity_combo.addItems(opacity_options)
         self._vol_opacity_combo.setCurrentText('linear')  # default
         self._vol_opacity_combo.setEnabled(False)
-        self._vol_opacity_combo.currentTextChanged.connect(self._on_vol_opacity_changed)
+        self._vol_opacity_combo.currentTextChanged.connect(self._on_vol_opacity_tf_changed)
         # Opacity range selectors (min / max)
         self._vol_opacity_min_spin = QDoubleSpinBox()
         self._vol_opacity_min_spin.setDecimals(0)
@@ -429,12 +426,11 @@ class ReconstructionExplorer(QMainWindow):
         self._voxel_colormap = cmap_name
         self._update_volume_colormap(cmap_name)
 
-    def _on_vol_opacity_changed(self, opacity_name: str):
+    def _on_vol_opacity_tf_changed(self, opacity_name: str):
         """Called when the user selects a different opacity transfer function."""
-        self._vol_opacity = opacity_name
+        self._vol_opacity_tf_name = opacity_name
         if self._vol_actor is not None:
-            # Re‑draw the volume with the new opacity setting
-            self._render_volume(self._voxel_colormap)
+            self._update_volume_colormap(self._voxel_colormap)
 
     def _on_vol_opacity_range_changed(self, _unused=None):
         """Called when either the min or max opacity spin box changes after a debounce."""
@@ -456,10 +452,6 @@ class ReconstructionExplorer(QMainWindow):
             self._vol_opacity_max_spin.blockSignals(False)
 
         self._vol_opacity_range = (min_val, max_val)
-        # Force linear text to appear in the dropdown menu without triggering `slef._on_vol_opacity_changed`
-        self._vol_opacity_combo.blockSignals(True)
-        self._vol_opacity_combo.setCurrentText('linear')
-        self._vol_opacity_combo.blockSignals(False)
         # Compute & update the opacity transfer function
         self._compute_volume_opacity()
         self._update_volume_opacity()
@@ -625,8 +617,6 @@ class ReconstructionExplorer(QMainWindow):
 
         common = dict(reset_camera=False)
         self._vol_actor = self.plotter.add_volume(self._vol, cmap=colormap,
-                                                  opacity=self._vol_opacity if isinstance(self._vol_opacity,
-                                                                                          str) else 1.,
                                                   scalar_bar_args=scalar_bar_args, **common)
         self._render_grid()
         self.plotter.render()
@@ -638,20 +628,23 @@ class ReconstructionExplorer(QMainWindow):
 
         # Build a new VTK lookup table from the requested Matplotlib cmap
         n_colors = 256
-        new_lut = pv.LookupTable(colormap, n_colors=n_colors)
-        # Attach the new LUT to the volume's property
+        new_lut = pv.LookupTable(colormap, n_values=n_colors)
+        # Set the data range on the LUT so the scalar bar knows where to put ticks
+        data_range = self._vol.get_data_range()
+        new_lut.scalar_range = data_range
+
+        # For volumes, we need to update the Color Transfer Function
         prop = self._vol_actor.GetProperty()
-        prop.SetLookupTable(new_lut)
-        # Some VTK pipelines cache the table inside the mapper as well.
-        # Updating the mapper ensures the change is honoured immediately.
-        mapper = self._vol_actor.GetMapper()
-        mapper.SetLookupTable(new_lut)
+        prop.SetColor(new_lut.to_color_tf())
+
+        # Update the scalar bar (the legend/colorbar)
+        if hasattr(self.plotter, 'scalar_bar'):
+            self.plotter.scalar_bar.SetLookupTable(new_lut)
 
         self._compute_volume_opacity()
         self._update_volume_opacity()
 
         # Refresh the scalar bar (so the legend shows the new colors)
-        self.plotter.update_scalar_bar_range(self._vol_actor)
         self.plotter.render()
 
     def _compute_volume_opacity(self) -> None:
@@ -669,25 +662,46 @@ class ReconstructionExplorer(QMainWindow):
 
         # Build a piece‑wise linear opacity function:
         #   0  for scalar < min_val
-        #   linearly 0 → 1 between min_val and max_val
+        #   transfer function 0 → 1 between min_val and max_val
         #   0  for scalar > max_val
         pwf = vtkPiecewiseFunction()
-        pwf.AddPoint(data_min, 0.0)  # before the user range
-        pwf.AddPoint(min_val, 0.0)  # start of ramp
-        pwf.AddPoint(max_val, 1.0)  # end of ramp
+
+        # 0 before the user range (if the data starts before)
+        if data_min < min_val:
+            pwf.AddPoint(data_min, 0.0)
+
+        if self._vol_opacity_tf_name == 'linear':
+            # Linear ramp from 0 to 1
+            pwf.AddPoint(min_val, 0.0)  # start of ramp
+            pwf.AddPoint(max_val, 1.0)  # end of ramp
+        elif self._vol_opacity_tf_name == 'geom':
+            # Logarithmic‑like ramp: we add a few intermediate points
+            # Using np.log1p to avoid log(0) and to give a smooth curve.
+            steps = int(max_val - min_val)
+            for i in range(steps + 1):
+                opacity = np.log1p(i / steps)
+                pwf.AddPoint(min_val + i, opacity)
+        else:
+            # Fallback to full opacity between min_val and max_val
+            pwf.AddPoint(min_val - 0.001, 0.0)
+            pwf.AddPoint(min_val, 1.0)
+            pwf.AddPoint(max_val, 1.0)
+
+        # 0 after the user range (if the data extends further)
         if data_max > max_val:
-            pwf.AddPoint(data_max, 0.0)  # after the user range
+            pwf.AddPoint(max_val + 0.001, 0.0)
+            pwf.AddPoint(data_max, 0.0)
 
         # Store the VTK object so the rendering code can use it directly
-        self._vol_opacity = pwf
+        self._vol_opacity_tf = pwf
 
     def _update_volume_opacity(self):
         if self._vol_actor is None:
             return
 
         prop = self._vol_actor.GetProperty()
-        # `self._vol_opacity` is now a vtkPiecewiseFunction (see _compute_volume_opacity)
-        prop.SetScalarOpacity(self._vol_opacity)
+        # `self._vol_opacity_tf` is now a vtkPiecewiseFunction (see _compute_volume_opacity)
+        prop.SetScalarOpacity(self._vol_opacity_tf)
         self.plotter.render()
 
     def _render_point_cloud(self, color):
