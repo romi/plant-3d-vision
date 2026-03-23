@@ -21,6 +21,7 @@ import argparse
 import numpy as np
 import pyvista as pv
 import pyvistaqt as pvqt
+from vtk import vtkPiecewiseFunction
 from PIL import Image
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
@@ -341,8 +342,6 @@ class ReconstructionExplorer(QMainWindow):
                 logger.info("Creating a PyVista object...")
                 self._vol = pyvista_volume(vol, origin=self._origin, spacing=self._spacing)
             if self._vol is not None:
-                self._vol_actor = self.plotter.add_mesh(self._vol, scalars="values")
-                self._render_volume(self._voxel_colormap)
                 # Initialize opacity‑range widgets from the data
                 scalar_min, scalar_max = self._vol.get_data_range()
                 self._vol_opacity_range = (scalar_min, scalar_max)  # store the full range as the default
@@ -357,6 +356,9 @@ class ReconstructionExplorer(QMainWindow):
                 self._vol_opacity_combo.setEnabled(True)
                 self._vol_opacity_min_spin.setEnabled(True)
                 self._vol_opacity_max_spin.setEnabled(True)
+                # Create the actor and render it
+                self._vol_actor = self.plotter.add_mesh(self._vol, scalars="values")
+                self._render_volume(self._voxel_colormap)
         else:
             if self._vol_actor is not None:
                 self.plotter.remove_actor(self._vol_actor)
@@ -425,7 +427,7 @@ class ReconstructionExplorer(QMainWindow):
 
     def _on_voxel_cmap_changed(self, cmap_name: str):
         self._voxel_colormap = cmap_name
-        self._apply_vol_color(cmap_name)
+        self._update_volume_colormap(cmap_name)
 
     def _on_vol_opacity_changed(self, opacity_name: str):
         """Called when the user selects a different opacity transfer function."""
@@ -454,10 +456,13 @@ class ReconstructionExplorer(QMainWindow):
             self._vol_opacity_max_spin.blockSignals(False)
 
         self._vol_opacity_range = (min_val, max_val)
-        self._vol_opacity = 'linear'
+        # Force linear text to appear in the dropdown menu without triggering `slef._on_vol_opacity_changed`
+        self._vol_opacity_combo.blockSignals(True)
         self._vol_opacity_combo.setCurrentText('linear')
-        # Re‑render the volume with the new opacity list
-        self._render_volume(self._voxel_colormap)
+        self._vol_opacity_combo.blockSignals(False)
+        # Compute & update the opacity transfer function
+        self._compute_volume_opacity()
+        self._update_volume_opacity()
 
     def _on_pick_pcd_color(self):
         color = QColorDialog.getColor(parent=self)
@@ -616,31 +621,74 @@ class ReconstructionExplorer(QMainWindow):
         )
 
         # Compute the opacity transfer function
-        if self._vol is not None:
-            data_min, data_max = self._vol.get_data_range()
-            min_val, max_val = self._vol_opacity_range
-            # Guard against a degenerate range (min == max)
-            if max_val > min_val and (max_val != data_max or min_val != data_min):
-                # Number of colors in the selected colormap (default 256)
-                n_colors = 256
-                # Sample scalar positions uniformly across the data range
-                sample_scalars = np.linspace(data_min, data_max, n_colors)
-                # Piece‑wise linear definition:
-                #   opacity = 0   for scalar < min_val
-                #   opacity ramps linearly from 0 → 1 between min_val and max_val
-                #   opacity = 0   for scalar > max_val
-                xp = [data_min, min_val, max_val, data_max]
-                fp = [0.0, 0.0, 1.0, 0.0]
-                self._vol_opacity = np.interp(sample_scalars, xp, fp)
+        self._compute_volume_opacity()
 
         common = dict(reset_camera=False)
-        self._vol_actor = self.plotter.add_volume(self._vol, cmap=colormap, opacity=self._vol_opacity,
+        self._vol_actor = self.plotter.add_volume(self._vol, cmap=colormap,
+                                                  opacity=self._vol_opacity if isinstance(self._vol_opacity,
+                                                                                          str) else 1.,
                                                   scalar_bar_args=scalar_bar_args, **common)
         self._render_grid()
         self.plotter.render()
 
-    def _apply_vol_color(self, colormap):
-        self._render_volume(colormap)
+    def _update_volume_colormap(self, colormap: str) -> None:
+        """Replace the color lookup table of the existing volume actor."""
+        if self._vol_actor is None:
+            return
+
+        # Build a new VTK lookup table from the requested Matplotlib cmap
+        n_colors = 256
+        new_lut = pv.LookupTable(colormap, n_colors=n_colors)
+        # Attach the new LUT to the volume's property
+        prop = self._vol_actor.GetProperty()
+        prop.SetLookupTable(new_lut)
+        # Some VTK pipelines cache the table inside the mapper as well.
+        # Updating the mapper ensures the change is honoured immediately.
+        mapper = self._vol_actor.GetMapper()
+        mapper.SetLookupTable(new_lut)
+
+        self._compute_volume_opacity()
+        self._update_volume_opacity()
+
+        # Refresh the scalar bar (so the legend shows the new colors)
+        self.plotter.update_scalar_bar_range(self._vol_actor)
+        self.plotter.render()
+
+    def _compute_volume_opacity(self) -> None:
+        if self._vol is None:
+            return
+
+        # Full data range of the volume
+        data_min, data_max = self._vol.get_data_range()
+        # Desired opacity interval (set by the spin boxes)
+        min_val, max_val = self._vol_opacity_range
+
+        # Clamp the user range to the actual data range
+        min_val = max(data_min, min(min_val, data_max))
+        max_val = min(data_max, max(min_val, max_val))
+
+        # Build a piece‑wise linear opacity function:
+        #   0  for scalar < min_val
+        #   linearly 0 → 1 between min_val and max_val
+        #   0  for scalar > max_val
+        pwf = vtkPiecewiseFunction()
+        pwf.AddPoint(data_min, 0.0)  # before the user range
+        pwf.AddPoint(min_val, 0.0)  # start of ramp
+        pwf.AddPoint(max_val, 1.0)  # end of ramp
+        if data_max > max_val:
+            pwf.AddPoint(data_max, 0.0)  # after the user range
+
+        # Store the VTK object so the rendering code can use it directly
+        self._vol_opacity = pwf
+
+    def _update_volume_opacity(self):
+        if self._vol_actor is None:
+            return
+
+        prop = self._vol_actor.GetProperty()
+        # `self._vol_opacity` is now a vtkPiecewiseFunction (see _compute_volume_opacity)
+        prop.SetScalarOpacity(self._vol_opacity)
+        self.plotter.render()
 
     def _render_point_cloud(self, color):
         """Add (or replace) the point cloud actor."""
@@ -655,7 +703,14 @@ class ReconstructionExplorer(QMainWindow):
         self.plotter.render()
 
     def _apply_pcd_color(self, color):
-        self._render_point_cloud(color)
+        if self._pcd_actor is None:
+            return
+
+        # Convert the color string (hex or name) to an RGB tuple in [0, 1]
+        rgb = pv.Color(color).float_rgb
+        # Apply the new color to the VTK actor
+        self._pcd_actor.GetProperty().SetColor(rgb)
+        self.plotter.render()
 
     def _render_mesh(self, color):
         """Add (or replace) the triangular mesh actor."""
@@ -669,7 +724,14 @@ class ReconstructionExplorer(QMainWindow):
         self.plotter.render()
 
     def _apply_mesh_color(self, color):
-        self._render_mesh(color)
+        if self._mesh_actor is None:
+            return
+
+        # Convert the color string (hex or name) to an RGB tuple in [0, 1]
+        rgb = pv.Color(color).float_rgb
+        # Apply the new color to the VTK actor
+        self._mesh_actor.GetProperty().SetColor(rgb)
+        self.plotter.render()
 
     def _render_grid(self):
         if self._vol_actor is not None:
@@ -717,6 +779,26 @@ class ReconstructionExplorer(QMainWindow):
 
         self.plotter.render()
 
+    def closeEvent(self, event):
+        """
+        Called automatically when the user clicks the top‑bar "X".
+        We stop background resources and then let Qt quit the event loop.
+        """
+        # Stop the debounce timer (if it is still running)
+        if self._opacity_range_timer.isActive():
+            self._opacity_range_timer.stop()
+
+        # Close the DB connection – this releases any background thread
+        try:
+            if hasattr(self, "_db") and self._db is not None:
+                self._db.disconnect()
+        except Exception as exc:
+            # Log but don’t prevent the shutdown
+            logger.warning(f"Error while disconnecting DB: {exc}")
+
+        # Ensure Qt quits when the last window is closed
+        QApplication.instance().quit()
+
 
 # ---------------------------------------------------------------------------
 # Entry point
@@ -736,6 +818,9 @@ def main():
         sys.exit(1)
 
     app = QApplication(sys.argv)
+    # Ensure the process exits when the last window is closed
+    app.setQuitOnLastWindowClosed(True)
+
     window = ReconstructionExplorer(db_path)
     window.show()
     sys.exit(app.exec())
