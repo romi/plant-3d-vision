@@ -37,7 +37,7 @@ from romitask.task import RomiTask
 logger = get_logger(__name__)
 
 
-def get_cnc_poses_from_files(image_files: File, axes: str = 'xyzpt') -> dict[str, list[float]]:
+def get_cnc_poses_from_files(image_files: File, axes: str|None = 'xyzptr', default: float | None = 0.) -> dict[str, list[float]]:
     """Extract CNC machine poses from image fileset metadata.
 
     Retrieves pose information from image fileset metadata, using either 'pose' or 'approximate_pose'
@@ -48,14 +48,17 @@ def get_cnc_poses_from_files(image_files: File, axes: str = 'xyzpt') -> dict[str
     image_files : list of plantdb.commons.db.File
         A list of image files containing pose metadata for each image.
     axes : str, optional
-        A string specifying which axes to return, by default 'xyzpt'.
-        Must contain only characters from 'xyzpt' (case insensitive).
+        A string specifying which axes to return, by default 'xyzptr'.
+        Must contain only characters from 'xyzptr' (case-insensitive).
+    default : float | None
+        The default value to use if an axis has no value.
+        Defaults to ``0.``.
 
     Returns
     -------
      dict[str, list[float]]
         The dictionary mapping image IDs to their pose coordinates.
-        Values are lists of float coordinates in the order specified by `axes` parameter.
+        Values are lists of float coordinates in the order specified by the `axes` parameter.
 
     Warnings
     --------
@@ -65,12 +68,13 @@ def get_cnc_poses_from_files(image_files: File, axes: str = 'xyzpt') -> dict[str
     -----
     - Pose data is primarily retrieved from 'pose' metadata, falling back to 'approximate_pose'
     - Images without pose data are excluded from the result
-    - Coordinate order in default 'xyzpt' format:
+    - Coordinate order in default 'xyzptr' format:
         - x: X-axis position
         - y: Y-axis position
         - z: Z-axis position
         - p: Pan angle
         - t: Tilt angle
+        - r: Roll angle
 
     Examples
     --------
@@ -78,6 +82,7 @@ def get_cnc_poses_from_files(image_files: File, axes: str = 'xyzpt') -> dict[str
     >>> from plantdb.commons.test_database import test_database
     >>> db = test_database('real_plant')
     >>> db.connect()
+    >>> db.login('guest', 'guest')
     >>> # - Select the dataset to reconstruct:
     >>> scan = db.get_scan('real_plant')
     >>> image_fs = scan.get_fileset('images')
@@ -92,7 +97,7 @@ def get_cnc_poses_from_files(image_files: File, axes: str = 'xyzpt') -> dict[str
     [100.0, 200.0, 300.0]
     """
     # Default order of axes in pose coordinates
-    DEF_AXES = 'xyzpt'
+    DEF_AXES = 'xyzptr'
     n_imgs = len(image_files)  # get the number of images
 
     # Get 'approximate_pose' metadata for all images
@@ -102,13 +107,10 @@ def get_cnc_poses_from_files(image_files: File, axes: str = 'xyzpt') -> dict[str
 
     # Prefer 'pose' over 'approximate_pose' when available
     cnc_poses = {im.id: poses[im.id] if poses[im.id] is not None else approx_poses[im.id] for im in image_files}
-    # Remove entries where no pose data was found
-    cnc_poses = {im_id: pose for im_id, pose in cnc_poses.items() if poses is not None}
-
-    # If user requested specific axes, extract only those coordinates
-    if axes != DEF_AXES:
-        axes_idx = [DEF_AXES.index(ax.lower()) for ax in axes]
-        cnc_poses = {im_id: [pose[ax_idx] for ax_idx in axes_idx] for im_id, pose in cnc_poses.items()}
+    # Remove entries where no pose data was found and convert each image pose list to an axis indexed dict
+    cnc_poses = {im_id: dict(zip(DEF_AXES, pose)) for im_id, pose in cnc_poses.items() if poses is not None}
+    # Apply axes reordering
+    cnc_poses = {im_id: [pose.get(ax, default) for ax in axes] for im_id, pose in cnc_poses.items()}
 
     # Log warning if some images are missing pose data
     n_poses = len(cnc_poses)
@@ -117,19 +119,25 @@ def get_cnc_poses_from_files(image_files: File, axes: str = 'xyzpt') -> dict[str
     return cnc_poses
 
 
-def get_cnc_poses(scan_dataset: Scan, axes: str = 'xyzpt') -> dict[str, list[float]]:
+def get_cnc_poses(scan_dataset: Scan, axes: str|None = 'xyzptr', default: float | None = 0.) -> dict[str, list[float]]:
     """Get the CNC poses from the 'images' fileset using "pose" or "approximate_pose" metadata.
 
     Parameters
     ----------
     scan_dataset : plantdb.commons.db.Scan
         The scan to get the CNC poses from.
+    axes : str, optional
+        A string specifying which axes to return, by default 'xyzptr'.
+        Must contain only characters from 'xyzptr' (case-insensitive).
+    default : float | None
+        The default value to use if an axis has no value.
+        Defaults to ``0.``.
 
     Returns
     -------
     dict[str, list[float]]
         The dictionary mapping image IDs to their pose coordinates.
-        Values are lists of float coordinates in the order specified by `axes` parameter.
+        Values are lists of float coordinates in the order specified by the `axes` parameter.
 
     Notes
     -----
@@ -170,11 +178,17 @@ def get_image_poses(scan_dataset: Scan, md: str = "calibrated_pose", default: An
     ----------
     scan_dataset : plantdb.commons.fsdb.core.Scan
         Get the calibrated poses from this scan dataset.
+    md : str, optional
+        The metadata entry hosting the image camera poses to recover.
+        Defaults to ``"calibrated_pose"``.
+    default : Any
+        The default value to use the `md` metadata entry is not found.
+        Defaults to ``None``.
 
     Returns
     -------
     dict[str, list[float]]
-        Image-id indexed dictionary of camera poses as X, Y, Z.
+        Image-id indexed dictionary of camera poses as X, Y, Z (, Pan, Tilt, Roll).
 
     Examples
     --------
