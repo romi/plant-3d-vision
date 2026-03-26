@@ -323,7 +323,9 @@ def plot_image_and_volume(image, volume, **kwargs):
     cam.disable_parallel_projection()
 
     if kwargs.get('fname', None):
-        plotter.screenshot(kwargs['fname'])
+        plotter.off_screen = True
+        plotter.screenshot(kwargs['fname'], scale=kwargs.get('scale', 1.0))
+        plotter.close()
     else:
         plotter.show()
 
@@ -415,8 +417,7 @@ def plot_image_and_point_cloud(image, point_cloud, **kwargs):
     if isinstance(point_cloud, File):
         point_cloud = read_point_cloud(point_cloud.path())
     else:
-        assert isinstance(point_cloud, np.ndarray)
-        assert point_cloud.shape[1] == 3
+        assert isinstance(point_cloud, o3d.geometry.PointCloud)
 
     plotter = pv.Plotter()
 
@@ -441,7 +442,9 @@ def plot_image_and_point_cloud(image, point_cloud, **kwargs):
     cam.disable_parallel_projection()
 
     if kwargs.get('fname', None):
-        plotter.screenshot(kwargs['fname'])
+        plotter.off_screen = True
+        plotter.screenshot(kwargs['fname'], scale=kwargs.get('scale', 1.0))
+        plotter.close()
     else:
         plotter.show()
 
@@ -555,6 +558,8 @@ def plot_image_and_mesh(image, triangular_mesh, **kwargs):
     cam.disable_parallel_projection()
 
     if kwargs.get('fname', None):
-        plotter.screenshot(kwargs['fname'])
+        plotter.off_screen = True
+        plotter.screenshot(kwargs['fname'], scale=kwargs.get('scale', 1.0))
+        plotter.close()
     else:
         plotter.show()
