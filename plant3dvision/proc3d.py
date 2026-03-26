@@ -671,11 +671,6 @@ def vol2pcd_parallel(volume, origin, voxel_size, level_set_value=0):
     from joblib import delayed
     start_time = time.time()
 
-    logger.info("Volume binarization...")
-    # Binarize volume using a threshold of 0.5
-    volume = 1.0 * (volume > 0.5)
-    logger.info(f"Volume binarization... Done in {time.time() - start_time:.2f}s")
-
     step_start = time.time()
     logger.info("Distance transform...")
     # Calculate distance transform for volume and its inverse
