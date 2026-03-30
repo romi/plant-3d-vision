@@ -399,34 +399,34 @@ class Backprojection:
         Process a fileset and generate results based on the labels.
 
         This method processes a given fileset with provided camera metadata.
-        It can also optionally invert the results. If labels are present,
-        it processes each label separately and returns a result array.
+        If labels are present, it processes each label separately and returns a result array.
         Otherwise, it directly calls process_label for the entire dataset.
 
         Parameters
         ----------
-        fs : plantdb.commons.db.Fileset
-            The input fileset to be processed.
-        camera_metadata : dict
-            Metadata associated with the camera used in processing.
+        fs : plantdb.commons.db.Fileset or list[plantdb.commons.db.File]
+            The images ``Fileset`` or list of images ``File`` to process.
+        camera_metadata : str or dict[str, dict]
+            If a string, it is the key used to retrieve the camera parameters from the files metadata.
+            Else, a dictionary with the file ID as keys and a dictionary with camera parameters as values.
         invert : bool, optional
-            Flag indicating whether to invert the results. Default is False.
+            Whether to invert the mask image before processing.
+            Defaults to ``False``.
 
         Returns
         -------
         numpy.ndarray
-            Processed result array if labels are present,
-            otherwise a single processed label result.
+            Processed result array if labels are present, otherwise a single processed label result.
         """
         # Check if labels are available for processing
         if self.labels is not None:
-            # Initialize result array with zeros based on shape and dtype
+            # Initialize a result array with zeros based on shape and dtype
             result = np.zeros((len(self.labels), *self.shape), dtype=self.dtype)
             # Process each label separately
             for i, label in enumerate(self.labels):
                 logger.info(f"Processing label '{label}' ({i+1}/{len(self.labels)})...")
                 if i != 0:
-                    self.clear()  # Clear previous state before processing next label
+                    self.clear()  # Clear the previous state before processing the next label
                 result[i, :] = self.process_label(fs, camera_metadata, label, invert)
             return result
         else:
@@ -445,15 +445,16 @@ class Backprojection:
 
         Parameters
         ----------
-        fs : plantdb.commons.db.Fileset or list of plantdb.commons.db.File
+        fs : plantdb.commons.db.Fileset or list[plantdb.commons.db.File]
             The images `Fileset` or list of images `File` to process.
         camera_metadata : str or dict[str, dict]
-            If a string, the key in file metadata used to retrieve camera parameters.
-            Else, a dictionary with the file ID as keys and a dictionary with camera parameters.
+            If a string, it is the key used to retrieve the camera parameters from the files metadata.
+            Else, a dictionary with the file ID as keys and a dictionary with camera parameters as values.
         label : str, optional
-            The label to filter files by channel. If None, no filtering is performed.
-        invert : bool, default=False
+            The label to filter files by channel. By defaults ``None`` ensures no filtering is performed.
+        invert : bool, optional
             Whether to invert the mask image before processing.
+            Defaults to ``False``.
 
         Returns
         -------
@@ -462,10 +463,13 @@ class Backprojection:
 
         Notes
         -----
-        This method logs debugging and error information using the `logger` object.
-        It also counts the number of processed and skipped files and logs this
-        information at the end of processing. The camera parameters are expected to
-        be in a specific format within the file metadata.
+        The camera parameters are expected to be in a specific format within the file metadata.
+
+        - 'rotmat': 3x3 array describing the rotation matrix
+        - 'tvec': 3x1 array describing the translation vector
+        - 'camera_model': the camera model parameters
+            - 'model': the type of the model, we need an "OPENCV" model
+            - 'params': the camera parameters of the OPENCV model ``[fx, fy, cx, cy, k1, k2, p1, p2]``
         """
         if isinstance(fs, Fileset):
             fs = fs.get_files()
@@ -474,7 +478,7 @@ class Backprojection:
         skipped_count = 0  # Counter for skipped files
 
         for fi in fs:
-            # Skip if label is specified and doesn't match current file's channel
+            # Skip if the label is specified and doesn't match the current file's channel
             if label is not None and fi.get_metadata("channel") != label:
                 continue
             logger.debug(f"Processing file {fi.id}")
