@@ -310,9 +310,9 @@ def pose_estimation_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_
         Name to give to the reference poses.
     pred_label : str
         Name to give to the predicted poses.
-    xlims : (float, float)
+    xlims : tuple[float, float]
         A len-2 tuple of float values to use as "x-axis limits" represented as dashed blue lines
-    ylims : (float, float)
+    ylims : tuple[float, float]
         A len-2 tuple of float values to use as "y-axis limits" represented as dashed blue lines
 
     Examples
@@ -370,10 +370,10 @@ def pose_estimation_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_
 
     # Get predicted camera pose (X, Y, Z, pan, tilt & roll):
     X, Y, Z, pan, tilt, roll = np.array(
-        [pose if pose is not None else [np.nan] * 3 for im_id, pose in pred_poses.items()]).T
+        [pose if pose is not None else [np.nan] * 6 for im_id, pose in pred_poses.items()]).T
 
     # - Plot REFERENCE XY poses coordinates as a black '+' marker:
-    # Add a black '+' marker to every non-null coordinates:
+    # Add a black '+' marker to every non-null coordinate:
     cnc_scatter = xyax.scatter(x, y, marker="+", c="black")
     cnc_scatter.set_label(ref_label)
     # Add a black "+" at the center of the CNC coordinates
