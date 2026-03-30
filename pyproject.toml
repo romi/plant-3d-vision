@@ -67,6 +67,7 @@ robustness_evaluation = "plant3dvision.cli.robustness_evaluation:main"
 voronoi_texture_generator = "plant3dvision.cli.voronoi_texture_generator:main"
 linear_filter = "plant3dvision.gui.linear_filter:main"
 pcd_to_mesh = "plant3dvision.gui.pcd_to_mesh:main"
+reconstruction_explorer = "plant3dvision.gui.reconstruction_explorer:main"
 
 [project.urls]
 homepage = "https://romi-project.eu/"

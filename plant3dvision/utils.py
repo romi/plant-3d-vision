@@ -234,7 +234,7 @@ def plot_points_circle(x, y, cx, cy, r, figname=None):
     fig, ax = plt.subplots()
     sc = ax.scatter(x, y, marker="x", c="red")
     circle = plt.Circle((cx, cy), radius=r, fill=False)
-    ax.add_artist(circle)
+    ax.add_patch(circle)
     ax.set_aspect('equal')
 
     if figname is not None:
