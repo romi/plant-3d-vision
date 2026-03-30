@@ -1150,7 +1150,7 @@ class CameraPoseQC(object):
     >>> print(f"Detected {len(outlier_ids)} potentially mis-estimated poses")
     >>> cam_qc.plot_boxplot_estimation_distance()
     >>> cam_qc.plot_xy_plane_poses()
-
+    >>> cam_qc.plot_z_poses()
     """
 
     def __init__(self, image_files, mad_factor, distance_threshold, max_blind_angle):
@@ -1370,7 +1370,6 @@ class CameraPoseQC(object):
                         fontsize=8, ha="left", va="center", color="#d73027")
 
         ax.legend()
-        return ax
 
     def _xy_plane_scatter_plot(self, ax, outlier_ids: list[str], use_image_id=False,
                                ref_label='CNC', pred_label='Colmap', **kwargs):
@@ -1380,7 +1379,7 @@ class CameraPoseQC(object):
         radius = scan_path_md['radius']
         center = scan_path_md['center']
 
-        # Get the REFERENCE XY coodinates
+        # Get the REFERENCE XY coordinates
         x, y, _, p, _, _ = np.array([ref_poses.get(im_id, [np.nan] * 6) for im_id in self.image_ids]).T
 
         # Get the non-outlier PREDICTED XY coordinates (good)
@@ -1473,10 +1472,47 @@ class CameraPoseQC(object):
         # Set aspect ratio
         ax.set_aspect('equal')
 
+    def _z_scatter_plot(self, ax, outlier_ids: list[str], ref_label='CNC', pred_label='Colmap'):
+        ref_poses = self.cnc_poses
+        pred_poses = self.colmap_poses
+
+        # Get the REFERENCE Z coordinates
+        _, _, z, _, _, _ = np.array([ref_poses.get(im_id, [np.nan] * 6) for im_id in self.image_ids]).T
+
+        # Get the non-outlier PREDICTED Z coordinates (good)
+        _, _, Zg, _, _, _ = np.array(
+            [pred_poses.get(im_id, [np.nan] * 6) for im_id in self.image_ids if im_id not in outlier_ids]).T
+        correct_poses_idx = [idx for idx in range(len(self.image_ids)) if self.image_ids[idx] not in outlier_ids]
+        # Get the outliers PREDICTED Z coordinates (bad)
+        _, _, Zw, _, _, _ = np.array(
+            [pred_poses.get(im_id, [np.nan] * 6) for im_id in self.image_ids if im_id in outlier_ids]).T
+        incorrect_poses_idx = [idx for idx in range(len(self.image_ids)) if self.image_ids[idx] in outlier_ids]
+
+        # - Plot REFERENCE Z poses coordinates as a '+' marker:
+        _ = ax.scatter(range(len(self.image_ids)), z, marker='+', c="black", label=ref_label)
+
+        # - Plot PREDICTED Z poses coordinates as a blue 'x' marker:
+        _ = ax.scatter(correct_poses_idx, Zg, marker="x", c='blue', label=pred_label + " (good)")
+        _ = ax.scatter(incorrect_poses_idx, Zw, marker="x", c='red', label=pred_label + " (bad)")
+
+        # Add axes labels:
+        ax.set_xlabel('Image index')
+        ax.set_ylabel('Z-axis (mm)')
+        # Add a grid
+        ax.grid(True, which='major', axis='both', linestyle='dotted')
+        # Add the legend
+        ax.legend()
+
     def plot_xy_plane_poses(self):
         from matplotlib import pyplot as plt
         fig, ax = plt.subplots(figsize=(12, 12))
         ax = self._xy_plane_scatter_plot(ax, self.outlier_ids, use_image_id=False, title="XY Plane Poses")
+        plt.show()
+
+    def plot_z_poses(self):
+        from matplotlib import pyplot as plt
+        fig, ax = plt.subplots(figsize=(12, 12))
+        ax = self._z_scatter_plot(ax, self.outlier_ids)
         plt.show()
 
     def plot_boxplot_estimation_distance(self):
