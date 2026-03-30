@@ -1130,6 +1130,26 @@ class CameraPoseQC(object):
         Dictionary mapping image IDs to their CNC ground truth poses.
     euclidean_distances : dict
         Dictionary mapping image IDs to Euclidean distances between CNC and COLMAP poses.
+
+    Examples
+    --------
+    >>> from plant3dvision.tasks.colmap import CameraPoseQC
+    >>> from plantdb.commons.test_database import test_database
+    >>> # Initialize a test database with a dataset that has the Colmap task
+    >>> db = test_database(dataset='real_plant_analyzed')
+    >>> db.connect()
+    >>> db.login("guest", "guest")
+    >>> scan_id = "real_plant_analyzed"
+    >>> scan = db.get_scan(scan_id)
+    >>> image_fs = scan.get_fileset('images')
+    >>> image_files = [image_fs.get_file(im) for im in image_fs.list_files()]
+    >>> cam_qc = CameraPoseQC(image_files, 5, 35)
+    >>> outlier_dict = cam_qc.flag_outlier_poses(2.5)
+    >>> # List detected outliers:
+    >>> outlier_ids = [img for img, v in outlier_dict.items() if v]
+    >>> print(f"Detected {len(outlier_ids)} potentially mis-estimated poses")
+    >>> cam_qc.plot_boxplot_estimation_distance(outlier_ids)
+
     """
 
     def __init__(self, image_files, distance_threshold, max_blind_angle):
@@ -1152,24 +1172,53 @@ class CameraPoseQC(object):
 
         self.intrinsic_calibration_scan_id = ""  # FIXME: ID for calibration scan, not set yet
 
-        self.colmap_poses = None
-        self.cnc_poses = None
-        self.euclidean_distances = None
+        self._colmap_poses = None
+        self._cnc_poses = None
 
-    def _get_cnc_poses(self, image_files):
+        self.image_ids = [im.id for im in self.image_files]
+        self.xy_distances = self._euclidean_distances(self.image_ids,
+                                                      {im_id: self.cnc_poses[im_id][:2] for im_id in self.image_ids},
+                                                      {im_id: self.colmap_poses[im_id][:2] for im_id in self.image_ids})
+        self.z_distances = self._euclidean_distances(self.image_ids,
+                                                     {im_id: [self.cnc_poses[im_id][2]] for im_id in self.image_ids},
+                                                     {im_id: [self.colmap_poses[im_id][2]] for im_id in self.image_ids})
+        self.pan_distances = self._angular_distances(self.image_ids,
+                                                     {im_id: self.cnc_poses[im_id][3] for im_id in self.image_ids},
+                                                     {im_id: self.colmap_poses[im_id][3] for im_id in self.image_ids})
+        self.tilt_distances = self._angular_distances(self.image_ids,
+                                                      {im_id: self.cnc_poses[im_id][4] for im_id in self.image_ids},
+                                                      {im_id: self.colmap_poses[im_id][4] for im_id in self.image_ids})
+        self.roll_distances = self._angular_distances(self.image_ids,
+                                                      {im_id: self.cnc_poses[im_id][5] for im_id in self.image_ids},
+                                                      {im_id: self.colmap_poses[im_id][5] for im_id in self.image_ids})
+
+    @property
+    def cnc_poses(self):
         """Get the CNC poses from the image fileset scan."""
-        # Extract ground truth poses from CNC machine metadata
-        return get_cnc_poses_from_files(image_files)
+        if self._cnc_poses is None:
+            # Extract camera poses from CNC machine metadata
+            self._cnc_poses = get_cnc_poses_from_files_metadata(self.image_files)
 
-    def _get_colmap_extrinsics(self, image_files):
-        """Get estimated camera poses from 'images' fileset metadata."""
-        # Create dictionary mapping image ID to its estimated pose
-        return {im.id: im.get_metadata("estimated_pose") for im in image_files}
+        return self._cnc_poses
+
+    @property
+    def colmap_poses(self):
+        """Get the Colmap estimated camera poses from 'images' fileset metadata."""
+        if self._colmap_poses is None:
+            # Create a dictionary mapping image ID to its Colmap estimated pose
+            self._colmap_poses = get_camera_poses_from_files_metadata(self.image_files, md="estimated_pose", default=0.)
+            if all(sum(np.array(pose) == 0.) >=3 for pose in self._colmap_poses.values()):
+                # If only XYZ data, compute estimated pose from colmap_camera metadata
+                self._colmap_poses = compute_camera_poses_from_files_metadata(self.image_files)
+            # Rotate the roll by 180° to match the different world conventions
+            self._colmap_poses = {im_id: pose[:5] + [180 - pose[5]] for im_id, pose in self._colmap_poses.items()}
+
+        return self._colmap_poses
 
     def _get_scan_config(self, current_scan):
         """Get the scan configuration from the current scan."""
         try:
-            # Load scan configuration from TOML file
+            # Load scan configuration TOML file
             scan_cfg = get_scan_config(current_scan.path())
         except FileNotFoundError:
             logger.warning("Could not find the `scan.toml` file!")
@@ -1212,16 +1261,108 @@ class CameraPoseQC(object):
         prefix = "Intrinsic calibration scan:\n" if self.intrinsic_calibration_scan_id else "Colmap estimated intrinsics\n"
         return prefix + camera_str
 
-    def compute_pose_distance(self):
-        """Calculate Euclidean distances between CNC and COLMAP poses."""
-        # Get poses from both sources
-        self.colmap_poses = self._get_colmap_extrinsics(self.image_files)
-        self.cnc_poses = self._get_cnc_poses(self.image_files)
-        # Calculate Euclidean distance between each pair of poses
-        self.euclidean_distances = {}
-        for im_id, cnc_pose in self.cnc_poses.items():
-            self.euclidean_distances[im_id] = euclidean(cnc_pose[:3], self.colmap_poses[im_id][:3])
-        return self.euclidean_distances
+    def _euclidean_distances(self, image_ids, cnc_poses, colmap_poses):
+        return {im_id: euclidean(cnc_poses.get(im_id), colmap_poses.get(im_id)) for im_id in image_ids}
+
+    def _angular_distances(self, image_ids, cnc_poses, colmap_poses):
+        return {im_id: angular_distance(cnc_poses.get(im_id), colmap_poses.get(im_id)) for im_id in image_ids}
+
+    def flag_outlier_poses(self, factor: float = 3.0) -> dict:
+        """Identify image ids whose pose estimations deviate strongly from the bulk of the data.
+
+        Parameters
+        ----------
+        factor : float, optional
+            Multiplicative factor applied to the MAD to set the outlier threshold.
+            Default is ``3.0``.
+
+        Returns
+        -------
+        dict
+            Mapping ``{image_id: list of violated criteria}``.
+            An empty list means the pose passed all checks.
+        """
+        image_ids = [im.id for im in self.image_files]
+
+        # Determine outliers for each metric using the shared helper
+        outliers_xy = mad_outlier(self.xy_distances, factor)
+        outliers_z = mad_outlier(self.z_distances, factor)
+        outliers_pan = mad_outlier(self.pan_distances, factor)
+        outliers_tilt = mad_outlier(self.tilt_distances, factor)
+        outliers_roll = mad_outlier(self.roll_distances, factor)
+
+        # Build the per-image report
+        outlier_report = {}
+        for img_id in image_ids:
+            violations = []
+
+            if img_id in outliers_xy:
+                violations.append("XY distance")
+            if img_id in outliers_z:
+                violations.append("Z distance")
+            if img_id in outliers_pan:
+                violations.append("Pan angle")
+            if img_id in outliers_tilt:
+                violations.append("Tilt angle")
+            if img_id in outliers_roll:
+                violations.append("Roll angle")
+
+            outlier_report[img_id] = violations
+
+        return outlier_report
+
+    def _boxplot_estimation_distance(self, ax, outlier_ids):
+        dist_data = [
+            list(self.xy_distances.values()),
+            list(self.z_distances.values()),
+            list(self.pan_distances.values()),
+            list(self.tilt_distances.values()),
+            list(self.roll_distances.values()),
+        ]
+
+        # Plot boxplot
+        ax.boxplot(
+            dist_data,
+            vert=False,
+            patch_artist=True,
+            boxprops=dict(facecolor="#a6cee3", color="#1f78b4"),
+            medianprops=dict(color="#1f78b4"),
+        )
+
+        ax.set_yticklabels(
+            ["XY distance", "Z distance", "Pan distance", "Tilt distance", "Roll distance"]
+        )
+        ax.set_xlabel("Distance from CNC [mm or degrees]")
+        ax.set_title(f"Boxplot of Estimation Pose Distances (outliers highlighted)")
+
+        # Overlay outlier points and annotate with image IDs
+        metric_arrays = dist_data
+        for idx, metric_vals in enumerate(metric_arrays):
+            # Values for outlier images for the current metric
+            vals = [metric_vals[list(self.xy_distances.keys()).index(i)] for i in outlier_ids]
+            # Uniform distribution for visibility (spaced evenly around the central line)
+            if len(vals) > 1:
+                _uniform_offsets = np.linspace(-0.25, 0.25, len(vals))
+            else:
+                _uniform_offsets = np.array([0.0])
+            y_positions = np.full_like(vals, idx + 1, dtype=float) + _uniform_offsets
+
+            # Plot outlier points
+            ax.plot(vals, y_positions, "r+", markersize=4, alpha=0.7, label="outlier" if idx == 0 else "")
+
+            # Annotate each point with its image ID
+            for x, y, _img_id in zip(vals, y_positions, outlier_ids):
+                ax.text(x + 0.04, y, str(_img_id[3:].replace("_rgb", "")),
+                        fontsize=8, ha="left", va="center", color="#d73027")
+
+        ax.legend()
+        return ax
+
+    def plot_boxplot_estimation_distance(self, outlier_ids):
+        from matplotlib import pyplot as plt
+        fig, ax = plt.subplots(figsize=(12, 5))
+        ax = self._boxplot_estimation_distance(ax, outlier_ids)
+        plt.show()
 
     def make_pose_qc_figures(self, fig_path):
         """Generate a figure with the comparison between estimated and ground truth poses."""
