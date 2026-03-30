@@ -318,7 +318,7 @@ def pose_estimation_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_
     Examples
     --------
     >>> from plantdb.commons.test_database import test_database
-    >>> from plant3dvision.tasks.colmap import get_cnc_poses
+    >>> from plant3dvision.tasks.colmap import get_cnc_poses_from_images_metadata
     >>> from plant3dvision.tasks.colmap import compute_camera_poses_from_images_metadata
     >>> from plant3dvision.tasks.colmap import pose_estimation_figure
     >>> from plant3dvision.tasks.colmap import use_precalibrated_poses
@@ -330,7 +330,7 @@ def pose_estimation_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_
     >>> scan_id = "real_plant_analyzed"
     >>> scan = db.get_scan(scan_id)
     >>> images_fileset = scan.get_fileset('images')
-    >>> cnc_poses = get_cnc_poses(scan)
+    >>> cnc_poses = get_cnc_poses_from_images_metadata(scan)
     >>> print(len(cnc_poses))
     60
     >>> colmap_poses = {im.id: im.get_metadata("estimated_pose") for im in images_fileset.get_files()}

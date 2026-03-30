@@ -6,7 +6,6 @@ import sys
 from os.path import join
 from os.path import splitext
 from pathlib import Path
-from typing import Any
 
 import luigi
 import numpy as np
@@ -25,6 +24,8 @@ from plant3dvision.filenames import COLMAP_DENSE_ID
 from plant3dvision.filenames import COLMAP_IMAGES_ID
 from plant3dvision.filenames import COLMAP_POINTS_ID
 from plant3dvision.filenames import COLMAP_SPARSE_ID
+from plant3dvision.utils import angular_distance
+from plant3dvision.utils import mad_outlier
 from plantdb.commons import io
 from plantdb.commons.fsdb.core import File
 from plantdb.commons.fsdb.core import Scan
@@ -36,19 +37,29 @@ from romitask.task import RomiTask
 
 logger = get_logger(__name__)
 
+#: Default order of axes in pose coordinates
+DEF_AXES = 'xyzptr'
 
-def get_cnc_poses_from_files(image_files: File, axes: str|None = 'xyzptr', default: float | None = 0.) -> dict[str, list[float]]:
-    """Extract CNC machine poses from image fileset metadata.
 
-    Retrieves pose information from image fileset metadata, using either 'pose' or 'approximate_pose'
-    fields. Can return full 5-axis positions (X, Y, Z, pan, tilt) or a subset of axes.
+def get_camera_poses_from_files_metadata(image_files: list[File], md: str = "calibrated_pose", axes: str | None = None,
+                                         default: float | None = 0.) -> dict[str, list[float]]:
+    """Get the camera poses from the specified metadata of a list of files.
 
     Parameters
     ----------
-    image_files : list of plantdb.commons.db.File
+    image_files : list[plantdb.commons.db.File]
         A list of image files containing pose metadata for each image.
+    md : str, optional
+        The metadata entry hosting the image camera poses to recover.
+        Defaults to ``"calibrated_pose"``.
+        The following options are valids:
+
+        - "approximate_pose": the requested camera poses from the CNC
+        - "calibrated_pose": the camera poses from an extrinsics calibration procedure
+        - "estimated_pose": the camera poses estimated by Colmap
     axes : str, optional
-        A string specifying which axes to return, by default 'xyzptr'.
+        A string specifying which axes to return.
+        Defaults to ``DEF_AXES`` (xyzptr).
         Must contain only characters from 'xyzptr' (case-insensitive).
     default : float | None
         The default value to use if an axis has no value.
@@ -56,17 +67,12 @@ def get_cnc_poses_from_files(image_files: File, axes: str|None = 'xyzptr', defau
 
     Returns
     -------
-     dict[str, list[float]]
-        The dictionary mapping image IDs to their pose coordinates.
+    dict[str, list[float]]
+        The dictionary mapping image IDs to their camera pose coordinates.
         Values are lists of float coordinates in the order specified by the `axes` parameter.
-
-    Warnings
-    --------
-    Logs a warning if the number of retrieved poses differs from the number of images
 
     Notes
     -----
-    - Pose data is primarily retrieved from 'pose' metadata, falling back to 'approximate_pose'
     - Images without pose data are excluded from the result
     - Coordinate order in default 'xyzptr' format:
         - x: X-axis position
@@ -78,121 +84,7 @@ def get_cnc_poses_from_files(image_files: File, axes: str|None = 'xyzptr', defau
 
     Examples
     --------
-    >>> from plant3dvision.tasks.colmap import get_cnc_poses_from_files
-    >>> from plantdb.commons.test_database import test_database
-    >>> db = test_database('real_plant')
-    >>> db.connect()
-    >>> db.login('guest', 'guest')
-    >>> # - Select the dataset to reconstruct:
-    >>> scan = db.get_scan('real_plant')
-    >>> image_fs = scan.get_fileset('images')
-    >>> # Get full 5-axis poses
-    >>> poses = get_cnc_poses_from_files(image_fs.get_files(query={"channel": 'rgb'}))
-    >>> print(poses['00001'])  # [x, y, z, pan, tilt]
-    [100.0, 200.0, 300.0, 45.0, 30.0]
-
-    >>> # Get only XYZ coordinates
-    >>> xyz_poses = get_cnc_poses_from_files(image_fs.get_files(query={"channel": 'rgb'}), axes='xyz')
-    >>> print(xyz_poses['00001'])  # [x, y, z]
-    [100.0, 200.0, 300.0]
-    """
-    # Default order of axes in pose coordinates
-    DEF_AXES = 'xyzptr'
-    n_imgs = len(image_files)  # get the number of images
-
-    # Get 'approximate_pose' metadata for all images
-    approx_poses = {im.id: im.get_metadata("approximate_pose", default=None) for im in image_files}
-    # Get 'pose' metadata for all images
-    poses = {im.id: im.get_metadata("pose", default=None) for im in image_files}
-
-    # Prefer 'pose' over 'approximate_pose' when available
-    cnc_poses = {im.id: poses[im.id] if poses[im.id] is not None else approx_poses[im.id] for im in image_files}
-    # Remove entries where no pose data was found and convert each image pose list to an axis indexed dict
-    cnc_poses = {im_id: dict(zip(DEF_AXES, pose)) for im_id, pose in cnc_poses.items() if poses is not None}
-    # Apply axes reordering
-    cnc_poses = {im_id: [pose.get(ax, default) for ax in axes] for im_id, pose in cnc_poses.items()}
-
-    # Log warning if some images are missing pose data
-    n_poses = len(cnc_poses)
-    if n_poses != n_imgs:
-        logger.warning(f"Number of obtained CNC poses ({n_poses}) and images ({n_imgs}) differs!")
-    return cnc_poses
-
-
-def get_cnc_poses(scan_dataset: Scan, axes: str|None = 'xyzptr', default: float | None = 0.) -> dict[str, list[float]]:
-    """Get the CNC poses from the 'images' fileset using "pose" or "approximate_pose" metadata.
-
-    Parameters
-    ----------
-    scan_dataset : plantdb.commons.db.Scan
-        The scan to get the CNC poses from.
-    axes : str, optional
-        A string specifying which axes to return, by default 'xyzptr'.
-        Must contain only characters from 'xyzptr' (case-insensitive).
-    default : float | None
-        The default value to use if an axis has no value.
-        Defaults to ``0.``.
-
-    Returns
-    -------
-    dict[str, list[float]]
-        The dictionary mapping image IDs to their pose coordinates.
-        Values are lists of float coordinates in the order specified by the `axes` parameter.
-
-    Notes
-    -----
-    The 'images' fileset has metadata "pose" when the ``Path`` parameter `exact_pose` is ``True`` during image acquisition.
-    This fileset has metadata "approximate_pose" when the ``Path`` parameter `exact_pose` is ``False`` during image acquisition.
-
-    See Also
-    --------
-    plantimager.hal.AbstractScanner.scan_at
-
-    Examples
-    --------
-    >>> from plant3dvision.tasks.colmap import get_cnc_poses
-    >>> from plantdb.commons.test_database import test_database
-    >>> # Initialize a test database with a dataset that has the Colmap task
-    >>> db = test_database(dataset='real_plant_analyzed')
-    >>> db.connect()
-    >>> db.login("guest", "guest")
-    >>> scan_id = "real_plant_analyzed"
-    >>> scan = db.get_scan(scan_id)
-    >>> # Get the CNC camera poses (extrinsic) from the 'images' fileset:
-    >>> cnc_poses = get_cnc_poses(scan)
-    >>> print(cnc_poses['00000_rgb'])  # X, Y, Z, pan, tilt coordinates
-    [75.0, 375.0, 80, 270.0, 0]
-    >>> xyz_cnc_poses = get_cnc_poses(scan, axes='xyz')
-    >>> print(xyz_cnc_poses['00000_rgb'])  # X, Y, Z coordinates
-    [75.0, 375.0, 80]
-    >>> db.disconnect()
-    """
-    img_fs = scan_dataset.get_fileset('images').get_files()
-    return get_cnc_poses_from_files(img_fs, axes)
-
-
-def get_image_poses(scan_dataset: Scan, md: str = "calibrated_pose", default: Any = None) -> dict[str, list[float]]:
-    """Get the calibrated camera poses, estimated by colmap, from the 'images' fileset using "calibrated_pose" metadata.
-
-    Parameters
-    ----------
-    scan_dataset : plantdb.commons.fsdb.core.Scan
-        Get the calibrated poses from this scan dataset.
-    md : str, optional
-        The metadata entry hosting the image camera poses to recover.
-        Defaults to ``"calibrated_pose"``.
-    default : Any
-        The default value to use the `md` metadata entry is not found.
-        Defaults to ``None``.
-
-    Returns
-    -------
-    dict[str, list[float]]
-        Image-id indexed dictionary of camera poses as X, Y, Z (, Pan, Tilt, Roll).
-
-    Examples
-    --------
-    >>> from plant3dvision.tasks.colmap import get_image_poses
+    >>> from plant3dvision.tasks.colmap import get_camera_poses_from_files_metadata
     >>> from plantdb.commons.test_database import test_database
     >>> # Initialize a test database with a dataset that has the Colmap task
     >>> db = test_database(dataset='real_plant_analyzed')
@@ -201,13 +93,246 @@ def get_image_poses(scan_dataset: Scan, md: str = "calibrated_pose", default: An
     >>> scan_id = "real_plant_analyzed"
     >>> scan = db.get_scan(scan_id)
     >>> # Get the estimated camera poses (extrinsic) from the 'images' fileset:
-    >>> colmap_poses = get_image_poses(scan, 'estimated_pose')
+    >>> colmap_poses = get_camera_poses_from_files_metadata(image_fs.get_files(query={"channel": 'rgb'}), 'estimated_pose')
     >>> print(colmap_poses['00000_rgb'])
     [75.13817987259904, 378.32946425921693, 77.70216061126882]
     >>> db.disconnect()
     """
-    images_fileset = scan_dataset.get_fileset('images')
-    return {im.id: im.get_metadata(md, default) for im in images_fileset.get_files()}
+    try:
+        assert md in ["approximate_pose", "calibrated_pose", "estimated_pose"]
+    except AssertionError:
+        raise ValueError("Invalid metadata entry, check the notes section.")
+
+    n_imgs = len(image_files)  # get the number of images
+    if axes is None:
+        axes = DEF_AXES
+    else:
+        axes = ''.join(set(axes.lower()) & set(DEF_AXES))
+
+    cam_poses = {im.id: im.get_metadata(md, None) for im in image_files}
+    # Remove entries where no pose data was found and convert each image pose list to an axis indexed dict
+    cam_poses = {im_id: dict(zip(DEF_AXES, pose)) for im_id, pose in cam_poses.items() if pose is not None}
+    # Apply axes reordering
+    cam_poses = {im_id: [pose.get(ax, default) for ax in axes] for im_id, pose in cam_poses.items()}
+
+    # Log warning if some images are missing pose data
+    n_poses = len(cam_poses)
+    if n_poses != n_imgs:
+        logger.warning(f"Number of '{md}' metadata ({n_poses}) and images ({n_imgs}) differs!")
+    return cam_poses
+
+
+def get_camera_poses_from_images_metadata(scan_dataset: Scan, md: str = "calibrated_pose", axes: str | None = 'xyzptr',
+                                          default: float | None = 0.) -> dict[str, list[float]]:
+    """Get the camera poses from the 'images' fileset from specified metadata.
+
+    Parameters
+    ----------
+    scan_dataset : plantdb.commons.fsdb.core.Scan
+        Get the calibrated poses from this scan dataset.
+    md : str, optional
+        The metadata entry hosting the image camera poses to recover.
+        Defaults to ``"calibrated_pose"``.
+        The following options are valids:
+
+        - "approximate_pose": the requested camera poses from the CNC
+        - "calibrated_pose": the camera poses from an extrinsics calibration procedure
+        - "estimated_pose": the camera poses estimated by Colmap
+    axes : str, optional
+        A string specifying which axes to return.
+        Defaults to ``DEF_AXES`` (xyzptr).
+        Must contain only characters from 'xyzptr' (case-insensitive).
+    default : float | None
+        The default value to use if an axis has no value.
+        Defaults to ``0.``.
+
+    Returns
+    -------
+    dict[str, list[float]]
+        The dictionary mapping image IDs to their camera pose coordinates.
+        Values are lists of float coordinates in the order specified by the `axes` parameter.
+
+    Notes
+    -----
+    - Images without pose data are excluded from the result
+    - Coordinate order in default 'xyzptr' format:
+        - x: X-axis position
+        - y: Y-axis position
+        - z: Z-axis position
+        - p: Pan angle
+        - t: Tilt angle
+        - r: Roll angle
+
+    Examples
+    --------
+    >>> from plant3dvision.tasks.colmap import get_camera_poses_from_images_metadata
+    >>> from plantdb.commons.test_database import test_database
+    >>> # Initialize a test database with a dataset that has the Colmap task
+    >>> db = test_database(dataset='real_plant_analyzed')
+    >>> db.connect()
+    >>> db.login("guest", "guest")
+    >>> scan_id = "real_plant_analyzed"
+    >>> scan = db.get_scan(scan_id)
+    >>> # Get the estimated camera poses (extrinsic) from the 'images' fileset:
+    >>> colmap_poses = get_camera_poses_from_images_metadata(scan,'estimated_pose')
+    >>> print(colmap_poses['00000_rgb'])
+    [75.13817987259904, 378.32946425921693, 77.70216061126882]
+    >>> db.disconnect()
+    """
+    image_files = scan_dataset.get_fileset('images').get_files()
+    return get_camera_poses_from_files_metadata(image_files, md, axes=axes, default=default)
+
+
+def get_cnc_poses_from_files_metadata(image_files: list[File], axes: str | None = None,
+                                      default: float | None = 0.) -> dict[str, list[float]]:
+    """Get the camera poses, requested to the CNC, for a given list of files.
+
+    Parameters
+    ----------
+    image_files : list[plantdb.commons.db.File]
+        A list of image files containing pose metadata for each image.
+    axes : str, optional
+        A string specifying which axes to return.
+        Defaults to ``DEF_AXES`` (xyzptr).
+        Must contain only characters from 'xyzptr' (case-insensitive).
+    default : float | None
+        The default value to use if an axis has no value.
+        Defaults to ``0.``.
+
+    Returns
+    -------
+    dict[str, list[float]]
+        The dictionary mapping image IDs to their camera pose coordinates.
+        Values are lists of float coordinates in the order specified by the `axes` parameter.
+
+    Notes
+    -----
+    - Images without pose data are excluded from the result
+    - Coordinate order in default 'xyzptr' format:
+        - x: X-axis position
+        - y: Y-axis position
+        - z: Z-axis position
+        - p: Pan angle
+        - t: Tilt angle
+        - r: Roll angle
+
+    Examples
+    --------
+    >>> from plant3dvision.tasks.colmap import get_cnc_poses_from_files_metadata
+    >>> from plantdb.commons.test_database import test_database
+    >>> db = test_database('real_plant')
+    >>> db.connect()
+    >>> db.login('guest', 'guest')
+    >>> # - Select the dataset to reconstruct:
+    >>> scan = db.get_scan('real_plant')
+    >>> image_fs = scan.get_fileset('images')
+    >>> # Get full 5-axis poses
+    >>> poses = get_cnc_poses_from_files_metadata(image_fs.get_files(query={"channel": 'rgb'}))
+    >>> print(poses['00001'])  # [x, y, z, pan, tilt]
+    [100.0, 200.0, 300.0, 45.0, 30.0]
+
+    >>> # Get only XYZ coordinates
+    >>> xyz_poses = get_cnc_poses_from_files_metadata(image_fs.get_files(query={"channel": 'rgb'}),axes='xyz')
+    >>> print(xyz_poses['00001'])  # [x, y, z]
+    [100.0, 200.0, 300.0]
+    """
+    return get_camera_poses_from_files_metadata(image_files, md="approximate_pose", axes=axes, default=default)
+
+
+def get_cnc_poses_from_images_metadata(scan_dataset: Scan, axes: str | None = None,
+                                       default: float | None = 0.) -> dict[str, list[float]]:
+    """Get the camera poses, requested to the CNC, for a given scan dataset.
+
+    Parameters
+    ----------
+    scan_dataset : plantdb.commons.db.Scan
+        The scan to get the pose metadata from.
+    axes : str, optional
+        A string specifying which axes to return.
+        Defaults to ``DEF_AXES`` (xyzptr).
+        Must contain only characters from 'xyzptr' (case-insensitive).
+    default : float | None
+        The default value to use if an axis has no value.
+        Defaults to ``0.``.
+
+    Returns
+    -------
+    dict[str, list[float]]
+        The dictionary mapping image IDs to their camera pose coordinates.
+        Values are lists of float coordinates in the order specified by the `axes` parameter.
+
+    Notes
+    -----
+    - Images without pose data are excluded from the result
+    - Coordinate order in default 'xyzptr' format:
+        - x: X-axis position
+        - y: Y-axis position
+        - z: Z-axis position
+        - p: Pan angle
+        - t: Tilt angle
+        - r: Roll angle
+
+    Examples
+    --------
+    >>> from plant3dvision.tasks.colmap import get_cnc_poses_from_images_metadata
+    >>> from plantdb.commons.test_database import test_database
+    >>> # Initialize a test database with a dataset that has the Colmap task
+    >>> db = test_database(dataset='real_plant_analyzed')
+    >>> db.connect()
+    >>> db.login("guest", "guest")
+    >>> scan_id = "real_plant_analyzed"
+    >>> scan = db.get_scan(scan_id)
+    >>> # Get the CNC camera poses (extrinsic) from the 'images' fileset:
+    >>> cnc_poses = get_cnc_poses_from_images_metadata(scan)
+    >>> print(cnc_poses['00000_rgb'])  # X, Y, Z, pan, tilt coordinates
+    [75.0, 375.0, 80, 270.0, 0]
+    >>> xyz_cnc_poses = get_cnc_poses_from_images_metadata(scan, axes='xyz')
+    >>> print(xyz_cnc_poses['00000_rgb'])  # X, Y, Z coordinates
+    [75.0, 375.0, 80]
+    >>> db.disconnect()
+    """
+    return get_camera_poses_from_images_metadata(scan_dataset, md="approximate_pose", axes=axes, default=default)
+
+
+def compute_camera_poses_from_files_metadata(image_files: list[File]) -> dict[str, list[float]]:
+    """Compute the camera poses estimated by Colmap from the metadata of a list of image files.
+
+    Parameters
+    ----------
+    image_files : list[plantdb.commons.db.File]
+        A list of image files containing pose metadata for each image.
+
+    Returns
+    -------
+    dict[str, list[float]]
+        Image-id indexed dictionary of camera poses as X, Y, Z, Pan, Tilt, Roll.
+
+    Examples
+    --------
+    >>> from plant3dvision.tasks.colmap import compute_camera_poses_from_images_metadata
+    >>> from plantdb.commons.test_database import test_database
+    >>> # Initialize a test database with a dataset that has the Colmap task
+    >>> db = test_database(dataset='real_plant_analyzed')
+    >>> db.connect()
+    >>> db.login("guest", "guest")
+    >>> scan_id = "real_plant_analyzed"
+    >>> scan = db.get_scan(scan_id)
+    >>> # Get the camera poses (extrinsic) from the metadata of each file in the 'images' fileset:
+    >>> colmap_poses = compute_camera_poses_from_images_metadata(scan)
+    >>> print(colmap_poses['00000_rgb'])
+    [75.13817987259904, 378.32946425921693, 77.70216061126882, 279.70087343697384, 69.88307357761366, 173.6289009619148]
+    >>> db.disconnect()
+    """
+    colmap_poses = {}
+    for i, fi in enumerate(image_files):
+        md_i = fi.get_metadata()
+        rotmat = md_i['colmap_camera']['rotmat']
+        tvec = md_i['colmap_camera']['tvec']
+        # - Compute the 'calibrated_pose' from COLMAP's rotation and translation matrix:
+        camera_pose = estimate_camera_pose(np.array(rotmat), np.array(tvec))
+        colmap_poses[fi.id] = list(map(float, camera_pose))
+
+    return colmap_poses
 
 
 def compute_camera_poses_from_images_metadata(scan_dataset: Scan) -> dict[str, list[float]]:
@@ -239,18 +364,7 @@ def compute_camera_poses_from_images_metadata(scan_dataset: Scan) -> dict[str, l
     [75.13817987259904, 378.32946425921693, 77.70216061126882, 279.70087343697384, 69.88307357761366, 173.6289009619148]
     >>> db.disconnect()
     """
-    images_fileset = scan_dataset.get_fileset('images')
-
-    colmap_poses = {}
-    for i, fi in enumerate(images_fileset.get_files()):
-        md_i = fi.get_metadata()
-        rotmat = md_i['colmap_camera']['rotmat']
-        tvec = md_i['colmap_camera']['tvec']
-        # - Compute the 'calibrated_pose' from COLMAP's rotation and translation matrix:
-        camera_pose = estimate_camera_pose(np.array(rotmat), np.array(tvec))
-        colmap_poses[fi.id] = list(map(float, camera_pose))
-
-    return colmap_poses
+    return compute_camera_poses_from_files_metadata(scan_dataset.get_fileset('images').get_files())
 
 
 def compute_colmap_poses_from_images_json(scan_dataset: Scan) -> dict[str, list[float]]:

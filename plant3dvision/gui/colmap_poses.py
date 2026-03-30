@@ -15,7 +15,7 @@ import toml
 
 from plant3dvision.camera import format_camera_params
 from plant3dvision.tasks.colmap import compute_colmap_poses_from_images_json
-from plant3dvision.tasks.colmap import get_cnc_poses
+from plant3dvision.tasks.colmap import get_cnc_poses_from_images_metadata
 from plant3dvision.tasks.colmap import pose_estimation_figure
 from plantdb.commons.fsdb.core import FSDB
 from romitask import SCAN_TOML
@@ -44,7 +44,7 @@ def main(dataset_path):
     # - Get the dataset corresponding to the selected scan:
     current_scan = db.get_scan(scan_name)
     # - Get the CNC poses:
-    cnc_poses = get_cnc_poses(current_scan)
+    cnc_poses = get_cnc_poses_from_images_metadata(current_scan)
     # - Get the COLMAP poses:
     colmap_poses = compute_colmap_poses_from_images_json(current_scan)
 
