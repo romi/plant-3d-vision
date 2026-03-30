@@ -38,8 +38,8 @@ v = volume_slider(vol, "random_scan", "plasma")
 import argparse
 from pathlib import Path
 
-from plant3dvision.visu import plt_volume_slice_viewer
-from plant3dvision.visu import pyvista_volume
+from plant3dvision.visu.matplotlib import plt_volume_slice_viewer
+from plant3dvision.visu.pyvista import volume_to_imagedata
 from plantdb.commons import io
 from plantdb.commons.fsdb.core import FSDB
 
@@ -103,7 +103,7 @@ def volume_viewer(volume, scan_name, cmap):
     plotter = pv.Plotter()
     plotter.add_title(str(scan_name))
 
-    vol_grid = pyvista_volume(volume)
+    vol_grid = volume_to_imagedata(volume)
 
     plotter.add_volume(
         vol_grid,

@@ -85,7 +85,7 @@ def pcd2mesh(pcd):
     --------
     >>> from plant3dvision.proc3d import pcd2mesh
     >>> from plantdb.commons.io import read_point_cloud
-    >>> from plantdb.server.rest_api import compute_fileset_matches
+    >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plantdb.commons.test_database import test_database
     >>> db = test_database()
     >>> db.connect()
@@ -147,7 +147,7 @@ def pcd2vol(pcd, voxel_size, zero_padding=0):
     --------
     >>> from plant3dvision.proc3d import pcd2vol
     >>> from plantdb.commons.io import read_point_cloud
-    >>> from plantdb.server.rest_api import compute_fileset_matches
+    >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plantdb.commons.test_database import test_database
     >>> db = test_database()
     >>> db.connect()
@@ -158,7 +158,7 @@ def pcd2vol(pcd, voxel_size, zero_padding=0):
     >>> vol, origin = pcd2vol(pcd, 1.0)
     >>> print(vol.shape)
     (80, 60, 277)
-    >>> from plant3dvision.visu import plotly_volume_slicer
+    >>> from plant3dvision.visu.plotly import plotly_volume_slicer
     >>> plotly_volume_slicer(vol)
     >>> db.disconnect()
 
@@ -200,9 +200,8 @@ def skeletonize(mesh):
     >>> import os
     >>> from plant3dvision.proc3d import skeletonize
     >>> from plantdb.commons.io import read_triangle_mesh
-    >>> from plantdb.server.rest_api import compute_fileset_matches
+    >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plantdb.commons.fsdb.core import FSDB
-    >>> db = FSDB(os.environ['ROMI_DB'])  # requires definition of this environment variable!
     >>> db = FSDB('/data/ROMI/test_owner')
     >>> db.connect()
     >>> scan = db.get_scan("Col-0_E1_1")
@@ -238,9 +237,10 @@ def knn_graph(pcd, k):
 
     Examples
     --------
-    >>> from plant3dvision.visu import draw_pcd_graph    >>> from plant3dvision.proc3d import knn_graph
+    >>> from plant3dvision.visu.open3d import draw_pcd_graph
+    >>> from plant3dvision.proc3d import knn_graph
     >>> from plantdb.commons.io import read_point_cloud
-    >>> from plantdb.server.rest_api import compute_fileset_matches
+    >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plantdb.commons.test_database import test_database
     >>> db = test_database()
     >>> db.connect()
@@ -296,7 +296,7 @@ def radius_graph(pcd, r):
     --------
     >>> from plant3dvision.proc3d import radius_graph
     >>> from plantdb.commons.io import read_point_cloud
-    >>> from plantdb.server.rest_api import compute_fileset_matches
+    >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plantdb.commons.test_database import test_database
     >>> db = test_database()
     >>> db.connect()
@@ -305,7 +305,7 @@ def radius_graph(pcd, r):
     >>> pcd_fs = scan.get_fileset(pcd_fs_id)
     >>> pcd = read_point_cloud(pcd_fs.get_file("PointCloud"))
     >>> neighbours_graph = radius_graph(pcd, 5)
-    >>> from plant3dvision.visu import draw_pcd_graph
+    >>> from plant3dvision.visu.open3d import draw_pcd_graph
     >>> draw_pcd_graph(neighbours_graph)
     >>> db.disconnect()
     """
@@ -357,7 +357,7 @@ def connect_graph(g, pcd, root_index):
     --------
     >>> from plant3dvision.proc3d import knn_graph, connect_graph
     >>> from plantdb.commons.io import read_point_cloud
-    >>> from plantdb.server.rest_api import compute_fileset_matches
+    >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plantdb.commons.test_database import test_database
     >>> db = test_database()
     >>> db.connect()
@@ -649,7 +649,7 @@ def vol2pcd_parallel(volume, origin, voxel_size, level_set_value=0):
     --------
     >>> from plant3dvision.proc3d import vol2pcd_parallel
     >>> from plantdb.commons.io import read_volume
-    >>> from plantdb.server.rest_api import compute_fileset_matches
+    >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plantdb.commons.test_database import test_database
     >>> db = test_database()
     >>> db.connect()
@@ -670,11 +670,6 @@ def vol2pcd_parallel(volume, origin, voxel_size, level_set_value=0):
     from joblib import Parallel
     from joblib import delayed
     start_time = time.time()
-
-    logger.info("Volume binarization...")
-    # Binarize volume using a threshold of 0.5
-    volume = 1.0 * (volume > 0.5)
-    logger.info(f"Volume binarization... Done in {time.time() - start_time:.2f}s")
 
     step_start = time.time()
     logger.info("Distance transform...")
@@ -769,7 +764,7 @@ def vol2pcd(volume, origin, voxel_size, level_set_value=0):
     Parameters
     ----------
     volume : numpy.ndarray
-        ``NxMxP`` 3D numpy array
+        ``NxMxP`` 3D binary numpy array
     origin : numpy.ndarray
         Origin of the volume
     voxel_size : float
@@ -787,7 +782,7 @@ def vol2pcd(volume, origin, voxel_size, level_set_value=0):
     --------
     >>> from plant3dvision.proc3d import vol2pcd
     >>> from plantdb.commons.io import read_volume
-    >>> from plantdb.server.rest_api import compute_fileset_matches
+    >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plantdb.commons.test_database import test_database
     >>> db = test_database()
     >>> db.connect()
@@ -806,11 +801,6 @@ def vol2pcd(volume, origin, voxel_size, level_set_value=0):
     """
     import time
     start_time = time.time()
-
-    logger.info("Volume binarization...")
-    # Binarize volume using a threshold of 0.5
-    volume = 1.0 * (volume > 0.5)
-    logger.info(f"Volume binarization... Done in {time.time() - start_time:.2f}s")
 
     step_start = time.time()
     logger.info("Distance transform...")
@@ -1269,7 +1259,7 @@ def pcd_convex_hull_volume(pcd):
     --------
     >>> from plant3dvision.proc3d import pcd_convex_hull_volume
     >>> from plantdb.commons.io import read_point_cloud
-    >>> from plantdb.server.rest_api import compute_fileset_matches
+    >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plantdb.commons.test_database import test_database
     >>> db = test_database()
     >>> db.connect()

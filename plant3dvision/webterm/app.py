@@ -476,7 +476,7 @@ def create_webterm_app(proxy=False, log_level=DEFAULT_LOG_LEVEL, async_mode='thr
     def get_scans():
         try:
             db = FSDB(os.getenv('ROMI_DB', '/myapp/db'))
-            db.connect(unsafe=True)
+            db.connect()
             list_scan_names = db.list_scans(owner_only=False)
             db.disconnect()
             return jsonify(list_scan_names)

@@ -319,7 +319,7 @@ def pose_estimation_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_
     --------
     >>> from plantdb.commons.test_database import test_database
     >>> from plant3dvision.tasks.colmap import get_cnc_poses
-    >>> from plant3dvision.tasks.colmap import compute_camera_poses_from_colmap
+    >>> from plant3dvision.tasks.colmap import compute_camera_poses_from_images_metadata
     >>> from plant3dvision.tasks.colmap import pose_estimation_figure
     >>> from plant3dvision.tasks.colmap import use_precalibrated_poses
     >>> # Example 1 - Get the CNC & COLMAP poses and compare them:
@@ -363,7 +363,7 @@ def pose_estimation_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_
     # -------------------------------------------------------------------------
     # Get X, Y, Z coordinates of reference points:
     try:
-        x, y, z, _, _ = np.array([pose if pose is not None else [np.nan] * 5 for im_id, pose in ref_poses.items()]).T
+        x, y, z, _, _, _ = np.array([pose if pose is not None else [np.nan] * 6 for im_id, pose in ref_poses.items()]).T
     except:
         x, y, z = np.array([pose if pose is not None else [np.nan] * 3 for im_id, pose in ref_poses.items()]).T
     x_c, y_c = np.mean(x), np.mean(y)  # 2D center point

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import numpy as np
+from PIL import Image
 
 from plantdb.commons import io
 from romitask.log import get_logger
@@ -251,6 +252,7 @@ def get_camera_kwargs_from_params_list(model, params):
     {'model': 'SIMPLE_RADIAL', 'f': 1200, 'cx': 720, 'cy': 540, 'k': 0.1}
 
     """
+
     def _simple_radial(camera_params):
         """Parameter list is expected in the following order: f, cx, cy, k."""
         cam_dict = {'model': "SIMPLE_RADIAL"}
@@ -594,3 +596,96 @@ def colmap_params_from_kwargs(**kwargs):
         return [kwargs['f'], kwargs['f'], kwargs['cx'], kwargs['cy'], kwargs['k1'], kwargs['k2'], 0., 0.]
     if model.lower() == 'simple_radial':
         return [kwargs['f'], kwargs['f'], kwargs['cx'], kwargs['cy'], kwargs['k'], 0., 0., 0.]
+
+
+def camera_params_from_file(image_f: "File",
+                            ) -> tuple[
+    tuple[float, float, float],
+    tuple[float, float, float],
+    tuple[float, float, float],
+    float,
+]:
+    """Return camera pose and field‑of‑view information extracted from a ROMI image file.
+
+    Parameters
+    ----------
+    image_f : plantdb.commons.fsdb.File
+        An image ``File`` instance that provides ``colmap_camera`` and ``estimated_pose`` metadata.
+        The file must be readable via ``image_f.path()`` because the image height may be obtained from the
+        actual image file when it is not stored in the metadata.
+
+    Returns
+    -------
+    cam_pos : tuple of float
+        The camera center in world coordinates (x, y, z).
+    focal_point : tuple of float
+        A point in world space that lies one unit forward from ``cam_pos`` in the
+        camera's viewing direction.
+    up : tuple of float
+        The camera's up vector expressed in world coordinates.
+    fov_y_deg : float
+        Vertical field‑of‑view in degrees, computed from the image height and the
+        focal length ``fy`` stored in the camera model.
+
+    Raises
+    ------
+    KeyError
+        If required metadata keys are missing from ``image_f``.
+
+    Examples
+    --------
+    >>> from plant3dvision.camera import camera_params_from_file
+    >>> from plantdb.commons.test_database import test_database
+    >>> db = test_database()
+    >>> db.connect()
+    >>> db.login('guest', 'guest')
+    >>> scan = db.get_scan('real_plant_analyzed')
+    >>> image_f = scan.get_fileset('images').get_files()[0]
+    >>> cam_pos, focal, up, fov = camera_params_from_file(image_f)
+    >>> print(cam_pos)
+    (0.0, 0.0, 0.0)          # example values
+    >>> print(fov)
+    45.0                     # example value in degrees
+    >>> db.disconnect()
+    """
+    # Retrieve COLMAP camera metadata; raise if absent
+    img_md = image_f.get_metadata('colmap_camera', default=None)
+    if img_md is None:
+        raise ValueError("Missing image metadata 'colmap_camera'.")
+
+    # Rotation matrix (3x3) and translation vector (3,) from metadata
+    rot_matrix = np.array(img_md['rotmat'])
+    t_vec = np.array(img_md['tvec'])
+
+    # Try to get estimated pose (x, y, z) from metadata; fallback to None
+    try:
+        x, y, z, _, _, _ = image_f.get_metadata('estimated_pose', default=[None] * 6)
+    except:
+        x, y, z = [None] * 3
+    # If pose missing, compute it from rotation/translation using COLMAP helper
+    if None in (x, y, z):
+        try:
+            from plant3dvision.colmap import estimate_camera_pose
+            x, y, z, _, _, _ = estimate_camera_pose(rot_matrix, t_vec)
+        except:
+            raise ValueError("Missing image metadata 'estimated_pose'.")
+
+    # Focal length in y direction (fy) from camera model parameters
+    fy = img_md['camera_model']['params'][1]
+    # Image height: use stored metadata or read actual image file as fallback
+    img_height = img_md.get('height') or Image.open(image_f.path()).size[1]
+
+    # Inverse rotation (transpose) to transform from camera to world coordinates
+    rot_mat_inv = rot_matrix.T
+    # Camera center in world coordinates
+    cam_pos = (x, y, z)
+    # Camera forward direction in world space (third column of inverse rotation)
+    forward_world = rot_mat_inv[:, 2]
+    # Camera up direction in world space (negative second column of inverse rotation)
+    up_world = -rot_mat_inv[:, 1]
+    # Point one unit ahead of the camera along its forward axis
+    focal_point = np.array(cam_pos) + forward_world
+    # Vertical field‑of‑view (degrees) derived from image height and fy
+    fov_y_deg = np.degrees(2.0 * np.arctan(img_height / (2.0 * fy)))
+
+    return cam_pos, tuple(focal_point), tuple(up_world), fov_y_deg

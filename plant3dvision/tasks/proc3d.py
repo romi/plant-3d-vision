@@ -76,6 +76,8 @@ class PointCloud(RomiTask):
     upstream_task = luigi.TaskParameter(default=Voxels)  # override default attribute from ``RomiTask``
     level_set_value = luigi.FloatParameter(default=1.0)
 
+    missing_images_threshold = luigi.IntParameter(default=2)
+
     labels = luigi.ListParameter(default=[])
     background_prior = luigi.FloatParameter(default=1.0)  # only used if labels were defined (multiclass)
     min_contrast = luigi.FloatParameter(default=10.0)  # only used if labels were defined (multiclass)
@@ -116,9 +118,17 @@ class PointCloud(RomiTask):
         - Finally, the point cloud and labels for all points are saved as
           outputs.
         """
+        # TODO: make sure this work with "averaging" method for upstream task voxel...
         for label in labels:
-            ifile = self.input_file(suffix=label)
+            ifile = self.input_file(suffix=f"_{label}")
+            # Fetch metadata
+            origin = np.array(ifile.get_metadata('origin'))
+            voxel_size = float(ifile.get_metadata('voxel_size'))
+            method = str(ifile.get_metadata('method', default='carving'))
+            n_img = int(ifile.get_metadata('n_img', default=0.))
+            # Read and binarize the volume
             voxels = io.read_volume(ifile)
+            voxels = self._binarize(voxels, method, n_img - self.missing_images_threshold)
             # Collect the names of all classes
             label = list(voxels.keys())
             # Prepare an array to aggregate voxel data from all classes
@@ -134,9 +144,6 @@ class PointCloud(RomiTask):
             res_idx = np.argmax(res, axis=3)
             # Prepare an Open3D point cloud object for aggregation
             pcd = o3d.geometry.PointCloud()
-            # Fetch metadata for origin and voxel size
-            origin = np.array(ifile.get_metadata('origin'))
-            voxel_size = float(ifile.get_metadata('voxel_size'))
             # List to keep track of assigned labels for each point
             point_labels = []
             # Predefined color dictionary for known labels
@@ -191,13 +198,26 @@ class PointCloud(RomiTask):
         """
         voxels = io.read_volume(ifile)
         # For single-class data, fetch origin and voxel size as usual
-        origin = np.array(ifile.get_metadata('origin'))
-        voxel_size = float(ifile.get_metadata('voxel_size'))
+        origin = np.array(ifile.get_metadata('origin', default=(0., 0., 0.)))
+        voxel_size = float(ifile.get_metadata('voxel_size', default=1.))
+        method = str(ifile.get_metadata('method', default='carving'))
+        n_img = int(ifile.get_metadata('n_img', default=0.))
+
+        # Binarize the volume
+        voxels = self._binarize(voxels, method, n_img - self.missing_images_threshold)
         # Directly create a point cloud from the single volume
         out = proc3d.vol2pcd(voxels, origin, voxel_size, self.level_set_value)
         # Write the point cloud to file and attach metadata
         io.write_point_cloud(self.output_file(create=True), out)
         self.output_file().set_metadata({'voxel_size': voxel_size})
+
+    @staticmethod
+    def _binarize(voxels, method, threshold):
+        if method == "averaging":
+            return voxels >= threshold
+        else:
+            return voxels >= 1.
+
 
     def run(self):
         """Process a volumetric data file into a point cloud representation.
@@ -217,13 +237,13 @@ class PointCloud(RomiTask):
 
         # Case 2: One label specified - process single class with label suffix
         elif len(self.labels) == 1:
-            # Get input file with label name appended to filename
+            # Get the input file with its label's name
             ifile = self.input_file(suffix=f"_{self.labels[0]}")
             self.run_single_class(ifile)
 
         # Case 3: Multiple labels - combine data from multiple classes
         else:
-            # Process multiple class volumes and combine them into single point cloud
+            # Process multiple class volumes and combine them into a single point cloud
             self.run_multiclass(self.labels)
 
 

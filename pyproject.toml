@@ -75,7 +75,12 @@ source = "https://github.com/romi/plant-3d-vision"
 issues = "https://github.com/romi/plant-3d-vision/issues"
 
 [project.optional-dependencies]
-gui = ["pyqt6", "pyvista"]
+gui = [
+    "pyside6",
+    "pyvista",
+    "pyvistaqt"
+]
+
 doc = [
     "mkdocs",
     "mkdocs-material",

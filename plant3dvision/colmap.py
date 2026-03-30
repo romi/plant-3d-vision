@@ -313,12 +313,12 @@ def estimate_camera_pose(rot_matrix, tvec):
     >>> from plant3dvision.colmap import estimate_camera_pose
     >>> # Sample rotation matrix (3x3) and translation vector (3x1)
     >>> rot_matrix = np.array([[0.04537058362671326, -0.998725595306853, 0.022106456530704977], [-0.5123537456733758, -0.042261105904542295, -0.8577340136791751], [0.8575751567272887, 0.027589566990035286, -0.5136182106949377]])
-    >>> tvec = np.array([370.51956102391097, 121.97435769625103, 24.928062162932385])
-    >>> x, y, z, pan, tilt, roll = estimate_camera_pose(rot_matrix, tvec)
+    >>> t_vec = np.array([370.51956102391097, 121.97435769625103, 24.928062162932385])
+    >>> x, y, z, pan, tilt, roll = estimate_camera_pose(rot_matrix, t_vec)
     >>> print([x, y, z])
     [24.305643496725597, 374.51438596370315, 109.2341875074113]
-    >>> print(pan, tilt)
-    265.2846760236354 59.063102235084784
+    >>> print(pan, tilt, roll)
+    265.2846760236354 59.063102235084784 177.53547406846363
     """
     from scipy.spatial.transform import Rotation as R
     # Compute the camera position in world coordinates
@@ -329,6 +329,52 @@ def estimate_camera_pose(rot_matrix, tvec):
     pan = (180 - pan) % 360  # change rotation orientation and range from [-180, 180] to [0, 360]
     return list(camera_position) + [pan, tilt, roll]
 
+def estimate_rotation_translation_mat(x, y, z, pan, tilt, roll):
+    """Estimate the rotation (3×3) and translation (3,) matrices from the camera pose (position & orientation).
+
+    Parameters
+    ----------
+    x, y, z : float
+        Camera center in world coordinates.
+    pan, tilt, roll : float
+        Angles (in degrees) in world coordinates.
+        *pan* should be remapped with ``(180‑pan) % 360``.
+
+    Returns
+    -------
+    rot_matrix : np.ndarray, shape (3, 3)
+        COLMAP rotation matrix.
+    tvec : np.ndarray, shape (3,)
+        COLMAP translation vector.
+
+    Notes
+    -----
+    This does the exact opposite of `estimate_camera_pose`.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from plant3dvision.colmap import estimate_rotation_translation_mat
+    >>> from plant3dvision.colmap import estimate_camera_pose
+    >>> # Sample rotation matrix (3x3) and translation vector (3x1)
+    >>> rot_matrix = np.array([[0.04537058362671326, -0.998725595306853, 0.022106456530704977], [-0.5123537456733758, -0.042261105904542295, -0.8577340136791751], [0.8575751567272887, 0.027589566990035286, -0.5136182106949377]])
+    >>> tvec = np.array([370.51956102391097, 121.97435769625103, 24.928062162932385])
+    >>> x, y, z, pan, tilt, roll = estimate_camera_pose(rot_matrix, tvec)
+    >>> rot_rec, tvec_rec = estimate_rotation_translation_mat(x, y, z, 180.0 - pan, tilt, roll)
+    >>> print("rot diff  :", np.max(np.abs(rot_matrix - rot_rec)))   # ≈ 0
+    >>> print("tvec diff :", np.max(np.abs(tvec - tvec_rec)))       # ≈ 0
+    """
+    from scipy.spatial.transform import Rotation as R
+    # Build the rotation matrix from the (pan, tilt, roll)
+    rot = R.from_euler('zxy', [pan, tilt, roll], degrees=True)
+    rot_matrix = rot.as_matrix()                     # shape (3, 3)
+
+    # Recover the translation vector (COLMAP’s “tvec”)
+    #    camera_position = -R.T @ tvec -> tvec = -R @ camera_position
+    camera_position = np.array([x, y, z], dtype=float)
+    tvec = -rot_matrix @ camera_position           # shape (3,)
+
+    return rot_matrix, tvec
 
 def export_camera_parameters(image_files, intrinsics, extrinsics, name_mapping: dict[str, str] = None):
     """Export camera intrinsics and extrinsic to images metadata.
@@ -538,16 +584,16 @@ class ColmapRunner(object):
             Method to use to perform feature matching operation, default is 'exhaustive'.
         compute_dense : bool, optional
             If ``True`` (default ``False``), compute dense point cloud.
-            This is time consumming & requires a lot of memory ressources.
+            This is time consumming & requires a lot of memory resources.
         all_cli_args : dict, optional
             Dictionary of arguments to pass to colmap command lines, empty by default.
         align_pcd : bool, optional
             If ``True`` (default ``False``), align spare (& dense) point cloud(s) coordinate system of given camera centers.
         use_calibration : bool, optional
-            If ``True`` (default ``False``),  use "calibrated_pose" instead of "pose" metadata for point cloud alignment.
+            If ``True`` (default ``False``), use "calibrated_pose" instead of "pose" metadata for point cloud alignment.
         bounding_box : dict, optional
-            If specified (default ``None``), crop the sparse (& dense) point cloud(s) with given volume dictionary.
-            Specifications: {"x" : [xmin, xmax], "y" : [ymin, ymax], "z" : [zmin, zmax]}.
+            If specified (default ``None``), crop the sparse (& dense) point cloud(s) with the given volume dictionary.
+            Specifications: {"x": [xmin, xmax], "y": [ymin, ymax], "z": [zmin, zmax]}.
         multiple_cameras : bool, optional
             If ``True``, colmap will assume there are multiple cameras and that all images with
             the same prefix are from the same camera.
@@ -558,8 +604,6 @@ class ColmapRunner(object):
             The executable to use to run the colmap reconstruction steps.
             'colmap' requires that you compile and install it from sources, see [colmap]_.
             The others use pre-built docker images, available from docker hub.
-            'geki/colmap' is colmap 3.6 with Ubuntu 18.04 and CUDA 10.1, see [geki_colmap]_
-            'roboticsmicrofarms/colmap' is colmap 3.7 with Ubuntu 18.04 and CUDA 10.2, see [roboticsmicrofarms_colmap]_
 
         References
         ----------
@@ -997,12 +1041,12 @@ class ColmapRunner(object):
         method : str
             COLMAP method to use, _e.g._ 'feature_extractor'.
         args : list
-            A list of arguments to use with COLMAP, usually from parent function.
+            A list of arguments to use with COLMAP, usually from the parent function.
         cli_args : dict
             A dictionary of arguments to use with COLMAP, usually from TOML configuration.
         to_log : bool, optional
             If ``True`` (default) append the output of the COLMAP command to the log file (``self.log_file``).
-            Else, return it as string.
+            Else, return it as a string.
 
         Raises
         ------
@@ -1012,7 +1056,7 @@ class ColmapRunner(object):
         Notes
         -----
         Adapt the COLMAP command to local COLMAP install or use of docker container.
-        Deactivate use of GPU if not available.
+        Automatically deactivate GPU usage if not available.
 
         See Also
         --------
@@ -1063,7 +1107,7 @@ class ColmapRunner(object):
         # -- Check the method's command-line arguments dict:
         if not isinstance(cli_args, dict):
             cli_args = cli_args.get_wrapped()  # Convert luigi FrozenOrderedDict to a Dict instance
-        # - Finally extend the COLMAP command to execute with the method's command-line arguments dict:
+        # - Finally, extend the COLMAP command to execute with the method's command-line arguments dict:
         for x in cli_args.keys():
             cmd.extend([x, str(cli_args[x])])
 
@@ -1088,8 +1132,7 @@ class ColmapRunner(object):
         Returns
         -------
         str
-            The outputs of the COLMAP process, may be empty if ``to_log=True``.
-
+            The outputs of the COLMAP process, they may be empty if ``to_log=True``.
         """
         import docker
         # Initialize docker client manager:
@@ -1172,8 +1215,7 @@ class ColmapRunner(object):
         Returns
         -------
         str
-            The outputs of the COLMAP process, may be empty if ``to_log=True``.
-
+            The outputs of the COLMAP process, they may be empty if ``to_log=True``.
         """
         logger.debug('Running subprocess: ' + ' '.join(process))
         if to_log:
@@ -1328,7 +1370,7 @@ class ColmapRunner(object):
 
     def get_intrinsics(self):
         """Get the camera intrinsic dictionary."""
-        # Defines the path to COLMAP image binary file and make sure it exists:
+        # Defines the path to the COLMAP image binary file and make sure it exists:
         cam_bin = Path(f'{self.sparse_dir}/0/cameras.bin')
         try:
             assert cam_bin.is_file()
@@ -1344,7 +1386,7 @@ class ColmapRunner(object):
 
     def get_extrinsics(self):
         """Get the camera extrinsic dictionary."""
-        # Defines path to COLMAP `images.bin` binary file and make sure it exists:
+        # Defines a path to COLMAP `images.bin` binary file and make sure it exists:
         img_bin = Path(f'{self.sparse_dir}/0/images.bin')
         try:
             assert img_bin.is_file()
@@ -1477,7 +1519,7 @@ class ColmapRunner(object):
         sparse_pcd = self.get_sparse_pcd()
         # - Read COLMAP 'points3D' binary and convert to dictionary:
         points = colmap_points_to_dict(f'{self.sparse_dir}/0/points3D.bin')
-        # - Raise an error if sparse point cloud is empty:
+        # - Raise an error if the sparse point cloud is empty:
         if len(sparse_pcd.points) == 0:
             raise Exception("Reconstructed sparse point cloud is EMPTY!")
 
@@ -1502,20 +1544,22 @@ class ColmapRunner(object):
         # - Try to crop the dense point cloud (if any) by bounding-box (if any):
         if self.bounding_box is not None and self.compute_dense:
             crop_dense_pcd = proc3d.crop_point_cloud(dense_pcd, self.bounding_box)
-            # - Replace the dense point cloud with cropped version only if it is not empty:
+            # - Replace the dense point cloud with a cropped version only if it is not empty:
             if len(crop_dense_pcd.points) == 0:
                 logger.critical("Empty dense point cloud after cropping by bounding box!")
-                logger.critical("Using non-cropped version!")
+                logger.info(f"Used bounding box: {self.bounding_box}")
+                logger.info("Using non-cropped version")
                 self.bounding_box = None
             else:
                 dense_pcd = crop_dense_pcd
         # - Try to crop the sparse point cloud by bounding-box (if any):
         if self.bounding_box is not None:
             crop_sparse_pcd = proc3d.crop_point_cloud(sparse_pcd, self.bounding_box)
-            # - Replace the sparse point cloud with cropped version only if it is not empty:
+            # - Replace the sparse point cloud with a cropped version only if it is not empty:
             if len(crop_sparse_pcd.points) == 0:
                 logger.critical("Empty sparse point cloud after cropping by bounding box!")
-                logger.critical("Using non-cropped version!")
+                logger.info(f"Used bounding box: {self.bounding_box}")
+                logger.info("Using non-cropped version")
                 # Check if we have a DENSE pcd that may contain points inside the bounding-box...
                 # else set to `None` to try automatic
                 if dense_pcd is None:
@@ -1526,7 +1570,7 @@ class ColmapRunner(object):
         # - AUTOMATIC estimation of bounding-box from dense (if any) or sparse point cloud if not manually defined:
         if self.bounding_box is None:
             if dense_pcd is not None:
-                points_array = np.asarray(sparse_pcd.points)
+                points_array = np.asarray(dense_pcd.points)
             else:
                 points_array = np.asarray(sparse_pcd.points)
             # Get the bounding-box using min & max in each direction +/- 5% of the range in each direction
@@ -1574,8 +1618,7 @@ def test_runner(test_dataset='real_plant', colmap_exe="roboticsmicrofarms/colmap
     >>> colmap = test_runner()
     >>> print(colmap.colmap_exe)
     roboticsmicrofarms/colmap:3.8
-
-   """
+    """
     from plantdb.commons.test_database import test_database
     db = test_database(test_dataset)
     db.connect()

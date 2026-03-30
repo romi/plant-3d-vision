@@ -22,13 +22,179 @@ import numpy as np
 from plant3dvision.tasks.colmap import Colmap
 from plant3dvision.tasks.proc2d import Masks
 from plant3dvision.voxel_cuda import Backprojection
-
 from plantdb.commons import io
 from romitask import RomiTask
 from romitask.log import get_logger
 from romitask.task import ImagesFilesetExists
 
 logger = get_logger(__name__)
+
+
+def shape_from_bounding_box(bounding_box, voxel_size=1.):
+    """Calculate the shape of the array required to cover a 3‑D bounding box at a specified voxel resolution.
+
+    Parameters
+    ----------
+    bounding_box : dict[str, tuple[int, int]]
+        Dictionary with keys ``'x'``, ``'y'``, and ``'z'``. Each value is a two‑element sequence
+        ``(min, max)`` defining the extents of the box along the corresponding axis.
+    voxel_size : float | None
+        Edge length of a cubic voxel. Must be positive. Default is ``1.0``.
+
+    Returns
+    -------
+    tuple[int, int, int]
+        The shape of the array to cover a 3‑D bounding box at a specified voxel resolution.
+
+    Raises
+    ------
+    KeyError
+        If any of the required keys ``'x'``, ``'y'``, or ``'z'`` are missing from ``bounding_box``.
+
+    Notes
+    -----
+    The calculation adds one voxel to ensure that both the minimum and
+    maximum coordinates are included in the resulting grid.
+
+    Examples
+    --------
+    >>> from plant3dvision.tasks.voxel_reconstruction import shape_from_bounding_box
+    >>> bounding_box = {"x": [300, 435], "y": [300, 435], "z": [-300, 60]}
+    >>> print(shape_from_bounding_box(bounding_box))
+    (136, 136, 361)
+    >>> voxel_size = 0.5
+    >>> print(shape_from_bounding_box(bounding_box, voxel_size))
+    (271, 271, 721)
+    """
+    (x_min, x_max) = bounding_box["x"]
+    (y_min, y_max) = bounding_box["y"]
+    (z_min, z_max) = bounding_box["z"]
+    nx = int((x_max - x_min) / voxel_size) + 1
+    ny = int((y_max - y_min) / voxel_size) + 1
+    nz = int((z_max - z_min) / voxel_size) + 1
+    return (nx, ny, nz)
+
+
+def origin_from_bounding_box(bounding_box, voxel_size=1.):
+    """Calculate the origin point of a 3‑D bounding box.
+
+    Parameters
+    ----------
+    bounding_box : dict[str, tuple(int, int)]
+        Dictionary with keys ``'x'``, ``'y'``, and ``'z'``. Each value is a two‑element sequence
+        ``(min, max)`` defining the extents of the box along the corresponding axis.
+    voxel_size : float | None
+        Edge length of a cubic voxel. Must be positive. Default is ``1.0``.
+        Use it to get the origin in voxel units.
+
+    Returns
+    -------
+    origin : tuple[int, int, int]
+        A three‑element tuple ``(x_min, y_min, z_min)`` representing the
+        minimal corner of the bounding box.
+
+    Raises
+    ------
+    KeyError
+        If any of the required keys ``'x'``, ``'y'`` or ``'z'`` are missing from ``bounding_box``.
+
+    Examples
+    --------
+    >>> from plant3dvision.tasks.voxel_reconstruction import origin_from_bounding_box
+    >>> bounding_box = {"x": [300, 435], "y": [300, 435], "z": [-300, 60]}
+    >>> print(origin_from_bounding_box(bounding_box))
+    (300, 300, -300)
+    >>> voxel_size = 0.5
+    >>> print(origin_from_bounding_box(bounding_box, voxel_size)) # to get it in voxel units
+    (600.0, 600.0, -600.0)
+    """
+    (x_min, x_max) = bounding_box["x"]
+    (y_min, y_max) = bounding_box["y"]
+    (z_min, z_max) = bounding_box["z"]
+    return tuple(map(float, np.array([x_min, y_min, z_min])/float(voxel_size)))
+
+def remap_averaging(vol, n_imgs):
+    """Remap voxel values produced by the ``averaging`` back‑projection method.
+
+    The function converts the raw floating‑point values returned by
+    ``Backprojection`` (type ``averaging``) into an integer count of how many
+    input images agree on each voxel.  The result is an array with the same
+    shape as ``vol`` whose values lie in the range ``[0, n_imgs]``.
+
+    Parameters
+    ----------
+    vol : numpy.ndarray
+        3‑D (or 4‑D) array containing the raw voxel values from the averaging
+        back‑projection.  The array should be of a floating‑point dtype; its
+        dtype is used to compute the machine epsilon for binning.
+    n_imgs : int
+        Number of mask images that contributed to the back‑projection.  This
+        value is used to shift the remapped indices into a non‑negative range.
+
+    Returns
+    -------
+    numpy.ndarray
+        Integer array of the same shape as ``vol`` where each voxel holds the
+        number of images that agree on that voxel.  The dtype is ``int`` and the
+        values are in ``[0, n_imgs]``.
+
+    Raises
+    ------
+    ValueError
+        If ``vol`` is empty (i.e. ``vol.size == 0``).
+    TypeError
+        If ``vol`` is not a ``numpy.ndarray`` or ``n_imgs`` is not an ``int``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from plant3dvision.tasks.voxel_reconstruction import remap_averaging
+    >>> from plant3dvision.tasks.voxel_reconstruction import origin_from_bounding_box
+    >>> from plant3dvision.tasks.voxel_reconstruction import shape_from_bounding_box
+    >>> from plantdb.commons.test_database import test_database
+    >>> from plantdb.server.core.utils import compute_fileset_matches
+    >>> from plant3dvision.voxel_cuda import Backprojection
+    >>> db = test_database()
+    >>> db.connect()
+    >>> db.login('guest', 'guest')
+    >>> scan = db.get_scan("real_plant_analyzed")
+    >>> # 1. Let's compute a voxel volume with the averaging method
+    >>> mask_fs_id = compute_fileset_matches(scan)["Masks"]
+    >>> mask_fs = scan.get_fileset(mask_fs_id)
+    >>> # List of input mask files (2D images) to process
+    >>> mask_files = mask_fs.get_files(query={"channel": "rgb"})
+    >>> # Example setup: define a bounding box and voxel configuration
+    >>> bounding_box = {"x": [300, 435], "y": [300, 435], "z": [-300, 60]}
+    >>> voxel_size = 0.6
+    >>> # Calculate the shape & origin of the voxel array
+    >>> shape = shape_from_bounding_box(bounding_box, voxel_size)
+    >>> origin = origin_from_bounding_box(bounding_box)  # in real units
+    >>> bp_averaging = Backprojection(shape, origin, voxel_size, type="averaging", labels=None, log=True)
+    >>> volume = bp_averaging.process_fileset(mask_files, "colmap_camera", False)
+    >>> print(np.unique(volume)[:5])
+    [-1381.552  -1358.5261 -1335.5002 -1312.4744 -1289.4485]
+    >>> volume = remap_averaging(volume, len(mask_files))
+    >>> print(np.unique(volume)[:5])
+    [0 1 2 3 4]
+    >>> db.disconnect()
+    """
+    # Sorted list of unique values:
+    uniq = np.unique(vol)
+    # Build the lookup table (integer → float)
+    int_labels = np.arange(max(-n_imgs, -len(uniq)), 1)
+
+    # - Bin the volume values
+    # `np.digitize` expects the right‑most edge to be exclusive, so we append a tiny epsilon
+    # to the last edge so that a value exactly equal to the maximum lands in the last bin.
+    eps = np.finfo(vol.dtype).eps
+    bins = np.append(uniq, uniq[-1] + eps)
+    # `bin_idx` is in the range 1 ... len(bins)-1
+    bin_idx = np.digitize(vol, bins, right=False)
+    # Convert to a 0‑based index that matches `int_labels`: (bin 1 → index 0, bin 2 → index 1, ...)
+    int_idx = bin_idx - 1  # shape == vol.shape
+
+    # Remap the whole volume, shifting to non‑negative indices
+    return int_labels[int_idx] + n_imgs
 
 
 class Voxels(RomiTask):
@@ -123,9 +289,6 @@ class Voxels(RomiTask):
     voxel_size = luigi.FloatParameter(default=1.0)
     type = luigi.Parameter(default="averaging")
     log = luigi.BoolParameter(default=True)
-
-    threshold = luigi.FloatParameter(default=-100.)
-    missing_images_threshold = luigi.IntParameter(default=2)
 
     invert = luigi.BoolParameter(default=False)
     labels = luigi.ListParameter(default=[])
@@ -247,41 +410,40 @@ class Voxels(RomiTask):
         if len(np.unique(vol)) == 1:
             logger.warning("There is something WRONG with the volume!")
 
-        # If "averaging" method was requested, apply thresholding:
-        if self.type == "averaging":
-            uniq = np.unique(vol)
-            n_imgs = len(masks_files)
-            try:
-                nimg_val_map = dict(zip(list(range(-n_imgs, 1))[::-1], uniq[::-1]))
-            except:
-                logger.warning("Could not create a mapping from image number to unique values!")
-                logger.info(f"Using threshold value of {self.threshold} instead.")
-                logger.info(f"Found these unique values in the volume: {uniq}.")
-            else:
-                logger.info(f"Found this mapping between image number and unique values: {nimg_val_map}.")
-                try:
-                    self.threshold = nimg_val_map[-int(self.missing_images_threshold)]
-                except KeyError:
-                    logger.warning("Could not find a threshold value corresponding to the missing images threshold ({self.missing_images_threshold})!")
-                else:
-                    logger.info(f"Using threshold value of {self.threshold} according to missing images threshold of {self.missing_images_threshold} image.")
-            vol = vol >= self.threshold
-
+        n_imgs = len(masks_files)
+        # Prepare the metadata dictionary
+        md = {
+            'voxel_size': float(self.voxel_size),
+            'origin': origin.tolist(),
+            'method': str(self.type),
+            'n_img': n_imgs
+        }
         if labels is not None:
             for i, label in enumerate(labels):
+                # Get the volume corresponding to the label
                 out = vol[i, :]
+                # Apply value remapping
+                out = self._remap(out, n_imgs)
+                # Write the volume file corresponding to the label
                 logger.debug(f"Writing volume file for label: {label}")
                 outfile = self.output_file(suffix=f"_{label}", create=True)
                 io.write_volume(outfile, out)
-                outfile.set_metadata({
-                    'voxel_size': self.voxel_size,
-                    'origin': origin.tolist(),
-                    'label': label,
-                })
+                # Save the volume metadata corresponding to the label
+                md['label'] = label
+                outfile.set_metadata(md)
         else:
             outfile = self.output_file(create=True)
+            # Apply value remapping
+            vol = self._remap(vol, n_imgs)
+            # Write the volume file
             io.write_volume(outfile, vol)
-            outfile.set_metadata({
-                'voxel_size': self.voxel_size,
-                'origin': origin.tolist()
-            })
+            # Save the volume metadata
+            outfile.set_metadata(md)
+
+    def _remap(self, vol, n_imgs):
+        if self.type == "averaging":
+            # If the "averaging" method, apply value remapping to get the number of agreeing images per voxel:
+            return remap_averaging(vol, n_imgs)
+        else:
+            # If the "carving" method, "apply thresholding" to get a binary outfile
+            return np.array(vol >= 1.0).astype(np.uint8)

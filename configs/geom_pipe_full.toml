@@ -93,10 +93,6 @@ voxel_size = 1.0  # Default: 1.0
 type = "averaging"  # Default: "averaging"
 # Whether to convert mask images to logarithmic values for 'averaging' type prior to back-projection
 log = true  # Default: true
-# Threshold value for voxel decision-making
-threshold = -100.0  # Default: -100.0
-# Threshold for the number of missing images allowed in the reconstruction
-missing_images_threshold = 2  # Default: 2
 # Whether to invert the mask values
 invert = false  # Default: false
 # List of labels to use for multi-class voxel reconstruction (requires a labeled mask dataset)
@@ -115,6 +111,8 @@ z = [-125, 100]
 upstream_task = "Voxels"  # Default: "Voxels"
 # Distance of the level set on which the points are sampled
 level_set_value = 1.0  # Default: 1.0
+# Threshold for the number of missing images allowed in the reconstruction
+missing_images_threshold = 2  # Default: 2
 # List of labels to use for multi-class point cloud generation
 labels = "[]"  # Default: [] (empty list)
 # Prior probability assigned to background points in multi-class segmentation

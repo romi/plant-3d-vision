@@ -55,16 +55,14 @@ query = "{}"
 camera_metadata = "colmap_camera"
 voxel_size = 1.0
 type = "averaging"
-log = false # default to true
-threshold = -100.0
 invert = false
 labels = "[\"background\"]"
 
 [PointCloud]
 upstream_task = "Voxels"
 labels = "[\"background\"]"
+missing_images_threshold = 2
 level_set_value = 0.5 # default to 1.0
-log = false
 background_prior= 1.0
 min_contrast = 10.0
 min_score = 0.01 # default to 0.2
