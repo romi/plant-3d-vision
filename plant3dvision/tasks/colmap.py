@@ -1143,16 +1143,17 @@ class CameraPoseQC(object):
     >>> scan = db.get_scan(scan_id)
     >>> image_fs = scan.get_fileset('images')
     >>> image_files = [image_fs.get_file(im) for im in image_fs.list_files()]
-    >>> cam_qc = CameraPoseQC(image_files, 5, 35)
-    >>> outlier_dict = cam_qc.flag_outlier_poses(2.5)
+    >>> cam_qc = CameraPoseQC(image_files, 2, 5, 35)
+    >>> outlier_dict = cam_qc.flag_outlier_poses()
     >>> # List detected outliers:
     >>> outlier_ids = [img for img, v in outlier_dict.items() if v]
     >>> print(f"Detected {len(outlier_ids)} potentially mis-estimated poses")
-    >>> cam_qc.plot_boxplot_estimation_distance(outlier_ids)
+    >>> cam_qc.plot_boxplot_estimation_distance()
+    >>> cam_qc.plot_xy_plane_poses()
 
     """
 
-    def __init__(self, image_files, distance_threshold, max_blind_angle):
+    def __init__(self, image_files, mad_factor, distance_threshold, max_blind_angle):
         """Initialize the class.
 
         Parameters
@@ -1167,6 +1168,7 @@ class CameraPoseQC(object):
             Only valid for circular path scans (`ScanPath` `class_name` is 'Circle' in `scan.toml`).
         """
         self.image_files = image_files
+        self.mad_factor = mad_factor
         self.distance_threshold = distance_threshold
         self.max_blind_angle = max_blind_angle
 
@@ -1174,7 +1176,9 @@ class CameraPoseQC(object):
 
         self._colmap_poses = None
         self._cnc_poses = None
+        self.outlier_ids = []
 
+        self.current_scan = self.image_files[0].fileset.scan
         self.image_ids = [im.id for im in self.image_files]
         self.xy_distances = self._euclidean_distances(self.image_ids,
                                                       {im_id: self.cnc_poses[im_id][:2] for im_id in self.image_ids},
@@ -1207,7 +1211,7 @@ class CameraPoseQC(object):
         if self._colmap_poses is None:
             # Create a dictionary mapping image ID to its Colmap estimated pose
             self._colmap_poses = get_camera_poses_from_files_metadata(self.image_files, md="estimated_pose", default=0.)
-            if all(sum(np.array(pose) == 0.) >=3 for pose in self._colmap_poses.values()):
+            if all(sum(np.array(pose) == 0.) >= 3 for pose in self._colmap_poses.values()):
                 # If only XYZ data, compute estimated pose from colmap_camera metadata
                 self._colmap_poses = compute_camera_poses_from_files_metadata(self.image_files)
             # Rotate the roll by 180° to match the different world conventions
@@ -1215,21 +1219,30 @@ class CameraPoseQC(object):
 
         return self._colmap_poses
 
-    def _get_scan_config(self, current_scan):
+    def _get_scan_config(self):
         """Get the scan configuration from the current scan."""
         try:
             # Load scan configuration TOML file
-            scan_cfg = get_scan_config(current_scan.path())
+            scan_cfg = get_scan_config(self.current_scan.path())
         except FileNotFoundError:
             logger.warning("Could not find the `scan.toml` file!")
             return {}
         else:
             return scan_cfg
 
-    def _get_hardware_metadata(self, current_scan):
+    def _get_scan_path_metadata(self):
+        """Get the scan path metadata from the image fileset scan."""
+        # Get scan configuration
+        scan_cfg = self._get_scan_config()
+        path = scan_cfg['ScanPath']['class_name']
+        radius = scan_cfg['ScanPath']['kwargs']['radius']
+        center = [scan_cfg['ScanPath']['kwargs']['center_x'], scan_cfg['ScanPath']['kwargs']['center_y']]
+        return {"path": path, "radius": radius, "center": center}
+
+    def _get_hardware_metadata(self):
         """Get the hardware metadata from the image fileset scan."""
         # Get scan configuration
-        scan_cfg = self._get_scan_config(current_scan)
+        scan_cfg = self._get_scan_config()
         try:
             # Extract hardware information from scan configuration
             hardware = scan_cfg['Scan']['metadata']['hardware']
@@ -1267,14 +1280,14 @@ class CameraPoseQC(object):
     def _angular_distances(self, image_ids, cnc_poses, colmap_poses):
         return {im_id: angular_distance(cnc_poses.get(im_id), colmap_poses.get(im_id)) for im_id in image_ids}
 
-    def flag_outlier_poses(self, factor: float = 3.0) -> dict:
+    def flag_outlier_poses(self, mad_factor=None) -> dict:
         """Identify image ids whose pose estimations deviate strongly from the bulk of the data.
 
         Parameters
         ----------
         factor : float, optional
             Multiplicative factor applied to the MAD to set the outlier threshold.
-            Default is ``3.0``.
+            The default is ``None`` and use the value defined at initialization.
 
         Returns
         -------
@@ -1282,14 +1295,20 @@ class CameraPoseQC(object):
             Mapping ``{image_id: list of violated criteria}``.
             An empty list means the pose passed all checks.
         """
+        # Use the init value or override it
+        if mad_factor is None:
+            mad_factor = self.mad_factor
+        else:
+            self.mad_factor = mad_factor
+
         image_ids = [im.id for im in self.image_files]
 
         # Determine outliers for each metric using the shared helper
-        outliers_xy = mad_outlier(self.xy_distances, factor)
-        outliers_z = mad_outlier(self.z_distances, factor)
-        outliers_pan = mad_outlier(self.pan_distances, factor)
-        outliers_tilt = mad_outlier(self.tilt_distances, factor)
-        outliers_roll = mad_outlier(self.roll_distances, factor)
+        outliers_xy = mad_outlier(self.xy_distances, mad_factor)
+        outliers_z = mad_outlier(self.z_distances, mad_factor)
+        outliers_pan = mad_outlier(self.pan_distances, mad_factor)
+        outliers_tilt = mad_outlier(self.tilt_distances, mad_factor)
+        outliers_roll = mad_outlier(self.roll_distances, mad_factor)
 
         # Build the per-image report
         outlier_report = {}
@@ -1309,9 +1328,10 @@ class CameraPoseQC(object):
 
             outlier_report[img_id] = violations
 
+        self.outlier_ids = [img for img, v in outlier_report.items() if v]
         return outlier_report
 
-    def _boxplot_estimation_distance(self, ax, outlier_ids):
+    def _boxplot_estimation_distance(self, ax, outlier_ids: list[str], vert=False):
         dist_data = [
             list(self.xy_distances.values()),
             list(self.z_distances.values()),
@@ -1321,17 +1341,11 @@ class CameraPoseQC(object):
         ]
 
         # Plot boxplot
-        ax.boxplot(
-            dist_data,
-            vert=False,
-            patch_artist=True,
-            boxprops=dict(facecolor="#a6cee3", color="#1f78b4"),
-            medianprops=dict(color="#1f78b4"),
-        )
+        ax.boxplot(dist_data, vert=vert, patch_artist=True,
+                   boxprops=dict(facecolor="#a6cee3", color="#1f78b4"),
+                   medianprops=dict(color="#1f78b4"))
 
-        ax.set_yticklabels(
-            ["XY distance", "Z distance", "Pan distance", "Tilt distance", "Roll distance"]
-        )
+        ax.set_yticklabels(["XY distance", "Z distance", "Pan distance", "Tilt distance", "Roll distance"])
         ax.set_xlabel("Distance from CNC [mm or degrees]")
         ax.set_title(f"Boxplot of Estimation Pose Distances (outliers highlighted)")
 
@@ -1351,32 +1365,137 @@ class CameraPoseQC(object):
             ax.plot(vals, y_positions, "r+", markersize=4, alpha=0.7, label="outlier" if idx == 0 else "")
 
             # Annotate each point with its image ID
-            for x, y, _img_id in zip(vals, y_positions, outlier_ids):
-                ax.text(x + 0.04, y, str(_img_id[3:].replace("_rgb", "")),
+            for x, y, img_id in zip(vals, y_positions, outlier_ids):
+                ax.text(x + 0.04, y, str(img_id[3:].replace("_rgb", "")),
                         fontsize=8, ha="left", va="center", color="#d73027")
 
         ax.legend()
         return ax
 
-    def plot_boxplot_estimation_distance(self, outlier_ids):
+    def _xy_plane_scatter_plot(self, ax, outlier_ids: list[str], use_image_id=False,
+                               ref_label='CNC', pred_label='Colmap', **kwargs):
+        ref_poses = self.cnc_poses
+        pred_poses = self.colmap_poses
+        scan_path_md = self._get_scan_path_metadata()
+        radius = scan_path_md['radius']
+        center = scan_path_md['center']
+
+        # Get the REFERENCE XY coodinates
+        x, y, _, p, _, _ = np.array([ref_poses.get(im_id, [np.nan] * 6) for im_id in self.image_ids]).T
+
+        # Get the non-outlier PREDICTED XY coordinates (good)
+        Xg, Yg, _, Pg, _, _ = np.array(
+            [pred_poses.get(im_id, [np.nan] * 6) for im_id in self.image_ids if im_id not in outlier_ids]).T
+        # Get the outliers PREDICTED XY coordinates (bad)
+        Xw, Yw, _, Pw, _, _ = np.array(
+            [pred_poses.get(im_id, [np.nan] * 6) for im_id in self.image_ids if im_id in outlier_ids]).T
+
+        # - Plot the REFERENCE center point
+        x_c, y_c = center  # 2D center point
+        center_scatter = ax.scatter(x_c, y_c, marker="x", c="black", s=50)
+        center_scatter.set_label("Path center")
+
+        # - Plot REFERENCE XY poses coordinates as a black '+' marker:
+        cnc_scatter = ax.scatter(x, y, marker="+", c="black")
+        cnc_scatter.set_label(ref_label)
+
+        # - Plot PREDICTED XY poses coordinates as a blue 'x' marker:
+        colmap_scatter_g = ax.scatter(Xg, Yg, marker="x", c='blue')
+        colmap_scatter_g.set_label(pred_label + " (good)")
+
+        # - Plot outliers PREDICTED XY poses coordinates as a red 'x' marker:
+        colmap_scatter_w = ax.scatter(Xw, Yw, marker="x", c="red")
+        colmap_scatter_w.set_label(pred_label + " (bad)")
+
+        # - Plot the REFERENCE pan orientation as blue arrows:
+        for xi, yi, angle in zip(x, y, p):
+            if np.isnan(xi) or np.isnan(yi) or np.isnan(angle):
+                continue
+            angle = np.deg2rad(angle + 90 % 360)
+            dx = np.cos(angle) * radius * 0.1
+            dy = np.sin(angle) * radius * 0.1
+            _ = ax.arrow(xi, yi, dx, dy, length_includes_head=True,
+                         head_width=5, head_length=7,
+                         fc='blue', ec='blue', linewidth=1.2)
+        _.set_label("CNC Pan")
+
+        # - Plot the Predicted pan orientation as dotted gray lines:
+        for xi, yi, angle in zip(Xg, Yg, Pg):
+            if np.isnan(xi) or np.isnan(yi) or np.isnan(angle):
+                continue
+            angle = np.deg2rad(angle + 90 % 360)
+            dx = np.cos(angle) * radius
+            dy = np.sin(angle) * radius
+            _ = ax.arrow(xi, yi, dx, dy, length_includes_head=True,
+                         head_width=0, head_length=0,
+                         edgecolor='gray', linewidth=0.8, linestyle=':')
+        _.set_label("Colmap Pan (good)")
+
+        # - Plot the Predicted pan orientation as dashed gray lines:
+        for xi, yi, angle in zip(Xw, Yw, Pw):
+            if np.isnan(xi) or np.isnan(yi) or np.isnan(angle):
+                continue
+            angle = np.deg2rad(angle + 90 % 360)
+            dx = np.cos(angle) * radius
+            dy = np.sin(angle) * radius
+            _ = ax.arrow(xi, yi, dx, dy, length_includes_head=True,
+                         head_width=0, head_length=0,
+                         edgecolor='gray', linewidth=0.8, linestyle='--')
+        _.set_label("Colmap Pan (bad)")
+
+        # - Plot the image indexes as text next to REFERENCE points:
+        if use_image_id:
+            # Get the image ids
+            im_ids = self.image_ids
+        else:
+            # Get images index:
+            im_ids = list(range(len(self.image_ids)))
+
+        # Add image or point ids as text:
+        for i, im_id in enumerate(im_ids):
+            x_off = 0.05 * np.diff(sorted([x[i], x_c]))
+            y_off = 0.05 * np.diff(sorted([y[i], y_c]))
+            xt = x[i] - x_off if x[i] < x_c else x[i] + x_off
+            yt = y[i] - y_off if y[i] < y_c else y[i] + y_off
+            ax.text(xt, yt, f"{im_id}", ha='center', va='center', fontfamily='monospace')
+
+        title = kwargs.get('title', None)
+        if title is not None:
+            ax.set_title(title, fontdict={'family': 'monospace', 'size': 'medium'})
+
+        # Add axes labels:
+        ax.set_xlabel('X-axis (mm)')
+        ax.set_ylabel('Y-axis (mm)')
+        # Add a grid
+        ax.grid(True, which='major', axis='both', linestyle='dotted')
+        # Add the legend
+        ax.legend()
+        # Set aspect ratio
+        ax.set_aspect('equal')
+
+    def plot_xy_plane_poses(self):
+        from matplotlib import pyplot as plt
+        fig, ax = plt.subplots(figsize=(12, 12))
+        ax = self._xy_plane_scatter_plot(ax, self.outlier_ids, use_image_id=False, title="XY Plane Poses")
+        plt.show()
+
+    def plot_boxplot_estimation_distance(self):
         from matplotlib import pyplot as plt
         fig, ax = plt.subplots(figsize=(12, 5))
-        ax = self._boxplot_estimation_distance(ax, outlier_ids)
+        ax = self._boxplot_estimation_distance(ax, self.outlier_ids)
         plt.show()
 
     def make_pose_qc_figures(self, fig_path):
         """Generate a figure with the comparison between estimated and ground truth poses."""
-        # Get reference to current scan
-        current_scan = self.image_files[0].fileset.scan
 
-        # Get metadata for visualization
-        hardware_str = self._get_hardware_metadata(current_scan)
+        # Get some metadata for visualization
+        hardware_str = self._get_hardware_metadata()
         camera_str = self._get_camera_params(self.image_files, str(self.intrinsic_calibration_scan_id))
 
-        # Generate pose estimation figure comparing CNC (ground truth) and COLMAP poses
+        # Generate a pose estimation figure comparing CNC (requested) and COLMAP (estimated) poses
         fig_fpath = pose_estimation_figure(
             self.cnc_poses, self.colmap_poses,
-            ref_scan_id="", pred_scan_id=current_scan.id,
+            ref_scan_id="", pred_scan_id=self.current_scan.id,
             ref_label="CNC", pred_label="COLMAP",
             distance_threshold=self.distance_threshold,
             vignette=hardware_str + "\n" + camera_str,
@@ -1407,7 +1526,7 @@ class CameraPoseQC(object):
         wrong_pose = 0  # Count of wrongly estimated poses
         wrong_pose_idx = []  # Indices of images with incorrect poses
 
-        # Verify each image's pose against threshold
+        # Verify each image's pose against a threshold
         for im_idx, im in enumerate(self.image_files):
             if self.euclidean_distances[im.id] >= self.distance_threshold:
                 # Mark pose as incorrect in image metadata
