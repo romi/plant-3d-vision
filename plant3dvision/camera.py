@@ -466,7 +466,7 @@ def format_camera_params(colmap_cameras):
     return format_camera_kwargs(camera_kwargs)
 
 
-def format_camera_kwargs(camera_kwargs):
+def format_camera_kwargs(camera_kwargs, indenter=""):
     """Format COLMAP camera parameters into a human-readable string representation.
 
     Parameters
@@ -511,7 +511,7 @@ def format_camera_kwargs(camera_kwargs):
             cam_str += f", {k}: {value}"
         else:
             cam_str += "\n"
-            cam_str += f"{k}: {value}"
+            cam_str += f"{indenter}{k}: {value}"
         prev_param = k
     return cam_str
 
