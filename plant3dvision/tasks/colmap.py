@@ -10,6 +10,7 @@ from pathlib import Path
 import luigi
 import numpy as np
 import toml
+from matplotlib.lines import Line2D
 from scipy.spatial.distance import euclidean
 
 from plant3dvision.calibration import pose_estimation_figure
@@ -1151,6 +1152,7 @@ class CameraPoseQC(object):
     >>> cam_qc.plot_boxplot_estimation_distance()
     >>> cam_qc.plot_xy_plane_poses()
     >>> cam_qc.plot_z_poses()
+    >>> cam_qc.plot_pose_estimation_figure()
     """
 
     def __init__(self, image_files, mad_factor, distance_threshold, max_blind_angle):
@@ -1173,12 +1175,12 @@ class CameraPoseQC(object):
         self.max_blind_angle = max_blind_angle
 
         self.intrinsic_calibration_scan_id = ""  # FIXME: ID for calibration scan, not set yet
+        self.current_scan = self.image_files[0].fileset.scan
 
         self._colmap_poses = None
         self._cnc_poses = None
         self.outlier_ids = []
 
-        self.current_scan = self.image_files[0].fileset.scan
         self.image_ids = [im.id for im in self.image_files]
         self.xy_distances = self._euclidean_distances(self.image_ids,
                                                       {im_id: self.cnc_poses[im_id][:2] for im_id in self.image_ids},
@@ -1197,7 +1199,7 @@ class CameraPoseQC(object):
                                                       {im_id: self.colmap_poses[im_id][5] for im_id in self.image_ids})
 
     @property
-    def cnc_poses(self):
+    def cnc_poses(self) -> dict:
         """Get the CNC poses from the image fileset scan."""
         if self._cnc_poses is None:
             # Extract camera poses from CNC machine metadata
@@ -1206,7 +1208,7 @@ class CameraPoseQC(object):
         return self._cnc_poses
 
     @property
-    def colmap_poses(self):
+    def colmap_poses(self) -> dict:
         """Get the Colmap estimated camera poses from 'images' fileset metadata."""
         if self._colmap_poses is None:
             # Create a dictionary mapping image ID to its Colmap estimated pose
@@ -1219,7 +1221,7 @@ class CameraPoseQC(object):
 
         return self._colmap_poses
 
-    def _get_scan_config(self):
+    def _get_scan_config(self) -> dict:
         """Get the scan configuration from the current scan."""
         try:
             # Load scan configuration TOML file
@@ -1230,7 +1232,7 @@ class CameraPoseQC(object):
         else:
             return scan_cfg
 
-    def _get_scan_path_metadata(self):
+    def _get_scan_path_metadata(self) -> dict:
         """Get the scan path metadata from the image fileset scan."""
         # Get scan configuration
         scan_cfg = self._get_scan_config()
@@ -1239,7 +1241,7 @@ class CameraPoseQC(object):
         center = [scan_cfg['ScanPath']['kwargs']['center_x'], scan_cfg['ScanPath']['kwargs']['center_y']]
         return {"path": path, "radius": radius, "center": center}
 
-    def _get_hardware_metadata(self):
+    def _get_hardware_metadata(self) -> str:
         """Get the hardware metadata from the image fileset scan."""
         # Get scan configuration
         scan_cfg = self._get_scan_config()
@@ -1253,31 +1255,35 @@ class CameraPoseQC(object):
             hardware_str = ""
         return hardware_str
 
-    def _get_camera_params(self, image_files, calibration_scan_id):
+    def _get_camera_params(self, calibration_scan_id=None) -> str:
         """Get camera intrinsic parameters from calibration scan or image metadata."""
-        if calibration_scan_id != "":
-            # Use parameters from calibration scan if provided
+        if calibration_scan_id:
+            # Get camera intrinsic parameters from a calibration scan if provided
             db = ScanConfiguration().scan.db
             calibration_scan = db.get_scan(calibration_scan_id)
             cameras = get_colmap_cameras_from_calib_scan(calibration_scan)
             camera_str = format_camera_params(cameras)
         else:
-            # Try to get parameters from image metadata
+            # Get camera intrinsic parameters estimated by Colmap from image metadata
             cameras = None
-            for img_f in image_files:
+            for img_f in self.image_files:
                 cameras = get_camera_kwargs_from_images_metadata(img_f)
                 if cameras is not None:
                     break
             camera_str = format_camera_kwargs(cameras) if cameras else "Not found!"
 
-        # Format camera parameters string with appropriate prefix
-        prefix = "Intrinsic calibration scan:\n" if self.intrinsic_calibration_scan_id else "Colmap estimated intrinsics\n"
+        # Format camera parameters string with the appropriate prefix
+        calib_prefix = "Intrinsic calibration scan:\n"
+        colmap_prefix = "Colmap estimated intrinsics:\n"
+        prefix = calib_prefix if calibration_scan_id else colmap_prefix
         return prefix + camera_str
 
-    def _euclidean_distances(self, image_ids, cnc_poses, colmap_poses):
+    @staticmethod
+    def _euclidean_distances(image_ids, cnc_poses, colmap_poses) -> dict:
         return {im_id: euclidean(cnc_poses.get(im_id), colmap_poses.get(im_id)) for im_id in image_ids}
 
-    def _angular_distances(self, image_ids, cnc_poses, colmap_poses):
+    @staticmethod
+    def _angular_distances(image_ids, cnc_poses, colmap_poses) -> dict:
         return {im_id: angular_distance(cnc_poses.get(im_id), colmap_poses.get(im_id)) for im_id in image_ids}
 
     def flag_outlier_poses(self, mad_factor=None) -> dict:
@@ -1331,7 +1337,7 @@ class CameraPoseQC(object):
         self.outlier_ids = [img for img, v in outlier_report.items() if v]
         return outlier_report
 
-    def _boxplot_estimation_distance(self, ax, outlier_ids: list[str], vert=False):
+    def _boxplot_estimation_distance(self, ax, outlier_ids: list[str], vert=False, **kwargs) -> None:
         dist_data = [
             list(self.xy_distances.values()),
             list(self.z_distances.values()),
@@ -1345,9 +1351,14 @@ class CameraPoseQC(object):
                    boxprops=dict(facecolor="#a6cee3", color="#1f78b4"),
                    medianprops=dict(color="#1f78b4"))
 
-        ax.set_yticklabels(["XY distance", "Z distance", "Pan distance", "Tilt distance", "Roll distance"])
-        ax.set_xlabel("Distance from CNC [mm or degrees]")
-        ax.set_title(f"Boxplot of Estimation Pose Distances (outliers highlighted)")
+        tick_labels = ["XY", "Z", "Pan", "Tilt", "Roll"]
+
+        if vert:
+            ax.set_xticklabels(tick_labels)
+            ax.set_ylabel("Distance from CNC [mm or degrees]")
+        else:
+            ax.set_yticklabels(tick_labels)
+            ax.set_xlabel("Distance from CNC [mm or degrees]")
 
         # Overlay outlier points and annotate with image IDs
         metric_arrays = dist_data
@@ -1362,17 +1373,26 @@ class CameraPoseQC(object):
             y_positions = np.full_like(vals, idx + 1, dtype=float) + _uniform_offsets
 
             # Plot outlier points
-            ax.plot(vals, y_positions, "r+", markersize=4, alpha=0.7, label="outlier" if idx == 0 else "")
+            xy = (y_positions, vals) if vert else (vals, y_positions)
+            ax.plot(*xy, "r+", markersize=4, alpha=0.7, label="outlier" if idx == 0 else "")
 
             # Annotate each point with its image ID
             for x, y, img_id in zip(vals, y_positions, outlier_ids):
-                ax.text(x + 0.04, y, str(img_id[3:].replace("_rgb", "")),
-                        fontsize=8, ha="left", va="center", color="#d73027")
+                xy = (y + 0.04, x) if vert else (x + 0.04, y)
+                ax.text(*xy, str(img_id[3:].replace("_rgb", "")),
+                        fontsize=8, ha="center", va="center", color="#d73027")
 
+        title = kwargs.get('title', None)
+        if title is not None:
+            ax.set_title(title, fontdict={'family': 'monospace', 'size': 'medium'})
+
+        # Add a grid
+        ax.grid(True, which='major', axis='both', linestyle='dotted')
+        # Agg a legend
         ax.legend()
 
     def _xy_plane_scatter_plot(self, ax, outlier_ids: list[str], use_image_id=False,
-                               ref_label='CNC', pred_label='Colmap', **kwargs):
+                               ref_label='CNC', pred_label='Colmap', **kwargs) -> None:
         ref_poses = self.cnc_poses
         pred_poses = self.colmap_poses
         scan_path_md = self._get_scan_path_metadata()
@@ -1396,7 +1416,7 @@ class CameraPoseQC(object):
 
         # - Plot REFERENCE XY poses coordinates as a black '+' marker:
         cnc_scatter = ax.scatter(x, y, marker="+", c="black")
-        cnc_scatter.set_label(ref_label)
+        cnc_scatter.set_label(ref_label + " (theoritical)")
 
         # - Plot PREDICTED XY poses coordinates as a blue 'x' marker:
         colmap_scatter_g = ax.scatter(Xg, Yg, marker="x", c='blue')
@@ -1416,7 +1436,6 @@ class CameraPoseQC(object):
             _ = ax.arrow(xi, yi, dx, dy, length_includes_head=True,
                          head_width=5, head_length=7,
                          fc='blue', ec='blue', linewidth=1.2)
-        _.set_label("CNC Pan")
 
         # - Plot the Predicted pan orientation as dotted gray lines:
         for xi, yi, angle in zip(Xg, Yg, Pg):
@@ -1428,7 +1447,6 @@ class CameraPoseQC(object):
             _ = ax.arrow(xi, yi, dx, dy, length_includes_head=True,
                          head_width=0, head_length=0,
                          edgecolor='gray', linewidth=0.8, linestyle=':')
-        _.set_label("Colmap Pan (good)")
 
         # - Plot the Predicted pan orientation as dashed gray lines:
         for xi, yi, angle in zip(Xw, Yw, Pw):
@@ -1440,7 +1458,6 @@ class CameraPoseQC(object):
             _ = ax.arrow(xi, yi, dx, dy, length_includes_head=True,
                          head_width=0, head_length=0,
                          edgecolor='gray', linewidth=0.8, linestyle='--')
-        _.set_label("Colmap Pan (bad)")
 
         # - Plot the image indexes as text next to REFERENCE points:
         if use_image_id:
@@ -1458,21 +1475,44 @@ class CameraPoseQC(object):
             yt = y[i] - y_off if y[i] < y_c else y[i] + y_off
             ax.text(xt, yt, f"{im_id}", ha='center', va='center', fontfamily='monospace')
 
+        # - Build a custom legend that includes the arrows
+        # Original scatter handles (they already have labels)
+        scatter_handles = [center_scatter, cnc_scatter, colmap_scatter_g, colmap_scatter_w]
+        # Proxy handles for the three arrow styles: a simple line/marker combo that mimics the visual style
+        ref_arrow_proxy = Line2D([0], [0], color='blue', lw=1.2,
+                                 marker='>', markersize=8, label='CNC Pan')
+        good_arrow_proxy = Line2D([0], [0], color='gray', lw=0.8,
+                                  linestyle=':', label='Colmap Pan (good)')
+        bad_arrow_proxy = Line2D([0], [0], color='gray', lw=0.8,
+                                 linestyle='--', label='Colmap Pan (bad)')
+        arrow_handles = [ref_arrow_proxy, good_arrow_proxy, bad_arrow_proxy]
+
+        # Add a title
         title = kwargs.get('title', None)
         if title is not None:
             ax.set_title(title, fontdict={'family': 'monospace', 'size': 'medium'})
 
-        # Add axes labels:
+        # Increase the XY plane to represent the whole work area
+        mw = x[0]  # margin width
+        ax.set_xlim(0, max(x) + mw)
+        ax.set_ylim(0, max(y) + mw)
+
+        # - Add the legends
+        # First legend: scatter markers, lower‑left
+        legend_scatter = ax.legend(handles=scatter_handles, loc='lower left', framealpha=0.7)
+        ax.add_artist(legend_scatter)  # keep it while we add the next one
+        # Second legend: arrow styles, lower‑right
+        legend_arrows = ax.legend(handles=arrow_handles, loc='lower right', framealpha=0.7)
+
+        # Add axes labels
         ax.set_xlabel('X-axis (mm)')
         ax.set_ylabel('Y-axis (mm)')
         # Add a grid
         ax.grid(True, which='major', axis='both', linestyle='dotted')
-        # Add the legend
-        ax.legend()
         # Set aspect ratio
         ax.set_aspect('equal')
 
-    def _z_scatter_plot(self, ax, outlier_ids: list[str], ref_label='CNC', pred_label='Colmap'):
+    def _z_scatter_plot(self, ax, outlier_ids: list[str], ref_label='CNC', pred_label='Colmap', **kwargs) -> None:
         ref_poses = self.cnc_poses
         pred_poses = self.colmap_poses
 
@@ -1495,6 +1535,10 @@ class CameraPoseQC(object):
         _ = ax.scatter(correct_poses_idx, Zg, marker="x", c='blue', label=pred_label + " (good)")
         _ = ax.scatter(incorrect_poses_idx, Zw, marker="x", c='red', label=pred_label + " (bad)")
 
+        title = kwargs.get('title', None)
+        if title is not None:
+            ax.set_title(title, fontdict={'family': 'monospace', 'size': 'medium'})
+
         # Add axes labels:
         ax.set_xlabel('Image index')
         ax.set_ylabel('Z-axis (mm)')
@@ -1506,38 +1550,56 @@ class CameraPoseQC(object):
     def plot_xy_plane_poses(self):
         from matplotlib import pyplot as plt
         fig, ax = plt.subplots(figsize=(12, 12))
-        ax = self._xy_plane_scatter_plot(ax, self.outlier_ids, use_image_id=False, title="XY Plane Poses")
+        self._xy_plane_scatter_plot(ax, self.outlier_ids, use_image_id=False,
+                                    title="XY Plane Poses")
         plt.show()
 
     def plot_z_poses(self):
         from matplotlib import pyplot as plt
         fig, ax = plt.subplots(figsize=(12, 12))
-        ax = self._z_scatter_plot(ax, self.outlier_ids)
+        self._z_scatter_plot(ax, self.outlier_ids,
+                             title="Z Axis Poses")
         plt.show()
 
     def plot_boxplot_estimation_distance(self):
         from matplotlib import pyplot as plt
         fig, ax = plt.subplots(figsize=(12, 5))
-        ax = self._boxplot_estimation_distance(ax, self.outlier_ids)
+        self._boxplot_estimation_distance(ax, self.outlier_ids,
+                                          title=f"Boxplot of Theoretical vs. Estimated Pose Distances")
         plt.show()
 
-    def make_pose_qc_figures(self, fig_path):
-        """Generate a figure with the comparison between estimated and ground truth poses."""
+    def plot_pose_estimation_figure(self):
+        from matplotlib import pyplot as plt
+        gs_kw = dict(height_ratios=[9, 3], width_ratios=[9, 3])
+        fig, axd = plt.subplots(nrows=2, ncols=2, figsize=(12, 12), constrained_layout=True, gridspec_kw=gs_kw)
+        xy_ax, bxp, z_ax, vignette = axd[0, 0], axd[0, 1], axd[1, 0], axd[1, 1],
 
-        # Get some metadata for visualization
+        title = f"CNC theoretical vs. Colmap estimated poses - {self.current_scan.id}"
+        plt.suptitle(title, fontweight="bold")
+
+        # - XY plane subplot
+        self._xy_plane_scatter_plot(xy_ax, self.outlier_ids, use_image_id=False, title="XY Plane Poses")
+        # - Z height subplot
+        self._z_scatter_plot(z_ax, self.outlier_ids, title="Z Axis Poses")
+        # - Distance boxplot subplot
+        self._boxplot_estimation_distance(bxp, self.outlier_ids, vert=True, title="Pose Distance")
+        # - Metadata vignette subplot
+        # Clear the vignette figure (lower left) of axes and ticks:
+        vignette.tick_params(left=False, bottom=False, labelbottom=False, labelleft=False)
+        try:
+            vignette.spines[:].set_visible(False)
+        except:
+            pass
+        # Get hardware and camera metadata for the vignette
         hardware_str = self._get_hardware_metadata()
-        camera_str = self._get_camera_params(self.image_files, str(self.intrinsic_calibration_scan_id))
-
-        # Generate a pose estimation figure comparing CNC (requested) and COLMAP (estimated) poses
-        fig_fpath = pose_estimation_figure(
-            self.cnc_poses, self.colmap_poses,
-            ref_scan_id="", pred_scan_id=self.current_scan.id,
-            ref_label="CNC", pred_label="COLMAP",
-            distance_threshold=self.distance_threshold,
-            vignette=hardware_str + "\n" + camera_str,
-            path=fig_path, suffix="_estimated"
-        )
-        return fig_fpath
+        camera_str = self._get_camera_params()
+        # Build a single multiline string (skip empty parts)
+        parts = [s for s in (hardware_str, camera_str) if s]  # keep only non‑empty strings
+        vignette_str = "\n".join(parts)  # <-- proper string with newlines
+        if vignette_str != "":
+            vignette.text(0., 0.5, vignette_str, ha='left', va='center',
+                          fontdict={'family': 'monospace', 'size': 'medium'})
+        plt.show()
 
     def is_correctly_estimated(self):
         """Check if estimated poses are within acceptable thresholds."""
