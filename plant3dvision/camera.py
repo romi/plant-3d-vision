@@ -340,12 +340,13 @@ def get_camera_kwargs_from_images_metadata(img_f):
     {'model': 'SIMPLE_RADIAL', 'f': 1166.9518889440105, 'cx': 720.0, 'cy': 540.0, 'k': -0.0013571157486977348}
     >>> db.disconnect()
     """
-    camera_model = img_f.get_metadata('colmap_camera')
+    camera_model = img_f.get_metadata('colmap_camera', default=None)
     if camera_model is None:
         return None
-    else:
-        camera_model = camera_model['camera_model']
-        return get_camera_kwargs_from_params_list(camera_model["model"], camera_model["params"])
+    camera_model = camera_model.get('camera_model', None)
+    if camera_model is None:
+        return None
+    return get_camera_kwargs_from_params_list(camera_model["model"], camera_model["params"])
 
 
 def get_camera_kwargs_from_colmap_json(colmap_cameras):
