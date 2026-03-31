@@ -13,7 +13,6 @@ import toml
 from matplotlib.lines import Line2D
 from scipy.spatial.distance import euclidean
 
-from plant3dvision.calibration import pose_estimation_figure
 from plant3dvision.camera import format_camera_kwargs
 from plant3dvision.camera import format_camera_params
 from plant3dvision.camera import get_camera_kwargs_from_images_metadata
@@ -40,6 +39,10 @@ logger = get_logger(__name__)
 
 #: Default order of axes in pose coordinates
 DEF_AXES = 'xyzptr'
+#: All metrics for image pose quality control
+ALL_METRICS = ["xy", "z", "pan", "tilt", "roll"]
+#: Default metrics for image pose quality control
+DEF_METRICS = ["xy", "z", "pan", "roll"]
 
 
 def get_camera_poses_from_files_metadata(image_files: list[File], md: str = "calibrated_pose", axes: str | None = None,
@@ -1117,20 +1120,16 @@ class CameraPoseQC(object):
 
     Attributes
     ----------
-    image_files : list
-        The list of image file objects.
-    distance_threshold : float
-        Maximum allowed distance (in mm) between estimated and ground truth poses.
-    max_blind_angle : float
-        Maximum allowed angle (in degrees) between consecutive failed pose estimations.
-    intrinsic_calibration_scan_id : str or None
+    image_files : list[plantdb.commons.core.fsdb.File]
+        The list of image file objects containing the metadata, notably the estimated camera poses.
+    mad_factor : float
+        The multiplicative factor applied to the Median Absolute Deviation to set the outlier threshold.
+    intrinsic_calibration_scan_id : str | None
         ID for the calibration scan, used to retrieve camera intrinsic parameters.
-    colmap_poses : dict
+    _colmap_poses : dict | None
         Dictionary mapping image IDs to their COLMAP estimated poses.
-    cnc_poses : dict
+    _cnc_poses : dict | None
         Dictionary mapping image IDs to their CNC ground truth poses.
-    euclidean_distances : dict
-        Dictionary mapping image IDs to Euclidean distances between CNC and COLMAP poses.
 
     Examples
     --------
@@ -1144,7 +1143,7 @@ class CameraPoseQC(object):
     >>> scan = db.get_scan(scan_id)
     >>> image_fs = scan.get_fileset('images')
     >>> image_files = [image_fs.get_file(im) for im in image_fs.list_files()]
-    >>> cam_qc = CameraPoseQC(image_files, 2, 5, 35)
+    >>> cam_qc = CameraPoseQC(image_files, 3)
     >>> outlier_dict = cam_qc.flag_outlier_poses()
     >>> # List detected outliers:
     >>> outlier_ids = [img for img, v in outlier_dict.items() if v]
@@ -1153,50 +1152,64 @@ class CameraPoseQC(object):
     >>> cam_qc.plot_xy_plane_poses()
     >>> cam_qc.plot_z_poses()
     >>> cam_qc.plot_pose_estimation_figure()
+    >>> cam_qc.is_correctly_estimated()
     """
 
-    def __init__(self, image_files, mad_factor, distance_threshold, max_blind_angle):
+    def __init__(self, image_files, mad_factor, metrics=None, calibration_scan=None, fixed_params=None, **kwargs):
         """Initialize the class.
 
         Parameters
         ----------
-        image_files : list
+        image_files : list[plantdb.commons.core.fsdb.File]
             The list of image file objects containing the metadata, notably the estimated camera poses.
-        distance_threshold : float
-            Maximum allowed distance (in mm) between estimated and ground truth poses.
-            If 0 or negative, no verification is performed.
-        max_blind_angle : float
-            Maximum allowed angle (in degrees) between consecutive failed pose estimations.
-            Only valid for circular path scans (`ScanPath` `class_name` is 'Circle' in `scan.toml`).
+        mad_factor : float
+            The multiplicative factor applied to the Median Absolute Deviation to set the outlier threshold.
+        metrics : list[str] | None
+            The list of metrics to use to detect the outliers using the Median Absolute Deviation method.
+            Only those defined in ``ALL_METRICS`` are valid.
+        calibration_scan : plantdb.commons.core.fsdb.Scan | None
+            The scan object used to calibrate the camera intrinsics.
+            Dy default, ``None`` indicates that the camera intrinsics have been estimated by Colmap.
+        fixed_params : list[str] | None
+            The list of camera parameters that are "fixed", meaning they do not move during a scan.
+            Defaults to ``["z", "tilt", "roll"]``.
         """
         self.image_files = image_files
         self.mad_factor = mad_factor
-        self.distance_threshold = distance_threshold
-        self.max_blind_angle = max_blind_angle
+        self.metrics = set(metrics) & set(ALL_METRICS) if metrics is not None else DEF_METRICS
+        self.fixed_params = fixed_params if fixed_params is not None else ["z", "tilt", "roll"]
 
-        self.intrinsic_calibration_scan_id = ""  # FIXME: ID for calibration scan, not set yet
+        self.distance_threshold = kwargs.get('distance_threshold', 3.)
+        self.fixed_distance_threshold = kwargs.get('fixed_distance_threshold', 1.)
+        self.angle_threshold = kwargs.get('angle_threshold', 5.)
+        self.fixed_angle_threshold = kwargs.get('fixed_angle_threshold', 3.5)
+        self.max_blind_angle = kwargs.get('max_blind_angle', 30.)
+
         self.current_scan = self.image_files[0].fileset.scan
+        self.intrinsic_calibration_scan_id = "" if calibration_scan is None else calibration_scan.id
 
         self._colmap_poses = None
         self._cnc_poses = None
         self.outlier_ids = []
 
         self.image_ids = [im.id for im in self.image_files]
-        self.xy_distances = self._euclidean_distances(self.image_ids,
-                                                      {im_id: self.cnc_poses[im_id][:2] for im_id in self.image_ids},
-                                                      {im_id: self.colmap_poses[im_id][:2] for im_id in self.image_ids})
-        self.z_distances = self._euclidean_distances(self.image_ids,
-                                                     {im_id: [self.cnc_poses[im_id][2]] for im_id in self.image_ids},
-                                                     {im_id: [self.colmap_poses[im_id][2]] for im_id in self.image_ids})
-        self.pan_distances = self._angular_distances(self.image_ids,
-                                                     {im_id: self.cnc_poses[im_id][3] for im_id in self.image_ids},
-                                                     {im_id: self.colmap_poses[im_id][3] for im_id in self.image_ids})
-        self.tilt_distances = self._angular_distances(self.image_ids,
-                                                      {im_id: self.cnc_poses[im_id][4] for im_id in self.image_ids},
-                                                      {im_id: self.colmap_poses[im_id][4] for im_id in self.image_ids})
-        self.roll_distances = self._angular_distances(self.image_ids,
-                                                      {im_id: self.cnc_poses[im_id][5] for im_id in self.image_ids},
-                                                      {im_id: self.colmap_poses[im_id][5] for im_id in self.image_ids})
+        # Build the distance dictionary
+        self.dist_dict = {}
+        self.dist_dict["xy"] = self._euclidean_dist(self.image_ids,
+                                                    {im_id: self.cnc_poses[im_id][:2] for im_id in self.image_ids},
+                                                    {im_id: self.colmap_poses[im_id][:2] for im_id in self.image_ids})
+        self.dist_dict["z"] = self._euclidean_dist(self.image_ids,
+                                                   {im_id: [self.cnc_poses[im_id][2]] for im_id in self.image_ids},
+                                                   {im_id: [self.colmap_poses[im_id][2]] for im_id in self.image_ids})
+        self.dist_dict["pan"] = self._angular_dist(self.image_ids,
+                                                   {im_id: self.cnc_poses[im_id][3] for im_id in self.image_ids},
+                                                   {im_id: self.colmap_poses[im_id][3] for im_id in self.image_ids})
+        self.dist_dict["tilt"] = self._angular_dist(self.image_ids,
+                                                    {im_id: self.cnc_poses[im_id][4] for im_id in self.image_ids},
+                                                    {im_id: self.colmap_poses[im_id][4] for im_id in self.image_ids})
+        self.dist_dict["roll"] = self._angular_dist(self.image_ids,
+                                                    {im_id: self.cnc_poses[im_id][5] for im_id in self.image_ids},
+                                                    {im_id: self.colmap_poses[im_id][5] for im_id in self.image_ids})
 
     @property
     def cnc_poses(self) -> dict:
@@ -1257,12 +1270,13 @@ class CameraPoseQC(object):
 
     def _get_camera_params(self, calibration_scan_id=None) -> str:
         """Get camera intrinsic parameters from calibration scan or image metadata."""
+        indenter = '  • '
         if calibration_scan_id:
             # Get camera intrinsic parameters from a calibration scan if provided
             db = ScanConfiguration().scan.db
             calibration_scan = db.get_scan(calibration_scan_id)
             cameras = get_colmap_cameras_from_calib_scan(calibration_scan)
-            camera_str = format_camera_params(cameras)
+            camera_str = format_camera_params(cameras, indenter)
         else:
             # Get camera intrinsic parameters estimated by Colmap from image metadata
             cameras = None
@@ -1270,20 +1284,20 @@ class CameraPoseQC(object):
                 cameras = get_camera_kwargs_from_images_metadata(img_f)
                 if cameras is not None:
                     break
-            camera_str = format_camera_kwargs(cameras) if cameras else "Not found!"
+            camera_str = format_camera_kwargs(cameras, indenter) if cameras else "Not found!"
 
         # Format camera parameters string with the appropriate prefix
         calib_prefix = "Intrinsic calibration scan:\n"
         colmap_prefix = "Colmap estimated intrinsics:\n"
         prefix = calib_prefix if calibration_scan_id else colmap_prefix
-        return prefix + camera_str
+        return prefix + indenter + camera_str
 
     @staticmethod
-    def _euclidean_distances(image_ids, cnc_poses, colmap_poses) -> dict:
+    def _euclidean_dist(image_ids, cnc_poses, colmap_poses) -> dict:
         return {im_id: euclidean(cnc_poses.get(im_id), colmap_poses.get(im_id)) for im_id in image_ids}
 
     @staticmethod
-    def _angular_distances(image_ids, cnc_poses, colmap_poses) -> dict:
+    def _angular_dist(image_ids, cnc_poses, colmap_poses) -> dict:
         return {im_id: angular_distance(cnc_poses.get(im_id), colmap_poses.get(im_id)) for im_id in image_ids}
 
     def flag_outlier_poses(self, mad_factor=None) -> dict:
@@ -1291,7 +1305,7 @@ class CameraPoseQC(object):
 
         Parameters
         ----------
-        factor : float, optional
+        mad_factor : float, optional
             Multiplicative factor applied to the MAD to set the outlier threshold.
             The default is ``None`` and use the value defined at initialization.
 
@@ -1310,27 +1324,15 @@ class CameraPoseQC(object):
         image_ids = [im.id for im in self.image_files]
 
         # Determine outliers for each metric using the shared helper
-        outliers_xy = mad_outlier(self.xy_distances, mad_factor)
-        outliers_z = mad_outlier(self.z_distances, mad_factor)
-        outliers_pan = mad_outlier(self.pan_distances, mad_factor)
-        outliers_tilt = mad_outlier(self.tilt_distances, mad_factor)
-        outliers_roll = mad_outlier(self.roll_distances, mad_factor)
+        outliers_dict = {metric: mad_outlier(self.dist_dict[metric], mad_factor) for metric in self.metrics}
 
         # Build the per-image report
         outlier_report = {}
         for img_id in image_ids:
             violations = []
-
-            if img_id in outliers_xy:
-                violations.append("XY distance")
-            if img_id in outliers_z:
-                violations.append("Z distance")
-            if img_id in outliers_pan:
-                violations.append("Pan angle")
-            if img_id in outliers_tilt:
-                violations.append("Tilt angle")
-            if img_id in outliers_roll:
-                violations.append("Roll angle")
+            for metric in self.metrics:
+                if img_id in outliers_dict[metric]:
+                    violations.append(metric)
 
             outlier_report[img_id] = violations
 
@@ -1338,20 +1340,13 @@ class CameraPoseQC(object):
         return outlier_report
 
     def _boxplot_estimation_distance(self, ax, outlier_ids: list[str], vert=False, **kwargs) -> None:
-        dist_data = [
-            list(self.xy_distances.values()),
-            list(self.z_distances.values()),
-            list(self.pan_distances.values()),
-            list(self.tilt_distances.values()),
-            list(self.roll_distances.values()),
-        ]
+        dist_data = [list(self.dist_dict[metric].values()) for metric in self.metrics]
+        tick_labels = [metric.upper() for metric in self.metrics]
 
         # Plot boxplot
         ax.boxplot(dist_data, vert=vert, patch_artist=True,
                    boxprops=dict(facecolor="#a6cee3", color="#1f78b4"),
                    medianprops=dict(color="#1f78b4"))
-
-        tick_labels = ["XY", "Z", "Pan", "Tilt", "Roll"]
 
         if vert:
             ax.set_xticklabels(tick_labels)
@@ -1360,11 +1355,11 @@ class CameraPoseQC(object):
             ax.set_yticklabels(tick_labels)
             ax.set_xlabel("Distance from CNC [mm or degrees]")
 
+        outlier_idx = [self.image_ids.index(i) for i in outlier_ids]
         # Overlay outlier points and annotate with image IDs
-        metric_arrays = dist_data
-        for idx, metric_vals in enumerate(metric_arrays):
+        for idx, metric_vals in enumerate(dist_data):
             # Values for outlier images for the current metric
-            vals = [metric_vals[list(self.xy_distances.keys()).index(i)] for i in outlier_ids]
+            vals = [metric_vals[i] for i in outlier_idx]
             # Uniform distribution for visibility (spaced evenly around the central line)
             if len(vals) > 1:
                 _uniform_offsets = np.linspace(-0.25, 0.25, len(vals))
@@ -1374,13 +1369,12 @@ class CameraPoseQC(object):
 
             # Plot outlier points
             xy = (y_positions, vals) if vert else (vals, y_positions)
-            ax.plot(*xy, "r+", markersize=4, alpha=0.7, label="outlier" if idx == 0 else "")
+            ax.plot(*xy, "+", color="#d73027", markersize=4, alpha=0.7, label="outlier" if idx == 0 else "")
 
-            # Annotate each point with its image ID
-            for x, y, img_id in zip(vals, y_positions, outlier_ids):
-                xy = (y + 0.04, x) if vert else (x + 0.04, y)
-                ax.text(*xy, str(img_id[3:].replace("_rgb", "")),
-                        fontsize=8, ha="center", va="center", color="#d73027")
+            # Annotate each outlier with its image index
+            for x, y, out_idx in zip(vals, y_positions, outlier_idx):
+                xy = (y + 0.15, x) if vert else (x + 0.1, y)
+                ax.text(*xy, out_idx, fontsize=8, ha="center", va="center", color="#d73027")
 
         title = kwargs.get('title', None)
         if title is not None:
@@ -1556,7 +1550,7 @@ class CameraPoseQC(object):
 
     def plot_z_poses(self):
         from matplotlib import pyplot as plt
-        fig, ax = plt.subplots(figsize=(12, 12))
+        fig, ax = plt.subplots(figsize=(12, 8))
         self._z_scatter_plot(ax, self.outlier_ids,
                              title="Z Axis Poses")
         plt.show()
@@ -1574,8 +1568,8 @@ class CameraPoseQC(object):
         fig, axd = plt.subplots(nrows=2, ncols=2, figsize=(12, 12), constrained_layout=True, gridspec_kw=gs_kw)
         xy_ax, bxp, z_ax, vignette = axd[0, 0], axd[0, 1], axd[1, 0], axd[1, 1],
 
-        title = f"CNC theoretical vs. Colmap estimated poses - {self.current_scan.id}"
-        plt.suptitle(title, fontweight="bold")
+        title = f"CNC theoretical vs. Colmap estimated poses\n[{self.current_scan.id}]"
+        plt.suptitle(title, fontweight="bold", fontsize=14)
 
         # - XY plane subplot
         self._xy_plane_scatter_plot(xy_ax, self.outlier_ids, use_image_id=False, title="XY Plane Poses")
@@ -1590,27 +1584,41 @@ class CameraPoseQC(object):
             vignette.spines[:].set_visible(False)
         except:
             pass
-        # Get hardware and camera metadata for the vignette
+        # Get hardware, camera and processing metadata for the vignette
         hardware_str = self._get_hardware_metadata()
         camera_str = self._get_camera_params()
+        outliers_str = f"Outliers MAD factor: {self.mad_factor}"
         # Build a single multiline string (skip empty parts)
-        parts = [s for s in (hardware_str, camera_str) if s]  # keep only non‑empty strings
-        vignette_str = "\n".join(parts)  # <-- proper string with newlines
+        parts = [s for s in (hardware_str, camera_str, outliers_str) if s]  # keep only non‑empty strings
+        vignette_str = "\n".join(parts)
         if vignette_str != "":
             vignette.text(0., 0.5, vignette_str, ha='left', va='center',
                           fontdict={'family': 'monospace', 'size': 'medium'})
         plt.show()
 
     def is_correctly_estimated(self):
-        """Check if estimated poses are within acceptable thresholds."""
-        # Get scan information
-        current_scan = self.image_files[0].fileset.scan
-        scan_cfg = self._get_scan_config(current_scan)
+        """Check if estimated poses are within acceptable thresholds.
 
-        # Skip verification if no threshold set (0 or negative value)
-        if self.distance_threshold <= 0.:
-            logger.info("No distance threshold given. No pose verification will be performed.")
-            return True
+        Parameters
+        ----------
+        distance_threshold : float
+            Maximum allowed distance (in mm) between estimated and ground truth poses.
+            If 0 or negative, no verification is performed.
+        max_blind_angle : float
+            Maximum allowed angle (in degrees) between consecutive failed pose estimations.
+            Only valid for circular path scans (`ScanPath.class_name` is 'Circle' in `scan.toml`).
+        """
+        # Get scan information
+        scan_cfg = self._get_scan_config()
+
+        # Verify the median Euclidean or angular distances are not above the thresholds
+        dist_th = {}
+        dist_th.update(self._check_euclidean_distance_thresholds())
+        dist_th.update(self._check_angular_distance_thresholds())
+        if not all(list(dist_th.values())):
+            return False
+        else:
+            logger.info("All poses distance medians are within acceptable thresholds.")
 
         # Verify the scan path type when using max blind angle parameter
         path_type = scan_cfg['ScanPath']['class_name']
@@ -1618,37 +1626,66 @@ class CameraPoseQC(object):
             logger.info("Max blind angle is only valid for circular scans.")
             self.max_blind_angle = None
 
-        logger.info(f"Check the pose estimation accuracy with a distance threshold of {self.distance_threshold}mm.")
+        # Check for blind angles due to consecutive failures (only for circular scans)
+        if self.max_blind_angle is not None:
+            return self._check_blind_angles()
 
-        # Track incorrectly estimated poses
-        wrong_pose = 0  # Count of wrongly estimated poses
-        wrong_pose_idx = []  # Indices of images with incorrect poses
-
-        # Verify each image's pose against a threshold
-        for im_idx, im in enumerate(self.image_files):
-            if self.euclidean_distances[im.id] >= self.distance_threshold:
+        # Update the images metadata with a "correct"/"incorrect" value
+        for im in enumerate(self.image_files):
+            if im.id in self.outlier_ids:
                 # Mark pose as incorrect in image metadata
                 im.set_metadata("pose_estimation", "incorrect")
-                logger.warning(f"Image {im.id} pose has been incorrectly estimated by COLMAP!")
-                wrong_pose += 1
-                wrong_pose_idx.append(im_idx)
             else:
                 # Mark pose as correct in image metadata
                 im.set_metadata("pose_estimation", "correct")
 
         # Warn if any poses were incorrectly estimated
-        if wrong_pose != 0:
-            logger.warning(
-                f"Colmap failed to estimate the pose of {wrong_pose} images within a {self.distance_threshold}mm distance to CNC pose!")
-            logger.warning(f"The following image indexes failed: {wrong_pose_idx}.")
-
-        # Check for blind angles due to consecutive failures (only for circular scans)
-        if self.max_blind_angle is not None:
-            return self.check_blind_angles(wrong_pose_idx)
+        n_outliers = len(self.outlier_ids)
+        if n_outliers != 0:
+            outlier_idx = [self.image_ids.index(i) for i in self.outlier_ids]
+            logger.warning(f"Pose coherence between CNC (theoretical) and Colmap (estimated) failed for {n_outliers}!")
+            logger.warning(f"The following image indexes failed: {outlier_idx}.")
 
         return True
 
-    def check_blind_angles(self, wrong_pose_idx):
+    def _check_euclidean_distance_thresholds(self):
+        valid_median_dist = {}
+        # Check the median Euclidean distance between theoretical and estimated poses is not above the threshold
+        for metric in ["xy", "z"]:
+            if metric in self.metrics:
+                median_dist = np.nanmedian(list(self.dist_dict[metric].values()))
+                if metric in self.fixed_params:
+                    # Use the fixed Euclidean distance threshold
+                    thres = self.fixed_distance_threshold
+                else:
+                    # Use the Euclidean distance threshold
+                    thres = self.distance_threshold
+                valid_median_dist[metric] = median_dist <= thres
+                if not valid_median_dist[metric]:
+                    logger.error(f"The '{metric}' median distance ({median_dist}) is above the threshold ({thres}).")
+
+        return valid_median_dist
+
+    def _check_angular_distance_thresholds(self):
+        valid_median_dist = {}
+        # Check the median angular distance between theoretical and estimated poses is not above the threshold
+        for metric in ["pan", "tilt", "roll"]:
+            if metric in self.metrics:
+                median_dist = np.nanmedian(list(self.dist_dict[metric].values()))
+                if metric in self.fixed_params:
+                    # Use the fixed angular distance threshold
+                    thres = self.fixed_angle_threshold
+                else:
+                    # Use the angular distance threshold
+                    thres = self.angle_threshold
+                valid_median_dist[metric] = median_dist <= thres
+                if not valid_median_dist[metric]:
+                    median_dist = np.round(median_dist, 3)
+                    logger.error(f"The '{metric}' median distance ({median_dist}) is above the threshold ({thres}).")
+
+        return valid_median_dist
+
+    def _check_blind_angles(self):
         """Checks whether the blind angle, caused by consecutive failed pose estimations, exceeds the allowed threshold.
 
         This method evaluates the angular gap between images in a circular scan, which arises due to failed pose
@@ -1657,29 +1694,25 @@ class CameraPoseQC(object):
         a warning is logged, and the method returns False. Otherwise, the method confirms that the blind angle is
         acceptable and logs the information.
 
-        Parameters
-        ----------
-        wrong_pose_idx : array-like
-            Indices of images where pose estimation failed.
-
         Returns
         -------
         bool
             True if the calculated blind angle is within the allowed threshold, False otherwise.
         """
-        # Calculate angle between consecutive images in a circular scan
+        # Calculate the angle between consecutive images in a circular scan
         n_imgs = len(self.image_files)
         angle_between_img = 360 / float(n_imgs)
 
-        # Adjust max blind angle if it's smaller than angle between consecutive images
+        # Adjust the 'max blind angle' if it's smaller than the angle between consecutive images
         if self.max_blind_angle < angle_between_img:
             logger.warning(
                 f"The allowed max blind angle ({self.max_blind_angle}°) is inferior to the angle between two images ({angle_between_img}°)!")
             self.max_blind_angle = angle_between_img
             logger.info(f"Changed the allowed max blind angle to {self.max_blind_angle}°.")
 
+        outlier_idx = [self.image_ids.index(i) for i in self.outlier_ids]
         # Find groups of consecutive failed poses
-        consecutive_wrong = np.split(wrong_pose_idx, np.where(np.diff(wrong_pose_idx) != 1)[0] + 1)
+        consecutive_wrong = np.split(outlier_idx, np.where(np.diff(outlier_idx) != 1)[0] + 1)
 
         # Get the longest sequence of consecutive failures
         max_wrong_size = len(consecutive_wrong[np.argmax([len(cw_i) for cw_i in consecutive_wrong])])
@@ -1687,12 +1720,12 @@ class CameraPoseQC(object):
         # Calculate the resulting blind angle (consecutive missing poses)
         blind_angle = angle_between_img * max_wrong_size
 
-        # Check if blind angle exceeds threshold
+        # Check if the blind angle exceeds the threshold
         if blind_angle > float(self.max_blind_angle):
             logger.warning(f"Failed to estimate the pose of {max_wrong_size} consecutive images!")
             logger.warning(f"This correspond to a blind angle of {blind_angle}°!")
-            logger.warning(f"This is above the allowed {self.max_blind_angle}° blind angle!")
+            logger.error(f"This is above the allowed {self.max_blind_angle}° blind angle!")
             return False
         else:
-            logger.info(f"The observed blind angle ({blind_angle}°) is below the threshold ({self.max_blind_angle}°).")
+            logger.info(f"The largest blind angle ({blind_angle}°) is below the threshold ({self.max_blind_angle}°).")
             return True
