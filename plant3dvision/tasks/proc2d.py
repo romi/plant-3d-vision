@@ -322,7 +322,7 @@ class Masks(FileByFileTask):
     """
     upstream_task = luigi.TaskParameter(default=Undistort)  # override default attribute from ``RomiTask``
     type = luigi.Parameter("linear")
-    colorspace = luigi.ChoiceParameter("RGB", choices=["RGB", "HSV", "YCbCr"])
+    colorspace = luigi.ChoiceParameter(default="RGB", choices=["RGB", "HSV", "YCbCr"], var_type=str)
     parameters = luigi.ListParameter(default=[0, 1, 0])
     min_threshold = luigi.FloatParameter(default=0.0)
     max_threshold = luigi.FloatParameter(default=0.4)
