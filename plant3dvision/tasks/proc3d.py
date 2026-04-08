@@ -60,10 +60,10 @@ class PointCloud(RomiTask):
     Notes
     -----
     For multi-class volumes:
-    - Classes are processed based on highest probability per voxel
+    - Classes are processed based on the highest probability per voxel
     - Background class is weighted by the background_prior
     - Points are filtered based on contrast between the highest and second-highest class
-    - Points are filtered based on minimum score threshold
+    - Points are filtered based on the minimum score threshold
     - Each class gets a color from the configuration or a random color
 
     For single-class volumes:
@@ -95,8 +95,7 @@ class PointCloud(RomiTask):
         Raises
         ------
         FileNotFoundError
-            If the input files corresponding to any of the specified labels
-            do not exist.
+            If the input files corresponding to any of the specified labels do not exist.
         ValueError
             If voxel data or metadata is improperly formatted or missing.
         TypeError
@@ -105,18 +104,15 @@ class PointCloud(RomiTask):
         Notes
         -----
         - This method performs multi-class processing by iterating over the
-          provided labels and aggregating voxel data into a multi-dimensional
-          array.
+          provided labels and aggregating voxel data into a multidimensional array.
         - The algorithm applies class-specific modifications, such as adjusting
           the background voxel values using a prior and filtering voxels based
           on contrast and score thresholds.
         - A point cloud is generated for each class based on its filtered voxel
           data. Each point cloud shares metadata on origin and voxel size.
         - Points are colorized and added to a final aggregated point cloud.
-          Predefined colors are used when available; otherwise, random colors
-          are assigned.
-        - Finally, the point cloud and labels for all points are saved as
-          outputs.
+          Predefined colors are used when available; otherwise, random colors are assigned.
+        - Finally, the point cloud and labels for all points are saved as outputs.
         """
         # TODO: make sure this work with "averaging" method for upstream task voxel...
         for label in labels:
@@ -315,8 +311,7 @@ class SegmentedPointCloud(RomiTask):
         px : tuple of int
             A tuple specifying the (x, y) coordinates of the pixel being checked.
         shape : tuple of int
-            A tuple defining the shape of the image in terms of
-            (number of rows, number of columns).
+            A tuple defining the shape of the image in terms of (number of rows, number of columns).
 
         Returns
         -------
@@ -564,7 +559,6 @@ class ClusteredMesh(RomiTask):
     Notes
     -----
     Task outputs are a series of PLY file with a triangular mesh for each label.
-
     """
     upstream_task = luigi.TaskParameter(default=SegmentedPointCloud)  # override default attribute from ``RomiTask``
 
