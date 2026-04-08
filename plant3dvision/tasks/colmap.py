@@ -1174,9 +1174,9 @@ class CameraPoseQC(object):
             The list of camera parameters that are "fixed", meaning they do not move during a scan.
             Defaults to ``["z", "tilt", "roll"]``.
         """
-        self.image_files = image_files
-        self.mad_factor = mad_factor
-        self.metrics = set(metrics) & set(ALL_METRICS) if metrics is not None else DEF_METRICS
+        self.image_files : list[File] = image_files
+        self.mad_factor: float = mad_factor
+        self.metrics : set[str] = set(metrics) & set(ALL_METRICS) if metrics is not None else set(DEF_METRICS)
         self.fixed_params = fixed_params if fixed_params is not None else ["z", "tilt", "roll"]
 
         self.distance_threshold = kwargs.get('distance_threshold', 3.)
@@ -1185,16 +1185,16 @@ class CameraPoseQC(object):
         self.fixed_angle_threshold = kwargs.get('fixed_angle_threshold', 3.5)
         self.max_blind_angle = kwargs.get('max_blind_angle', 30.)
 
-        self.current_scan = self.image_files[0].fileset.scan
+        self.current_scan : Scan = self.image_files[0].fileset.scan
         self.intrinsic_calibration_scan_id = "" if calibration_scan is None else calibration_scan.id
 
         self._colmap_poses = None
         self._cnc_poses = None
         self.outlier_ids = []
 
-        self.image_ids = [im.id for im in self.image_files]
-        # Build the distance dictionary
-        self.dist_dict = {}
+        self.image_ids : list[str] = [im.id for im in self.image_files]
+        # Build the distance dictionary: {"dist_name": {"img_id": distance}}
+        self.dist_dict: dict[str, dict[str, float]] = {}
         self.dist_dict["xy"] = self._euclidean_dist(self.image_ids,
                                                     {im_id: self.cnc_poses[im_id][:2] for im_id in self.image_ids},
                                                     {im_id: self.colmap_poses[im_id][:2] for im_id in self.image_ids})
@@ -1293,11 +1293,11 @@ class CameraPoseQC(object):
         return prefix + indenter + camera_str
 
     @staticmethod
-    def _euclidean_dist(image_ids, cnc_poses, colmap_poses) -> dict:
+    def _euclidean_dist(image_ids, cnc_poses, colmap_poses) -> dict[str, float]:
         return {im_id: euclidean(cnc_poses.get(im_id), colmap_poses.get(im_id)) for im_id in image_ids}
 
     @staticmethod
-    def _angular_dist(image_ids, cnc_poses, colmap_poses) -> dict:
+    def _angular_dist(image_ids, cnc_poses, colmap_poses) -> dict[str, float]:
         return {im_id: angular_distance(cnc_poses.get(im_id), colmap_poses.get(im_id)) for im_id in image_ids}
 
     def flag_outlier_poses(self, mad_factor=None) -> dict:
