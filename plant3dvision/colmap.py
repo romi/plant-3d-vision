@@ -991,6 +991,9 @@ class ColmapRunner(object):
                 colmap_exe, tag = colmap_exe.split(":")
                 logger.info(f"Requested usage of docker image {colmap_exe}:{tag}...")
 
+            # Try to pull the docker image (nothing will happen if locally found)
+            docker_pull(colmap_exe, tag=tag)
+
             # Try to find the closest matching tag from available Docker images, if any
             # This is done because cuda compute capability may vary depending on available hardware
             # Locally built image may have a different 'cuda_cc' value than the default.
