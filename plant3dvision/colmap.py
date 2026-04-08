@@ -431,7 +431,7 @@ def export_camera_parameters(image_files, intrinsics, extrinsics, name_mapping: 
         associated_name = name_mapping[fi.filename] if name_mapping else fi.filename
         try:
             assert associated_name in extrinsics
-        except KeyError:
+        except AssertionError:
             logger.error(f"No pose & camera model defined by COLMAP for image '{fi.filename}' !'!")
         else:
             camera = {
@@ -738,7 +738,9 @@ class ColmapRunner(object):
         self.colmap_version: str = None
         self._header: str = None
         self._init_exe(kwargs.get('colmap_exe', COLMAP_EXE))
-        finalize(self, self.clean_up)
+
+        if not kwargs.get('no_final_clean_up', False):
+           finalize(self, self.clean_up)
 
     def _image_pattern(self, image_files):
         # Get an image file path to test the patterns:
@@ -1432,7 +1434,7 @@ class ColmapRunner(object):
         except PermissionError as e:
             logger.error(f"Permission denied while removing {self.colmap_workdir}: {e}")
         except FileNotFoundError as e:
-            logger.warning(f"Directory {self.colmap_workdir} already removed or not found: {e}")
+            logger.debug(f"Directory {self.colmap_workdir} already removed or not found: {e}")
         except OSError as e:
             logger.error(f"Failed to remove directory {self.colmap_workdir}: {e}")
         else:

@@ -701,6 +701,7 @@ class Colmap(RomiTask):
     retry_count = luigi.IntParameter(default=10)
 
     cli_args = luigi.DictParameter(default={})
+    no_final_clean_up = False
 
     def _workspace_as_bounding_box(self):
         """Use the scanner workspace as bounding-box.
@@ -914,7 +915,8 @@ class Colmap(RomiTask):
             use_calibration=extrinsic_calibration,  # impact the ``poses.txt`` file: use calibrated instead of cnc poses
             bounding_box=bounding_box,
             multiple_cameras=not self.single_camera,
-            colmap_exe=str(self.colmap_exe)
+            colmap_exe=str(self.colmap_exe),
+            no_final_clean_up=bool(self.no_final_clean_up)
         )
 
         # Perform reconstruction and get results
@@ -973,6 +975,7 @@ class Colmap(RomiTask):
             suffix = f"_try_{self.retry}{ext}"
             fpath.rename(str(fpath).replace(ext, suffix))
 
+        self.no_final_clean_up = False
         if self.qc_check:
             # - Add a "pose_estimation" metadata and performs estimation accuracy checks if requested:
             correctly_estimated = camera_pose_qc.is_correctly_estimated()
