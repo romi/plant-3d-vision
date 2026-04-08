@@ -737,7 +737,7 @@ class Colmap(RomiTask):
         Maximum alignment error allowed during ``model_aligner`` step.
         Defaults to ``10``.
     bounding_box : luigi.DictParameter, optional
-        Volume dictionary used to crop the point cloud after colmap reconstruction and keep only points associated to the plant.
+        Volume dictionary used to crop the point cloud after colmap reconstruction and keep only points associated with the plant.
         By default, it uses the scanner workspace defined in the 'images' fileset.
         Defined as `{'x': [int, int], 'y': [int, int], 'z': [int, int]}`.
         Defaults to NO bounding-box.

@@ -1311,7 +1311,7 @@ class ColmapRunner(object):
                 'rgb': list
                     color of the point
                 'error': float
-                    error associated to the point
+                    error associated with the point
                 'image_ids': list
                     list of image ids where the point is extracted from
                 'point2D_idxs': list

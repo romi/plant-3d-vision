@@ -122,7 +122,7 @@ def calibrate_opencv_camera(corners, ids, img_shape, aruco_kwargs):
     corners : list
         List of detected corners from ChArUco board.
     ids : list
-        List of id associated to detected corners from ChArUco board.
+        List of id associated with detected corners from ChArUco board.
     img_shape : list
         Size of the image, used only to initialize the camera intrinsic matrix.
     aruco_kwargs : dict
@@ -176,7 +176,7 @@ def calibrate_radial_camera(corners, ids, img_shape, aruco_kwargs):
     corners : list
         List of detected corners from ChArUco board.
     ids : list
-        List of id associated to detected corners from ChArUco board.
+        List of id associated with detected corners from ChArUco board.
     img_shape : list
         Size of the image, used only to initialize the camera intrinsic matrix.
     aruco_kwargs : dict
@@ -232,7 +232,7 @@ def calibrate_simple_radial_camera(corners, ids, img_shape, aruco_kwargs):
     corners : list
         List of detected corners from ChArUco board.
     ids : list
-        List of id associated to detected corners from ChArUco board.
+        List of id associated with detected corners from ChArUco board.
     img_shape : list
         Size of the image, used only to initialize the camera intrinsic matrix.
     aruco_kwargs : dict

@@ -409,7 +409,7 @@ class SegmentedPointCloud(RomiTask):
         # Assign colors and labels to points
         for i in range(len(labels)):
             nlab_pts = (pts_labels == i).sum()
-            logger.critical(f"Number of points associated to label '{labels[i]}': {nlab_pts}")
+            logger.critical(f"Number of points associated with label '{labels[i]}': {nlab_pts}")
 
             # Use predefined color if available, otherwise random color
             if labels[i] in colors:
@@ -666,14 +666,14 @@ class OrganSegmentation(RomiTask):
         pcd : open3d.geometry.PointCloud
             A PointCloud instance with points.
         labels : list
-            The list of labels associated to the points.
+            The list of labels associated with the points.
         label : str
             Label used to select points from point cloud.
 
         Returns
         -------
         open3d.geometry.PointCloud
-            A point cloud containing only the points associated to the selected label.
+            A point cloud containing only the points associated with the selected label.
         """
         # Get the index of points matching the semantic label
         idx_mask = np.where(np.array(labels) == label)[0]

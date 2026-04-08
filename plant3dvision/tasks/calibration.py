@@ -243,7 +243,7 @@ class IntrinsicCalibration(RomiTask):
         return {"board": self.board_fileset(), "markers": self.upstream_task()}
 
     def output(self):
-        """The output fileset associated to a ``IntrinsicCalibration`` is an 'camera_model' dataset."""
+        """The output fileset associated with a ``IntrinsicCalibration`` is an 'camera_model' dataset."""
         return FilesetTarget(ScanConfiguration().scan, "camera_model")
 
     def run(self):
