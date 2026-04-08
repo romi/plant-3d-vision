@@ -796,29 +796,34 @@ class Colmap(RomiTask):
     """
     upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)  # override default attribute from ``RomiTask``
     query = luigi.DictParameter(default={})
-    matcher = luigi.Parameter(default="exhaustive")
     colmap_exe = luigi.Parameter(default="roboticsmicrofarms/colmap:3.8")
+    # ColmapRunner options
+    matcher = luigi.Parameter(default="exhaustive")
+    use_gpu = luigi.BoolParameter(default=True)
+    single_camera = luigi.BoolParameter(default=True)
     compute_dense = luigi.BoolParameter(default=False)
+    alignment_max_error = luigi.IntParameter(default=10)
     align_pcd = luigi.BoolParameter(default=True)
+    camera_model = luigi.Parameter(default="SIMPLE_RADIAL")
+    bounding_box = luigi.DictParameter(default=None)
+    cli_args = luigi.DictParameter(default={})
+
     intrinsic_calibration_scan_id = luigi.Parameter(default="")
     extrinsic_calibration_scan_id = luigi.Parameter(default="")
     use_calibration_camera = luigi.BoolParameter(default=True)  # has no effect if no *_calib_scan_id
-    camera_model = luigi.Parameter(default="SIMPLE_RADIAL")
-    use_gpu = luigi.BoolParameter(default=True)
-    single_camera = luigi.BoolParameter(default=True)
-    alignment_max_error = luigi.IntParameter(default=10)
-    bounding_box = luigi.DictParameter(default=None)
 
     # Camera poses quality check parameters
     qc_check = luigi.BoolParameter(default=True)
-    distance_threshold = luigi.FloatParameter(default=6.)
-    max_blind_angle = luigi.FloatParameter(default=20.)
+    mad_factor = luigi.FloatParameter(default=3.)
+    distance_threshold = luigi.FloatParameter(default=3.)
+    fixed_distance_threshold = luigi.FloatParameter(default=1.)
+    angle_threshold = luigi.FloatParameter(default=5.)
+    fixed_angle_threshold = luigi.FloatParameter(default=3.5)
+    max_blind_angle = luigi.FloatParameter(default=30.)
 
     # Retry parameters
     retry = 0
     retry_count = luigi.IntParameter(default=10)
-
-    cli_args = luigi.DictParameter(default={})
 
     def _workspace_as_bounding_box(self):
         """Use the scanner workspace as bounding-box.
@@ -1064,20 +1069,33 @@ class Colmap(RomiTask):
             outfile.import_file(log_path)
 
         # Initialize an instance to perform camera pose estimations quality check:
-        camera_pose_qc = CameraPoseQC(image_files, self.distance_threshold, self.max_blind_angle)
+        camera_pose_qc = CameraPoseQC(image_files, self.mad_factor,
+                                      distance_threshold=self.distance_threshold,
+                                      fixed_distance_threshold=self.fixed_distance_threshold,
+                                      angle_threshold=self.angle_threshold,
+                                      fixed_angle_threshold=self.fixed_angle_threshold,
+                                      max_blind_angle=self.max_blind_angle)
 
-        # Compute the Euclidean distances:
-        euclidean_distances = camera_pose_qc.compute_pose_distance()
+        pose_fig_fpath = f"{self.output().get().path()}/cnc_vs_colmap_poses_estimated.png"
+        camera_pose_qc.plot_pose_estimation_figure(figname=pose_fig_fpath)
+
         # Save Euclidean distances to JSON:
-        dist_json = {
-            "mean_euclidean_distance": np.nanmean(list(euclidean_distances.values())),
-            "std_euclidean_distance": np.nanstd(list(euclidean_distances.values())),
-            "euclidean_distances": euclidean_distances,
-        }
-        dist_outfile = self.output_file(f"euclidean_distances.json", create=True)
+        dist_dict = camera_pose_qc.dist_dict
+        dist_json = dict()
+        dist_stats_json = dict()
+        for dist_name, dist_values in dist_dict.items():
+            dist_stats_json.update({
+                f"mean_{dist_name}_distance": np.nanmean(list(dist_values.values())),
+                f"median_{dist_name}_distance": np.nanmedian(list(dist_values.values())),
+                f"std_{dist_name}_distance": np.nanstd(list(dist_values.values())),
+            })
+            dist_json.update({
+                f"{dist_name}_distances": dist_values,
+            })
+        dist_outfile = self.output_file(f"ref2pred_pose_distances.json", create=True)
         io.write_json(dist_outfile, dist_json)
-
-        pose_fig_fpath = camera_pose_qc.make_pose_qc_figures(self.output().get().path())
+        dist_stats_outfile = self.output_file(f"ref2pred_pose_distances_stats.json", create=True)
+        io.write_json(dist_stats_outfile, dist_stats_json)
 
         def _rename_retry_file(fpath):
             """Rename the file with a try number suffix."""
@@ -1089,13 +1107,13 @@ class Colmap(RomiTask):
 
         if self.qc_check:
             # - Add a "pose_estimation" metadata and performs estimation accuracy checks if requested:
-            correctly_estimated = camera_pose_qc.is_correctly_estimated()
+            correctly_estimated = camera_pose_qc.validate_camera_poses()
             if not correctly_estimated:
                 _rename_retry_file(dist_outfile.path())
                 _rename_retry_file(pose_fig_fpath)
                 if self.retry < self.retry_count:
                     self.retry += 1
-                    # Clean-up the temporary working directory created by the ColmapRunner instance:
+                    # Clean up the temporary working directory created by the ColmapRunner instance:
                     colmap_runner.clean_up()
                     raise Exception(
                         f"Attempt #{self.retry} - Failed to correctly estimate camera poses!")
@@ -1152,7 +1170,7 @@ class CameraPoseQC(object):
     >>> cam_qc.plot_xy_plane_poses()
     >>> cam_qc.plot_z_poses()
     >>> cam_qc.plot_pose_estimation_figure()
-    >>> cam_qc.is_correctly_estimated()
+    >>> cam_qc.validate_camera_poses()
     """
 
     def __init__(self, image_files, mad_factor, metrics=None, calibration_scan=None, fixed_params=None, **kwargs):
@@ -1174,9 +1192,9 @@ class CameraPoseQC(object):
             The list of camera parameters that are "fixed", meaning they do not move during a scan.
             Defaults to ``["z", "tilt", "roll"]``.
         """
-        self.image_files : list[File] = image_files
+        self.image_files: list[File] = image_files
         self.mad_factor: float = mad_factor
-        self.metrics : set[str] = set(metrics) & set(ALL_METRICS) if metrics is not None else set(DEF_METRICS)
+        self.metrics: set[str] = set(metrics) & set(ALL_METRICS) if metrics is not None else set(DEF_METRICS)
         self.fixed_params = fixed_params if fixed_params is not None else ["z", "tilt", "roll"]
 
         self.distance_threshold = kwargs.get('distance_threshold', 3.)
@@ -1185,14 +1203,14 @@ class CameraPoseQC(object):
         self.fixed_angle_threshold = kwargs.get('fixed_angle_threshold', 3.5)
         self.max_blind_angle = kwargs.get('max_blind_angle', 30.)
 
-        self.current_scan : Scan = self.image_files[0].fileset.scan
+        self.current_scan: Scan = self.image_files[0].fileset.scan
         self.intrinsic_calibration_scan_id = "" if calibration_scan is None else calibration_scan.id
 
         self._colmap_poses = None
         self._cnc_poses = None
         self.outlier_ids = []
 
-        self.image_ids : list[str] = [im.id for im in self.image_files]
+        self.image_ids: list[str] = [im.id for im in self.image_files]
         # Build the distance dictionary: {"dist_name": {"img_id": distance}}
         self.dist_dict: dict[str, dict[str, float]] = {}
         self.dist_dict["xy"] = self._euclidean_dist(self.image_ids,
@@ -1343,7 +1361,7 @@ class CameraPoseQC(object):
         dist_data = [list(self.dist_dict[metric].values()) for metric in self.metrics]
         tick_labels = [metric.upper() for metric in self.metrics]
 
-        # Plot boxplot
+        # - Add the distance boxplot
         ax.boxplot(dist_data, vert=vert, patch_artist=True,
                    boxprops=dict(facecolor="#a6cee3", color="#1f78b4"),
                    medianprops=dict(color="#1f78b4"))
@@ -1355,6 +1373,7 @@ class CameraPoseQC(object):
             ax.set_yticklabels(tick_labels)
             ax.set_xlabel("Distance from CNC [mm or degrees]")
 
+        # - Add the outlier labels
         outlier_idx = [self.image_ids.index(i) for i in outlier_ids]
         # Overlay outlier points and annotate with image IDs
         for idx, metric_vals in enumerate(dist_data):
@@ -1376,6 +1395,7 @@ class CameraPoseQC(object):
                 xy = (y + 0.15, x) if vert else (x + 0.1, y)
                 ax.text(*xy, out_idx, fontsize=8, ha="center", va="center", color="#d73027")
 
+        # Add a title
         title = kwargs.get('title', None)
         if title is not None:
             ax.set_title(title, fontdict={'family': 'monospace', 'size': 'medium'})
@@ -1399,9 +1419,6 @@ class CameraPoseQC(object):
         # Get the non-outlier PREDICTED XY coordinates (good)
         Xg, Yg, _, Pg, _, _ = np.array(
             [pred_poses.get(im_id, [np.nan] * 6) for im_id in self.image_ids if im_id not in outlier_ids]).T
-        # Get the outliers PREDICTED XY coordinates (bad)
-        Xw, Yw, _, Pw, _, _ = np.array(
-            [pred_poses.get(im_id, [np.nan] * 6) for im_id in self.image_ids if im_id in outlier_ids]).T
 
         # - Plot the REFERENCE center point
         x_c, y_c = center  # 2D center point
@@ -1415,10 +1432,6 @@ class CameraPoseQC(object):
         # - Plot PREDICTED XY poses coordinates as a blue 'x' marker:
         colmap_scatter_g = ax.scatter(Xg, Yg, marker="x", c='blue')
         colmap_scatter_g.set_label(pred_label + " (good)")
-
-        # - Plot outliers PREDICTED XY poses coordinates as a red 'x' marker:
-        colmap_scatter_w = ax.scatter(Xw, Yw, marker="x", c="red")
-        colmap_scatter_w.set_label(pred_label + " (bad)")
 
         # - Plot the REFERENCE pan orientation as blue arrows:
         for xi, yi, angle in zip(x, y, p):
@@ -1441,24 +1454,32 @@ class CameraPoseQC(object):
             _ = ax.arrow(xi, yi, dx, dy, length_includes_head=True,
                          head_width=0, head_length=0,
                          edgecolor='gray', linewidth=0.8, linestyle=':')
+        if outlier_ids:
+            # Get the PREDICTED XY coordinates (bad)
+            Xw, Yw, _, Pw, _, _ = np.array(
+                [pred_poses.get(im_id, [np.nan] * 6) for im_id in self.image_ids if im_id in outlier_ids]).T
 
-        # - Plot the Predicted pan orientation as dashed gray lines:
-        for xi, yi, angle in zip(Xw, Yw, Pw):
-            if np.isnan(xi) or np.isnan(yi) or np.isnan(angle):
-                continue
-            angle = np.deg2rad(angle + 90 % 360)
-            dx = np.cos(angle) * radius
-            dy = np.sin(angle) * radius
-            _ = ax.arrow(xi, yi, dx, dy, length_includes_head=True,
-                         head_width=0, head_length=0,
-                         edgecolor='gray', linewidth=0.8, linestyle='--')
+            # - Plot the PREDICTED XY poses coordinates as a red 'x' marker:
+            colmap_scatter_w = ax.scatter(Xw, Yw, marker="x", c="red")
+            colmap_scatter_w.set_label(pred_label + " (bad)")
+
+            # - Plot the PREDICTED pan orientation as dashed gray lines:
+            for xi, yi, angle in zip(Xw, Yw, Pw):
+                if np.isnan(xi) or np.isnan(yi) or np.isnan(angle):
+                    continue
+                angle = np.deg2rad(angle + 90 % 360)
+                dx = np.cos(angle) * radius
+                dy = np.sin(angle) * radius
+                _ = ax.arrow(xi, yi, dx, dy, length_includes_head=True,
+                             head_width=0, head_length=0,
+                             edgecolor='gray', linewidth=0.8, linestyle='--')
 
         # - Plot the image indexes as text next to REFERENCE points:
         if use_image_id:
             # Get the image ids
             im_ids = self.image_ids
         else:
-            # Get images index:
+            # Get the image index
             im_ids = list(range(len(self.image_ids)))
 
         # Add image or point ids as text:
@@ -1471,7 +1492,9 @@ class CameraPoseQC(object):
 
         # - Build a custom legend that includes the arrows
         # Original scatter handles (they already have labels)
-        scatter_handles = [center_scatter, cnc_scatter, colmap_scatter_g, colmap_scatter_w]
+        scatter_handles = [center_scatter, cnc_scatter, colmap_scatter_g]
+        if outlier_ids:
+            scatter_handles.append(colmap_scatter_w)
         # Proxy handles for the three arrow styles: a simple line/marker combo that mimics the visual style
         ref_arrow_proxy = Line2D([0], [0], color='blue', lw=1.2,
                                  marker='>', markersize=8, label='CNC Pan')
@@ -1510,24 +1533,27 @@ class CameraPoseQC(object):
         ref_poses = self.cnc_poses
         pred_poses = self.colmap_poses
 
-        # Get the REFERENCE Z coordinates
+        # - Get the REFERENCE Z coordinates
         _, _, z, _, _, _ = np.array([ref_poses.get(im_id, [np.nan] * 6) for im_id in self.image_ids]).T
 
-        # Get the non-outlier PREDICTED Z coordinates (good)
+        # - Get the non-outlier PREDICTED Z coordinates (good)
         _, _, Zg, _, _, _ = np.array(
             [pred_poses.get(im_id, [np.nan] * 6) for im_id in self.image_ids if im_id not in outlier_ids]).T
         correct_poses_idx = [idx for idx in range(len(self.image_ids)) if self.image_ids[idx] not in outlier_ids]
-        # Get the outliers PREDICTED Z coordinates (bad)
-        _, _, Zw, _, _, _ = np.array(
-            [pred_poses.get(im_id, [np.nan] * 6) for im_id in self.image_ids if im_id in outlier_ids]).T
-        incorrect_poses_idx = [idx for idx in range(len(self.image_ids)) if self.image_ids[idx] in outlier_ids]
 
         # - Plot REFERENCE Z poses coordinates as a '+' marker:
         _ = ax.scatter(range(len(self.image_ids)), z, marker='+', c="black", label=ref_label)
 
         # - Plot PREDICTED Z poses coordinates as a blue 'x' marker:
         _ = ax.scatter(correct_poses_idx, Zg, marker="x", c='blue', label=pred_label + " (good)")
-        _ = ax.scatter(incorrect_poses_idx, Zw, marker="x", c='red', label=pred_label + " (bad)")
+
+        if outlier_ids:
+            # - Get the PREDICTED Z coordinates (bad)
+            _, _, Zw, _, _, _ = np.array(
+                [pred_poses.get(im_id, [np.nan] * 6) for im_id in self.image_ids if im_id in outlier_ids]).T
+            incorrect_poses_idx = [idx for idx in range(len(self.image_ids)) if self.image_ids[idx] in outlier_ids]
+            # - Plot PREDICTED Z poses coordinates as a blue 'x' marker:
+            _ = ax.scatter(incorrect_poses_idx, Zw, marker="x", c='red', label=pred_label + " (bad)")
 
         title = kwargs.get('title', None)
         if title is not None:
@@ -1562,7 +1588,7 @@ class CameraPoseQC(object):
                                           title=f"Boxplot of Theoretical vs. Estimated Pose Distances")
         plt.show()
 
-    def plot_pose_estimation_figure(self):
+    def plot_pose_estimation_figure(self, figname=None):
         from matplotlib import pyplot as plt
         gs_kw = dict(height_ratios=[9, 3], width_ratios=[9, 3])
         fig, axd = plt.subplots(nrows=2, ncols=2, figsize=(12, 12), constrained_layout=True, gridspec_kw=gs_kw)
@@ -1594,9 +1620,14 @@ class CameraPoseQC(object):
         if vignette_str != "":
             vignette.text(0., 0.5, vignette_str, ha='left', va='center',
                           fontdict={'family': 'monospace', 'size': 'medium'})
-        plt.show()
 
-    def is_correctly_estimated(self):
+        if figname:
+            plt.savefig(figname)
+            plt.close(fig)
+        else:
+            plt.show()
+
+    def validate_camera_poses(self):
         """Check if estimated poses are within acceptable thresholds.
 
         Parameters
@@ -1613,9 +1644,10 @@ class CameraPoseQC(object):
 
         # Verify the median Euclidean or angular distances are not above the thresholds
         dist_th = {}
-        dist_th.update(self._check_euclidean_distance_thresholds())
-        dist_th.update(self._check_angular_distance_thresholds())
+        dist_th.update(self._validate_median_distances())
+        dist_th.update(self._validate_median_angular_distances())
         if not all(list(dist_th.values())):
+            logger.error("Some poses distance medians are outside acceptable thresholds.")
             return False
         else:
             logger.info("All poses distance medians are within acceptable thresholds.")
@@ -1628,10 +1660,11 @@ class CameraPoseQC(object):
 
         # Check for blind angles due to consecutive failures (only for circular scans)
         if self.max_blind_angle is not None:
-            return self._check_blind_angles()
+            if not self._is_blind_angle_acceptable():
+                return False
 
         # Update the images metadata with a "correct"/"incorrect" value
-        for im in enumerate(self.image_files):
+        for im in self.image_files:
             if im.id in self.outlier_ids:
                 # Mark pose as incorrect in image metadata
                 im.set_metadata("pose_estimation", "incorrect")
@@ -1648,7 +1681,7 @@ class CameraPoseQC(object):
 
         return True
 
-    def _check_euclidean_distance_thresholds(self):
+    def _validate_median_distances(self):
         valid_median_dist = {}
         # Check the median Euclidean distance between theoretical and estimated poses is not above the threshold
         for metric in ["xy", "z"]:
@@ -1666,7 +1699,7 @@ class CameraPoseQC(object):
 
         return valid_median_dist
 
-    def _check_angular_distance_thresholds(self):
+    def _validate_median_angular_distances(self):
         valid_median_dist = {}
         # Check the median angular distance between theoretical and estimated poses is not above the threshold
         for metric in ["pan", "tilt", "roll"]:
@@ -1685,7 +1718,7 @@ class CameraPoseQC(object):
 
         return valid_median_dist
 
-    def _check_blind_angles(self):
+    def _is_blind_angle_acceptable(self):
         """Checks whether the blind angle, caused by consecutive failed pose estimations, exceeds the allowed threshold.
 
         This method evaluates the angular gap between images in a circular scan, which arises due to failed pose
