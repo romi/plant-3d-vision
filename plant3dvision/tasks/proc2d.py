@@ -3,6 +3,7 @@
 
 """Task submodule dedicated to the processing of 2D images that creates 2D images."""
 
+import concurrent.futures
 import sys
 
 import luigi
@@ -17,8 +18,8 @@ from plant3dvision.utils import jsonify
 from plantdb.commons import io
 from romitask.log import get_logger
 from romitask.task import FileByFileTask
-from romitask.task import ModelFilesetExists
 from romitask.task import ImagesFilesetExists
+from romitask.task import ModelFilesetExists
 
 logger = get_logger(__name__, log_level="INFO")
 
@@ -95,6 +96,9 @@ class Undistort(FileByFileTask):
     intrinsic_calib_scan_id = luigi.Parameter(default="")  # ID of scan containing intrinsic calibration
     extrinsic_calib_scan_id = luigi.Parameter(default="")  # ID of scan containing extrinsic calibration
 
+    parallel = luigi.BoolParameter(default=True)
+    n_workers = luigi.IntParameter(default=None)
+
     def requires(self):
         """Determines the dependencies required for the task execution."""
         from plant3dvision.tasks.calibration import ExtrinsicCalibrationExists
@@ -166,7 +170,8 @@ class Undistort(FileByFileTask):
         images_files = images_fileset.get_files(query=self.query)
         output_fileset = self.output().get()
 
-        for fi in tqdm(images_files, unit="file"):
+        # Worker function executed in parallel
+        def _process_file(fi):
             # Add calibration metadata to image
             if poses is not None:
                 fi.set_metadata({'calibrated_pose': poses[fi.id]})
@@ -181,6 +186,16 @@ class Undistort(FileByFileTask):
                 m = fi.get_metadata()
                 outm = outfi.get_metadata()
                 outfi.set_metadata({**m, **outm})
+            return outfi
+
+        if not self.parallel:
+            self.n_workers = 1
+
+        # Parallel execution using ThreadPoolExecutor
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.n_workers) as executor:
+            # tqdm wraps the iterator to show progress
+            list(tqdm(executor.map(_process_file, images_files),
+                      total=len(images_files), unit="file"))
 
     def f(self, fi, outfs):
         """Undistort an input image using camera calibration parameters.
