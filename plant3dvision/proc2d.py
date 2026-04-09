@@ -17,10 +17,6 @@ from skimage.morphology import binary_dilation
 from skimage.morphology import disk
 from skimage.color import convert_colorspace
 
-from romitask.log import get_logger
-
-logger = get_logger(__name__)
-
 EPS = 1e-9
 
 
