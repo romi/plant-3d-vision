@@ -9,7 +9,6 @@ import sys
 import luigi
 import numpy
 import numpy as np
-from tqdm import tqdm
 
 import plantdb.commons.db
 from plant3dvision import proc2d
@@ -21,11 +20,12 @@ from romitask.log import get_logger
 from romitask.task import FileByFileTask
 from romitask.task import ImagesFilesetExists
 from romitask.task import ModelFilesetExists
+from romitask.task import ParallelFileTask
 
 logger = get_logger(__name__, log_level="INFO")
 
 
-class Undistort(FileByFileTask):
+class Undistort(ParallelFileTask):
     """Image distortion correction using camera intrinsic parameters.
 
     This class implements a task that corrects image distortion using camera calibration 
@@ -44,7 +44,7 @@ class Undistort(FileByFileTask):
     query : luigi.DictParameter, optional
         A filtering dictionary to apply on input ```Fileset`` metadata.
         Key(s) and value(s) must be found in metadata to select the ``File``.
-        By default, no filtering is performed, all inputs are used.
+        By default, no filtering is performed; all inputs are used.
     camera_model_src : luigi.Parameter, optional
         Source of the camera model, can be in ['Colmap', 'IntrinsicCalibration', 'ExtrinsicCalibration']
     camera_model : luigi.Parameter, optional
@@ -134,6 +134,7 @@ class Undistort(FileByFileTask):
         This method applies camera distortion correction to each image in the input fileset
         using either intrinsic or extrinsic calibration parameters. It preserves all original
         image metadata and adds calibration metadata to the processed images.
+        This method delegates the heavy lifting to the parent `ParallelFileTask` implementation.
 
         Raises
         ------
@@ -166,37 +167,13 @@ class Undistort(FileByFileTask):
             from plant3dvision.camera import get_camera_arrays_from_params
             colmap_camera, poses = self.input()['camera']
 
-        # Process each image in the input fileset
-        images_fileset = self.input()["images"].get()
-        images_files = images_fileset.get_files(query=self.query)
-        output_fileset = self.output().get()
+        # Store these for use in the f method
+        self._poses = poses
+        self._colmap_camera = colmap_camera
+        self._camera_model_src = self.camera_model_src
 
-        # Worker function executed in parallel
-        def _process_file(fi):
-            # Add calibration metadata to image
-            if poses is not None:
-                fi.set_metadata({'calibrated_pose': poses[fi.id]})
-            if str(self.camera_model_src).lower() == 'intrinsiccalibration':
-                fi.set_metadata({'colmap_camera': colmap_camera})
-            elif str(self.camera_model_src).lower() == 'extrinsiccalibration':
-                fi.set_metadata({'colmap_camera': colmap_camera[fi.id]})
-
-            # Process the image and preserve metadata
-            outfi = self.f(fi, output_fileset)
-            if outfi is not None:
-                m = fi.get_metadata()
-                outm = outfi.get_metadata()
-                outfi.set_metadata({**m, **outm})
-            return outfi
-
-        if not self.parallel:
-            self.n_workers = 1
-
-        # Parallel execution using ThreadPoolExecutor
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.n_workers) as executor:
-            # tqdm wraps the iterator to show progress
-            list(tqdm(executor.map(_process_file, images_files),
-                      total=len(images_files), unit="file"))
+        # Let the parent class handle the parallel execution
+        super().run(self.input()['images'].get(), self.output().get())
 
     def f(self, fi, outfs):
         """Undistort an input image using camera calibration parameters.
@@ -245,6 +222,16 @@ class Undistort(FileByFileTask):
             # Save result and add metadata
             outfi = outfs.create_file(fi.id)
             io.write_image(outfi, img)
+
+            # Add special metadata based on camera model source
+            if hasattr(self, '_poses') and self._poses is not None:
+                fi.set_metadata({'calibrated_pose': self._poses[fi.id]})
+            if hasattr(self, '_colmap_camera'):
+                if str(self._camera_model_src).lower() == 'intrinsiccalibration':
+                    fi.set_metadata({'colmap_camera': self._colmap_camera})
+                elif str(self._camera_model_src).lower() == 'extrinsiccalibration':
+                    fi.set_metadata({'colmap_camera': self._colmap_camera[fi.id]})
+
             md = {'upstream_task': str(self.upstream_task), "Camera model source": str(self.camera_model_src)}
             outfi.set_metadata(md)
             return outfi
@@ -253,7 +240,7 @@ class Undistort(FileByFileTask):
             return None
 
 
-class Masks(FileByFileTask):
+class Masks(ParallelFileTask):
     """Compute binary masks from RGB images using various filtering methods.
 
     This task applies image transformation techniques to RGB images followed by
@@ -419,6 +406,17 @@ class Masks(FileByFileTask):
             md.update({'query': jsonify(self.query)})
         outfi.set_metadata({self.get_task_family(): md})
         return outfi
+
+    def run(self):
+        """Run the task using the parallel execution framework.
+
+        This method delegates the heavy lifting to the parent `ParallelFileTask` implementation.
+        It retrieves the input ``Fileset`` and output ``FilesetTarget`` from the Luigi task
+        infrastructure and then calls ``ParallelFileTask.run`` which iterates over
+        all input files, applying the `f` function to generate binary mask images.
+        """
+        # Let the parent class handle the parallel execution
+        super().run(self.input().get(), self.output().get())
 
 
 class Segmentation2D(FileByFileTask):
