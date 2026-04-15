@@ -2,19 +2,23 @@
 # Type of matcher to use with COLMAP
 # Options: "exhaustive" (matches every image against every other) or "sequential" (matches successive images)
 matcher = "exhaustive"  # Default: "exhaustive"
-# Align and scale point clouds using CNC coordinates
-align_pcd = true  # Default: true
 # Camera model to use for reconstruction
 # Options: "SIMPLE_RADIAL", "RADIAL", "OPENCV"
 camera_model = "SIMPLE_RADIAL"  # Default: "SIMPLE_RADIAL"
-# Use GPU for feature extraction and matching when available
-use_gpu = true  # Default: true
 # Whether images were taken with a single camera (shared intrinsics)
 single_camera = true  # Default: true
-# Maximum alignment error allowed during model alignment
-alignment_max_error = 10  # Default: 10
-# Maximum 3D Euclidean distance to CNC pose to validate COLMAP pose estimation
-distance_threshold = 6.0  # Default: 6.0mm
+# Whether to perform the verification of the estimated camera extrinsic
+qc_check = true
+# Median absolute deviation factor to detect outlier camera pose
+mad_factor = 3.0
+# Maximum distance to CNC pose to validate COLMAP pose estimation
+distance_threshold = 3.0  # Default: 3.0mm
+# Maximum distance to fixed CNC pose to validate COLMAP pose estimation
+fixed_distance_threshold = 1.0  # Default: 1.0mm
+# Maximum angular distance to CNC pose to validate COLMAP pose estimation
+angle_threshold = 5.0  # Default: 5.0°
+# Maximum angular distance to fixed CNC pose to validate COLMAP pose estimation
+fixed_angle_threshold = 3.5  # Default: 3.5°
 # Maximum blind angle tolerated for camera pose quality control
 max_blind_angle = 20.0  # Default: 20.0 (degrees)
 # Number of retries if the task fails
