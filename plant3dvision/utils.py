@@ -392,8 +392,8 @@ def signed_angular_distance(angle1, angle2):
     The sign indicates the direction you must rotate from *angle1* to reach
     *angle2* using the shortest path:
 
-    * **>0** – rotate counter‑clockwise (mathematical positive direction)
-    * **<0** – rotate clockwise
+    * **>0** - rotate counter‑clockwise (mathematical positive direction)
+    * **<0** - rotate clockwise
 
     The magnitude is always ≤180°.  The result is in the range ``(-180, 180]``.
 
@@ -425,7 +425,7 @@ def signed_angular_distance(angle1, angle2):
     a1 = angle1 % 360
     a2 = angle2 % 360
 
-    # Compute raw difference (target – source)
+    # Compute raw difference (target - source)
     diff = a2 - a1
 
     # Wrap it into (-180, 180] using modular arithmetic

@@ -417,7 +417,7 @@ class ReconstructionExplorer(QMainWindow):
         if self._vol is None:
             return
 
-        # Ensure min ≤ max – Qt will already clamp the values, but we keep it safe
+        # Ensure min ≤ max - Qt will already clamp the values, but we keep it safe
         min_val = self._vol_opacity_min_spin.value()
         max_val = self._vol_opacity_max_spin.value()
         if min_val > max_val:
@@ -781,7 +781,7 @@ class ReconstructionExplorer(QMainWindow):
         if self._opacity_range_timer.isActive():
             self._opacity_range_timer.stop()
 
-        # Close the DB connection – this releases any background thread
+        # Close the DB connection - this releases any background thread
         try:
             if hasattr(self, "_db") and self._db is not None:
                 self._db.disconnect()
