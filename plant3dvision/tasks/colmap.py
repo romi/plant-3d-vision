@@ -695,16 +695,40 @@ class Colmap(RomiTask):
         A filtering dictionary to apply on input ```Fileset`` metadata.
         Key(s) and value(s) must be found in metadata to select the ``File``.
         By default, no filtering is performed, all inputs are used.
+    colmap_exe : luigi.Parameter, optional
+        The colmap "executable" to use. Can be "colmap" to use an installed colmap binary.
+        Else should be the name of a docker image with colmap installed.
     matcher : luigi.Parameter, optional
         Type of matcher to use, either "exhaustive" or "sequential".
         *Exhaustive matcher* tries to match every other image.
         *Sequential matcher* tries to match successive image, this requires a sequential file name ordering.
         Defaults to "exhaustive".
+    use_gpu : luigi.BoolParameter
+        Whether to use GPU for feature extraction (feature_extractor) and matching (*_matcher).
+        Defaults to ``True``.
+    single_camera : luigi.BoolParameter
+        Whether there is only one camera. Defaults to ``True``.
     compute_dense : luigi.BoolParameter, optional
         Whether to run the dense point cloud reconstruction. Defaults to ``False``.
+    alignment_max_error : luigi.IntParameter
+        Maximum alignment error allowed during ``model_aligner`` step.
+        Defaults to ``10``.
     align_pcd : luigi.BoolParameter, optional
         Whether to "world-align" (scale and geo-reference) the reconstructed model using 'calibrated' or 'estimated' poses.
         Default to ``True``.
+    camera_model : luigi.Parameter, optional
+        If no intrinsic or extrinsic calibration scan is defined, this select the camera model to estimate by COLMAP.
+        Valid models are in {'SIMPLE_RADIAL', 'RADIAL', 'OPENCV'}.
+        If an ``intrinsic_calibration_scan_id`` is specified, this select the intrinsic parameters to set in COLMAP.
+        If an ``extrinsic_calibration_scan_id`` is specified and `use_calibration_camera` is ``True``, this does nothing!
+        Defaults to "SIMPLE_RADIAL" camera model.
+    bounding_box : luigi.DictParameter, optional
+        Volume dictionary used to crop the point cloud after colmap reconstruction and keep only points associated with the plant.
+        By default, it uses the scanner workspace defined in the 'images' fileset.
+        Defined as `{'x': [int, int], 'y': [int, int], 'z': [int, int]}`.
+        Defaults to NO bounding-box.
+    cli_args : luigi.DictParameter, optional
+        Dictionary of arguments to pass to colmap command lines, empty by default.
     intrinsic_calibration_scan_id : luigi.Parameter, optional
         If set, get the intrinsic camera parameters from this scan dataset.
         These intrinsic parameters will be set in COLMAP ``feature_extractor`` and will not be refined by ``mapper``.
@@ -722,29 +746,18 @@ class Colmap(RomiTask):
     use_calibration_camera : luigi.BoolParameter, optional
         If ``True``, use the intrinsic parameters from ``extrinsic_calibration_scan_id``.
         Else, estimate the intrinsic parameters automatically.
-    camera_model : luigi.Parameter, optional
-        If no intrinsic or extrinsic calibration scan is defined, this select the camera model to estimate by COLMAP.
-        Valid models are in {'SIMPLE_RADIAL', 'RADIAL', 'OPENCV'}.
-        If an ``intrinsic_calibration_scan_id`` is specified, this select the intrinsic parameters to set in COLMAP.
-        If an ``extrinsic_calibration_scan_id`` is specified and `use_calibration_camera` is ``True``, this does nothing!
-        Defaults to "SIMPLE_RADIAL" camera model.
-    use_gpu : luigi.BoolParameter
-        Whether to use GPU for feature extraction (feature_extractor) and matching (*_matcher).
-        Defaults to ``True``.
-    single_camera : luigi.BoolParameter
-        Whether there is only one camera. Defaults to ``True``.
-    alignment_max_error : luigi.IntParameter
-        Maximum alignment error allowed during ``model_aligner`` step.
-        Defaults to ``10``.
-    bounding_box : luigi.DictParameter, optional
-        Volume dictionary used to crop the point cloud after colmap reconstruction and keep only points associated with the plant.
-        By default, it uses the scanner workspace defined in the 'images' fileset.
-        Defined as `{'x': [int, int], 'y': [int, int], 'z': [int, int]}`.
-        Defaults to NO bounding-box.
-    cli_args : luigi.DictParameter, optional
-        Dictionary of arguments to pass to colmap command lines, empty by default.
+    qc_check : float, optional
+        Whether to perform the verification of the estimated camera extrinsic
+    mad_factor : float, optional
+        Median absolute deviation factor to detect outlier camera pose
     distance_threshold : float, optional
-        Maximum allowed distance between estimated and calibrated poses, defaults to 6.0
+        Maximum distance to CNC pose to validate COLMAP pose estimation
+    fixed_distance_threshold : float, optional
+        Maximum distance to fixed CNC pose to validate COLMAP pose estimation
+    angle_threshold : float, optional
+        Maximum angular distance to CNC pose to validate COLMAP pose estimation
+    fixed_angle_threshold : float, optional
+        Maximum angular distance to fixed CNC pose to validate COLMAP pose estimation
     max_blind_angle : float, optional
         Maximum allowed blind angle for camera poses, defaults to 20.0
     retry_count : int, optional
@@ -822,8 +835,8 @@ class Colmap(RomiTask):
     max_blind_angle = luigi.FloatParameter(default=30.)
 
     # Retry parameters
-    retry = 0
     retry_count = luigi.IntParameter(default=10)
+    retry = 0
 
     def _workspace_as_bounding_box(self):
         """Use the scanner workspace as bounding-box.

@@ -41,6 +41,12 @@ class Undistort(ParallelFileTask):
     scan_id : luigi.Parameter, optional
         The dataset id (scan name) to use to create the ``FilesetTarget``.
         If unspecified (default), the current active scan will be used.
+    n_workers : luigi.IntParameter, optional
+        Number of worker threads to use for parallel processing.
+        Defaults to ``-1``, which uses the default ``ThreadPoolExecutor`` behavior.
+    parallel : luigi.BoolParameter, optional
+        Flag to enable/disable parallel processing.
+        Defaults to ``True``.
     query : luigi.DictParameter, optional
         A filtering dictionary to apply on input ```Fileset`` metadata.
         Key(s) and value(s) must be found in metadata to select the ``File``.
@@ -96,9 +102,6 @@ class Undistort(ParallelFileTask):
     camera_model = luigi.Parameter(default="SIMPLE_RADIAL")  # Camera model type for intrinsic calibration
     intrinsic_calib_scan_id = luigi.Parameter(default="")  # ID of scan containing intrinsic calibration
     extrinsic_calib_scan_id = luigi.Parameter(default="")  # ID of scan containing extrinsic calibration
-
-    parallel = luigi.BoolParameter(default=True)
-    n_workers = luigi.IntParameter(default=None)
 
     def requires(self):
         """Determines the dependencies required for the task execution."""
@@ -262,6 +265,12 @@ class Masks(ParallelFileTask):
         A filtering dictionary to apply on input ```Fileset`` metadata.
         Key(s) and value(s) must be found in metadata to select the ``File``.
         By default, no filtering is performed; all inputs are used.
+    n_workers : luigi.IntParameter, optional
+        Number of worker threads to use for parallel processing.
+        Defaults to ``-1``, which uses the default ``ThreadPoolExecutor`` behavior.
+    parallel : luigi.BoolParameter, optional
+        Flag to enable/disable parallel processing.
+        Defaults to ``True``.
     type : luigi.Parameter, optional
         The type of image tranformation algorithm to use prior to masking by thresholding.
         Can be "linear" or "excess_green". Defaults to `'linear'`.

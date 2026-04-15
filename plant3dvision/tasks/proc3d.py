@@ -34,6 +34,8 @@ class PointCloud(RomiTask):
         The upstream task providing the input data for this task. Defaults to ``Voxels``.
     level_set_value : luigi.FloatParameter, optional
         Value used to define the level set for point cloud generation. Default is ``1.0``.
+    missing_images_threshold : luigi.IntParameter, optional
+        Threshold for the number of missing images allowed in the reconstructed volume.
     labels : luigi.ListParameters, optional
         List of class labels to process. An empty list (default) processes a single unlabeled volume.
         A single label processes that specific class. Multiple labels trigger multi-class processing.
@@ -785,7 +787,7 @@ class CurveSkeleton(RomiTask):
             # Read the triangular mesh from input file
             mesh = io.read_triangle_mesh(self.input_file())
             # Generate curve skeleton from mesh
-            out = proc3d.skeletonize(mesh)
+            out = proc3d.mesh_to_skeleton(mesh)
         else:
             # Raise error if upstream task is not supported
             logger.error(f"No implementation to compute `{task_name}` from `{uptask_name}`.")
