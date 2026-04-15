@@ -10,6 +10,7 @@ use_gpu = true
 single_camera = true
 alignment_max_error = 10
 distance_threshold = 6  # maximum allowed Euclidean distance from CNC pose
+colmap_exe = "colmap"
 
 [Undistort]
 upstream_task = "ImagesFilesetExists"

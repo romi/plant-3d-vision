@@ -146,11 +146,11 @@ fi
 
 # - Run the pipeline, up to the selected task, using the geometric workflow:
 # 1. Clean the dataset:
-romi_run_task Clean ${dataset} --config ${cfg}
+romi_run_task Clean ${dataset} --config ${cfg} --db-user admin --db-password
 
 # 2. Run the pipeline, up to the selected task:
-echo "romi_run_task ${task} ${dataset} --config ${cfg} --log-level ${log_level}"
-romi_run_task ${task} ${dataset} --config ${cfg} --log-level ${log_level}
+echo "romi_run_task ${task} ${dataset} --config ${cfg} --log-level ${log_level} --db-user admin --db-password"
+romi_run_task ${task} ${dataset} --config ${cfg} --log-level ${log_level} --db-user admin --db-password
 
 # 3. Print information about tested task(s):
 if [ "${task}" = "AnglesAndInternodes" ]; then
