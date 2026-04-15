@@ -182,7 +182,7 @@ def pcd2vol(pcd, voxel_size, zero_padding=0):
     return vol, origin
 
 
-def skeletonize(mesh):
+def mesh_to_skeleton(mesh):
     """Use CGAL to create a skeleton from a triangular mesh.
 
     Parameters
@@ -198,7 +198,7 @@ def skeletonize(mesh):
     Example
     -------
     >>> import os
-    >>> from plant3dvision.proc3d import skeletonize
+    >>> from plant3dvision.proc3d import mesh_to_skeleton
     >>> from plantdb.commons.io import read_triangle_mesh
     >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plantdb.commons.fsdb.core import FSDB
@@ -209,7 +209,7 @@ def skeletonize(mesh):
     >>> fs = scan.get_fileset(mesh_fs_id)
     >>> f = fs.get_file('TriangleMesh')
     >>> tmesh = read_triangle_mesh(f)
-    >>> skel = skeletonize(tmesh)
+    >>> skel = mesh_to_skeleton(tmesh)
     >>> print(f"There is {len(skel['points'])} points and {len(skel['lines'])} lines in the skeleton.")
     >>> db.disconnect()
     >>> draw_skeleton(skel)
@@ -1043,7 +1043,6 @@ def backproject_points(points, K, rot, tvec):
     x = x / x[2, :][np.newaxis, :]
     # Return only x,y coordinates (pixel coordinates) and transpose back to (N,2) shape
     return x[:2, :].transpose()
-
 
 
 def project_camera_plane(K, rot, tvec, X0, n):

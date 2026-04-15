@@ -57,7 +57,7 @@ class TestProc2D(unittest.TestCase):
         cylinder_mesh_file = abspath(join(parent_dir, "testdata", "cylinder.ply"))
         
         mesh = open3d.io.read_triangle_mesh(cylinder_mesh_file)
-        skel = proc3d.skeletonize(mesh)
+        skel = proc3d.mesh_to_skeleton(mesh)
         assert(len(skel["points"]) > 0)
         assert(len(skel["lines"]) > 0)
 
