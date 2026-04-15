@@ -185,6 +185,79 @@ def o3d_mesh_to_polydata(triangle_mesh: o3d.geometry.TriangleMesh) -> pv.PolyDat
     return pv.PolyData(vertices, faces)
 
 
+def skeleton_graph_to_polydata(skel: dict) -> pv.PolyData:
+    """
+    Convert a skeleton graph into a `pyvista.PolyData` object.
+
+    Parameters
+    ----------
+    skel : dict
+        Skeleton dictionary with keys ``"points"`` and ``"lines"``.
+
+    Returns
+    -------
+    pyvista.PolyData
+        PolyData containing all skeleton vertices and poly‑line cells for the branches.
+
+    See Also
+    --------
+    plant3dvision.proc3d.mesh_to_skeleton
+    plant3dvision.skeletonize.volume_to_skeleton
+
+    Example
+    -------
+    >>> from plant3dvision.visu.pyvista import skeleton_graph_to_polydata
+    >>> from plantdb.commons.io import read_json
+    >>> from plantdb.server.core.utils import compute_fileset_matches
+    >>> from plantdb.commons.fsdb.core import FSDB
+    >>> db = FSDB('/data/ROMI/test_owner')
+    >>> db.connect()
+    >>> db.login('admin', 'admin')
+    >>> scan = db.get_scan("Col-0_E1_1")
+    >>> skel_fs_id = compute_fileset_matches(scan)["CurveSkeleton"]
+    >>> fs = scan.get_fileset(skel_fs_id)
+    >>> f = fs.get_file('CurveSkeleton')
+    >>> skel = read_json(f)
+    >>> skel_pd = skeleton_graph_to_polydata(skel)
+    >>> import pyvista as pv
+    >>> plotter = pv.Plotter()
+    >>> _actor = plotter.add_mesh(skel_pd, color='tomato', line_width=2)
+    >>> _grid = plotter.show_grid()
+    >>> plotter.show()
+    """
+    # 1. Gather every unique voxel coordinate (z, y, x) from points + lines
+    all_coords: list[tuple[int, int, int]] = list(map(tuple, skel.get("points", {})))
+
+    # Map coordinate -> contiguous point index
+    coord_to_idx: dict[tuple[int, int, int], int] = {c: i for i, c in enumerate(sorted(all_coords))}
+
+    # 2. Build the point array, convert to (z, y, z) to (x, y, z)
+    points_list = []
+    for (z, y, x) in sorted(coord_to_idx, key=coord_to_idx.get):
+        points_list.append([x, y, z])
+    points = np.array(points_list, dtype=np.float32)
+
+    # 3. Build the poly‑line connectivity array
+    lines_flat: list[int] = []
+    for start_id, end_id in skel.get("lines", []):
+        path = [all_coords[start_id], all_coords[end_id]]
+        # Ensure the path is ordered; convert each voxel to its point index
+        idx_seq = [coord_to_idx[tuple(coord)] for coord in path]
+        # Poly‑line cell definition: <n_pts> <pt_id_0> ... <pt_id_n‑1>
+        lines_flat.append(len(idx_seq))
+        lines_flat.extend(idx_seq)
+
+    # Convert to NumPy array of type int
+    if lines_flat:
+        lines = np.array(lines_flat, dtype=np.int64)
+    else:
+        # Empty skeleton - create an empty PolyData
+        lines = np.empty((0,), dtype=np.int64)
+
+    # 4. Create the PolyData object
+    return pv.PolyData(points, lines=lines)
+
+
 def plot_image_and_volume(image, volume, **kwargs):
     """Visualize a 2‑D RGB image together with a 3‑D volumetric reconstruction.
 
@@ -558,6 +631,60 @@ def plot_image_and_mesh(image, triangular_mesh, **kwargs):
     cam.disable_parallel_projection()
 
     if kwargs.get('fname', None):
+        plotter.off_screen = True
+        plotter.screenshot(kwargs['fname'], scale=kwargs.get('scale', 1.0))
+        plotter.close()
+    else:
+        plotter.show()
+
+
+def plot_skeleton(skel: dict, **kwargs) -> None:
+    """
+    Visualize a skeleton graph using PyVista.
+
+    Parameters
+    ----------
+    skel : dict
+        Skeleton dictionary returned by :func:`volume_to_skeleton_graph`.
+    **kwargs
+        Additional keyword arguments passed to ``plotter.add_mesh`` such as
+        ``color``, ``line_width``, ``opacity`` or ``show_edges``. They are also
+        forwarded to the optional screenshot handling (``fname`` and ``scale``).
+
+    Example
+    -------
+    >>> from plant3dvision.visu.pyvista import plot_skeleton
+    >>> from plantdb.commons.io import read_json
+    >>> from plantdb.server.core.utils import compute_fileset_matches
+    >>> from plantdb.commons.fsdb.core import FSDB
+    >>> db = FSDB('/data/ROMI/test_owner')
+    >>> db.connect()
+    >>> db.login('admin', 'admin')
+    >>> scan = db.get_scan("Col-0_E1_1")
+    >>> skel_fs_id = compute_fileset_matches(scan)["CurveSkeleton"]
+    >>> fs = scan.get_fileset(skel_fs_id)
+    >>> f = fs.get_file('CurveSkeleton')
+    >>> skel = read_json(f)
+    >>> plot_skeleton(skel, color='tomato', line_width=2)
+    >>> db.disconnect()
+    """
+    poly = skeleton_graph_to_polydata(skel)  # Build the PolyData
+
+    plotter = pv.Plotter()
+    # Default visual parameters - can be overridden via **kwargs
+    mesh_kwargs = dict(
+        color=kwargs.pop('color', 'white'),
+        line_width=kwargs.pop('line_width', 2),
+        opacity=kwargs.pop('opacity', 1.0),
+        render_lines_as_tubes=kwargs.pop('render_lines_as_tubes', True),
+    )
+    mesh_kwargs.update(kwargs)  # any extra kwargs go to add_mesh
+
+    _actor = plotter.add_mesh(poly, **mesh_kwargs)
+
+    plotter.show_grid()
+    # Screenshot handling (mirrors the pattern used in other helpers)
+    if kwargs.get('fname'):
         plotter.off_screen = True
         plotter.screenshot(kwargs['fname'], scale=kwargs.get('scale', 1.0))
         plotter.close()
