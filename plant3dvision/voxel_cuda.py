@@ -179,6 +179,43 @@ class Backprojection:
         # Log memory usage
         self._log_memory_usage()
 
+    def _cuda_compute_capability_flag(self):
+        """
+        Return a CUDA architecture flag that is known to the installed NVCC.
+
+        It queries the current device for its compute capability and, if that capability
+        is newer than what NVCC supports, it falls back to a safe architecture (e.g. sm_80)..
+        """
+        # Get the first CUDA device (you can adapt this if you have multiple)
+        dev = cuda.Device(0)
+        # compute_capability returns a tuple like (8, 9)
+        major, minor = dev.compute_capability()
+        # Build the sm_xx string
+        sm_target = f"sm_{major}{minor}"
+        known_arches = {
+            (12, 0): ["sm_89", "sm_86", "sm_80"],  # CUDA 12.0 supports 8.9
+            (11, 8): ["sm_86", "sm_80"],  # CUDA 11.8 supports up to 8.6
+            (11, 0): ["sm_80", "sm_75", "sm_70"],  # older toolkits
+        }
+
+        # Find the highest supported arch for the nvcc version we have
+        # The nvcc major/minor can be read from the driver
+        nvcc_version = cuda.get_version()  # (major, minor)
+        supported = known_arches.get(nvcc_version, [])
+        if sm_target not in supported:
+            # Fallback to the first known arch for this toolkit (or sm_80 as a generic safe choice)
+            fallback_arch = supported[0] if supported else "sm_80"
+            logger.warning(
+                f"Requested architecture {sm_target} not supported by installed CUDA {nvcc_version}. "
+                f"Falling back to {fallback_arch}."
+            )
+            arch_flag = fallback_arch
+        else:
+            arch_flag = sm_target
+
+        return arch_flag
+
+
     def _compile_kernels(self):
         """
         Compile and load the necessary CUDA kernels for processing.
@@ -201,7 +238,7 @@ class Backprojection:
         """
         try:
             # Compile the CUDA code using PyCUDA's SourceModule
-            self.mod = SourceModule(cuda_code)
+            self.mod = SourceModule(cuda_code, arch=self._cuda_compute_capability_flag())
             # Get functions from the compiled module
             self.average_kernel = self.mod.get_function("average_kernel")
             self.carve_kernel = self.mod.get_function("carve_kernel")
