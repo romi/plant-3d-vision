@@ -46,10 +46,3 @@ use_colmap_poses = "False"
 
 [PointCloud]
 level_set_value = 1.0
-
-[Visualization]
-max_image_size = 1500
-max_pcd_size = 10000000
-thumbnail_size = 150
-pcd_source = "vox2pcd"
-mesh_source = "delaunay"
