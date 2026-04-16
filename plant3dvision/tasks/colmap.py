@@ -17,6 +17,7 @@ from plant3dvision.camera import format_camera_kwargs
 from plant3dvision.camera import format_camera_params
 from plant3dvision.camera import get_camera_kwargs_from_images_metadata
 from plant3dvision.camera import get_colmap_cameras_from_calib_scan
+from plant3dvision.colmap import COLMAP_EXE
 from plant3dvision.colmap import ColmapRunner
 from plant3dvision.colmap import estimate_camera_pose
 from plant3dvision.filenames import COLMAP_CAMERAS_ID
@@ -698,6 +699,8 @@ class Colmap(RomiTask):
     colmap_exe : luigi.Parameter, optional
         The colmap "executable" to use. Can be "colmap" to use an installed colmap binary.
         Else should be the name of a docker image with colmap installed.
+        Default to ``plant3dvision.colmap.COLMAP_EXE``, that is the `'COLMAP_EXE'` environment variable
+        or ``'plant3dvision.colmap.DEFAULT_COLMAP'``
     matcher : luigi.Parameter, optional
         Type of matcher to use, either "exhaustive" or "sequential".
         *Exhaustive matcher* tries to match every other image.
@@ -809,7 +812,7 @@ class Colmap(RomiTask):
     """
     upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)  # override default attribute from ``RomiTask``
     query = luigi.DictParameter(default={})
-    colmap_exe = luigi.Parameter(default="roboticsmicrofarms/colmap:3.8")
+    colmap_exe = luigi.Parameter(default=COLMAP_EXE)
     # ColmapRunner options
     matcher = luigi.Parameter(default="exhaustive")
     use_gpu = luigi.BoolParameter(default=True)
