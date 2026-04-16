@@ -10,6 +10,7 @@ invert = true
 [PointCloud]
 upstream_task = "Voxels"
 level_set_value = 0.0
+missing_images_threshold = 0
 
 [TriangleMesh]
 upstream_task = "PointCloud"
@@ -19,13 +20,6 @@ depth = 9  # depth parameter used by Open3D to mesh the point cloud
 
 [CurveSkeleton]
 upstream_task = "TriangleMesh"
-
-[RefineSkeleton]
-upstream_task = "CurveSkeleton"
-upstream_pcd = "PointCloud"
-alpha = 5.0
-beta = 5.0
-knn_mst = true
 
 [TreeGraph]
 upstream_task = "RefineSkeleton"
@@ -39,19 +33,6 @@ stem_axis_inverted = false
 organ_type = "fruit"
 node_sampling_dist = 2  # ~9x smaller than real plants
 min_fruit_size = 0.7  # ~9x smaller than real plants
-
-[Visualization]
-upstream_images = "ImagesFilesetExists"
-upstream_point_cloud = "PointCloud"
-upstream_mesh = "TriangleMesh"
-upstream_skeleton = "CurveSkeleton"
-upstream_angles = "AnglesAndInternodes"
-upstream_virtualplantobj = "VirtualPlantObj"
-query = "{\"channel\":\"rgb\"}"  # default is an empty dict '{}'
-max_image_size = 1500
-max_point_cloud_size = 10000000
-thumbnail_size = 150
-use_colmap_poses = false
 
 # --------------- Evaluation --------------- #
 [PointCloudGroundTruth]
