@@ -1,16 +1,20 @@
 [Colmap]
 upstream_task = "ImagesFilesetExists"
+# colmap_exe = "none"  # Let the default choice work, will be 'colmap' in docker container
 matcher = "exhaustive"
-camera_model = "SIMPLE_RADIAL"
-intrinsic_calibration_scan_id = ""  # use a dataset with calibrated intrinsic camera poses
-extrinsic_calibration_scan_id = ""  # use a dataset with calibrated extrinsic camera poses
-compute_dense = false
-align_pcd = true
 use_gpu = true
 single_camera = true
+compute_dense = false
 alignment_max_error = 10
-distance_threshold = 6  # maximum allowed Euclidean distance from CNC pose
-colmap_exe = "colmap"
+align_pcd = true
+camera_model = "SIMPLE_RADIAL"
+qc_check = true
+mad_factor = 3.0
+distance_threshold = 3.0
+fixed_distance_threshold = 1.0
+angle_threshold = 5.0
+fixed_angle_threshold = 3.5
+max_blind_angle = 20.0
 
 [Undistort]
 upstream_task = "ImagesFilesetExists"
@@ -20,16 +24,18 @@ query = "{\"channel\":\"rgb\", \"pose_estimation\":\"correct\"}"  # RGB images w
 upstream_task = "Undistort"
 query = "{\"channel\":\"rgb\"}"
 type = "linear"
-parameters = "[0, 1, 0]"
-dilation = 1
-threshold = 0.2
+colorspace = "RGB"
+parameters = "[0.2, 1, 0.1]"
+min_threshold = 0.2 # Default: 0.0
+max_threshold = 1.0 # Default: 0.4
+dilation = 1 # Default: 0 (no dilation)
 
 [Voxels]
 upstream_task = "Masks"
 upstream_colmap = "Colmap"
 camera_metadata = "colmap_camera"
-voxel_size = 0.5
-type = "carving"
+voxel_size = 0.6
+type = "averaging"
 [Voxels.bounding_box]
 x = [300, 450]
 y = [300, 450]
@@ -37,7 +43,7 @@ z = [-175, 105]
 
 [PointCloud]
 upstream_task = "Voxels"
-level_set_value = 1.0
+missing_images_threshold = 2  # Default: 2
 
 [TriangleMesh]
 upstream_task = "PointCloud"
