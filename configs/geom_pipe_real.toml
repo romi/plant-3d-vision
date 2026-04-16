@@ -42,13 +42,15 @@ query = "{\"channel\":\"rgb\"}"  # Default: "{\"channel\":\"rgb\"}"  (only RGB i
 # The type of image transformation algorithm to use prior to masking
 # Options: "linear" (linear combination of RGB channels), "excess_green" (excess green index)
 type = "linear"  # Default: "linear"
-# Linear coefficients to apply to each RGB channel of the original image
+# The colorspace to use for the filtering
+# Options: "RGB", "HSV", "YCbCr"
+colorspace = "RGB"  # Default: "RGB"
+# Linear coefficients to apply to each channel of the original image in the selected colorspace
 # Used only when type="linear"
-parameters = "[0.2, 1, 0.1]"
+parameters = "[0.2, 1, 0.1]"  # Default: [0, 1, 0] (using only the green channel in RGB)
 # Binarization threshold applied after transforming the image
-threshold = 0.15 # Default: 0.3
-# Dilation factor for the binary mask images (morphological dilation)
-dilation = 1 # Default: 0 (no dilation)
+min_threshold = 0.2 # Default: 0.0
+max_threshold = 1.0 # Default: 0.4
 
 [Voxels]
 # Task that provides the masked images as input
@@ -74,8 +76,6 @@ z = [-125, 100]
 [PointCloud]
 # Task that provides the voxel array as input
 upstream_task = "Voxels"  # Default: "Voxels"
-# Distance of the level set on which the points are sampled
-level_set_value = 1.0  # Default: 1.0
 # Threshold for the number of missing images allowed in the reconstruction
 missing_images_threshold = 2  # Default: 2
 
