@@ -8,11 +8,15 @@ plant3dvision.proc3d
 This module contains all functions for processing of 3D data.
 
 """
+import time
+
 import networkx as nx
 import numpy as np
 import open3d as o3d
+from scipy.ndimage import binary_erosion
 from scipy.ndimage.filters import gaussian_filter
-from scipy.ndimage.morphology import distance_transform_edt
+from scipy.ndimage.morphology import distance_transform_edt, binary_dilation
+from skimage import measure
 from skimage.exposure import rescale_intensity
 from tqdm import tqdm
 
@@ -786,6 +790,7 @@ def vol2pcd(volume, origin, voxel_size, level_set_value=0):
     >>> from plantdb.commons.test_database import test_database
     >>> db = test_database()
     >>> db.connect()
+    >>> db.login('admin', 'admin')
     >>> scan = db.get_scan("real_plant_analyzed")
     >>> vol_fs_id = compute_fileset_matches(scan)["Voxels"]
     >>> vol_fs = scan.get_fileset(vol_fs_id)
@@ -799,7 +804,6 @@ def vol2pcd(volume, origin, voxel_size, level_set_value=0):
     >>> o3d.visualization.draw_geometries([pcd])
     >>> db.disconnect()
     """
-    import time
     start_time = time.time()
 
     step_start = time.time()
@@ -882,6 +886,105 @@ def vol2pcd(volume, origin, voxel_size, level_set_value=0):
 
     logger.info(f"Total execution time: {time.time() - start_time:.2f}s")
     return pcd
+
+def vol2pcd_mc(volume, origin, voxel_size, level_set_value=0):
+    """
+    Generate a point cloud and triangle mesh from a binary volume using marching cubes.
+
+    This function converts a 3D binary volume into a point cloud and a triangle mesh
+    by applying the marching cubes algorithm. The resulting point cloud and mesh
+    are in world coordinates, accounting for voxel size and origin. Optionally, a
+    level set value can be applied to dilate the input volume before processing.
+
+    Parameters
+    ----------
+    volume : numpy.ndarray
+        A 3D binary volume array representing the input data.
+    origin : Sequence[float]
+        The origin of the volume in world coordinates as (x, y, z).
+    voxel_size : float
+        The size of a voxel in world units.
+    level_set_value : float, optional
+        The level set value used to dilate the binary volume before processing.
+        Defaults to 0, which skips the dilation step.
+
+    Returns
+    -------
+    tuple
+        A tuple containing:
+        - pcd (open3d.geometry.PointCloud): The generated point cloud object.
+        - mesh (open3d.geometry.TriangleMesh): The generated triangle mesh object.
+
+    Raises
+    ------
+    ValueError
+        If any of the input parameters are invalid or the processing fails.
+        Examples
+    --------
+    >>> from plant3dvision.proc3d import vol2pcd_mc
+    >>> from plantdb.commons.io import read_volume
+    >>> from plantdb.server.core.utils import compute_fileset_matches
+    >>> from plantdb.commons.test_database import test_database
+    >>> db = test_database()
+    >>> db.connect()
+    >>> db.login('admin', 'admin')
+    >>> scan = db.get_scan("real_plant_analyzed")
+    >>> vol_fs_id = compute_fileset_matches(scan)["Voxels"]
+    >>> vol_fs = scan.get_fileset(vol_fs_id)
+    >>> vol = read_volume(vol_fs.get_file("Voxels"))
+    >>> print(vol.shape)
+    (301, 301, 561)
+    >>> pcd, mesh = vol2pcd_mc(vol, [0., 0., 0.], 0.5, level_set_value=1.0)
+    >>> print(len(pcd.points))
+    20320
+    >>> import open3d as o3d
+    >>> o3d.visualization.draw_geometries([pcd])
+    >>> db.disconnect()
+    """
+    volume = (volume - np.min(volume)) / np.max(volume - np.min(volume))
+    if level_set_value != 0:
+        logger.info("Computing level set dilation...")
+        _t = time.time()
+        # Convert offset from world units to voxels
+        radius = int(np.round(level_set_value / voxel_size))
+        struct = np.ones((2 * np.abs(radius) + 1,) * 3, dtype=bool)
+        if radius > 0:
+            volume = binary_dilation(volume, structure=struct)
+        elif radius < 0:
+            volume = binary_erosion(volume, structure=struct)
+        logger.info(f"Computing level set dilation... Done in {time.time() - _t:.2f}s")
+
+    # marching_cubes works on a float field; we give it the binary mask.
+    logger.info("Computing marching cubes...")
+    _t = time.time()
+    verts, faces, normals, _ = measure.marching_cubes(
+        volume.astype(np.float32),
+        level=0.5,
+        spacing=(voxel_size, voxel_size, voxel_size)
+    )
+    logger.info(f"Computing marching cubes... Done in {time.time() - _t:.2f}s")
+
+    # Translate to world coordinates
+    verts += np.asarray(origin, dtype=verts.dtype)
+
+    logger.info("Building Open3D PointCloud and Mesh...")
+    _t = time.time()
+    # Build the Open3D point cloud
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(verts)
+    pcd.normals = o3d.utility.Vector3dVector(normals)
+    pcd.normalize_normals()
+
+    # Create empty triangle mesh object
+    mesh = o3d.geometry.TriangleMesh()
+    # Assign vertex coordinates using Open3D's Vector3dVector format
+    mesh.vertices = o3d.utility.Vector3dVector(verts)
+    # Assign triangle face indices using Open3D's Vector3iVector format
+    mesh.triangles = o3d.utility.Vector3iVector(faces)
+    # Assign vertex normals
+    mesh.vertex_normals = o3d.utility.Vector3dVector(normals)
+    logger.info(f"Building Open3D PointCloud and Mesh... Done in {time.time() - _t:.2f}s")
+    return pcd, mesh
 
 
 def crop_point_cloud(point_cloud, bounding_box):
