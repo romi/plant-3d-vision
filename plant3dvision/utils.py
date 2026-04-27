@@ -7,6 +7,7 @@ A collection of utility functions for data manipulation, geometric calculations,
 visualization, and file operations. This module provides reusable components to
 simplify common tasks in data analysis and scientific computing projects.
 """
+
 import numpy as np
 
 
@@ -23,9 +24,9 @@ def flatten(l):
     >>> list(flatten([[1,[2,3]],4]))
     [1, 2, 3, 4]
     """
-    import collections
+    from collections.abc import Iterable
     for el in l:
-        if isinstance(el, collections.Iterable) and not isinstance(el, str):
+        if isinstance(el, Iterable) and not isinstance(el, str):
             for sub in flatten(el):
                 yield sub
         else:
