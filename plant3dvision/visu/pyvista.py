@@ -119,12 +119,12 @@ def o3d_point_cloud_to_polydata(point_cloud: o3d.geometry.PointCloud) -> pv.Poly
     >>> db.connect()
     >>> db.login('guest', 'guest')
     >>> scan = db.get_scan("real_plant_analyzed")
-    >>> mesh_fs_id = compute_fileset_matches(scan)["PointCloud"]
-    >>> mesh_fs = scan.get_fileset(mesh_fs_id)
-    >>> mesh = read_point_cloud(mesh_fs.get_file("PointCloud"))
-    >>> pv_mesh = o3d_point_cloud_to_polydata(mesh)
+    >>> pcd_fs_id = compute_fileset_matches(scan)["PointCloud"]
+    >>> pcd_fs = scan.get_fileset(pcd_fs_id)
+    >>> pcd = read_point_cloud(pcd_fs.get_file("PointCloud"))
+    >>> pv_pcd = o3d_point_cloud_to_polydata(pcd)
     >>> plotter = pv.Plotter()
-    >>> _ = plotter.add_mesh(pv_mesh, color='dodgerblue')
+    >>> _ = plotter.add_mesh(pv_pcd, color='dodgerblue')
     >>> _ = plotter.show_grid()
     >>> plotter.show()
     """

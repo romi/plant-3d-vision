@@ -784,7 +784,7 @@ def vol2pcd(volume, origin, voxel_size, level_set_value=0):
     >>> from plantdb.commons.io import read_volume
     >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plantdb.commons.test_database import test_database
-    >>> db = test_database()
+    >>> db = test_database(no_auth=True)
     >>> db.connect()
     >>> scan = db.get_scan("real_plant_analyzed")
     >>> vol_fs_id = compute_fileset_matches(scan)["Voxels"]
@@ -792,11 +792,16 @@ def vol2pcd(volume, origin, voxel_size, level_set_value=0):
     >>> vol = read_volume(vol_fs.get_file("Voxels"))
     >>> print(vol.shape)
     (301, 301, 561)
-    >>> pcd = vol2pcd(vol, [0., 0., 0.], 0.5, level_set_value=1.0)
+    >>> pcd = vol2pcd(vol>0., [0., 0., 0.], 0.5, level_set_value=1.0)
     >>> print(len(pcd.points))
     20320
-    >>> import open3d as o3d
-    >>> o3d.visualization.draw_geometries([pcd])
+    >>> import pyvista as pv
+    >>> from plant3dvision.visu.pyvista import o3d_point_cloud_to_polydata
+    >>> pv_pcd = o3d_point_cloud_to_polydata(pcd)
+    >>> plotter = pv.Plotter()
+    >>> _ = plotter.add_mesh(pv_pcd, color='dodgerblue')
+    >>> _ = plotter.show_grid()
+    >>> plotter.show()
     >>> db.disconnect()
     """
     import time
