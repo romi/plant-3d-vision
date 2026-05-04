@@ -63,7 +63,7 @@ def volume_to_imagedata(volume: np.ndarray,
     >>> import pyvista as pv
     >>> pv_vol = volume_to_imagedata(volume, origin, voxel_size)
     >>> plotter = pv.Plotter()
-    >>> _ = plotter.add_volume(pv_vol, clim=(35, 45), cmap='viridis', opacity='linear')
+    >>> _ = plotter.add_volume(pv_vol, clim=(35, 45), cmap='viridis', opacity='foreground')
     >>> plotter.show_grid()
     >>> plotter.show()
     >>> db.disconnect()
