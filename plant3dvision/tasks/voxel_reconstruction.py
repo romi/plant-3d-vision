@@ -30,7 +30,7 @@ from romitask.task import ImagesFilesetExists
 logger = get_logger(__name__)
 
 
-def shape_from_bounding_box(bounding_box, voxel_size=1.):
+def shape_from_bounding_box(bounding_box: dict[str, tuple[int, int]], voxel_size: float = 1.) -> tuple[int, int, int]:
     """Calculate the shape of the array required to cover a 3‑D bounding box at a specified voxel resolution.
 
     Parameters
@@ -38,7 +38,7 @@ def shape_from_bounding_box(bounding_box, voxel_size=1.):
     bounding_box : dict[str, tuple[int, int]]
         Dictionary with keys ``'x'``, ``'y'``, and ``'z'``. Each value is a two‑element sequence
         ``(min, max)`` defining the extents of the box along the corresponding axis.
-    voxel_size : float | None
+    voxel_size : float
         Edge length of a cubic voxel. Must be positive. Default is ``1.0``.
 
     Returns
@@ -75,21 +75,22 @@ def shape_from_bounding_box(bounding_box, voxel_size=1.):
     return (nx, ny, nz)
 
 
-def origin_from_bounding_box(bounding_box, voxel_size=1.):
+def origin_from_bounding_box(bounding_box: dict[str, tuple[int, int]], voxel_size: float = 1.) -> tuple[
+    float, float, float]:
     """Calculate the origin point of a 3‑D bounding box.
 
     Parameters
     ----------
-    bounding_box : dict[str, tuple(int, int)]
+    bounding_box : dict[str, tuple[int, int]]
         Dictionary with keys ``'x'``, ``'y'``, and ``'z'``. Each value is a two‑element sequence
         ``(min, max)`` defining the extents of the box along the corresponding axis.
-    voxel_size : float | None
+    voxel_size : float
         Edge length of a cubic voxel. Must be positive. Default is ``1.0``.
         Use it to get the origin in voxel units.
 
     Returns
     -------
-    origin : tuple[int, int, int]
+    origin : tuple[float, float, float]
         A three‑element tuple ``(x_min, y_min, z_min)`` representing the
         minimal corner of the bounding box.
 
@@ -111,9 +112,43 @@ def origin_from_bounding_box(bounding_box, voxel_size=1.):
     (x_min, x_max) = bounding_box["x"]
     (y_min, y_max) = bounding_box["y"]
     (z_min, z_max) = bounding_box["z"]
-    return tuple(map(float, np.array([x_min, y_min, z_min])/float(voxel_size)))
+    return tuple(map(float, np.array([x_min, y_min, z_min]) / float(voxel_size)))
 
-def remap_averaging(vol, n_imgs):
+
+def camera_metadata_from_colmap(camera_md: dict) -> dict[str, np.ndarray]:
+    """
+    Camera metadata conversion from COLMAP format.
+
+    Parameters
+    ----------
+    camera_md : dict
+        Dictionary containing COLMAP camera metadata. Expected keys include
+        ``camera_model`` with a ``params`` sequence, ``rotmat`` and ``tvec``.
+        The function extracts the first four intrinsic parameters and the
+        rotation matrix and translation vector.
+
+    Returns
+    -------
+    dict
+        Mapping with the following entries:
+
+        * **intrinsics** : ``np.ndarray`` of shape (4,) and dtype ``float32``
+          Intrinsic camera parameters extracted from ``camera_md``.
+        * **rotmat** : ``np.ndarray`` of shape (3, 3) and dtype ``float32``
+          Rotation matrix of the camera.
+        * **tvec** : ``np.ndarray`` of shape (3,) and dtype ``float32``
+          Translation vector of the camera.
+    """
+    assert camera_md["camera_model"]['model'] == 'OPENCV', \
+        f"Expected OPENCV camera model, got {camera_md['camera_model']['model']}"
+    return {
+        'intrinsics': np.array(camera_md["camera_model"]['params'][0:4], dtype=np.float32),
+        'rotmat': np.array(camera_md['rotmat'], dtype=np.float32),
+        'tvec': np.array(camera_md['tvec'], dtype=np.float32),
+    }
+
+
+def remap_averaging(vol: np.ndarray, n_imgs: int) -> np.ndarray:
     """Remap voxel values produced by the ``averaging`` back‑projection method.
 
     The function converts the raw floating‑point values returned by
@@ -400,11 +435,16 @@ class Voxels(RomiTask):
             # Defines labels to use in case of semantic labelled masks:
             labels = list(self.labels)
 
+        camera_metadata = {}
+        for mask in masks_fileset:
+            cam = mask.get_metadata(camera_metadata, default=None)
+            camera_metadata[mask.id] = camera_metadata_from_colmap(cam)
+
         logger.debug("Initialize `Backprojection` instance...")
         sc = Backprojection(shape=[nx, ny, nz], origin=[x_min, y_min, z_min], voxel_size=float(self.voxel_size),
-                            type=str(self.type), labels=labels, log=bool(self.log))
+                            type=str(self.type), log=bool(self.log))
         logger.debug("Processing the mask fileset...")
-        vol = sc.process_fileset(masks_files, str(self.camera_metadata), bool(self.invert))
+        vol = sc.process_fileset(masks_files, camera_metadata, bool(self.invert))
         logger.debug(f"Voxel volume shape: {vol.shape}")
         logger.debug(f"Voxel volume size: {vol.size}")
         if len(np.unique(vol)) == 1:
