@@ -403,7 +403,7 @@ class Masks(FileByFileTask):
         # Threshold the filtered image to make a binary mask:
         img = (img >= self.min_threshold) & (img <= self.max_threshold)
         if self.invert:
-            img = not img
+            img = np.logical_not(img)
         # Apply dilation to the binary mask, if any:
         if self.dilation > 0:
             img = proc2d.dilation(img, self.dilation)
