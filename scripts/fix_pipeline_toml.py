@@ -13,12 +13,43 @@ Usage example
 """
 
 import fnmatch
+import shutil
+from datetime import datetime
 
 import click
 import toml
 from toml import TomlDecodeError
 
 from plantdb.commons.fsdb.core import FSDB
+
+
+def fix_colmap(toml_dict):
+    """
+    Fix and augment the ``Colmap`` section of a TOML‑derived dictionary.
+
+    Parameters
+    ----------
+    toml_dict : dict
+        Dictionary obtained from parsing a TOML configuration file.
+
+    Returns
+    -------
+    dict
+        The updated toml dictionary.
+    """
+    if 'Colmap' in toml_dict:
+        toml_dict['Colmap'].pop('distance_threshold')
+        toml_dict['Colmap']['colmap_exe'] = "roboticsmicrofarms/colmap:3.8"
+        toml_dict['Colmap']['qc_check'] = True
+        toml_dict['Colmap']['mad_factor'] = 3.0
+        toml_dict['Colmap']['distance_threshold'] = 3.0
+        toml_dict['Colmap']['fixed_distance_threshold'] = 1.0
+        toml_dict['Colmap']['angle_threshold'] = 5.0
+        toml_dict['Colmap']['fixed_angle_threshold'] = 3.5
+        toml_dict['Colmap']['max_blind_angle'] = 20
+        toml_dict['Colmap']['retry_count'] = 10
+
+    return toml_dict
 
 
 def fix_undistorted(toml_dict):
@@ -92,7 +123,37 @@ def fix_mask(toml_dict):
             map(float, eval(toml_dict['Masks']['parameters'])))
         toml_dict['Masks']['max_threshold'] = 1.
         toml_dict['Masks'].pop('threshold', None)
-        toml_dict['Masks']['colorspace'] = 'RGB'
+
+    toml_dict['Masks']['colorspace'] = 'RGB'
+    toml_dict['Masks']['dilation'] = 2.0
+
+    return toml_dict
+
+
+def fix_voxels(toml_dict):
+    """
+    Fix and augment the ``Voxels`` section of a TOML‑derived dictionary.
+
+    Parameters
+    ----------
+    toml_dict : dict
+        Dictionary obtained from parsing a TOML configuration file.
+
+    Returns
+    -------
+    dict
+        The updated toml dictionary.
+    """
+    if 'Voxels' in toml_dict:
+        vxs = toml_dict['Voxels'].get("voxel_size")
+        bbox = toml_dict['Voxels'].get('bounding_box')
+
+        toml_dict['Voxels'] = {}
+        toml_dict['Voxels']['query'] = '{}'
+        toml_dict['Voxels']['type'] = 'averaging'
+        toml_dict['Voxels']['voxel_size'] = vxs if vxs else 0.8
+        if bbox:
+            toml_dict['Voxels']['bounding_box'] = bbox
 
     return toml_dict
 
@@ -108,7 +169,9 @@ def fix_mask(toml_dict):
               help='FSDB password (optional).')
 @click.option('--no-auth', is_flag=True, default=False,
               help="Use a database with automatic 'admin' user log in, for testing purposes only.")
-def main(db_path, scan_patterns, db_user, db_password, no_auth):
+@click.option('--no-backup', is_flag=True, default=False,
+              help="Disable automatic backup of the original TOML configuration file.")
+def main(db_path, scan_patterns, db_user, db_password, no_auth, no_backup):
     """
     Connect to the FSDB, optionally filter scans, and apply the negative‑z fix.
 
@@ -170,7 +233,14 @@ def main(db_path, scan_patterns, db_user, db_password, no_auth):
             continue
 
         toml_dict = fix_undistorted(toml_dict)
+        toml_dict = fix_colmap(toml_dict)
         toml_dict = fix_mask(toml_dict)
+        toml_dict = fix_voxels(toml_dict)
+
+        if not no_backup:
+            # Back-up the original pipeline.toml with a timestamp
+            backup_path = scan.path() / f"pipeline_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.toml"
+            shutil.copy2(scan.path() / "pipeline.toml", backup_path)
 
         with open(scan.path() / "pipeline.toml", "w") as f:
             toml.dump(toml_dict, f)
