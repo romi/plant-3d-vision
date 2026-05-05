@@ -15,13 +15,16 @@ Usage example
 import fnmatch
 import shutil
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import click
 import toml
 from toml import TomlDecodeError
+from tqdm import tqdm
 
 from plantdb.commons.fsdb.core import FSDB
+from plantdb.commons.fsdb.core import MARKER_FILE_NAME
 
 
 def fix_colmap(toml_dict: dict[str, Any]) -> dict[str, Any]:
@@ -113,7 +116,8 @@ def fix_mask(toml_dict: dict[str, Any]) -> dict[str, Any]:
 
     toml_dict['Masks']['colorspace'] = 'RGB'
     toml_dict['Masks']['dilation'] = 2.0
-    toml_dict['Masks']['method'] = toml_dict['Masks'].pop('type')
+    if 'type' in toml_dict['Masks']:
+        toml_dict['Masks']['method'] = toml_dict['Masks'].pop('type')
 
     return toml_dict
 
@@ -146,50 +150,44 @@ def fix_voxels(toml_dict: dict[str, Any]) -> dict[str, Any]:
     return toml_dict
 
 
-@click.command()
-@click.argument('db_path', type=click.Path(exists=True, file_okay=False, resolve_path=True))
-@click.option('--scan', 'scan_patterns', multiple=True, default=('*',),
-              help='Glob pattern(s) to select scans (e.g. "2023‑03‑*"). '
-                   'Multiple patterns can be given; they are OR‑combined.')
-@click.option('--db-user', 'db_user', default='guest',
-              help='FSDB username.')
-@click.option('--db-password', 'db_password', default='guest',
-              help='FSDB password.')
-@click.option('--no-auth', is_flag=True, default=False,
-              help="Use a database with automatic 'admin' user log in, for testing purposes only.")
-@click.option('--no-backup', is_flag=True, default=False,
-              help="Disable automatic backup of the original TOML configuration file.")
-def main(
-        db_path: str,
-        scan_patterns: tuple[str, ...],
-        db_user: str,
-        db_password: str,
-        no_auth: bool,
-        no_backup: bool,
-) -> None:
-    """
-    Connect to the FSDB, optionally filter scans, and apply the negative‑z fix.
+def _fix_toml(toml_path: Path, no_backup: bool) -> None:
+    print(f"Fixing toml file {toml_path}...")
+    try:
+        toml_dict = toml.load(toml_path)
+    except FileNotFoundError:
+        click.echo(f"No file '{toml_path}'")
+        return
+    except TomlDecodeError:
+        click.echo(f"Could not decode the file '{toml_path}'")
+        return
+    except Exception as e:
+        click.echo(f"Unexpected error: {e}")
+        return
 
-    Parameters
-    ----------
-    db_path : str
-        Path to the FSDB database directory.
-    scan_patterns : tuple[str, ...]
-        Glob pattern(s) to select scans (e.g. "2023‑03‑*").
-        Multiple patterns can be given; they are OR‑combined.
-    db_user : str
-        FSDB username.
-    db_password : str
-        FSDB password.
-    no_auth : bool
-        A boolean flag to switch between session managers.
-        If ``True``, use `NoAuthSessionManager` else use `SingleSessionManager`.
-    no_backup : bool
-        A boolean flag to disable automatic backup of the original TOML configuration file.
-        Default to ``False``.
-    """
+    toml_dict = fix_undistorted(toml_dict)
+    toml_dict = fix_colmap(toml_dict)
+    toml_dict = fix_mask(toml_dict)
+    toml_dict = fix_voxels(toml_dict)
+
+    if not no_backup:
+        _backup(toml_path)
+    _save(toml_path, toml_dict)
+
+
+def _backup(toml_path: Path) -> None:
+    # Back up the original pipeline.toml with a timestamp
+    backup_path = toml_path.parent / f"pipeline_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.toml.bak"
+    shutil.copy2(toml_path, backup_path)
+
+
+def _save(toml_path: Path, toml_dict: dict) -> None:
+    with open(toml_path, "w") as f:
+        toml.dump(toml_dict, f)
+
+
+def database_directory(path, scan_patterns, db_user, db_password, no_auth, no_backup):
     # Initialise the database
-    db = FSDB(db_path, no_auth=no_auth)
+    db = FSDB(path, no_auth=no_auth)
     db.connect()
 
     if not no_auth:
@@ -216,32 +214,67 @@ def main(
     # Process each selected scan
     for scan_id in selected_scans:
         scan = db.get_scan(scan_id)
-
         click.echo(f"Processing scan: {scan_id}")
-        try:
-            toml_dict = toml.load(scan.path() / "pipeline.toml")
-        except FileNotFoundError:
-            click.echo(f"No such pipeline.toml file for scan: {scan_id}")
-            continue
-        except TomlDecodeError:
-            click.echo(f"Could not decode pipeline.toml file for scan: {scan_id}")
-            continue
-        except Exception as e:
-            click.echo(f"Unexpected error: {e}")
-            continue
+        toml_path = scan.path() / "pipeline.toml"
+        _fix_toml(toml_path, no_backup)
 
-        toml_dict = fix_undistorted(toml_dict)
-        toml_dict = fix_colmap(toml_dict)
-        toml_dict = fix_mask(toml_dict)
-        toml_dict = fix_voxels(toml_dict)
 
-        if not no_backup:
-            # Back-up the original pipeline.toml with a timestamp
-            backup_path = scan.path() / f"pipeline_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.toml"
-            shutil.copy2(scan.path() / "pipeline.toml", backup_path)
+def config_directory(toml_path: Path, no_backup) -> None:
+    for toml_file in toml_path.glob('*.toml'):
+        if toml_file.stem.startswith('scan'):
+            continue
+        _fix_toml(toml_file, no_backup)
 
-        with open(scan.path() / "pipeline.toml", "w") as f:
-            toml.dump(toml_dict, f)
+
+@click.command()
+@click.argument('path', type=click.Path(exists=True, file_okay=True, resolve_path=True))
+@click.option('--scan', 'scan_patterns', multiple=True, default=('*',),
+              help='Glob pattern(s) to select scans (e.g. "2023‑03‑*"). '
+                   'Multiple patterns can be given; they are OR‑combined.')
+@click.option('--db-user', 'db_user', default='guest',
+              help='FSDB username.')
+@click.option('--db-password', 'db_password', default='guest',
+              help='FSDB password.')
+@click.option('--no-auth', is_flag=True, default=False,
+              help="Use a database with automatic 'admin' user log in, for testing purposes only.")
+@click.option('--no-backup', is_flag=True, default=False,
+              help="Disable automatic backup of the original TOML configuration file.")
+def main(
+        path: Path,
+        scan_patterns: tuple[str, ...],
+        db_user: str,
+        db_password: str,
+        no_auth: bool,
+        no_backup: bool,
+) -> None:
+    """
+    Connect to the FSDB, optionally filter scans, and apply the negative‑z fix.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        The path to the TOML files a dicrectory woth TOML files or an FSDB database directory.
+    scan_patterns : tuple[str, ...]
+        Glob pattern(s) to select scans (e.g. "2023‑03‑*").
+        Multiple patterns can be given; they are OR‑combined.
+    db_user : str
+        FSDB username.
+    db_password : str
+        FSDB password.
+    no_auth : bool
+        A boolean flag to switch between session managers.
+        If ``True``, use `NoAuthSessionManager` else use `SingleSessionManager`.
+    no_backup : bool
+        A boolean flag to disable automatic backup of the original TOML configuration file.
+        Default to ``False``.
+    """
+    path = Path(path)
+    if path.is_file() and path.suffix == '.toml':
+        _fix_toml(path, no_backup)
+    elif path.is_dir() and MARKER_FILE_NAME in path.iterdir():
+        database_directory(path, scan_patterns, db_user, db_password, no_auth, no_backup)
+    else:
+        config_directory(path, no_backup)
 
     click.echo("All done!")
 
