@@ -12,16 +12,39 @@ from typing import Literal
 
 import cv2
 import numpy as np
+from skimage.color import convert_colorspace
 from skimage.exposure import rescale_intensity
 from skimage.morphology import binary_dilation
 from skimage.morphology import disk
-from skimage.color import convert_colorspace
 
 EPS = 1e-9
 
 
-def undistort(img, camera_mtx, distortion_vect):
-    """Use OpenCV to undistort an image thanks to a camera model.
+def undistort(img: np.ndarray, camera_mtx: np.ndarray, distortion_params: np.ndarray) -> np.ndarray:
+    r"""
+    Undistort an image using the pinhole camera model.
+
+    Let :math:`\mathbf{K}` be the intrinsic camera matrix *camera_mtx* and let
+    :math:`\mathbf{d} = (k_1, k_2, p_1, p_2, \dots)` be the vector of radial and
+    tangential distortion coefficients *distortion_vect*. For a pixel with
+    homogeneous image coordinates :math:`\mathbf{p}_d = (x_d, y_d, 1)^\top`
+    in the distorted image, the undistorted coordinates :math:`\mathbf{p}_u`
+    are obtained by solving the distortion equations
+
+    .. math::
+        \begin{aligned}
+        x_u &= x_d + \Delta_x(x_d, y_d, \mathbf{d}) \\
+        y_u &= y_d + \Delta_y(x_d, y_d, \mathbf{d})
+        \end{aligned}
+
+    where :math:`\Delta_x` and :math:`\Delta_y` are the radial‑and‑tangential
+    distortion terms defined by the OpenCV distortion model. The function
+    ``cv2.undistort`` computes the inverse mapping and returns an image whose
+    pixel coordinates correspond to the ideal (undistorted) pinhole projection
+    given by
+
+    .. math::
+        \mathbf{p}_\text{ideal} = \mathbf{K}^{-1}\,\mathbf{p}_u.
 
     Parameters
     ----------
@@ -29,8 +52,8 @@ def undistort(img, camera_mtx, distortion_vect):
         An RGB image as an NxMx3 array.
     camera_mtx : numpy.ndarray
         A 3x3 floating-point camera matrix.
-    distortion_vect : numpy.ndarray
-        A Vector of distortion coefficients (k1, k2, p1, p2, k3)
+    distortion_params : numpy.ndarray
+        A vector of distortion parameters :math:`(k_1, k_2, p_1, p_2[, k_3, k_4, k_5, k_6[, s_1, s_2, s_3, s_4[, \tau_x, \tau_y]]])`
 
     See Also
     --------
@@ -51,7 +74,7 @@ def undistort(img, camera_mtx, distortion_vect):
     >>> path = test_db_path()
     >>> img = imread(path.joinpath('real_plant/images/00000_rgb.jpg'))
     >>> camera_mtx = np.array([[1.16e+03, 0., 7.20e+02], [0., 1.16e+03, 5.40e+02], [0., 0., 1.]])
-    >>> distortion_vect = np.array([-0.00115644, 0., 0., 0.])
+    >>> distortion_vect = np.array([-0.00115644, 0., 0., 0.])  # k1, k2, p1, p2
     >>> undistorted_img = undistort(img, camera_mtx, distortion_vect)
     >>> plt.imshow(undistorted_img)
     >>> plt.title("Undistorted image")
@@ -60,17 +83,27 @@ def undistort(img, camera_mtx, distortion_vect):
     >>> plt.show()
 
     """
-    undistorted_data = cv2.undistort(img, camera_mtx, distortion_vect, None)
+    undistorted_data = cv2.undistort(img, camera_mtx, distortion_params, None)
     return undistorted_data
 
 
-def linear(img, coefs, colorspace: Literal["RGB", "HSV", "YCbCr"]="RGB"):
+def linear(img: np.ndarray, coefs: list[float, float, float],
+           colorspace: Literal["RGB", "HSV", "YCbCr"] = "RGB") -> np.ndarray:
     """
-    Applies a linear transformation to the given image based on specified coefficients and colorspace.
+    Linear colour index.
 
-    This function performs a linear combination of the color channels of an image according to the specified
-    coefficients. The image is optionally converted to a different colorspace before the transformation. The
-    color channel intensity values are normalized to the range [0, 1] to ensure consistency during the operation.
+    For each pixel :math:`x` the function computes a weighted sum of the three colour
+    channels in the (optionally converted) colour space.  Let
+    :math:`c_1, c_2, c_3` be the coefficients supplied in *coefs* and let
+    :math:`p_1(x), p_2(x), p_3(x)` be the intensity values of the first, second and
+    third channel of pixel :math:`x` (e.g. red, green, blue for the RGB space).  The
+    linear index is defined as
+
+    .. math::
+        f(x) = (c_1 \, p_1(x) + c_2 \, p_2(x) + c_3 \, p_3(x)) / (c_1 + c_2 + c_3)
+
+    The image is first normalised to the range :math:`[0, 1]`; if *colorspace* is not
+    ``"RGB"``, the image is converted to the requested space before the computation.
 
     Parameters
     ----------
@@ -78,7 +111,7 @@ def linear(img, coefs, colorspace: Literal["RGB", "HSV", "YCbCr"]="RGB"):
         The input image as a NumPy array with shape (H, W, C), where H is the height, W is the width,
         and C is the number of color channels. The input image can either be of dtype `uint8` or `float`.
         This image is expected to be in the RGB colorspace
-    coefs : list or tuple of float
+    coefs : list[float, float, float]
         A sequence of three coefficients that represent the weights for each color channel's contribution
         to the result. The coefficients should correspond to the order of the color channels in the input
         image, such as [R, G, B] or [H, S, V] depending on the colorspace.
@@ -122,8 +155,20 @@ def linear(img, coefs, colorspace: Literal["RGB", "HSV", "YCbCr"]="RGB"):
     return (coefs[0] * img[:, :, 0] + coefs[1] * img[:, :, 1] + coefs[2] * img[:, :, 2]) / sum(coefs)
 
 
-def excess_green(img):
-    """Excess green function `EG = 2*g-r-b`.
+def excess_green(img: np.ndarray) -> np.ndarray:
+    r"""
+    Excess green function
+
+    The excess‑green index :math:`f(x)` measures the relative contribution of the green
+    channel compared to the red and blue channels for each pixel :math:`x`.  It is
+    defined mathematically as
+
+    .. math::
+        f(x) = 2\,g(x) - r(x) - b(x),
+
+    where :math:`r(x)`, :math:`g(x)`, and :math:`b(x)` denote the red, green, and blue
+    intensity values of pixel :math:`x`, respectively.  The function returns a
+    single‑channel image where each pixel contains its excess‑green value.
 
     Parameters
     ----------
@@ -176,8 +221,9 @@ def excess_green(img):
     return (2 * g - r - b)
 
 
-def dilation(img, n):
-    """Dilates a binary image by `n` pixels using a sequence of cross-shaped footprint.
+def dilation(img: np.ndarray, n: int) -> np.ndarray:
+    """
+    Dilates a binary image by `n` pixels using a sequence of cross-shaped footprint.
 
     Parameters
     ----------
