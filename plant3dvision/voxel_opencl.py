@@ -17,14 +17,14 @@ Key Features:
 Geodesic computing is still in a very experimental stage.
 """
 import os
+from typing import Literal
 
 import numpy as np
 import pyopencl as cl
 from skimage.util import img_as_float32
 
 from plant3dvision.proc3d import point2index
-from plantdb.commons import io
-from plantdb.commons.db import Fileset
+from plant3dvision.voxel import AbstractBackprojection
 from romitask.log import get_logger
 
 logger = get_logger(__name__)
@@ -51,7 +51,7 @@ with open(os.path.join(prg_dir, 'fim.c')) as f:
     fim_kernels = cl.Program(ctx, f.read()).build(options=f"-I{prg_dir}")
 
 
-class Backprojection(object):
+class Backprojection(AbstractBackprojection):
     """Backprojection using OpenCL to process and construct volumes from multiple input views.
 
     This class supports two modes of backprojection: 'carving' (integer-based for masking)
@@ -95,41 +95,43 @@ class Backprojection(object):
     Examples
     --------
     >>> import numpy as np
-    >>> from plantdb.commons.fsdb.core import FSDB
+    >>> from plantdb.commons.test_database import test_database
     >>> from plantdb.server.core.utils import compute_fileset_matches
-    >>> from plant3dvision.cl import Backprojection
-    >>> from plant3dvision.visu import plt_volume_slice_viewer
-    >>> db = FSDB('/data/ROMI/test_owner')
+    >>> from plant3dvision.voxel_opencl import Backprojection
+    >>> from plant3dvision.tasks.voxel_reconstruction import camera_metadata_from_colmap
+    >>> from plant3dvision.tasks.voxel_reconstruction import remap_averaging
+    >>> from plant3dvision.tasks.voxel_reconstruction import origin_from_bounding_box
+    >>> from plant3dvision.tasks.voxel_reconstruction import shape_from_bounding_box
+    >>> from plant3dvision.visu.matplotlib import plt_volume_slice_viewer
+    >>> # Set up the database and scan
+    >>> db = test_database('real_plant_analyzed')
     >>> db.connect()
-    >>> scan = db.get_scan("Col-0_E1_1")
+    >>> db.login('guest', 'guest')
+    >>> scan = db.get_scan("real_plant_analyzed")
     >>> mask_fs_id = compute_fileset_matches(scan)["Masks"]
     >>> mask_fs = scan.get_fileset(mask_fs_id)
     >>> # List of input mask files (2D images) to process
     >>> mask_files = mask_fs.get_files(query={"channel": "rgb"})
+    >>> mask_fp = {mask.id: mask.path() for mask in mask_files}
     >>> # Example setup: define a bounding box and voxel configuration
-    >>> bounding_box = {"x": [300, 435], "y": [300, 435], "z": [-300, 60]}
+    >>> bounding_box = {"x": [300, 435], "y": [300, 435], "z": [-200, 100]}
     >>> voxel_size = 0.6
-    >>> # Calculate the shape of the voxel array
-    >>> (x_min, x_max) = bounding_box["x"]
-    >>> (y_min, y_max) = bounding_box["y"]
-    >>> (z_min, z_max) = bounding_box["z"]
-    >>> nx = int((x_max - x_min) / voxel_size) + 1
-    >>> ny = int((y_max - y_min) / voxel_size) + 1
-    >>> nz = int((z_max - z_min) / voxel_size) + 1
-    >>> shape = (nx, ny, nz)
-    >>> origin = (x_min, y_min, z_min)
+    >>> # Calculate the shape & origin of the voxel array
+    >>> shape = shape_from_bounding_box(bounding_box, voxel_size)
+    >>> origin = origin_from_bounding_box(bounding_box)  # in real units
     >>> camera_md = "colmap_camera"  # The camera metadata key in the fileset that provides intrinsic & pose data
     >>> invert_masks = False  # Whether to invert the mask values
+    >>> mask_md = {mask.id: camera_metadata_from_colmap(mask.get_metadata(camera_md)) for mask in mask_files}
 
     >>> # EXAMPLE 1 - Carving mode
-    >>> backproj = Backprojection(shape, origin, voxel_size, type="carving", labels=None)
-    >>> volume = backproj.process_fileset(mask_files, camera_md, invert_masks)
+    >>> backproj = Backprojection(shape, origin, voxel_size, "carving")
+    >>> volume = backproj.process_fileset(mask_fp, mask_md, invert_masks)
     >>> # 'volume' is now a NumPy array holding the 3D backprojected binary data
     >>> plt_volume_slice_viewer(volume, cmap="viridis")
 
     >>> # EXAMPLE 2 - Averaging mode
-    >>> backproj = Backprojection(shape, origin, voxel_size, type="averaging", labels=None, log=True)
-    >>> volume = backproj.process_fileset(mask_files, camera_md, invert_masks)
+    >>> backproj = Backprojection(shape, origin, voxel_size, "averaging", log=True)
+    >>> volume = backproj.process_fileset(mask_fp, mask_md, invert_masks)
     >>> # 'volume' is now a NumPy array holding the 3D backprojected data
     >>> vol_values = np.unique(volume)
     >>> print(f"Unique values in the volume: {vol_values}")
@@ -147,46 +149,45 @@ class Backprojection(object):
 
     """
 
-    def __init__(self, shape, origin, voxel_size, type="carving", default_value=0, labels=None, log=False):
+    def __init__(
+            self,
+            shape: list[int],
+            origin: list[float],
+            voxel_size: float,
+            method: Literal["carving", "averaging"] = "carving",
+            default_value: float = 0,
+            log: bool = False,
+    ) -> None:
         """Initializes the class instance.
 
         Parameters
         ----------
-        shape : tuple
-            The shape (dimensions) of the buffer array.
-        origin : tuple
-            The origin or reference point for the volume generation.
+        shape : list[int]
+            The shape of the voxel volume as a list [nx, ny, nz].
+        origin : list[float]
+            The location of the origin of the voxel space as a list [x0, y0, z0].
         voxel_size : float
-            Individual voxel dimensions within the volume.
-        type : str, optional
-            The type of operation for the kernel, either "carving" or "averaging".
-        default_value : int or float, optional
-            Default value for initializing the buffer, depending on the type.
-        labels : list, optional
-            Optional labels for referencing the data within the volume.
+            The size of each voxel in the volume.
+        method : {'carving', 'averaging'}, optional
+            Type of backprojection to perform, either 'carving' (default) or 'averaging'.
+        default_value : float, optional
+            The default voxel data value used during initialization. Default is ``0.0``.
         log : bool, optional
-            Flag to enable or suppress logging information.
+            A boolean flag indicating whether logarithmic transformation is applied to a mask in 'averaging' mode.
+            Default is ``False``.
 
         Raises
         ------
         ValueError
             If the specified kernel type is not 'carving' or 'averaging'.
         """
-        self.shape = shape
-        self.origin = origin
-        self.voxel_size = voxel_size
-        self.default_value = default_value
-        self.log = log
-        self.labels = labels
-        # Defines `dtype` & `kernel` attributes based on initialization `type`.
-        if type == "carving":
-            self.dtype = np.int32
+        super().__init__(shape, origin, voxel_size, method, default_value, log)
+
+        # Defines `kernel` attributes based on initialization `type`.
+        if method == "carving":
             self.kernel = backprojection_kernels.carve
-        elif type == "averaging":
-            self.dtype = np.float32
+        elif method == "averaging":
             self.kernel = backprojection_kernels.average
-        else:
-            raise ValueError(f"Unknown kernel type {type}, valid values are 'averaging' or 'carving'!")
 
         # Print info about buffer array size and associated memory cost for `self.values_h`:
         buff_size = np.ones(self.shape, dtype=self.dtype).nbytes
@@ -299,79 +300,6 @@ class Backprojection(object):
         """Gets computed values from the OpenCL device."""
         cl.enqueue_copy(queue, self.values_h, self.values_d)
         return self.values_h.reshape(self.shape)
-
-    def process_fileset(self, fs, camera_metadata, invert=False):
-        """Processes a whole fileset.
-
-        Parameters
-        ----------
-        fs : plantdb.commons.db.Fileset or list of plantdb.commons.db.File
-            The images `Fileset` or list of images `File` to process.
-        camera_metadata : str
-            Name of the metadata to use to get the camera intrinsics (fx, fy, cx, cy) & poses.
-        invert : bool, optional
-            If ``True``, invert the values of the mask file to process.
-            Defaults to ``False``.
-
-        """
-        if self.labels is not None:
-            result = np.zeros((len(self.labels), *self.shape))
-            for i, label in enumerate(self.labels):
-                logger.info(f"Processing label '{label}'...")
-                if i != 0:
-                    self.clear()
-                result[i, :] = self.process_label(fs, camera_metadata, label, invert)
-            return result
-        else:
-            return self.process_label(fs, camera_metadata, None, invert=invert)
-
-    def process_label(self, fs, camera_metadata, label=None, invert=False):
-        """Processes a whole fileset for given label.
-
-        Parameters
-        ----------
-        fs : plantdb.commons.db.Fileset or list of plantdb.commons.db.File
-            The images `Fileset` or list of images `File` to process.
-        camera_metadata : str
-            Name of the metadata to use to get the camera intrinsics (fx, fy, cx, cy) & poses ('rotmat', 'tvec').
-        label : str, optional
-            Name of the label to process, can be `None`.
-        invert : bool, optional
-            If ``True``, invert the values of the mask file to process.
-            Defaults to ``False``.
-
-        Returns
-        -------
-        numpy.ndarray
-            The processed volume, for given label, if any.
-        """
-        if isinstance(fs, Fileset):
-            fs = fs.get_files()
-
-        for fi in fs:
-            # Skip file if not of the right label (when defined)
-            if label is not None and fi.get_metadata("channel") != label:
-                continue
-            logger.debug("processing file %s" % fi.id)
-            # Get camera dictionary from mask metadata
-            cam = fi.get_metadata(camera_metadata, default=None)
-            if cam is None:
-                logger.warning(f"Could not get camera params from '{camera_metadata}' for {fi.id}, skipping...")
-                continue
-            # Load camera intrinsic parameters:
-            intrinsics = np.array(cam["camera_model"]['params'][0:4], dtype=np.float32)
-            # Load camera poses as rotation matrix and translation vector:
-            rot = np.array(sum(cam['rotmat'], []), dtype=np.float32)
-            tvec = np.array(cam['tvec'], dtype=np.float32)
-            # Load mask image:
-            mask = io.read_image(fi)
-            # Invert mask if required:
-            if invert:
-                mask = np.invert(mask)
-            # Process the view:
-            self.process_view(intrinsics, rot, tvec, mask)
-
-        return self.get_values()
 
     def clear(self):
         """Clear computed values from the OpenCL device."""
