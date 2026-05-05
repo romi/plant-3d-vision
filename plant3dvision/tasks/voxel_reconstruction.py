@@ -436,13 +436,13 @@ class Voxels(RomiTask):
             labels = list(self.labels)
 
         camera_metadata = {}
-        for mask in masks_fileset:
+        for mask in masks_files:
             cam = mask.get_metadata(camera_metadata, default=None)
             camera_metadata[mask.id] = camera_metadata_from_colmap(cam)
 
         logger.debug("Initialize `Backprojection` instance...")
         sc = Backprojection(shape=[nx, ny, nz], origin=[x_min, y_min, z_min], voxel_size=float(self.voxel_size),
-                            type=str(self.type), log=bool(self.log))
+                            method=str(self.type), log=bool(self.log))
         logger.debug("Processing the mask fileset...")
         vol = sc.process_fileset(masks_files, camera_metadata, bool(self.invert))
         logger.debug(f"Voxel volume shape: {vol.shape}")
