@@ -256,15 +256,15 @@ class Voxels(RomiTask):
         Size of a (cubic) voxel, to compare with the `bounding_box` to reconstruct.
         That is if ``voxel_size=1.``, then the final shape of the _volume_ is the same as the ``bounding_box``.
         defaults to ``1.``.
-    type : luigi.Parameter
+    method : luigi.Parameter
         Type of back-projection to perform.
         Valid values are in ["carving", "averaging"].
         Defaults to ``"carving"``.
     log : luigi.BoolParameter, optional
-        If ``True``, convert the mask images to logarithmic values for 'averaging' `type` prior to back-projection.
+        If ``True``, convert the mask images to logarithmic values for 'averaging' `method` prior to back-projection.
         Defaults to ``True``.
     threshold : luigi.FloatParameter, optional
-        The threshold value to use for 'averaging' `type` conversion to logarithmic values.
+        The threshold value to use for 'averaging' `method` conversion to logarithmic values.
         Defaults to ``-100.0``.
     missing_images_threshold : luigi.IntParameter, optional
         Maximum number of missing images allowed in the processing pipeline.
@@ -322,7 +322,7 @@ class Voxels(RomiTask):
     query = luigi.DictParameter(default={})
     camera_metadata = luigi.Parameter(default='colmap_camera')  # camera definition (intrinsic & poses) in metadata
     voxel_size = luigi.FloatParameter(default=1.0)
-    type = luigi.Parameter(default="averaging")
+    method = luigi.Parameter(default="averaging")
     log = luigi.BoolParameter(default=True)
 
     invert = luigi.BoolParameter(default=False)
@@ -443,7 +443,7 @@ class Voxels(RomiTask):
 
         logger.debug("Initialize `Backprojection` instance...")
         sc = Backprojection(shape=[nx, ny, nz], origin=[x_min, y_min, z_min], voxel_size=float(self.voxel_size),
-                            method=str(self.type), log=bool(self.log))
+                            method=str(self.method), log=bool(self.log))
         logger.debug("Processing the mask fileset...")
         vol = sc.process_fileset({mask.id: mask.path() for mask in masks_files},
                                  camera_metadata, bool(self.invert))
@@ -457,7 +457,7 @@ class Voxels(RomiTask):
         md = {
             'voxel_size': float(self.voxel_size),
             'origin': origin.tolist(),
-            'method': str(self.type),
+            'method': str(self.method),
             'n_img': n_imgs
         }
         if labels is not None:
@@ -483,7 +483,7 @@ class Voxels(RomiTask):
             outfile.set_metadata(md)
 
     def _remap(self, vol, n_imgs):
-        if self.type == "averaging":
+        if self.method == "averaging":
             # If the "averaging" method, apply value remapping to get the number of agreeing images per voxel:
             return remap_averaging(vol, n_imgs)
         else:

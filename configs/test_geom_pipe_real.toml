@@ -23,7 +23,7 @@ query = "{\"channel\":\"rgb\", \"pose_estimation\":\"correct\"}"  # RGB images w
 [Masks]
 upstream_task = "Undistort"
 query = "{\"channel\":\"rgb\"}"
-type = "linear"
+method = "linear"
 colorspace = "RGB"
 parameters = "[0.2, 1, 0.1]"
 min_threshold = 0.2 # Default: 0.0
@@ -35,7 +35,7 @@ upstream_task = "Masks"
 upstream_colmap = "Colmap"
 camera_metadata = "colmap_camera"
 voxel_size = 0.6
-type = "averaging"
+method = "averaging"
 [Voxels.bounding_box]
 x = [300, 450]
 y = [300, 450]

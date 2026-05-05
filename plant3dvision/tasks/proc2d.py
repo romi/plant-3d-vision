@@ -284,10 +284,10 @@ class Masks(FileByFileTask):
     parallel : luigi.BoolParameter, optional
         Flag to enable/disable parallel processing.
         Defaults to ``True``.
-    type : luigi.Parameter, optional
+    method : luigi.Parameter, optional
         The type of image tranformation algorithm to use prior to masking by thresholding.
         Can be "linear" or "excess_green". Defaults to `'linear'`.
-        Have a look at the documentation [mask_type]_ for more details.
+        Have a look at the documentation [mask_methods]_ for more details.
     colorspace : luigi.ChoiceParameter, optional
         The colorspace to use for the linear filtering ('RGB', 'HSV' or 'YCbCr')
         Defaults to ``"RGB"``.
@@ -325,7 +325,7 @@ class Masks(FileByFileTask):
 
     References
     ----------
-    .. [mask_type] https://docs.romi-project.eu/plant_imager/explanations/masks/
+    .. [mask_methods] https://docs.romi-project.eu/plant_imager/explanations/masks/
 
     Examples
     --------
@@ -347,8 +347,8 @@ class Masks(FileByFileTask):
 
     """
     upstream_task = luigi.TaskParameter(default=Undistort)  # override default attribute from ``RomiTask``
-    type = luigi.Parameter("linear")
-    colorspace = luigi.ChoiceParameter(default="RGB", choices=["RGB", "HSV", "YCbCr"], var_type=str)
+    method = luigi.Parameter("linear")
+    colorspace = luigi.ChoiceParameter("RGB", choices=["RGB", "HSV", "YCbCr"])
     parameters = luigi.ListParameter(default=[0, 1, 0])
     min_threshold = luigi.FloatParameter(default=0.0)
     max_threshold = luigi.FloatParameter(default=0.4)
@@ -374,12 +374,12 @@ class Masks(FileByFileTask):
             If the specified filter type is unknown.
         """
         logger.debug(f"Image shape: {img.shape}")
-        if self.type == "linear":
+        if self.method == "linear":
             return proc2d.linear(img, list(self.parameters), colorspace=self.colorspace)
-        elif self.type == "excess_green":
+        elif self.method == "excess_green":
             return proc2d.excess_green(img)
         else:
-            raise Exception(f"Unknown masking type '{self.type}'!")
+            raise Exception(f"Unknown masking method '{self.method}'!")
 
     def f(self, fi: plantdb.commons.db.File, outfs: plantdb.commons.db.Fileset) -> plantdb.commons.db.File:
         """Compute the binary mask image for the input image ``File``.
@@ -415,14 +415,14 @@ class Masks(FileByFileTask):
         # Add metadata to the binary mask image:
         md = {
             'upstream_task': str(self.upstream_task.get_task_family()),
-            'filter': str(self.type),
+            'filter': str(self.method),
             'colorspace': str(self.colorspace),
             'min_threshold': self.min_threshold,
             'max_threshold': self.max_threshold,
             'invert': self.invert,
             'dilation': self.dilation
         }
-        if self.type == "linear":
+        if self.method == "linear":
             md.update({'linear_coeff': list(self.parameters)})
         if self.query != {}:
             md.update({'query': jsonify(self.query)})

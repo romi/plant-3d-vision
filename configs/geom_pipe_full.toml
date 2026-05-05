@@ -84,7 +84,7 @@ parallel = true  # Default: true
 n_workers = -1  # Default: -1 (Default ``concurrent.futures.ThreadPoolExecutor`` behavior)
 # The type of image transformation algorithm to use prior to masking
 # Options: "linear" (linear combination of the channels (RGB, HSV, YCbCr), "excess_green" (excess green index)
-type = "linear"  # Default: "linear"
+method = "linear"  # Default: "linear"
 # The colorspace to use for the filtering
 # Options: "RGB", "HSV", "YCbCr"
 colorspace = "RGB"  # Default: "RGB"
@@ -110,7 +110,7 @@ camera_metadata = "colmap_camera"  # Default: "colmap_camera"
 voxel_size = 1.0  # Default: 1.0
 # Type of backprojection algorithm to use
 # Options: "carving", "averaging"
-type = "averaging"  # Default: "averaging"
+method = "averaging"  # Default: "averaging"
 # Whether to convert mask images to logarithmic values for 'averaging' type prior to back-projection
 log = true  # Default: true
 # Whether to invert the mask values
