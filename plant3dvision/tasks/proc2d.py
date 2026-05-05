@@ -7,16 +7,14 @@ import concurrent.futures
 import sys
 
 import luigi
-import numpy
 import numpy as np
 from tqdm import tqdm
 
-import plantdb.commons.db
 from plant3dvision import proc2d
-from plant3dvision.camera import colmap_params_from_kwargs
-from plant3dvision.tasks.colmap import Colmap
 from plant3dvision.utils import jsonify
 from plantdb.commons import io
+from plantdb.commons.db import File
+from plantdb.commons.db import Fileset
 from romitask.log import get_logger
 from romitask.task import FileByFileTask
 from romitask.task import ImagesFilesetExists
@@ -129,6 +127,7 @@ class Undistort(FileByFileTask):
             logger.info(f"Using extrinsic calibration scan: {self.extrinsic_calib_scan_id}...")
             return {"camera": extrinsic_calib_scan, "images": self.upstream_task()}
         else:
+            from plant3dvision.tasks.colmap import Colmap
             return {"camera": Colmap(), "images": self.upstream_task()}
 
     def run(self):
@@ -161,6 +160,7 @@ class Undistort(FileByFileTask):
         # Handle intrinsic calibration case
         if str(self.camera_model_src).lower() == 'intrinsiccalibration':
             from plant3dvision.camera import get_camera_params_from_arrays
+            from plant3dvision.camera import colmap_params_from_kwargs
             camera_params = get_camera_params_from_arrays(self.camera_model)
             params = colmap_params_from_kwargs(**camera_params)
             colmap_camera = {"camera_model": {"camera_model": self.camera_model, "params": params}}
@@ -355,7 +355,7 @@ class Masks(FileByFileTask):
     invert = luigi.BoolParameter(default=False)
     dilation = luigi.IntParameter(default=0)
 
-    def f_raw(self, img: numpy.ndarray) -> numpy.ndarray:
+    def f_raw(self, img: np.ndarray) -> np.ndarray:
         """Apply the selected filter to the image.
 
         Parameters
@@ -381,7 +381,7 @@ class Masks(FileByFileTask):
         else:
             raise Exception(f"Unknown masking method '{self.method}'!")
 
-    def f(self, fi: plantdb.commons.db.File, outfs: plantdb.commons.db.Fileset) -> plantdb.commons.db.File:
+    def f(self, fi: File, outfs: Fileset) -> File:
         """Compute the binary mask image for the input image ``File``.
 
         Parameters
