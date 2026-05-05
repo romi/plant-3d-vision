@@ -15,6 +15,7 @@ Usage example
 import fnmatch
 import shutil
 from datetime import datetime
+from typing import Any
 
 import click
 import toml
@@ -23,7 +24,7 @@ from toml import TomlDecodeError
 from plantdb.commons.fsdb.core import FSDB
 
 
-def fix_colmap(toml_dict):
+def fix_colmap(toml_dict: dict[str, Any]) -> dict[str, Any]:
     """
     Fix and augment the ``Colmap`` section of a TOML‑derived dictionary.
 
@@ -52,7 +53,7 @@ def fix_colmap(toml_dict):
     return toml_dict
 
 
-def fix_undistorted(toml_dict):
+def fix_undistorted(toml_dict: dict[str, Any]) -> dict[str, Any]:
     """Crawl through the keys and values of the dictionary and replace 'Undistorted' with 'Undistort'
 
     Parameters
@@ -90,33 +91,19 @@ def fix_undistorted(toml_dict):
     return _replace(toml_dict)
 
 
-def fix_mask(toml_dict):
+def fix_mask(toml_dict: dict[str, Any]) -> dict[str, Any]:
     """
     Fix and augment the ``Mask`` section of a TOML‑derived dictionary.
-
-    This function inspects the provided dictionary for a top‑level ``Mask`` key.
-    If the ``Mask`` mapping contains a ``threshold`` entry, the function computes
-    a normalized ``min_threshold`` by dividing the original threshold by the sum
-    of the values in ``Mask['parameters']``. It then sets ``max_threshold`` to
-    ``1.0``, removes the original ``threshold`` entry, and forces the
-    ``colorspace`` to ``RGB``. The operation is performed in place; the input
-    dictionary is mutated and no new object is returned.
 
     Parameters
     ----------
     toml_dict : dict
-        Dictionary obtained from parsing a TOML configuration file.  It may
-        contain a ``Mask`` sub‑dictionary with keys ``threshold`` and
-        ``parameters`` among others.
+        Dictionary obtained from parsing a TOML configuration file.
 
     Returns
     -------
     dict
         The updated toml dictionary.
-
-    References
-    ----------
-    None
     """
     if 'Masks' in toml_dict and 'threshold' in toml_dict['Masks']:
         toml_dict['Masks']['min_threshold'] = float(toml_dict['Masks']['threshold']) / sum(
@@ -126,11 +113,12 @@ def fix_mask(toml_dict):
 
     toml_dict['Masks']['colorspace'] = 'RGB'
     toml_dict['Masks']['dilation'] = 2.0
+    toml_dict['Masks']['method'] = toml_dict['Masks'].pop('type')
 
     return toml_dict
 
 
-def fix_voxels(toml_dict):
+def fix_voxels(toml_dict: dict[str, Any]) -> dict[str, Any]:
     """
     Fix and augment the ``Voxels`` section of a TOML‑derived dictionary.
 
@@ -150,7 +138,7 @@ def fix_voxels(toml_dict):
 
         toml_dict['Voxels'] = {}
         toml_dict['Voxels']['query'] = '{}'
-        toml_dict['Voxels']['type'] = 'averaging'
+        toml_dict['Voxels']['method'] = 'averaging'
         toml_dict['Voxels']['voxel_size'] = vxs if vxs else 0.8
         if bbox:
             toml_dict['Voxels']['bounding_box'] = bbox
@@ -164,14 +152,21 @@ def fix_voxels(toml_dict):
               help='Glob pattern(s) to select scans (e.g. "2023‑03‑*"). '
                    'Multiple patterns can be given; they are OR‑combined.')
 @click.option('--db-user', 'db_user', default='guest',
-              help='FSDB username (optional).')
+              help='FSDB username.')
 @click.option('--db-password', 'db_password', default='guest',
-              help='FSDB password (optional).')
+              help='FSDB password.')
 @click.option('--no-auth', is_flag=True, default=False,
               help="Use a database with automatic 'admin' user log in, for testing purposes only.")
 @click.option('--no-backup', is_flag=True, default=False,
               help="Disable automatic backup of the original TOML configuration file.")
-def main(db_path, scan_patterns, db_user, db_password, no_auth, no_backup):
+def main(
+        db_path: str,
+        scan_patterns: tuple[str, ...],
+        db_user: str,
+        db_password: str,
+        no_auth: bool,
+        no_backup: bool,
+) -> None:
     """
     Connect to the FSDB, optionally filter scans, and apply the negative‑z fix.
 
@@ -179,7 +174,7 @@ def main(db_path, scan_patterns, db_user, db_password, no_auth, no_backup):
     ----------
     db_path : str
         Path to the FSDB database directory.
-    scan_patterns : list
+    scan_patterns : tuple[str, ...]
         Glob pattern(s) to select scans (e.g. "2023‑03‑*").
         Multiple patterns can be given; they are OR‑combined.
     db_user : str
@@ -189,6 +184,9 @@ def main(db_path, scan_patterns, db_user, db_password, no_auth, no_backup):
     no_auth : bool
         A boolean flag to switch between session managers.
         If ``True``, use `NoAuthSessionManager` else use `SingleSessionManager`.
+    no_backup : bool
+        A boolean flag to disable automatic backup of the original TOML configuration file.
+        Default to ``False``.
     """
     # Initialise the database
     db = FSDB(db_path, no_auth=no_auth)
