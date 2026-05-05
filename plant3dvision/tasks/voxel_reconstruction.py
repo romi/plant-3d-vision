@@ -370,6 +370,7 @@ class Voxels(RomiTask):
         masks_fileset = self.input()['masks'].get()
         masks_files = masks_fileset.get_files(query=self.query)
         logger.info(f"Processing a list of {len(masks_files)} mask files...")
+        md_str = str(self.camera_metadata).lower()
 
         # - Define bounding-box to use to define the shape of the voxel array:
         # Get it from the `Scan` metadata:
@@ -377,7 +378,7 @@ class Voxels(RomiTask):
             self.bounding_box = self.output().get().scan.get_metadata("bounding_box", default=None)
             logger.debug(f"Bounding-box from scan metadata: {self.bounding_box}")
         # Get it from Colmap if required:
-        if self.bounding_box is None and str(self.camera_metadata).lower() == 'colmap_camera':
+        if self.bounding_box is None and md_str == 'colmap_camera':
             colmap_fileset = self.input()['colmap'].get()
             if self.bounding_box is None:
                 self.bounding_box = colmap_fileset.get_metadata("bounding_box", default=None)
@@ -437,14 +438,15 @@ class Voxels(RomiTask):
 
         camera_metadata = {}
         for mask in masks_files:
-            cam = mask.get_metadata(camera_metadata, default=None)
+            cam = mask.get_metadata(md_str, default=None)
             camera_metadata[mask.id] = camera_metadata_from_colmap(cam)
 
         logger.debug("Initialize `Backprojection` instance...")
         sc = Backprojection(shape=[nx, ny, nz], origin=[x_min, y_min, z_min], voxel_size=float(self.voxel_size),
                             method=str(self.type), log=bool(self.log))
         logger.debug("Processing the mask fileset...")
-        vol = sc.process_fileset(masks_files, camera_metadata, bool(self.invert))
+        vol = sc.process_fileset({mask.id: mask.path() for mask in masks_files},
+                                 camera_metadata, bool(self.invert))
         logger.debug(f"Voxel volume shape: {vol.shape}")
         logger.debug(f"Voxel volume size: {vol.size}")
         if len(np.unique(vol)) == 1:
