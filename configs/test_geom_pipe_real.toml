@@ -44,6 +44,9 @@ z = [-175, 105]
 [PointCloud]
 upstream_task = "Voxels"
 missing_images_threshold = 2  # Default: 2
+algorithm = "marching-cubes"  # Default: "marching-cubes"
+sigma = 0.8
+mc_level = 0.5
 
 [TriangleMesh]
 upstream_task = "PointCloud"

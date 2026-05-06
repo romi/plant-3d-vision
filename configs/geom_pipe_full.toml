@@ -129,8 +129,10 @@ z = [-125, 100]
 [PointCloud]
 # Task that provides the voxel array as input
 upstream_task = "Voxels"  # Default: "Voxels"
+# The algorithm to use to compute the pointcloud
+algorithm = "marching-cubes"  # Default: "marching-cubes"
 # Distance of the level set on which the points are sampled
-level_set_value = 1.0  # Default: 1.0
+level_set_value = 0.0  # Default: 1.0
 # Threshold for the number of missing images allowed in the reconstructed volume
 missing_images_threshold = 2  # Default: 2
 # List of labels to use for multi-class point cloud generation
@@ -144,6 +146,10 @@ min_contrast = 10.0  # Default: 10.0
 # Minimum score threshold for points in multi-class segmentation
 # Only used if labels are defined (multi-class)
 min_score = 0.2  # Default: 0.2
+# Standard deviation for Gaussian kernel (only for marching-cubes)
+sigma = 0.8
+# Level set value for the marching cubes algorithm
+mc_level = 0.5
 
 [TriangleMesh]
 # Task that provides the point cloud as input
