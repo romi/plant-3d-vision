@@ -13,7 +13,8 @@ import time
 import networkx as nx
 import numpy as np
 import open3d as o3d
-from scipy.ndimage import binary_erosion
+import skimage
+from scipy.ndimage import binary_erosion, generate_binary_structure
 from scipy.ndimage.filters import gaussian_filter
 from scipy.ndimage.morphology import distance_transform_edt, binary_dilation
 from skimage import measure
@@ -887,7 +888,7 @@ def vol2pcd(volume, origin, voxel_size, level_set_value=0):
     logger.info(f"Total execution time: {time.time() - start_time:.2f}s")
     return pcd
 
-def vol2pcd_mc(volume, origin, voxel_size, level_set_value=0):
+def vol2pcd_mc(volume, origin, voxel_size, level_set_value=0, sigma=0.5, mc_level=0.5):
     """
     Generate a point cloud and triangle mesh from a binary volume using marching cubes.
 
@@ -907,6 +908,10 @@ def vol2pcd_mc(volume, origin, voxel_size, level_set_value=0):
     level_set_value : float, optional
         The level set value used to dilate the binary volume before processing.
         Defaults to 0, which skips the dilation step.
+    sigma : float, optional
+        Standart deviation for the gaussian filtering prior to marching cubes.
+    mc_level : float, optional
+        Level set for the marching cubes algorithm which sets at which level the surface is. Should be between 0 and 1.
 
     Returns
     -------
@@ -934,7 +939,7 @@ def vol2pcd_mc(volume, origin, voxel_size, level_set_value=0):
     >>> vol = read_volume(vol_fs.get_file("Voxels"))
     >>> print(vol.shape)
     (301, 301, 561)
-    >>> pcd, mesh = vol2pcd_mc(vol, [0., 0., 0.], 0.5, level_set_value=1.0)
+    >>> pcd, mesh = vol2pcd_mc(vol, [0., 0., 0.], 0.5, level_set_value=0.0, sigma=0.8, mc_level=0.2)
     >>> print(len(pcd.points))
     20320
     >>> import open3d as o3d
@@ -947,19 +952,19 @@ def vol2pcd_mc(volume, origin, voxel_size, level_set_value=0):
         _t = time.time()
         # Convert offset from world units to voxels
         radius = int(np.round(level_set_value / voxel_size))
-        struct = np.ones((2 * np.abs(radius) + 1,) * 3, dtype=bool)
+        struct = generate_binary_structure(3, 1)
         if radius > 0:
-            volume = binary_dilation(volume, structure=struct)
+            volume = binary_dilation(volume, structure=struct, iterations=radius)
         elif radius < 0:
-            volume = binary_erosion(volume, structure=struct)
+            volume = binary_erosion(volume, structure=struct, iterations=radius)
         logger.info(f"Computing level set dilation... Done in {time.time() - _t:.2f}s")
 
-    # marching_cubes works on a float field; we give it the binary mask.
     logger.info("Computing marching cubes...")
     _t = time.time()
+    blurred_vol = skimage.filters.gaussian(volume.astype(np.float32), sigma=sigma)
     verts, faces, normals, _ = measure.marching_cubes(
-        volume.astype(np.float32),
-        level=0.5,
+        blurred_vol,
+        level=mc_level,
         spacing=(voxel_size, voxel_size, voxel_size)
     )
     logger.info(f"Computing marching cubes... Done in {time.time() - _t:.2f}s")
@@ -969,19 +974,14 @@ def vol2pcd_mc(volume, origin, voxel_size, level_set_value=0):
 
     logger.info("Building Open3D PointCloud and Mesh...")
     _t = time.time()
-    # Build the Open3D point cloud
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(verts)
     pcd.normals = o3d.utility.Vector3dVector(normals)
     pcd.normalize_normals()
 
-    # Create empty triangle mesh object
     mesh = o3d.geometry.TriangleMesh()
-    # Assign vertex coordinates using Open3D's Vector3dVector format
     mesh.vertices = o3d.utility.Vector3dVector(verts)
-    # Assign triangle face indices using Open3D's Vector3iVector format
     mesh.triangles = o3d.utility.Vector3iVector(faces)
-    # Assign vertex normals
     mesh.vertex_normals = o3d.utility.Vector3dVector(normals)
     logger.info(f"Building Open3D PointCloud and Mesh... Done in {time.time() - _t:.2f}s")
     return pcd, mesh

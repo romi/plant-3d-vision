@@ -84,6 +84,12 @@ class PointCloud(RomiTask):
     background_prior = luigi.FloatParameter(default=1.0)  # only used if labels were defined (multiclass)
     min_contrast = luigi.FloatParameter(default=10.0)  # only used if labels were defined (multiclass)
     min_score = luigi.FloatParameter(default=0.2)  # only used if labels were defined (multiclass)
+    algorithm = luigi.ChoiceParameter(
+        default='marching-cubes', choices=['distance-transform', 'marching-cubes'], var_type=str
+    )
+
+    sigma = luigi.FloatParameter(default=0.8, description="Standard deviation for Gaussian kernel (only for marching-cubes)")
+    mc_level = luigi.FloatParameter(default=0.5, description="Level set value for the marching cubes algorithm. Should be between 0 and 1")
 
     def run_multiclass(self, labels):
         """Processes multi-class voxel data to generate a unified point cloud.
@@ -162,7 +168,10 @@ class PointCloud(RomiTask):
                 # Apply minimum score threshold
                 pred_c *= (pred_c > self.min_score)
                 # Convert filtered volume to a partial point cloud
-                out = proc3d.vol2pcd(pred_c, origin, voxel_size, self.level_set_value)
+                if self.algorithm == 'marching-cubes':
+                    out, _ = proc3d.vol2pcd_mc(pred_c, origin, voxel_size, self.level_set_value, self.sigma, self.mc_level)
+                else:
+                    out = proc3d.vol2pcd(pred_c, origin, voxel_size, self.level_set_value)
                 # Assign a color to all points in this partial cloud
                 color = np.zeros((len(out.points), 3))
                 if label[i] in colors:
@@ -204,7 +213,10 @@ class PointCloud(RomiTask):
         # Binarize the volume
         voxels = self._binarize(voxels, method, n_img - self.missing_images_threshold)
         # Directly create a point cloud from the single volume
-        out = proc3d.vol2pcd(voxels, origin, voxel_size, self.level_set_value)
+        if self.algorithm == 'marching-cubes':
+            out, _ = proc3d.vol2pcd_mc(voxels, origin, voxel_size, self.level_set_value, self.sigma, self.mc_level)
+        else:
+            out = proc3d.vol2pcd(voxels, origin, voxel_size, self.level_set_value)
         # Write the point cloud to file and attach metadata
         io.write_point_cloud(self.output_file(create=True), out)
         self.output_file().set_metadata({'voxel_size': voxel_size})
