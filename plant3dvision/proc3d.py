@@ -14,9 +14,11 @@ import networkx as nx
 import numpy as np
 import open3d as o3d
 import skimage
-from scipy.ndimage import binary_erosion, generate_binary_structure
+from scipy.ndimage import binary_erosion
+from scipy.ndimage import generate_binary_structure
 from scipy.ndimage.filters import gaussian_filter
-from scipy.ndimage.morphology import distance_transform_edt, binary_dilation
+from scipy.ndimage.morphology import binary_dilation
+from scipy.ndimage.morphology import distance_transform_edt
 from scipy.spatial import cKDTree
 from skimage import measure
 from skimage.exposure import rescale_intensity
@@ -32,49 +34,64 @@ except:
     logger.warning("Could not load CGAL bindings, some methods will be unavailable")
 
 
-def index2point(indexes, origin, voxel_size):
-    """Converts discrete nd indexes to a 3d points.
+def index2point(indexes: np.ndarray, origin: np.ndarray | list, voxel_size: float) -> np.ndarray:
+    """
+    Convert discrete voxel indices to world coordinates.
+
+    This function transforms integer voxel indices into physical 3‑D points by scaling each index with the
+    voxel size and translating by an origin offset.
 
     Parameters
     ----------
     indexes : numpy.ndarray
-        Nxd array of indices
-    origin : numpy.ndarray
-        1d array of length d
+        An ``(N, d)`` array of integer indices for each voxel.
+        ``N`` is the number of points and ``d`` is the dimensionality (typically 3).
+    origin : numpy.ndarray | list
+        A 1‑D array or list of length ``d`` that specifies the world coordinate of the
+        voxel at index ``(0, 0, ..., 0)``.
     voxel_size : float
-        size of voxels
+        The physical size of a voxel edge. All dimensions are assumed to be isotropic.
 
     Returns
     -------
     numpy.ndarray
-        Nxd array of points
+        An ``(N, d)`` array of world coordinates corresponding to ``indexes``.
+        The returned dtype is the result of broadcasting ``indexes`` and ``voxel_size`` (normally ``float``).
+
     """
     # Convert origin to numpy array if it's a list
     origin = np.asarray(origin)
     return voxel_size * indexes + origin[np.newaxis, :]
 
 
-def point2index(points, origin, voxel_size):
-    """Converts discrete nd indexes to a 3d points.
+def point2index(points: np.ndarray, origin: np.ndarray | list, voxel_size: float) -> np.ndarray:
+    """"
+    Convert continuous 3‑D points to discrete voxel indices.
+
+    This routine translates an array of points expressed in world coordinates into integer voxel indices
+    based on a specified origin and voxel size.
 
     Parameters
     ----------
     points : numpy.ndarray
-        Nxd array of points
-    origin : numpy.ndarray
-        1d array of length d
+        An ``(N, d)`` array of point coordinates.
+        ``N`` is the number of points and ``d`` is the dimensionality of the space.
+    origin : numpy.ndarray | list
+        A 1‑D array or list of length ``d`` representing the world coordinate of the voxel grid origin.
+        It is broadcast against ``points`` so each point is shifted relative to this origin.
     voxel_size : float
-        size of voxels
+        The physical size of a voxel edge (assumed equal along all dimensions).
 
     Returns
     -------
-    numpy.ndarray (dtype=int)
-        Nxd array of indices
+    numpy.ndarray
+        An ``(N, d)`` array of integer voxel indices.
+        Each index corresponds to the voxel that contains the input point.
     """
     return np.array(np.round((points - origin[np.newaxis, :]) / voxel_size), dtype=int)
 
 
-def pcd2mesh(pcd):
+def pcd2mesh(pcd: o3d.geometry.PointCloud) -> o3d.geometry.TriangleMesh:
     """Use CGAL to create a Delaunay triangulation of a point cloud with normals.
 
     Parameters
@@ -764,25 +781,43 @@ def vol2pcd_parallel(volume, origin, voxel_size, level_set_value=0):
     return pcd
 
 
-def vol2pcd(volume, origin, voxel_size, level_set_value=0):
-    """Converts a volume into a point-cloud with normals.
+def vol2pcd(volume: np.ndarray, origin: np.ndarray | list, voxel_size: float,
+            level_set_value: float = 0.) -> o3d.geometry.PointCloud:
+    """Convert a binary volumetric mask into an Open3D point cloud with normals.
+
+    This routine performs a distance transform on a 3‑D binary mask, extracts a level‑set surface around
+    the foreground–background boundary, computes smoothed surface normals, and returns a pointcloud
+    containing the sampled points in real‑world coordinates.
 
     Parameters
     ----------
     volume : numpy.ndarray
-        ``NxMxP`` 3D binary numpy array
-    origin : numpy.ndarray
-        Origin of the volume
+        3‑D binary array of shape ``(N, M, P)``. The foreground voxels (``1``) represent the object to be reconstructed.
+    origin : numpy.ndarray | list
+        3‑tuple or list giving the world coordinates of the array origin (the voxel at index ``[0, 0, 0]``).
     voxel_size : float
-        Voxel size to use to create the point-cloud from the array.
+        Physical size of a voxel edge in the same units as ``origin``.
     level_set_value : float, optional
-        distance of the level set on which the points are sampled
-        Defaults to ``0``.
+        Signed distance value at which the surface is extracted.
+        Positive values sample points inside the object, negative values sample points outside.
+        Default is ``0`` (the zero level set).
 
     Returns
     -------
     open3d.geometry.PointCloud
-        Point-cloud with normal vectors.
+        A point cloud whose points are positioned on the extracted level set and whose normals
+        point inwards (towards the foreground).
+
+    Notes
+    -----
+    The algorithm follows these steps:
+
+    1. Compute a signed distance field from the binary volume.
+    2. Smooth the gradients of the field with a Gaussian filter.
+    3. Locate voxels within a thin band around the chosen level set.
+    4. Compute point positions and normals from the gradients.
+    5. Convert voxel indices to world coordinates using ``origin`` and
+       ``voxel_size``.
 
     Examples
     --------
@@ -889,12 +924,15 @@ def vol2pcd(volume, origin, voxel_size, level_set_value=0):
     logger.info(f"Total execution time: {time.time() - start_time:.2f}s")
     return pcd
 
-def vol2pcd_mc(volume, origin, voxel_size, level_set_value=0, sigma=0.5, mc_level=0.5):
+
+def vol2pcd_mc(volume: np.ndarray, origin: list[float, float, float], voxel_size: float,
+               level_set_value: float = 0., sigma: float = 0.5, mc_level: float = 0.5) -> tuple[
+    o3d.geometry.PointCloud, o3d.geometry.TriangleMesh]:
     """
     Generate a point cloud and triangle mesh from a binary volume using marching cubes.
 
     This function converts a 3D binary volume into a point cloud and a triangle mesh
-    by applying the marching cubes algorithm. The resulting point cloud and mesh
+    by applying the marching cubes' algorithm. The resulting point cloud and mesh
     are in world coordinates, accounting for voxel size and origin. Optionally, a
     level set value can be applied to dilate the input volume before processing.
 
@@ -902,7 +940,7 @@ def vol2pcd_mc(volume, origin, voxel_size, level_set_value=0, sigma=0.5, mc_leve
     ----------
     volume : numpy.ndarray
         A 3D binary volume array representing the input data.
-    origin : Sequence[float]
+    origin : list of float
         The origin of the volume in world coordinates as (x, y, z).
     voxel_size : float
         The size of a voxel in world units.
@@ -912,20 +950,22 @@ def vol2pcd_mc(volume, origin, voxel_size, level_set_value=0, sigma=0.5, mc_leve
     sigma : float, optional
         Standart deviation for the gaussian filtering prior to marching cubes.
     mc_level : float, optional
-        Level set for the marching cubes algorithm which sets at which level the surface is. Should be between 0 and 1.
+        Level set for the marching cubes algorithm which sets at which level the surface is.
+        Should be between 0 and 1.
 
     Returns
     -------
-    tuple
-        A tuple containing:
-        - pcd (open3d.geometry.PointCloud): The generated point cloud object.
-        - mesh (open3d.geometry.TriangleMesh): The generated triangle mesh object.
+    open3d.geometry.PointCloud
+        The generated point cloud object.
+    open3d.geometry.TriangleMesh
+        The generated triangle mesh object.
 
     Raises
     ------
     ValueError
         If any of the input parameters are invalid or the processing fails.
-        Examples
+
+    Examples
     --------
     >>> from plant3dvision.proc3d import vol2pcd_mc
     >>> from plantdb.commons.io import read_volume
@@ -947,6 +987,10 @@ def vol2pcd_mc(volume, origin, voxel_size, level_set_value=0, sigma=0.5, mc_leve
     >>> o3d.visualization.draw_geometries([pcd])
     >>> db.disconnect()
     """
+    # Convert boolean volume to uint8 to be able to perfrom operation (subtractions, ...)
+    if volume.dtype == np.bool:
+        volume = volume.astype(np.uint8)
+
     volume = (volume - np.min(volume)) / np.max(volume - np.min(volume))
     if level_set_value != 0:
         logger.info("Computing level set dilation...")
@@ -1392,17 +1436,41 @@ def pcd_convex_hull_volume(pcd):
 
 def chamfer_distance(pc1: np.ndarray | o3d.geometry.PointCloud, pc2: np.ndarray | o3d.geometry.PointCloud) -> float:
     """ Compute the symmetric Chamfer distance between two point clouds.
+
     Parameters
     ----------
     pc1, pc2 : np.ndarray or o3d.geometry.PointCloud
-        Point clouds of shape (N, D) and (M, D) respectively.
-        D is the dimensionality (3 for typical 3?D clouds).
+        Point clouds of shape ``(N, D)`` and ``(M, D)`` respectively.
+        ``D`` is the dimensionality (3 for typical 3-D clouds).
 
     Returns
     -------
     float
-        Mean of the squared nearest?neighbor distances from pc1?pc2
-        plus the mean from pc2?pc1.
+        Mean of the squared nearest-neighbor distances from `pc1` to `pc2`
+        plus the mean from `pc2` to `pc1`.
+
+    Examples
+    --------
+    >>> from plant3dvision.proc3d import chamfer_distance
+    >>> from plant3dvision.proc3d import vol2pcd
+    >>> from plant3dvision.proc3d import vol2pcd_mc
+    >>> from plantdb.commons.io import read_volume
+    >>> from plantdb.server.core.utils import compute_fileset_matches
+    >>> from plantdb.commons.test_database import test_database
+    >>> db = test_database()
+    >>> db.connect()
+    >>> db.login('admin', 'admin')
+    >>> scan = db.get_scan("real_plant_analyzed")
+    >>> vol_fs_id = compute_fileset_matches(scan)["Voxels"]
+    >>> vol_fs = scan.get_fileset(vol_fs_id)
+    >>> vol = read_volume(vol_fs.get_file("Voxels"))
+    >>> print(vol.shape)
+    (301, 301, 561)
+    >>> pcd = vol2pcd(vol>0., [0., 0., 0.], 0.5, level_set_value=0.0)
+    >>> pcd_mc, _ = vol2pcd_mc(vol>0., [0., 0., 0.], 0.5, level_set_value=0.0, sigma=0.8, mc_level=0.2)
+    >>> dist = chamfer_distance(pcd, pcd_mc)
+    >>> print(dist)
+    >>> db.disconnect()
     """
     # Convert open3d PointCloud to numpy arrays
     pc1 = np.asarray(pc1.points) if isinstance(pc1, o3d.geometry.PointCloud) else pc1
