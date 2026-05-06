@@ -45,6 +45,7 @@ z = [-175, 105]
 upstream_task = "Voxels"
 missing_images_threshold = 2  # Default: 2
 algorithm = "marching-cubes"  # Default: "marching-cubes"
+level_set_value = 1.0
 sigma = 0.8
 mc_level = 0.5
 
