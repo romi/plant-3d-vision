@@ -33,7 +33,7 @@ class PointCloud(RomiTask):
     upstream_task : luigi.TaskParameter, optional
         The upstream task providing the input data for this task. Defaults to ``Voxels``.
     algorithm : luigi.ChoiceParameter, optional
-        The algorithm to use to comput the pointcloud.
+        The algorithm to use to compute the pointcloud.
         Use 'marching-cubes' for a fast processing with a control over smoothing operation.
         Use 'distance-transform' to extract a level‑set surface around the foreground–background boundary.
         Default to ``'marching-cubes'``.
@@ -59,10 +59,10 @@ class PointCloud(RomiTask):
         Defaults to ``0.2``.
     sigma : luigi.FloatParameter, optional
         Standard deviation for Gaussian kernel (only for marching-cubes).
-        Defaults to ``0.2``.
+        Defaults to ``0.8``.
     mc_level : luigi.FloatParameter, optional
         Level set value for the marching cubes algorithm. Should be between 0 and 1.
-        Defaults to ``0.2``.
+        Defaults to ``0.5``.
 
     Returns
     -------
