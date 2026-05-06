@@ -17,6 +17,7 @@ import skimage
 from scipy.ndimage import binary_erosion, generate_binary_structure
 from scipy.ndimage.filters import gaussian_filter
 from scipy.ndimage.morphology import distance_transform_edt, binary_dilation
+from scipy.spatial import cKDTree
 from skimage import measure
 from skimage.exposure import rescale_intensity
 from tqdm import tqdm
@@ -1387,3 +1388,34 @@ def pcd_convex_hull_volume(pcd):
 
     convex_hull, _ = pcd.compute_convex_hull()
     return convex_hull.get_volume()
+
+
+def chamfer_distance(pc1: np.ndarray | o3d.geometry.PointCloud, pc2: np.ndarray | o3d.geometry.PointCloud) -> float:
+    """ Compute the symmetric Chamfer distance between two point clouds.
+    Parameters
+    ----------
+    pc1, pc2 : np.ndarray or o3d.geometry.PointCloud
+        Point clouds of shape (N, D) and (M, D) respectively.
+        D is the dimensionality (3 for typical 3?D clouds).
+
+    Returns
+    -------
+    float
+        Mean of the squared nearest?neighbor distances from pc1?pc2
+        plus the mean from pc2?pc1.
+    """
+    # Convert open3d PointCloud to numpy arrays
+    pc1 = np.asarray(pc1.points) if isinstance(pc1, o3d.geometry.PointCloud) else pc1
+    pc2 = np.asarray(pc2.points) if isinstance(pc2, o3d.geometry.PointCloud) else pc2
+
+    # Build KD?trees for fast NN queries
+    tree1 = cKDTree(pc1)
+    tree2 = cKDTree(pc2)
+
+    # Distances from each point in pc1 to its nearest neighbour in pc2
+    d1, _ = tree1.query(pc2, k=1)
+    # Distances from each point in pc2 to its nearest neighbour in pc1
+    d2, _ = tree2.query(pc1, k=1)
+
+    # Chamfer distance = average of squared distances in both directions
+    return float(np.mean(d1 ** 2) + np.mean(d2 ** 2))
