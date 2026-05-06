@@ -32,8 +32,16 @@ class PointCloud(RomiTask):
     ----------
     upstream_task : luigi.TaskParameter, optional
         The upstream task providing the input data for this task. Defaults to ``Voxels``.
+    algorithm : luigi.ChoiceParameter, optional
+        The algorithm to use to compute the pointcloud.
+        Use 'marching-cubes' for a fast processing with a control over smoothing operation.
+        Use 'distance-transform' to extract a level‑set surface around the foreground–background boundary.
+        Default to ``'marching-cubes'``.
     level_set_value : luigi.FloatParameter, optional
-        Value used to define the level set for point cloud generation. Default is ``1.0``.
+        Value used to define the level set for point cloud generation.
+        With the ``'marching-cubes'`` `algorithm` we advise to use `0.`.
+        With the ``'distance-transform'`` `algorithm` we advise to use `1.`.
+        Default is ``0.0``.
     missing_images_threshold : luigi.IntParameter, optional
         Threshold for the number of missing images allowed in the reconstructed volume.
     labels : luigi.ListParameters, optional
@@ -49,6 +57,12 @@ class PointCloud(RomiTask):
     min_score : luigi.FloatParameter, optional
         Minimum score threshold for class predictions in a multi-class volume.
         Defaults to ``0.2``.
+    sigma : luigi.FloatParameter, optional
+        Standard deviation for Gaussian kernel (only for marching-cubes).
+        Defaults to ``0.8``.
+    mc_level : luigi.FloatParameter, optional
+        Level set value for the marching cubes algorithm. Should be between 0 and 1.
+        Defaults to ``0.5``.
 
     Returns
     -------
@@ -76,7 +90,10 @@ class PointCloud(RomiTask):
     If multi-class, point label information is included in the metadata.
     """
     upstream_task = luigi.TaskParameter(default=Voxels)  # override default attribute from ``RomiTask``
-    level_set_value = luigi.FloatParameter(default=1.0)
+    algorithm = luigi.ChoiceParameter(
+        default='marching-cubes', choices=['distance-transform', 'marching-cubes'], var_type=str
+    )
+    level_set_value = luigi.FloatParameter(default=0.0)
 
     missing_images_threshold = luigi.IntParameter(default=2)
 
@@ -84,6 +101,11 @@ class PointCloud(RomiTask):
     background_prior = luigi.FloatParameter(default=1.0)  # only used if labels were defined (multiclass)
     min_contrast = luigi.FloatParameter(default=10.0)  # only used if labels were defined (multiclass)
     min_score = luigi.FloatParameter(default=0.2)  # only used if labels were defined (multiclass)
+
+    sigma = luigi.FloatParameter(default=0.8,
+                                 description="Standard deviation for Gaussian kernel (only for marching-cubes)")
+    mc_level = luigi.FloatParameter(default=0.5,
+                                    description="Level set value for the marching cubes algorithm. Should be between 0 and 1")
 
     def run_multiclass(self, labels):
         """Processes multi-class voxel data to generate a unified point cloud.
@@ -162,7 +184,10 @@ class PointCloud(RomiTask):
                 # Apply minimum score threshold
                 pred_c *= (pred_c > self.min_score)
                 # Convert filtered volume to a partial point cloud
-                out = proc3d.vol2pcd(pred_c, origin, voxel_size, self.level_set_value)
+                if self.algorithm == 'marching-cubes':
+                    out, _ = proc3d.vol2pcd_mc(pred_c, origin, voxel_size, self.level_set_value, self.sigma, self.mc_level)
+                else:
+                    out = proc3d.vol2pcd(pred_c, origin, voxel_size, self.level_set_value)
                 # Assign a color to all points in this partial cloud
                 color = np.zeros((len(out.points), 3))
                 if label[i] in colors:
@@ -204,7 +229,10 @@ class PointCloud(RomiTask):
         # Binarize the volume
         voxels = self._binarize(voxels, method, n_img - self.missing_images_threshold)
         # Directly create a point cloud from the single volume
-        out = proc3d.vol2pcd(voxels, origin, voxel_size, self.level_set_value)
+        if self.algorithm == 'marching-cubes':
+            out, _ = proc3d.vol2pcd_mc(voxels, origin, voxel_size, self.level_set_value, self.sigma, self.mc_level)
+        else:
+            out = proc3d.vol2pcd(voxels, origin, voxel_size, self.level_set_value)
         # Write the point cloud to file and attach metadata
         io.write_point_cloud(self.output_file(create=True), out)
         self.output_file().set_metadata({'voxel_size': voxel_size})

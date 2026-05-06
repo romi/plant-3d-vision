@@ -76,8 +76,14 @@ z = [-125, 100]
 [PointCloud]
 # Task that provides the voxel array as input
 upstream_task = "Voxels"  # Default: "Voxels"
+# The algorithm to use to compute the pointcloud
+algorithm = "marching-cubes"  # Default: "marching-cubes"
 # Threshold for the number of missing images allowed in the reconstruction
 missing_images_threshold = 2  # Default: 2
+# Standard deviation for Gaussian kernel (only for marching-cubes)
+sigma = 0.8
+# Level set value for the marching cubes algorithm
+mc_level = 0.5
 
 [TriangleMesh]
 # Task that provides the point cloud as input
