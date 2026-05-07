@@ -43,7 +43,7 @@ class Undistort(FileByFileTask):
         If unspecified (default), the current active scan will be used.
     n_workers : luigi.IntParameter, optional
         Number of worker threads to use for parallel processing.
-        Defaults to ``-1``, which uses the default ``ThreadPoolExecutor`` behavior.
+        Defaults to ``None``, which uses the default ``ThreadPoolExecutor`` behavior.
     parallel : luigi.BoolParameter, optional
         Flag to enable/disable parallel processing.
         Defaults to ``True``.
@@ -102,6 +102,9 @@ class Undistort(FileByFileTask):
     camera_model = luigi.Parameter(default="SIMPLE_RADIAL")  # Camera model type for intrinsic calibration
     intrinsic_calib_scan_id = luigi.Parameter(default="")  # ID of scan containing intrinsic calibration
     extrinsic_calib_scan_id = luigi.Parameter(default="")  # ID of scan containing extrinsic calibration
+
+    n_workers = luigi.IntParameter(default=None)
+    parallel = luigi.BoolParameter(default=True)
 
     def requires(self):
         """Determines the dependencies required for the task execution."""
