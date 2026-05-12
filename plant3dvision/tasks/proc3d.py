@@ -4,13 +4,15 @@
 import luigi
 import numpy as np
 import open3d as o3d
-from plantdb.commons import io
+from tqdm import tqdm
 
 from plant3dvision import proc3d
 from plant3dvision.proc3d import PointCloudColorMap
 from plant3dvision.proc3d import filter_segmented_pcd
 from plant3dvision.tasks.colmap import Colmap
 from plant3dvision.tasks.proc2d import Segmentation2D
+from plantdb.commons import io
+from plantdb.commons.fsdb.exceptions import FileNotFoundError
 from romitask import RomiTask
 from romitask.log import get_logger
 from skeleton_refinement.stochastic_registration import knn_mst
@@ -391,7 +393,7 @@ class SegmentedPointCloud(RomiTask):
         scores = np.zeros((len(labels), len(pts)))
 
         # Process each segmentation file
-        for fi in fs.get_files():
+        for fi in tqdm(fs.get_files(), unit="file", desc="Points backprojection"):
             label = fi.get_metadata("channel")
             if label not in labels:
                 continue
@@ -424,9 +426,9 @@ class SegmentedPointCloud(RomiTask):
                 if self.is_in_pict(px, mask.shape):
                     scores[label_idx, i] += mask[px[1], px[0]]
 
+        logger.info(f"Processing following labels: {labels}")
         # Determine final label for each point based on highest score
         pts_labels = np.argmax(scores, axis=0).flatten()
-        logger.critical(f"Processed following labels: {labels}")
 
         # Get color mapping from config
         colors = PointCloudColorMap().colors
@@ -439,7 +441,7 @@ class SegmentedPointCloud(RomiTask):
         # Assign colors and labels to points
         for i in range(len(labels)):
             nlab_pts = (pts_labels == i).sum()
-            logger.critical(f"Number of points associated with label '{labels[i]}': {nlab_pts}")
+            logger.info(f"Number of points associated with label '{labels[i]}': {nlab_pts}")
 
             # Use predefined color if available, otherwise random color
             if labels[i] in colors:
@@ -769,9 +771,12 @@ class OrganSegmentation(RomiTask):
         # Skip point cloud reconstruction if no points corresponding to label
         n_points = sum(idx_mask)
         if n_points == 0:
-            print(f"No points found for label: '{label}'!")
+            logger.warning(f"No points found for label: '{label}'!")
         else:
-            print(f"Found {n_points} point for, label '{label}'.")
+            if log_info:
+                logger.info(f"Found {n_points} point for, label '{label}'.")
+            else:
+                logger.debug(f"Found {n_points} point for, label '{label}'.")
         # Returns point cloud (colored & with normals if any):
         return pcd.select_by_index(list(idx_mask))
 
@@ -788,7 +793,7 @@ class OrganSegmentation(RomiTask):
         # Process each unique organ label separately
         for label in unique_labels:
             # Extract points corresponding to current label
-            label_pcd = self.get_label_pointcloud(labelled_pcd, labels, label)
+            label_pcd = self.get_label_pointcloud(labelled_pcd, labels, label, log_info=True)
             # Special handling for stem - no clustering needed
             if label == 'stem':
                 f = output_fileset.create_file(f"{label}_000")
@@ -806,16 +811,17 @@ class OrganSegmentation(RomiTask):
             # Get unique cluster IDs (-1 represents noise points)
             ids = np.unique(clustered_arr)
             n_ids = len(ids)
-            print(f"Found {n_ids} clusters in the point cloud!")
+            logger.info(f"Found {n_ids} clusters in the point cloud!")
             # Process each cluster separately
             for i in ids:
+                label_id = f"{label}_{str(i).zfill(len(str(n_ids)))}"
                 # Skip noise points (cluster ID -1)
                 if i == -1:
                     continue
                 # Extract points for current cluster
                 cluster_pcd = self.get_label_pointcloud(label_pcd, clustered_arr, i)
                 # Save cluster point cloud to output file
-                f = output_fileset.create_file(f"{label}_{i:03d}")
+                f = output_fileset.create_file(label_id)
                 io.write_point_cloud(f, cluster_pcd)
                 f.set_metadata("label", label)
 
