@@ -11,6 +11,7 @@ from plant3dvision.proc3d import PointCloudColorMap
 from plant3dvision.proc3d import filter_segmented_pcd
 from plant3dvision.tasks.colmap import Colmap
 from plant3dvision.tasks.proc2d import Segmentation2D
+from plant3dvision.tasks.voxel_reconstruction import Voxels
 from plantdb.commons import io
 from plantdb.commons.fsdb.exceptions import FileNotFoundError
 from romitask import RomiTask
@@ -92,9 +93,9 @@ class PointCloud(RomiTask):
     If multi-class, point label information is included in the metadata.
     """
     upstream_task = luigi.TaskParameter(default=Voxels)  # override default attribute from ``RomiTask``
-    algorithm = luigi.ChoiceParameter(
-        default='marching-cubes', choices=['distance-transform', 'marching-cubes'], var_type=str
-    )
+    algorithm = luigi.ChoiceParameter(default='marching-cubes',
+                                      choices=['distance-transform', 'marching-cubes'],
+                                      var_type=str)
     level_set_value = luigi.FloatParameter(default=0.0)
 
     missing_images_threshold = luigi.IntParameter(default=2)
@@ -187,7 +188,8 @@ class PointCloud(RomiTask):
                 pred_c *= (pred_c > self.min_score)
                 # Convert filtered volume to a partial point cloud
                 if self.algorithm == 'marching-cubes':
-                    out, _ = proc3d.vol2pcd_mc(pred_c, origin, voxel_size, self.level_set_value, self.sigma, self.mc_level)
+                    out, _ = proc3d.vol2pcd_mc(pred_c, origin, voxel_size, self.level_set_value, self.sigma,
+                                               self.mc_level)
                 else:
                     out = proc3d.vol2pcd(pred_c, origin, voxel_size, self.level_set_value)
                 # Assign a color to all points in this partial cloud
@@ -245,7 +247,6 @@ class PointCloud(RomiTask):
             return voxels >= threshold
         else:
             return voxels >= 1.
-
 
     def run(self):
         """Process a volumetric data file into a point cloud representation.
@@ -324,9 +325,9 @@ class SegmentedPointCloud(RomiTask):
             If the specified file or any files are not found during retrieval.
         """
         try:
-            x = self.upstream_task().output().get().get_file("dense")
+            x = self.upstream_task().output().get().get_file("dense")  # from Colmap
         except FileNotFoundError:
-            x = self.upstream_task().output().get().get_files()[0]
+            x = self.upstream_task().output().get().get_files()[0]  # try to grab the first one, if any
 
         return io.read_point_cloud(x)
 
@@ -749,7 +750,7 @@ class OrganSegmentation(RomiTask):
     eps = luigi.FloatParameter(default=2.0)
     min_points = luigi.IntParameter(default=5)
 
-    def get_label_pointcloud(self, pcd, labels, label):
+    def get_label_pointcloud(self, pcd, labels, label, log_info=False):
         """Return a point cloud only for the selected label.
 
         Parameters
