@@ -646,6 +646,65 @@ class ClusteredMesh(RomiTask):
                 f.set_metadata("label", l)
 
 
+class FilteredSegmentedPointCloud(RomiTask):
+    """Filters small color/label patches from a ``SegmentedPointCloud`` output.
+
+    Small, isolated patches of a given label that are embedded inside a larger
+    patch of another label are a common artefact of the back-projection segmentation pipeline.
+    This task removes them by running a per-label DBSCAN clustering and discarding any cluster
+    whose size falls below a configurable threshold. Points that are discarded are re-labelled by
+    looking at the majority label among their k-nearest neighbours in the full point cloud.
+
+    Attributes
+    ----------
+    upstream_task : luigi.TaskParameter, optional
+        Task upstream of this task, should provide a **labelled** point cloud.
+        Defaults to ``SegmentedPointCloud``.
+    scan_id : luigi.Parameter, optional
+        The dataset id (scan name) to use to create the ``FilesetTarget``.
+        If unspecified (default), the current active scan will be used.
+    eps : luigi.FloatParameter, optional
+        Maximum Euclidean distance between two points for them to be considered neighbours by DBSCAN.
+        Defaults to ``2.0``.
+    min_points : luigi.IntParameter, optional
+        Minimum number of points required to form a dense region in DBSCAN.
+        Defaults to ``5``.
+    n_neighbors : luigi.IntParameter, optional
+        Number of nearest neighbours used to re-label small‑patch points via a k‑NN majority vote.
+        Defaults to ``10``.
+    mad_factor : luigi.FloatParameter, optional
+        Multiplicative factor applied to the MAD to set the lower‑side outlier threshold.
+        Clusters with `size < (median – mad_factor×MAD)` are considered small patches.
+        Defaults to ``3.0``.
+
+    Notes
+    -----
+    * Points that belong to DBSCAN noise (cluster id ``-1``) are also considered small-patch points
+      and get re-labelled.
+    * If a re-labelled point has no valid neighbour with a known label (unlikely but possible for
+      very sparse clouds) it keeps its original label.
+    """
+
+    upstream_task = luigi.TaskParameter(default=SegmentedPointCloud)
+
+    eps = luigi.FloatParameter(default=2.0)
+    min_points = luigi.IntParameter(default=5)
+    n_neighbors = luigi.IntParameter(default=10)
+    mad_factor = luigi.FloatParameter(default=3.)
+
+    def run(self):
+        # Load the labelled point cloud produced by SegmentedPointCloud
+        pcd = io.read_point_cloud(self.input_file())
+        point_labels = self.input_file().get_metadata("labels")  # list[str], one per point
+
+        pcd = filter_segmented_pcd(pcd, point_labels, self.eps, self.min_points, self.n_neighbors, self.mad_factor)
+
+        # Save the filtered point cloud
+        out_file = self.output_file(create=True)
+        io.write_point_cloud(out_file, pcd)
+        out_file.set_metadata("labels", point_labels)
+
+
 class OrganSegmentation(RomiTask):
     """Organ detection using DBSCAN clustering on the SegmentedPointCloud.
 
