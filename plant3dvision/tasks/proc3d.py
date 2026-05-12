@@ -7,9 +7,8 @@ import open3d as o3d
 from plantdb.commons import io
 
 from plant3dvision import proc3d
-from plant3dvision.tasks import config
-from plant3dvision.tasks.voxel_reconstruction import Voxels
 from plant3dvision.proc3d import PointCloudColorMap
+from plant3dvision.proc3d import filter_segmented_pcd
 from plant3dvision.tasks.colmap import Colmap
 from plant3dvision.tasks.proc2d import Segmentation2D
 from romitask import RomiTask
@@ -430,9 +429,8 @@ class SegmentedPointCloud(RomiTask):
         logger.critical(f"Processed following labels: {labels}")
 
         # Get color mapping from config
-        colors = config.PointCloudColorConfig().colors
-        logger.critical(f"Associated colors: {colors}")
         colors = PointCloudColorMap().colors
+        logger.debug(f"Associated colors: {colors}")
 
         # Initialize arrays for point colors and labels
         color_array = np.zeros((len(pts), 3))
