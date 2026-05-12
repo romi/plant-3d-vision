@@ -1492,3 +1492,54 @@ def chamfer_distance(pc1: np.ndarray | o3d.geometry.PointCloud, pc2: np.ndarray 
 
     # Chamfer distance = average of squared distances in both directions
     return float(np.mean(d1 ** 2) + np.mean(d2 ** 2))
+
+
+class PointCloudColorMap:
+    """Map RGB colors to semantic labels for point cloud coloring."""
+    colors = {
+        "stem": [1.0, 0.0, 0.0],
+        "flower": [1.0, 1.0, 0.0],
+        "fruit": [1.0, 0.0, 1.0],
+        "pedicel": [1.0, 1.0, 1.0],
+        "leaf": [0.0, 1.0, 0.0],
+    }
+
+    def label_to_rgb(self, label: str, default: list[float] = [1., 1., 1.]) -> list[float]:
+        """
+        Convert a label identifier to its corresponding RGB color.
+
+        Parameters
+        ----------
+        label: str
+            Label identifier used as a key in the internal color mapping.
+        default : list of float, optional
+            RGB values to return when ``label`` is not present in the mapping.
+            The default is ``[1., 1., 1.]`` which represents white.
+
+        Returns
+        -------
+        rgb : list of float
+            A len-3 list containing the RGB values associated with ``label`` or the ``default`` value if the
+            label is absent.
+        """
+        return self.colors.get(label, default)
+
+    def labels_to_rgb(self, labels: list[str], default: list[float] = [1., 1., 1.]) -> list[list[float]]:
+        """
+        Convert a label identifier to its corresponding RGB color.
+
+        Parameters
+        ----------
+        label: list[str]
+            A list of label identifiers used as a key in the internal color mapping.
+        default : list of float, optional
+            RGB values to return when ``label`` is not present in the mapping.
+            The default is ``[1., 1., 1.]`` which represents white.
+
+        Returns
+        -------
+        rgb : list of list of float
+            A list of len-3 list of floats containing the RGB values associated with ``label`` or the
+            ``default`` value if the label is absent.
+        """
+        return [self.colors.get(label, default) for label in labels]
