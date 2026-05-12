@@ -1543,3 +1543,210 @@ class PointCloudColorMap:
             ``default`` value if the label is absent.
         """
         return [self.colors.get(label, default) for label in labels]
+
+
+def filter_segmented_pcd(pcd: o3d.geometry.PointCloud,
+                         point_labels: list[str],
+                         eps: float = 2.0,
+                         min_points: int = 5,
+                         n_neighbors: int = 10,
+                         mad_factor: float = 3.0) -> o3d.geometry.PointCloud:
+    """
+    Filter small, isolated label patches from a segmented point cloud.
+
+    Small, isolated patches of a given label that are embedded inside a larger
+    patch of another label are a common artefact of the back-projection segmentation pipeline.
+    Clusters whose size falls below a threshold derived from the median absolute deviation (MAD) are
+    considered *small patches*.
+    Points that are discarded are re-labelled by looking at the majority label among their k-nearest
+    neighbours in the full point cloud.
+
+    Parameters
+    ----------
+    pcd : o3d.geometry.PointCloud
+        Input point cloud containing 3‑D coordinates.
+    point_labels : list of str
+        List of labels associated with each point in ``pcd``.
+    eps : float, optional
+        Maximum Euclidean distance between two points for them to be considered neighbours by DBSCAN.
+        Defaults to ``2.0``.
+    min_points : int, optional
+        Minimum number of points required to form a dense region in DBSCAN.
+        Defaults to ``5``.
+    n_neighbors : int, optional
+        Number of nearest neighbours used to re-label small‑patch points via a k‑NN majority vote.
+        Defaults to ``10``.
+    mad_factor : float, optional
+        Multiplicative factor applied to the MAD to set the lower‑side outlier threshold.
+        Clusters with `size < (median – mad_factor×MAD)` are considered small patches.
+        Defaults to ``3.0``.
+
+    Returns
+    -------
+    o3d.geometry.PointCloud
+        The filtered point cloud.
+
+    Notes
+    -----
+    * Points that belong to DBSCAN noise (cluster id ``-1``) are also considered small-patch points
+      and get re-labelled.
+    * If a re-labelled point has no valid neighbour with a known label (unlikely but possible for
+      very sparse clouds) it keeps its original label.
+
+    Examples
+    --------
+    >>> from plantdb.commons.fsdb.core import FSDB
+    >>> import open3d as o3d
+    >>> import pyvista as pv
+    >>> from plant3dvision.proc3d import filter_segmented_pcd
+    >>> from plant3dvision.proc3d import PointCloudColorMap
+    >>> from plant3dvision.visu.pyvista import o3d_point_cloud_to_polydata
+    >>> db_path = "/tmp/romidb/"
+    >>> db = FSDB(db_path, no_auth=True)
+    >>> db.connect()
+    >>> scan = db.get_scan("2026-05-08_21-52-20_ML_real_plant")
+    >>> fs = scan.get_fileset("SegmentedPointCloud__Segmentation2D_PointCloud_708d848ef9")
+    >>> pcd_file = fs.get_file("SegmentedPointCloud")
+    >>> point_labels = pcd_file.get_metadata("labels")
+    >>> pcd = o3d.io.read_point_cloud(pcd_file.path())
+    >>> pcd_cmap = PointCloudColorMap()
+    >>> pcd.colors = o3d.utility.Vector3dVector(pcd_cmap.labels_to_rgb(point_labels))
+    >>> # Filter small patches:
+    >>> new_pcd = filter_segmented_pcd(pcd, point_labels, eps=4, mad_factor=2)
+    >>> # Visualize:
+    >>> pv_pcd = o3d_point_cloud_to_polydata(pcd)
+    >>> pv_new_pcd = o3d_point_cloud_to_polydata(new_pcd)
+    >>> plotter = pv.Plotter(shape=(1, 2))
+    >>> plotter.subplot(0, 0)
+    >>> _ = plotter.add_mesh(pv_pcd)
+    >>> _ = plotter.show_grid()
+    >>> plotter.subplot(0, 1)
+    >>> _ = plotter.add_mesh(pv_new_pcd)
+    >>> _ = plotter.show_grid()
+    >>> plotter.link_views()
+    >>> plotter.show()
+    """
+    from sklearn.neighbors import KNeighborsClassifier
+
+    if point_labels is None:
+        raise ValueError("Input point cloud has no 'labels' metadata. "
+                         "Make sure the upstream task is SegmentedPointCloud.")
+
+    pts = np.asarray(pcd.points)  # (N, 3) array of point coordinates
+    colors = np.asarray(pcd.colors)  # (N, 3) original colors
+    point_labels = list(point_labels)  # mutable copy
+    n_pts = len(pts)  # total number of points
+
+    unique_labels = [l for l in set(point_labels) if l != ""]
+    logger.info(f"Labels found in input cloud: {unique_labels}")
+
+    # Boolean mask: if True, point is "good" (belongs to a large cluster)
+    #               if False, point is a small-patch candidate for re-labelling
+    keep_mask = np.ones(n_pts, dtype=bool)
+
+    # - Per-label DBSCAN clustering to identify small patches
+    for label in unique_labels:
+        label_idx = np.where(np.array(point_labels) == label)[0]  # indices of current label
+        if len(label_idx) == 0:
+            continue
+
+        label_pts = pts[label_idx]  # sub-pointcloud for this label
+
+        # Build a temporary Open3D pointcloud for DBSCAN
+        sub_pcd = o3d.geometry.PointCloud()
+        sub_pcd.points = o3d.utility.Vector3dVector(label_pts)
+
+        cluster_ids = np.array(
+            sub_pcd.cluster_dbscan(eps=eps, min_points=int(min_points), print_progress=False)
+        )  # shape (len(label_idx),), values: -1 = 'noise', [0, K] = 'cluster id'
+
+        unique_clusters = np.unique(cluster_ids)
+
+        # Collect sizes of valid clusters (ignore noise)
+        cluster_sizes = [(cid, (cluster_ids == cid).sum()) for cid in unique_clusters if cid != -1]
+
+        if cluster_sizes:
+            sizes = np.array([sz for _, sz in cluster_sizes])
+            median_sz = np.median(sizes)  # median cluster size
+            mad_sz = np.median(np.abs(sizes - median_sz))  # median absolute deviation
+            # Guard against MAD == 0 (all clusters are of same size)
+            if mad_sz == 0:
+                threshold = median_sz * 0.5  # fallback to 50% of median
+            else:
+                threshold = median_sz - mad_factor * mad_sz
+            # Ensure threshold is at least 1 point
+            threshold = max(1, threshold)
+        else:
+            # No non‑noise clusters → everything is noise
+            threshold = 0
+
+        # Mark outliers (noise always outlier)
+        for cid, cluster_size in cluster_sizes:
+            is_noise = False
+            cluster_mask = cluster_ids == cid
+            if cid == -1:
+                is_noise = True
+            if is_noise or cluster_size < threshold:
+                logger.debug(
+                    f"Label '{label}': cluster {cid} (size={cluster_size}) "
+                    f"is below MAD threshold ({threshold:.1f}) and marked for re‑labelling."
+                )
+                keep_mask[label_idx[cluster_mask]] = False
+
+        # Explicitly handle pure noise points (cid == -1) not covered above
+        noise_mask = cluster_ids == -1
+        if noise_mask.any():
+            logger.debug(
+                f"Label '{label}': {noise_mask.sum()} noise points, marked for re‑labelling."
+            )
+            keep_mask[label_idx[noise_mask]] = False
+
+    n_relabel = (~keep_mask).sum()
+    logger.info(f"Points to be re-labelled (small patches): {n_relabel} / {n_pts}")
+
+    # - Re-label small-patch points via k-NN majority vote on the points that belong to large clusters
+    if n_relabel > 0:
+        kept_idx = np.where(keep_mask)[0]  # indices of points to keep
+        relabel_idx = np.where(~keep_mask)[0]  # indices of points to re‑label
+
+        if len(kept_idx) == 0:
+            logger.warning("All points were marked as small patches – nothing to re-label from. "
+                           "Consider relaxing the thresholds.")
+        else:
+            # Map string labels to integers for the classifier
+            label_to_int = {l: i for i, l in enumerate(unique_labels)}
+            int_to_label = {i: l for l, i in label_to_int.items()}
+
+            kept_labels_int = np.array([label_to_int[point_labels[i]] for i in kept_idx])
+
+            knn = KNeighborsClassifier(
+                n_neighbors=min(int(n_neighbors), len(kept_idx)),
+                algorithm='kd_tree'
+            )
+            knn.fit(pts[kept_idx], kept_labels_int)  # train on kept points
+            predicted_int = knn.predict(pts[relabel_idx])  # predict for small patches
+
+            for arr_pos, global_idx in enumerate(relabel_idx):
+                point_labels[global_idx] = int_to_label[predicted_int[arr_pos]]
+
+    # - Update colors to match the (possibly changed) labels
+    color_cfg = PointCloudColorMap().colors  # predefined label to RGB mapping
+    color_array = np.array(colors)  # start from original colors
+
+    for label in unique_labels:
+        label_idx = np.where(np.array(point_labels) == label)[0]
+        if len(label_idx) == 0:
+            continue
+        if label in color_cfg:
+            color_array[label_idx] = np.asarray(color_cfg[label])  # apply mapped color
+        # If no predefined color, keep the original color from the upstream cloud
+
+    # Log final point counts per label
+    for label in unique_labels:
+        n = sum(1 for l in point_labels if l == label)
+        logger.info(f"Points with label '{label}' after filtering: {n}")
+
+    out_pcd = o3d.geometry.PointCloud()
+    out_pcd.points = o3d.utility.Vector3dVector(pts)
+    out_pcd.colors = o3d.utility.Vector3dVector(color_array)
+    return out_pcd

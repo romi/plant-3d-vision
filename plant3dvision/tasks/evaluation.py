@@ -12,8 +12,7 @@ from PIL import Image
 
 from plant3dvision.metrics import CompareMaskFilesets
 from plant3dvision.metrics import CompareSegmentedPointClouds
-from plant3dvision.tasks import voxel_reconstruction
-from plant3dvision.tasks import config
+from plant3dvision.proc3d import PointCloudColorMap
 from plant3dvision.tasks import proc2d
 from plant3dvision.tasks import proc3d
 from plant3dvision.tasks.arabidopsis import AnglesAndInternodes
@@ -154,7 +153,7 @@ class PointCloudGroundTruth(RomiTask):
         x = self.input_file()
         mtl_file = self.input().get().get_file(x.id + "_mtl")
         outfs = self.output().get()
-        colors = config.PointCloudColorConfig().colors
+        colors = PointCloudColorMap().colors
         with tempfile.TemporaryDirectory() as tmpdir:
             to_file(x, os.path.join(tmpdir, "plant.obj"))
             to_file(x, os.path.join(tmpdir, "plant.mtl"))
@@ -215,7 +214,7 @@ class ClusteredMeshGroundTruth(RomiTask):
         x = self.input_file()
         mtl_file = self.input().get().get_file(x.id + "_mtl")
         outfs = self.output().get()
-        colors = config.PointCloudColorConfig().colors
+        colors = PointCloudColorMap().colors
         output_fileset = self.output().get()
         with tempfile.TemporaryDirectory() as tmpdir:
             to_file(x, os.path.join(tmpdir, "plant.obj"))
