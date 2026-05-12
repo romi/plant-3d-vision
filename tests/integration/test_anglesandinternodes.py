@@ -71,7 +71,7 @@ class TestGeomAnglesAndInternodes(unittest.TestCase):
 
 class TestMLAnglesAndInternodes(unittest.TestCase):
     def test_real_plant(self):
-        ml_pipe_real_conf = os.path.join(Path(__file__).parents[2], "configs/ml_pipe_real.toml")
+        ml_pipe_real_conf = os.path.join(Path(__file__).parents[2], "configs/test_ml_pipe_real.toml")
         print(f"Testing CNN pipeline with conf: {ml_pipe_real_conf}")
         real_plant_data = os.path.join(Path(__file__).parents[1], "testdata/real_plant/")
         print(f"Testing CNN pipeline with data: {real_plant_data}")

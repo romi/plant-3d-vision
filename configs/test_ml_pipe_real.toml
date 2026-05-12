@@ -1,0 +1,94 @@
+[Colmap]
+upstream_task = "ImagesFilesetExists"
+# colmap_exe = "none"  # Let the default choice work, will be 'colmap' in docker container
+matcher = "exhaustive"
+use_gpu = true
+single_camera = true
+compute_dense = false
+alignment_max_error = 10
+align_pcd = true
+camera_model = "SIMPLE_RADIAL"
+qc_check = true
+mad_factor = 3.0
+distance_threshold = 3.0
+fixed_distance_threshold = 1.0
+angle_threshold = 5.0
+fixed_angle_threshold = 3.5
+max_blind_angle = 20.0
+
+[Undistort]
+upstream_task = "ImagesFilesetExists"
+query = "{\"channel\":\"rgb\", \"pose_estimation\":\"correct\"}"  # RGB images with a valid COLMAP pose
+
+[ModelFilesetExists]
+scan_id = "models"
+
+[Segmentation2D]
+upstream_task = "Undistort"
+model_fileset = "ModelFilesetExists"
+model_id = "Resnet_896_896_epoch50"  # no default value
+query = "{\"channel\":\"rgb\"}"  # default is an empty dict '{}'
+Sx = 896
+Sy = 896
+binarize = true
+resize = true
+dilation = 1
+epochs = 1
+batch = 1
+learning_rate = 0.0001
+threshold = 0.01
+
+[Voxels]
+upstream_task = "Segmentation2D"
+upstream_colmap = "Colmap"
+camera_metadata = "colmap_camera"
+voxel_size = 0.6
+type = "averaging"
+labels = "[\"background\"]"
+invert = true
+[Voxels.bounding_box]
+x = [300, 450]
+y = [300, 450]
+z = [-175, 105]
+
+[PointCloud]
+upstream_task = "Voxels"
+labels = "[\"background\"]"
+missing_images_threshold = 2  # Default: 2
+algorithm = "marching-cubes"  # Default: "marching-cubes"
+level_set_value = 0.0
+sigma = 0.8
+mc_level = 0.5
+
+[SegmentedPointCloud]
+upstream_task = "PointCloud"
+upstream_segmentation = "Segmentation2D"
+use_colmap_poses = true
+
+[ClusteredMesh]
+upstream_task = "SegmentedPointCloud"
+min_vol = 1.0
+min_length = 10.0
+
+[OrganSegmentation]
+upstream_task = "SegmentedPointCloud"
+eps = 2.0
+min_points = 5
+
+[AnglesAndInternodes]
+upstream_task = "OrganSegmentation"
+characteristic_length = 1.0
+organ_type = "fruit"
+stem_axis = 2
+stem_axis_inverted = false
+min_elongation_ratio = 2.0
+min_fruit_size = 0.1
+
+[AnglesAndInternodesEvaluation]
+upstream_task = "AnglesAndInternodes"
+ground_truth = "ImagesFilesetExists"  # "ImagesFilesetExists" with manual measures / "VirtualPlantObj" with computer generated plants
+free_ends = 0.4
+free_ends_eps = 1e-2
+
+[Clean]
+no_confirm = true
