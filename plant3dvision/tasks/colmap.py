@@ -841,7 +841,7 @@ class Colmap(RomiTask):
     retry_count = luigi.IntParameter(default=10)
 
     cli_args = luigi.DictParameter(default={})
-    no_final_clean_up = False
+    no_final_clean_up = luigi.BoolParameter(default=False)
     retry = 0
 
     def _workspace_as_bounding_box(self):
@@ -1149,8 +1149,8 @@ class Colmap(RomiTask):
                     raise Exception(f"Max retries ({self.retry_count}) reached - Failed to estimate camera poses!")
 
         # Clean up the temporary working directory created by the ColmapRunner instance:
-        colmap_runner.clean_up()
-        return
+        if not self.no_final_clean_up:
+            colmap_runner.clean_up()
 
 
 class CameraPoseQC(object):
@@ -1462,7 +1462,7 @@ class CameraPoseQC(object):
         for xi, yi, angle in zip(x, y, p):
             if np.isnan(xi) or np.isnan(yi) or np.isnan(angle):
                 continue
-            angle = np.deg2rad(angle + 90 % 360)
+            angle = np.deg2rad(angle)
             dx = np.cos(angle) * radius * 0.1
             dy = np.sin(angle) * radius * 0.1
             _ = ax.arrow(xi, yi, dx, dy, length_includes_head=True,
@@ -1473,7 +1473,7 @@ class CameraPoseQC(object):
         for xi, yi, angle in zip(Xg, Yg, Pg):
             if np.isnan(xi) or np.isnan(yi) or np.isnan(angle):
                 continue
-            angle = np.deg2rad(angle + 90 % 360)
+            angle = np.deg2rad(angle)
             dx = np.cos(angle) * radius
             dy = np.sin(angle) * radius
             _ = ax.arrow(xi, yi, dx, dy, length_includes_head=True,
@@ -1492,7 +1492,7 @@ class CameraPoseQC(object):
             for xi, yi, angle in zip(Xw, Yw, Pw):
                 if np.isnan(xi) or np.isnan(yi) or np.isnan(angle):
                     continue
-                angle = np.deg2rad(angle + 90 % 360)
+                angle = np.deg2rad(angle)
                 dx = np.cos(angle) * radius
                 dy = np.sin(angle) * radius
                 _ = ax.arrow(xi, yi, dx, dy, length_includes_head=True,
