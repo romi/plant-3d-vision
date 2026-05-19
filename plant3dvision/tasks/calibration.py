@@ -243,7 +243,7 @@ class IntrinsicCalibration(RomiTask):
         return {"board": self.board_fileset(), "markers": self.upstream_task()}
 
     def output(self):
-        """The output fileset associated to a ``IntrinsicCalibration`` is an 'camera_model' dataset."""
+        """The output fileset associated with a ``IntrinsicCalibration`` is an 'camera_model' dataset."""
         return FilesetTarget(ScanConfiguration().scan, "camera_model")
 
     def run(self):
@@ -460,7 +460,7 @@ class ExtrinsicCalibration(RomiTask):
         from plant3dvision.calibration import pose_estimation_figure
         from plant3dvision.camera import format_camera_params
         from plant3dvision.camera import get_camera_kwargs_from_colmap_json
-        from plant3dvision.tasks.colmap import get_cnc_poses
+        from plant3dvision.tasks.colmap import get_cnc_poses_from_images_metadata
         from plant3dvision.utils import recursively_unfreeze
 
         self.cli_args = recursively_unfreeze(self.cli_args)  # originally an immutable `FrozenOrderedDict`
@@ -479,7 +479,7 @@ class ExtrinsicCalibration(RomiTask):
         scan_cfg = toml.load(scan_cfg)
 
         # - Get CNC images pose from metadata:
-        cnc_poses = get_cnc_poses(images_fileset.scan)
+        cnc_poses = get_cnc_poses_from_images_metadata(images_fileset.scan)
 
         # - Instantiate a ColmapRunner with parsed configuration:
         logger.debug("Instantiate a ColmapRunner...")

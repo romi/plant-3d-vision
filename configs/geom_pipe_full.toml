@@ -3,36 +3,48 @@
 upstream_task = "ImagesFilesetExists"  # Default: "ImagesFilesetExists"
 # Query to filter files from upstream task by metadata
 query = "{}"  # Default: "{}"  (empty dictionary, no filtering)
+# The colmap "executable" to use
+colmap_exe = "colmap/colmap:20251107.4118"
 # Type of matcher to use with COLMAP
 # Options: "exhaustive" (matches every image against every other) or "sequential" (matches successive images)
 matcher = "sequential"  # Default: "exhaustive"
+# Use GPU for feature extraction and matching when available
+use_gpu = true  # Default: true
+# Whether images were taken with a single camera (shared intrinsics)
+single_camera = false  # Default: true
 # Whether to compute a dense point cloud after sparse reconstruction
 compute_dense = false  # Default: false
+# Maximum alignment error allowed during model alignment
+alignment_max_error = 10  # Default: 10
 # Align and scale point clouds using CNC coordinates
 align_pcd = true  # Default: true
+# Camera model to use for reconstruction
+# Options: "SIMPLE_RADIAL", "RADIAL", "OPENCV"
+camera_model = "SIMPLE_RADIAL"  # Default: "SIMPLE_RADIAL"
+# Additional command-line arguments to pass to COLMAP
+cli_args = "{}"  # Default: "{}"
 # Dataset ID containing calibrated intrinsic camera parameters to use
 intrinsic_calibration_scan_id = ""  # Default: "" (empty, no intrinsic calibration)
 # Dataset ID containing calibrated extrinsic camera parameters to use
 extrinsic_calibration_scan_id = ""  # Default: "" (empty, no extrinsic calibration)
 # Whether to use the intrinsic parameters from extrinsic_calibration_scan_id
 use_calibration_camera = false  # Default: false
-# Camera model to use for reconstruction
-# Options: "SIMPLE_RADIAL", "RADIAL", "OPENCV"
-camera_model = "SIMPLE_RADIAL"  # Default: "SIMPLE_RADIAL"
-# Use GPU for feature extraction and matching when available
-use_gpu = true  # Default: true
-# Whether images were taken with a single camera (shared intrinsics)
-single_camera = false  # Default: true
-# Maximum alignment error allowed during model alignment
-alignment_max_error = 10  # Default: 10
-# Maximum 3D Euclidean distance to CNC pose to validate COLMAP pose estimation
-distance_threshold = 6.0  # Default: 6.0mm
+# Whether to perform the verification of the estimated camera extrinsic
+qc_check = true  # Default: true
+# Median absolute deviation factor to detect outlier camera pose
+mad_factor = 3.0  # Default: 3.
+# Maximum distance to CNC pose to validate COLMAP pose estimation
+distance_threshold = 3.0  # Default: 3.0mm
+# Maximum distance to fixed CNC pose to validate COLMAP pose estimation
+fixed_distance_threshold = 1.0  # Default: 1.0mm
+# Maximum angular distance to CNC pose to validate COLMAP pose estimation
+angle_threshold = 5.0  # Default: 5.0°
+# Maximum angular distance to fixed CNC pose to validate COLMAP pose estimation
+fixed_angle_threshold = 3.5  # Default: 3.5°
 # Maximum blind angle tolerated for camera pose quality control
 max_blind_angle = 20.0  # Default: 20.0 (degrees)
 # Number of retries if the task fails
 retry_count = 10  # Default: 10
-# Additional command-line arguments to pass to COLMAP
-cli_args = "{}"  # Default: "{}"
 # Optional bounding box to limit reconstruction volume
 # Default: None
 #[Colmap.bounding_box]
@@ -44,7 +56,11 @@ cli_args = "{}"  # Default: "{}"
 # The upstream task that provides the input files
 upstream_task = "ImagesFilesetExists"  # Default: "ImagesFilesetExists"
 # Query to filter files from upstream task by metadata
-query = "{}"  # Default: "{}"  (empty dictionary, no filtering)
+query = "{}"  # Default: "{}" (empty dictionary, no filtering)
+# Flag to enable/disable parallel processing
+parallel = true  # Default: true
+# Number of worker threads to use for parallel processing.
+n_workers = -1  # Default: -1 (Default ``concurrent.futures.ThreadPoolExecutor`` behavior)
 # Source of the camera model
 # Options: 'Colmap', 'IntrinsicCalibration', 'ExtrinsicCalibration'
 camera_model_src = "Colmap"  # Default: "Colmap"
@@ -62,22 +78,26 @@ extrinsic_calibration_scan_id = ""  # Default: "" (empty, no extrinsic calibrati
 upstream_task = "Undistort"  # Default: "Undistort"
 # Query to filter files from upstream task by metadata
 query = "{\"channel\":\"rgb\"}"  # Default: "{\"channel\":\"rgb\"}"  (only RGB images)
+# Flag to enable/disable parallel processing
+parallel = true  # Default: true
+# Number of worker threads to use for parallel processing.
+n_workers = -1  # Default: -1 (Default ``concurrent.futures.ThreadPoolExecutor`` behavior)
 # The type of image transformation algorithm to use prior to masking
 # Options: "linear" (linear combination of the channels (RGB, HSV, YCbCr), "excess_green" (excess green index)
 type = "linear"  # Default: "linear"
 # The colorspace to use for the filtering
 # Options: "RGB", "HSV", "YCbCr"
-colorspace = "YCbCr"  # Default: "RGB"
+colorspace = "RGB"  # Default: "RGB"
 # Linear coefficients to apply to each channel of the original image in the selected colorspace
 # Used only when type="linear"
-parameters = "[0.0, 1, 0.0]"  # Default: [0, 1, 0] (using only the green channel in RGB)
+parameters = "[0.2, 1, 0.1]"  # Default: [0, 1, 0] (using only the green channel in RGB)
 # Binarization threshold applied after transforming the image
-min_threshold = 0.08 # Default: 0.0
-max_threshold = 0.47 # Default: 0.4
+min_threshold = 0.2 # Default: 0.0
+max_threshold = 1.0 # Default: 0.4
 # Invert the filter
 invert = false  # Default: false
 # Dilation factor for the binary mask images (morphological dilation)
-dilation = 0 # Default: 0 (no dilation)
+dilation = 1 # Default: 0 (no dilation)
 
 [Voxels]
 # Task that provides the masked images as input
@@ -109,9 +129,11 @@ z = [-125, 100]
 [PointCloud]
 # Task that provides the voxel array as input
 upstream_task = "Voxels"  # Default: "Voxels"
+# The algorithm to use to compute the pointcloud
+algorithm = "marching-cubes"  # Default: "marching-cubes"
 # Distance of the level set on which the points are sampled
-level_set_value = 1.0  # Default: 1.0
-# Threshold for the number of missing images allowed in the reconstruction
+level_set_value = 0.0  # Default: 1.0
+# Threshold for the number of missing images allowed in the reconstructed volume
 missing_images_threshold = 2  # Default: 2
 # List of labels to use for multi-class point cloud generation
 labels = "[]"  # Default: [] (empty list)
@@ -124,6 +146,10 @@ min_contrast = 10.0  # Default: 10.0
 # Minimum score threshold for points in multi-class segmentation
 # Only used if labels are defined (multi-class)
 min_score = 0.2  # Default: 0.2
+# Standard deviation for Gaussian kernel (only for marching-cubes)
+sigma = 0.8
+# Level set value for the marching cubes algorithm
+mc_level = 0.5
 
 [TriangleMesh]
 # Task that provides the point cloud as input

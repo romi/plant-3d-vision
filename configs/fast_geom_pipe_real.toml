@@ -9,9 +9,11 @@ extrinsic_calib_scan_id = "extrinsic_calib_1"  # use a dataset with calibrated i
 upstream_task = "Undistort"
 query = "{\"channel\":\"rgb\"}"
 type = "linear"
-parameters = "[0, 1, 0]"
-dilation = 3 # default to 0
-threshold = 0.2
+colorspace = "RGB"
+parameters = "[0.2, 1, 0.1]"
+min_threshold = 0.2
+max_threshold = 1.0
+dilation = 1
 
 [Voxels]
 upstream_task = "Masks"
@@ -25,10 +27,7 @@ z = [ -250, 70,]
 
 [PointCloud]
 upstream_task = "Voxels"
-level_set_value = 0.0
-background_prior = 1.0  # only used if labels were defined in `Mask` (multiclass)
-min_contrast = 10.0  # only used if labels were defined in `Mask` (multiclass)
-min_score = 0.2  # only used if labels were defined in `Mask` (multiclass)
+missing_images_threshold = 2
 
 [TriangleMesh]
 upstream_task = "PointCloud"
@@ -53,17 +52,6 @@ upstream_task = "AnglesAndInternodes"
 ground_truth = "ImagesFilesetExists"  # "ImagesFilesetExists" with manual measures / "VirtualPlantObj" with computer generated plants
 free_ends = 0.4
 free_ends_eps = 1e-2
-
-[Visualization]
-upstream_point_cloud = "PointCloud"
-upstream_mesh = "TriangleMesh"
-upstream_colmap = "Colmap"
-upstream_angles = "AnglesAndInternodes"
-upstream_skeleton = "CurveSkeleton"
-upstream_images = "ImagesFilesetExists"
-max_image_size = 1500
-max_point_cloud_size = 10000000
-thumbnail_size = 150
 
 [Clean]
 no_confirm = true

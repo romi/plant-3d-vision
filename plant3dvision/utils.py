@@ -10,6 +10,8 @@ simplify common tasks in data analysis and scientific computing projects.
 import docker
 from tqdm import tqdm
 
+import numpy as np
+
 
 def flatten(l):
     """Flatten iterables to a non-nested list.
@@ -24,9 +26,9 @@ def flatten(l):
     >>> list(flatten([[1,[2,3]],4]))
     [1, 2, 3, 4]
     """
-    import collections
+    from collections.abc import Iterable
     for el in l:
-        if isinstance(el, collections.Iterable) and not isinstance(el, str):
+        if isinstance(el, Iterable) and not isinstance(el, str):
             for sub in flatten(el):
                 yield sub
         else:
@@ -386,14 +388,15 @@ def angular_distance(angle1, angle2):
     # Return the smaller angle between direct difference and going the other way around the circle
     return min(diff, 360 - diff)
 
+
 def signed_angular_distance(angle1, angle2):
     """Return the signed minimum angular distance from *angle1* to *angle2*.
 
     The sign indicates the direction you must rotate from *angle1* to reach
     *angle2* using the shortest path:
 
-    * **>0** – rotate counter‑clockwise (mathematical positive direction)
-    * **<0** – rotate clockwise
+    * **>0** - rotate counter‑clockwise (mathematical positive direction)
+    * **<0** - rotate clockwise
 
     The magnitude is always ≤180°.  The result is in the range ``(-180, 180]``.
 
@@ -425,7 +428,7 @@ def signed_angular_distance(angle1, angle2):
     a1 = angle1 % 360
     a2 = angle2 % 360
 
-    # Compute raw difference (target – source)
+    # Compute raw difference (target - source)
     diff = a2 - a1
 
     # Wrap it into (-180, 180] using modular arithmetic
@@ -520,3 +523,59 @@ def docker_pull(image_name, tag="latest"):
     # Move the cursor below all the finished bars
     print("\n" * layer_position)
     print(f"Finished pulling {image_name}:{tag}")
+
+
+def median_deviation(values, angular=False, abs=False):
+    """Compute the deviation of each element from the median of the input sequence.
+
+    Parameters
+    ----------
+    values : Sequence[float] or np.ndarray
+        A list or array of numeric values.
+    angular : bool, optional
+        If True, treat `values` as angular measurements (degrees) and compute
+        the minimal angular deviation from the circular median. Default is `False`.
+
+    Returns
+    -------
+    np.ndarray
+        An array where each entry is `value - median(values)`. For angular data,
+        the deviation is wrapped to the interval [-180, 180[.
+    """
+    arr = np.asarray(values, dtype=float)
+    median_val = np.median(arr)
+    if angular:
+        angular_dist = angular_distance if abs else signed_angular_distance
+        return np.array([angular_dist(i, median_val) for i in arr])
+    else:
+        return np.abs(arr - median_val) if abs else arr - median_val
+
+
+def mad_outlier(distances: dict, factor: float = 3.0) -> set:
+    """Compute a MAD-based threshold and return the IDs of items that exceed it.
+
+    Parameters
+    ----------
+    distances : dict
+        Mapping ``{image_id: float}`` for a single distance metric.
+    factor : float, optional
+        Multiplicative factor applied to the MAD to set the outlier threshold.
+        Default is ``3.0``.
+
+    Returns
+    -------
+    set
+        A set of ``image_id`` values flagged as outliers for this metric.
+    """
+    # Convert the values to a NumPy array for efficient computation
+    values = np.asarray(list(distances.values()), dtype=float)
+
+    # Median of the data
+    median = np.median(values)
+    # Median Absolute Deviation (MAD)
+    mad = np.median(np.abs(values - median))
+    # Threshold = median + factor * MAD
+    threshold = median + factor * mad
+
+    # Return IDs whose value is larger than the threshold
+    return {img_id for img_id, val in distances.items() if val > threshold}

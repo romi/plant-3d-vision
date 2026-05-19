@@ -32,8 +32,18 @@ class PointCloud(RomiTask):
     ----------
     upstream_task : luigi.TaskParameter, optional
         The upstream task providing the input data for this task. Defaults to ``Voxels``.
+    algorithm : luigi.ChoiceParameter, optional
+        The algorithm to use to compute the pointcloud.
+        Use 'marching-cubes' for a fast processing with a control over smoothing operation.
+        Use 'distance-transform' to extract a level‑set surface around the foreground–background boundary.
+        Default to ``'marching-cubes'``.
     level_set_value : luigi.FloatParameter, optional
-        Value used to define the level set for point cloud generation. Default is ``1.0``.
+        Value used to define the level set for point cloud generation.
+        With the ``'marching-cubes'`` `algorithm` we advise to use `0.`.
+        With the ``'distance-transform'`` `algorithm` we advise to use `1.`.
+        Default is ``0.0``.
+    missing_images_threshold : luigi.IntParameter, optional
+        Threshold for the number of missing images allowed in the reconstructed volume.
     labels : luigi.ListParameters, optional
         List of class labels to process. An empty list (default) processes a single unlabeled volume.
         A single label processes that specific class. Multiple labels trigger multi-class processing.
@@ -47,6 +57,12 @@ class PointCloud(RomiTask):
     min_score : luigi.FloatParameter, optional
         Minimum score threshold for class predictions in a multi-class volume.
         Defaults to ``0.2``.
+    sigma : luigi.FloatParameter, optional
+        Standard deviation for Gaussian kernel (only for marching-cubes).
+        Defaults to ``0.8``.
+    mc_level : luigi.FloatParameter, optional
+        Level set value for the marching cubes algorithm. Should be between 0 and 1.
+        Defaults to ``0.5``.
 
     Returns
     -------
@@ -60,10 +76,10 @@ class PointCloud(RomiTask):
     Notes
     -----
     For multi-class volumes:
-    - Classes are processed based on highest probability per voxel
+    - Classes are processed based on the highest probability per voxel
     - Background class is weighted by the background_prior
     - Points are filtered based on contrast between the highest and second-highest class
-    - Points are filtered based on minimum score threshold
+    - Points are filtered based on the minimum score threshold
     - Each class gets a color from the configuration or a random color
 
     For single-class volumes:
@@ -74,7 +90,10 @@ class PointCloud(RomiTask):
     If multi-class, point label information is included in the metadata.
     """
     upstream_task = luigi.TaskParameter(default=Voxels)  # override default attribute from ``RomiTask``
-    level_set_value = luigi.FloatParameter(default=1.0)
+    algorithm = luigi.ChoiceParameter(
+        default='marching-cubes', choices=['distance-transform', 'marching-cubes'], var_type=str
+    )
+    level_set_value = luigi.FloatParameter(default=0.0)
 
     missing_images_threshold = luigi.IntParameter(default=2)
 
@@ -82,6 +101,11 @@ class PointCloud(RomiTask):
     background_prior = luigi.FloatParameter(default=1.0)  # only used if labels were defined (multiclass)
     min_contrast = luigi.FloatParameter(default=10.0)  # only used if labels were defined (multiclass)
     min_score = luigi.FloatParameter(default=0.2)  # only used if labels were defined (multiclass)
+
+    sigma = luigi.FloatParameter(default=0.8,
+                                 description="Standard deviation for Gaussian kernel (only for marching-cubes)")
+    mc_level = luigi.FloatParameter(default=0.5,
+                                    description="Level set value for the marching cubes algorithm. Should be between 0 and 1")
 
     def run_multiclass(self, labels):
         """Processes multi-class voxel data to generate a unified point cloud.
@@ -95,8 +119,7 @@ class PointCloud(RomiTask):
         Raises
         ------
         FileNotFoundError
-            If the input files corresponding to any of the specified labels
-            do not exist.
+            If the input files corresponding to any of the specified labels do not exist.
         ValueError
             If voxel data or metadata is improperly formatted or missing.
         TypeError
@@ -105,18 +128,15 @@ class PointCloud(RomiTask):
         Notes
         -----
         - This method performs multi-class processing by iterating over the
-          provided labels and aggregating voxel data into a multi-dimensional
-          array.
+          provided labels and aggregating voxel data into a multidimensional array.
         - The algorithm applies class-specific modifications, such as adjusting
           the background voxel values using a prior and filtering voxels based
           on contrast and score thresholds.
         - A point cloud is generated for each class based on its filtered voxel
           data. Each point cloud shares metadata on origin and voxel size.
         - Points are colorized and added to a final aggregated point cloud.
-          Predefined colors are used when available; otherwise, random colors
-          are assigned.
-        - Finally, the point cloud and labels for all points are saved as
-          outputs.
+          Predefined colors are used when available; otherwise, random colors are assigned.
+        - Finally, the point cloud and labels for all points are saved as outputs.
         """
         # TODO: make sure this work with "averaging" method for upstream task voxel...
         for label in labels:
@@ -164,7 +184,10 @@ class PointCloud(RomiTask):
                 # Apply minimum score threshold
                 pred_c *= (pred_c > self.min_score)
                 # Convert filtered volume to a partial point cloud
-                out = proc3d.vol2pcd(pred_c, origin, voxel_size, self.level_set_value)
+                if self.algorithm == 'marching-cubes':
+                    out, _ = proc3d.vol2pcd_mc(pred_c, origin, voxel_size, self.level_set_value, self.sigma, self.mc_level)
+                else:
+                    out = proc3d.vol2pcd(pred_c, origin, voxel_size, self.level_set_value)
                 # Assign a color to all points in this partial cloud
                 color = np.zeros((len(out.points), 3))
                 if label[i] in colors:
@@ -206,7 +229,10 @@ class PointCloud(RomiTask):
         # Binarize the volume
         voxels = self._binarize(voxels, method, n_img - self.missing_images_threshold)
         # Directly create a point cloud from the single volume
-        out = proc3d.vol2pcd(voxels, origin, voxel_size, self.level_set_value)
+        if self.algorithm == 'marching-cubes':
+            out, _ = proc3d.vol2pcd_mc(voxels, origin, voxel_size, self.level_set_value, self.sigma, self.mc_level)
+        else:
+            out = proc3d.vol2pcd(voxels, origin, voxel_size, self.level_set_value)
         # Write the point cloud to file and attach metadata
         io.write_point_cloud(self.output_file(create=True), out)
         self.output_file().set_metadata({'voxel_size': voxel_size})
@@ -315,8 +341,7 @@ class SegmentedPointCloud(RomiTask):
         px : tuple of int
             A tuple specifying the (x, y) coordinates of the pixel being checked.
         shape : tuple of int
-            A tuple defining the shape of the image in terms of
-            (number of rows, number of columns).
+            A tuple defining the shape of the image in terms of (number of rows, number of columns).
 
         Returns
         -------
@@ -414,7 +439,7 @@ class SegmentedPointCloud(RomiTask):
         # Assign colors and labels to points
         for i in range(len(labels)):
             nlab_pts = (pts_labels == i).sum()
-            logger.critical(f"Number of points associated to label '{labels[i]}': {nlab_pts}")
+            logger.critical(f"Number of points associated with label '{labels[i]}': {nlab_pts}")
 
             # Use predefined color if available, otherwise random color
             if labels[i] in colors:
@@ -564,7 +589,6 @@ class ClusteredMesh(RomiTask):
     Notes
     -----
     Task outputs are a series of PLY file with a triangular mesh for each label.
-
     """
     upstream_task = luigi.TaskParameter(default=SegmentedPointCloud)  # override default attribute from ``RomiTask``
 
@@ -672,14 +696,14 @@ class OrganSegmentation(RomiTask):
         pcd : open3d.geometry.PointCloud
             A PointCloud instance with points.
         labels : list
-            The list of labels associated to the points.
+            The list of labels associated with the points.
         label : str
             Label used to select points from point cloud.
 
         Returns
         -------
         open3d.geometry.PointCloud
-            A point cloud containing only the points associated to the selected label.
+            A point cloud containing only the points associated with the selected label.
         """
         # Get the index of points matching the semantic label
         idx_mask = np.where(np.array(labels) == label)[0]
@@ -791,7 +815,7 @@ class CurveSkeleton(RomiTask):
             # Read the triangular mesh from input file
             mesh = io.read_triangle_mesh(self.input_file())
             # Generate curve skeleton from mesh
-            out = proc3d.skeletonize(mesh)
+            out = proc3d.mesh_to_skeleton(mesh)
         else:
             # Raise error if upstream task is not supported
             logger.error(f"No implementation to compute `{task_name}` from `{uptask_name}`.")

@@ -365,7 +365,7 @@ class Voxels(RomiTask):
         # Print the bounding-box values:
         logger.info(f"Bounding-box to use: {self.bounding_box}")
 
-        # - Check if any displacement exists, and use it to modify the shape of the voxel array (to create):
+        # - Check if any displacement exists and use it to modify the shape of the voxel array (to create):
         x_min, x_max = sorted(self.bounding_box["x"])
         y_min, y_max = sorted(self.bounding_box["y"])
         z_min, z_max = sorted(self.bounding_box["z"])

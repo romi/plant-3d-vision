@@ -16,8 +16,8 @@ from plant3dvision.metrics import point_cloud_registration_fitness
 from plant3dvision.metrics import surface_ratio
 from plant3dvision.metrics import volume_ratio
 from plant3dvision.tasks.colmap import compute_camera_poses_from_images_metadata
-from plant3dvision.tasks.colmap import get_cnc_poses
-from plant3dvision.tasks.colmap import get_image_poses
+from plant3dvision.tasks.colmap import get_cnc_poses_from_images_metadata
+from plant3dvision.tasks.colmap import get_camera_poses_from_images_metadata
 from plantdb.commons.fsdb.core import FSDB
 from plantdb.commons.io import read_json
 from plantdb.commons.io import read_npz
@@ -420,12 +420,12 @@ def estimated_pose_variability(db, task_name, scans_list):
     from scipy.spatial.distance import euclidean
     ref_scan_name = '_'.join(scans_list[0].id.split('_')[:-1])
     # We get the CNC poses from the first scan of the list as they are replicates:
-    cnc_poses_by_image = get_cnc_poses(scans_list[0], axes='xyz')
+    cnc_poses_by_image = get_cnc_poses_from_images_metadata(scans_list[0], axes='xyz')
 
     # - Get the dictionary of colmap poses (XYZ) indexed by image id by scan id:
     colmap_poses_by_scan = {}  # scan_id indexed
     for scan in scans_list:
-        colmap_poses_by_scan[scan.id] = get_image_poses(scan, "estimated_pose")
+        colmap_poses_by_scan[scan.id] = get_camera_poses_from_images_metadata(scan, "estimated_pose")
 
     # Get the list of image ids:
     im_ids = list(colmap_poses_by_scan[scans_list[0].id].keys())
@@ -513,7 +513,7 @@ def compare_to_cnc_poses(db, task_name, scans_list):
     cnc_poses = {}
     n = 0
     while cnc_poses == {} and n < len(scans_list):
-        cnc_poses = get_cnc_poses(scans_list[n])
+        cnc_poses = get_cnc_poses_from_images_metadata(scans_list[n])
         n_imgs = len(scans_list[n].get_fileset('images').get_files())
         n_poses = len(cnc_poses)
         if n_poses != n_imgs:
@@ -533,7 +533,8 @@ def compare_to_cnc_poses(db, task_name, scans_list):
             camera_poses_by_scan[scan.id] = compute_camera_poses_from_images_metadata(
                 scan)  # {img_id: [x, y, z, pan, tilt, roll]}
         elif "Calibration" in task_name:
-            camera_poses_by_scan[scan.id] = get_image_poses(scan, "calibrated_pose")  # {img_id: [x, y, z, pan, tilt, roll]}
+            camera_poses_by_scan[scan.id] = get_camera_poses_from_images_metadata(scan,
+                                                                                  "calibrated_pose")  # {img_id: [x, y, z, pan, tilt, roll]}
         else:
             logger.critical(f"Nothing defined here for a task named '{task_name}'!")
 
@@ -630,7 +631,8 @@ def compare_to_calibrated_poses(db, task_name, scans_list):
     logger.info(f"Comparing '{task_name}' outputs for {len(scans_list)} replicated scans!")
 
     # Get the image_id indexed dictionary of calibrated poses:
-    calibrated_poses = get_image_poses(scans_list[0], "calibrated_pose", default=None)  # {scan_id: {img_id: [x, y, z]}}
+    calibrated_poses = get_camera_poses_from_images_metadata(scans_list[0], "calibrated_pose",
+                                                             default=None)  # {scan_id: {img_id: [x, y, z]}}
     # Exclude entries with a `None` value as poses:
     calibrated_poses = {img_id: pose for img_id, pose in calibrated_poses.items() if pose is not None}
     # Test if there is any calibrated poses left in the dict, if not exit to avoid crashing:

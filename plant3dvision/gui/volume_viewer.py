@@ -9,10 +9,10 @@ It supports interactive 3‑D rendering with PyVista or a 2‑D slider view, and
 
 Key Features
 ------------
-- **Automatic dataset parsing** – extracts the voxel fileset from a PlantDB scan and loads it into a NumPy array.
-- **Dual‑mode display** – either a 3‑D volume rendered with PyVista (default) or a 2‑D slice slider.
-- **Customisable colormap** – choose any Matplotlib‑compatible colormap via the `--cmap` argument.
-- **Error handling** – detects empty volumes.
+- **Automatic dataset parsing** - extracts the voxel fileset from a PlantDB scan and loads it into a NumPy array.
+- **Dual‑mode display** - either a 3‑D volume rendered with PyVista (default) or a 2‑D slice slider.
+- **Customisable colormap** - choose any Matplotlib‑compatible colormap via the `--cmap` argument.
+- **Error handling** - detects empty volumes.
 
 Usage Examples
 --------------

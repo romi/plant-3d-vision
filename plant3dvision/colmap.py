@@ -729,7 +729,7 @@ class ColmapRunner(object):
         self.camera_names: list[str] = []  # list of camera names, initialized by `self._init_temp_dir`
         self.image_names: dict[str, str] = self._init_temp_dir(self.imgs_dir, [f.path() for f in img_files])
         # - Initialize the `poses.txt` file required by COLMAP:
-        self._init_poses()
+        self._init_poses(excluded_ids=kwargs.get('excluded_ids'))
         # - Initialize a log file to gather COLMAP outputs:
         self.log_file = f"{self.colmap_workdir}/colmap.log"
         logger.info(f"See {self.log_file} for a detailed log about COLMAP jobs...")
@@ -880,7 +880,7 @@ class ColmapRunner(object):
         self.dense_dir.mkdir(parents=True, exist_ok=True)
         return image_names
 
-    def _init_poses(self):
+    def _init_poses(self, excluded_ids:list[str] | None = None):
         """Initialize the ``poses.txt`` file for COLMAP.
 
         If the use of an "extrinsic calibration" is requested, this will try to get the "calibrated_poses" from the 'images' fileset metadata.
@@ -910,11 +910,16 @@ class ColmapRunner(object):
         else:
             pose_md = 'approximate_pose'  # ``CalibrationScan`` & ``Scan`` cases
 
+        if excluded_ids is None:
+            excluded_ids = []
+
         # - Create the ``poses.txt`` file required by COLMAP's ``model_aligner`` to estimate camera poses:
         with open(f"{self.colmap_workdir}/poses.txt", mode='w') as pose_file:
             # - Try to get the camera pose from each image File metadata:
             missing_pose = []
             for img_f in self.image_files:
+                if img_f.id in excluded_ids:
+                    continue  # skip if in the list of image ids to exclude
                 # - Try to get the pose metadata, may be `None`:
                 p = img_f.get_metadata(pose_md, default=None)
                 # - If a pose metadata was found for the file, add it to COLMAP's 'poses.txt' file:
@@ -1464,7 +1469,7 @@ class ColmapRunner(object):
                 'rgb': list
                     color of the point
                 'error': float
-                    error associated to the point
+                    error associated with the point
                 'image_ids': list
                     list of image ids where the point is extracted from
                 'point2D_idxs': list

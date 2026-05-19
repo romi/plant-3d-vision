@@ -34,6 +34,7 @@ def fix_undistorted(toml_dict):
     dict
         The updated toml dictionary.
     """
+
     def _replace(item):
         """Recursively replace the target substring in dict keys, list items and strings."""
         if isinstance(item, dict):
@@ -87,21 +88,27 @@ def fix_mask(toml_dict):
     None
     """
     if 'Masks' in toml_dict and 'threshold' in toml_dict['Masks']:
-        toml_dict['Masks']['min_threshold'] = float(toml_dict['Masks']['threshold']) / sum(map(float, eval(toml_dict['Masks']['parameters'])))
+        toml_dict['Masks']['min_threshold'] = float(toml_dict['Masks']['threshold']) / sum(
+            map(float, eval(toml_dict['Masks']['parameters'])))
         toml_dict['Masks']['max_threshold'] = 1.
         toml_dict['Masks'].pop('threshold', None)
         toml_dict['Masks']['colorspace'] = 'RGB'
 
     return toml_dict
 
+
 @click.command()
 @click.argument('db_path', type=click.Path(exists=True, file_okay=False, resolve_path=True))
 @click.option('--scan', 'scan_patterns', multiple=True, default=('*',),
               help='Glob pattern(s) to select scans (e.g. "2023‑03‑*"). '
                    'Multiple patterns can be given; they are OR‑combined.')
-@click.option('--db-user', 'db_user', default='guest', help='FSDB username (optional).')
-@click.option('--db-password', 'db_password', default='guest', help='FSDB password (optional).')
-def main(db_path, scan_patterns, db_user, db_password):
+@click.option('--db-user', 'db_user', default='guest',
+              help='FSDB username (optional).')
+@click.option('--db-password', 'db_password', default='guest',
+              help='FSDB password (optional).')
+@click.option('--no-auth', is_flag=True, default=False,
+              help="Use a database with automatic 'admin' user log in, for testing purposes only.")
+def main(db_path, scan_patterns, db_user, db_password, no_auth):
     """
     Connect to the FSDB, optionally filter scans, and apply the negative‑z fix.
 
@@ -116,13 +123,20 @@ def main(db_path, scan_patterns, db_user, db_password):
         FSDB username.
     db_password : str
         FSDB password.
+    no_auth : bool
+        A boolean flag to switch between session managers.
+        If ``True``, use `NoAuthSessionManager` else use `SingleSessionManager`.
     """
     # Initialise the database
-    db = FSDB(db_path)
+    db = FSDB(db_path, no_auth=no_auth)
     db.connect()
 
-    if db_user and db_password:
-        db.login(db_user, db_password)
+    if not no_auth:
+        try:
+            success = db.login(db_user, db_password)
+            assert success is not None
+        except AssertionError:
+            raise ValueError("Missing login credentials or use `--no-auth` option.")
 
     # Resolve scan selection
     selected_scans = []
@@ -144,7 +158,7 @@ def main(db_path, scan_patterns, db_user, db_password):
 
         click.echo(f"Processing scan: {scan_id}")
         try:
-            toml_dict = toml.load(scan.path()/"pipeline.toml")
+            toml_dict = toml.load(scan.path() / "pipeline.toml")
         except FileNotFoundError:
             click.echo(f"No such pipeline.toml file for scan: {scan_id}")
             continue
@@ -158,7 +172,7 @@ def main(db_path, scan_patterns, db_user, db_password):
         toml_dict = fix_undistorted(toml_dict)
         toml_dict = fix_mask(toml_dict)
 
-        with open(scan.path()/"pipeline.toml", "w") as f:
+        with open(scan.path() / "pipeline.toml", "w") as f:
             toml.dump(toml_dict, f)
 
     click.echo("All done!")

@@ -417,7 +417,7 @@ class ReconstructionExplorer(QMainWindow):
         if self._vol is None:
             return
 
-        # Ensure min ≤ max – Qt will already clamp the values, but we keep it safe
+        # Ensure min ≤ max - Qt will already clamp the values, but we keep it safe
         min_val = self._vol_opacity_min_spin.value()
         max_val = self._vol_opacity_max_spin.value()
         if min_val > max_val:
@@ -506,9 +506,9 @@ class ReconstructionExplorer(QMainWindow):
         try:
             vol_fs = scan.get_fileset(fs_matches['Voxels'])
             self._vol_fs = vol_fs.get_file('Voxels')
-            logger.info(f"Found the 'Voxels' associated to scan dataset '{scan_id}'...")
+            logger.info(f"Found the 'Voxels' associated with scan dataset '{scan_id}'...")
         except (FilesetNotFoundError, KeyError):
-            logger.error(f"Could not find a 'Voxels' associated to scan dataset '{scan_id}'!")
+            logger.error(f"Could not find a 'Voxels' associated with scan dataset '{scan_id}'!")
             self._vol_fs = None
         self._voxel_checkbox.setEnabled(self._vol_fs is not None)
         self._voxel_checkbox.blockSignals(True)
@@ -519,9 +519,9 @@ class ReconstructionExplorer(QMainWindow):
         try:
             pcd_fs = scan.get_fileset(fs_matches['PointCloud'])
             self._pcd_fs = pcd_fs.get_file('PointCloud')
-            logger.info(f"Found the 'PointCloud' associated to scan dataset '{scan_id}'...")
+            logger.info(f"Found the 'PointCloud' associated with scan dataset '{scan_id}'...")
         except (FilesetNotFoundError, KeyError):
-            logger.error(f"Could not find a 'PointCloud' associated to scan dataset '{scan_id}'!")
+            logger.error(f"Could not find a 'PointCloud' associated with scan dataset '{scan_id}'!")
             self._pcd_fs = None
         self._pcd_checkbox.setEnabled(self._pcd_fs is not None)
         self._pcd_checkbox.blockSignals(True)
@@ -532,9 +532,9 @@ class ReconstructionExplorer(QMainWindow):
         try:
             mesh_fs = scan.get_fileset(fs_matches['TriangleMesh'])
             self._mesh_fs = mesh_fs.get_file('TriangleMesh')
-            logger.info(f"Found the 'TriangleMesh' associated to scan dataset '{scan_id}'...")
+            logger.info(f"Found the 'TriangleMesh' associated with scan dataset '{scan_id}'...")
         except (FilesetNotFoundError, KeyError):
-            logger.error(f"Could not find a 'TriangleMesh' associated to scan dataset '{scan_id}'!")
+            logger.error(f"Could not find a 'TriangleMesh' associated with scan dataset '{scan_id}'!")
             self._mesh_fs = None
         self._mesh_checkbox.setEnabled(self._mesh_fs is not None)
         self._mesh_checkbox.blockSignals(True)
@@ -781,7 +781,7 @@ class ReconstructionExplorer(QMainWindow):
         if self._opacity_range_timer.isActive():
             self._opacity_range_timer.stop()
 
-        # Close the DB connection – this releases any background thread
+        # Close the DB connection - this releases any background thread
         try:
             if hasattr(self, "_db") and self._db is not None:
                 self._db.disconnect()

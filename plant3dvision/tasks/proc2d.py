@@ -3,27 +3,29 @@
 
 """Task submodule dedicated to the processing of 2D images that creates 2D images."""
 
+import concurrent.futures
 import sys
 
 import luigi
 import numpy
 import numpy as np
-from tqdm import tqdm
 
 import plantdb.commons.db
+from plant3dvision import proc2d
 from plant3dvision.camera import colmap_params_from_kwargs
 from plant3dvision.tasks.colmap import Colmap
 from plant3dvision.utils import jsonify
 from plantdb.commons import io
 from romitask.log import get_logger
 from romitask.task import FileByFileTask
-from romitask.task import ModelFilesetExists
 from romitask.task import ImagesFilesetExists
+from romitask.task import ModelFilesetExists
+from romitask.task import ParallelFileTask
 
 logger = get_logger(__name__, log_level="INFO")
 
 
-class Undistort(FileByFileTask):
+class Undistort(ParallelFileTask):
     """Image distortion correction using camera intrinsic parameters.
 
     This class implements a task that corrects image distortion using camera calibration 
@@ -42,7 +44,13 @@ class Undistort(FileByFileTask):
     query : luigi.DictParameter, optional
         A filtering dictionary to apply on input ```Fileset`` metadata.
         Key(s) and value(s) must be found in metadata to select the ``File``.
-        By default, no filtering is performed, all inputs are used.
+        By default, no filtering is performed; all inputs are used.
+    n_workers : luigi.IntParameter, optional
+        Number of worker threads to use for parallel processing.
+        Defaults to ``None``, which uses the default ``ThreadPoolExecutor`` behavior.
+    parallel : luigi.BoolParameter, optional
+        Flag to enable/disable parallel processing.
+        Defaults to ``True``.
     camera_model_src : luigi.Parameter, optional
         Source of the camera model, can be in ['Colmap', 'IntrinsicCalibration', 'ExtrinsicCalibration']
     camera_model : luigi.Parameter, optional
@@ -95,6 +103,9 @@ class Undistort(FileByFileTask):
     intrinsic_calib_scan_id = luigi.Parameter(default="")  # ID of scan containing intrinsic calibration
     extrinsic_calib_scan_id = luigi.Parameter(default="")  # ID of scan containing extrinsic calibration
 
+    n_workers = luigi.IntParameter(default=None)
+    parallel = luigi.BoolParameter(default=True)
+
     def requires(self):
         """Determines the dependencies required for the task execution."""
         from plant3dvision.tasks.calibration import ExtrinsicCalibrationExists
@@ -129,6 +140,7 @@ class Undistort(FileByFileTask):
         This method applies camera distortion correction to each image in the input fileset
         using either intrinsic or extrinsic calibration parameters. It preserves all original
         image metadata and adds calibration metadata to the processed images.
+        This method delegates the heavy lifting to the parent `ParallelFileTask` implementation.
 
         Raises
         ------
@@ -161,26 +173,13 @@ class Undistort(FileByFileTask):
             from plant3dvision.camera import get_camera_arrays_from_params
             colmap_camera, poses = self.input()['camera']
 
-        # Process each image in the input fileset
-        images_fileset = self.input()["images"].get()
-        images_files = images_fileset.get_files(query=self.query)
-        output_fileset = self.output().get()
+        # Store these for use in the f method
+        self._poses = poses
+        self._colmap_camera = colmap_camera
+        self._camera_model_src = self.camera_model_src
 
-        for fi in tqdm(images_files, unit="file"):
-            # Add calibration metadata to image
-            if poses is not None:
-                fi.set_metadata({'calibrated_pose': poses[fi.id]})
-            if str(self.camera_model_src).lower() == 'intrinsiccalibration':
-                fi.set_metadata({'colmap_camera': colmap_camera})
-            elif str(self.camera_model_src).lower() == 'extrinsiccalibration':
-                fi.set_metadata({'colmap_camera': colmap_camera[fi.id]})
-
-            # Process the image and preserve metadata
-            outfi = self.f(fi, output_fileset)
-            if outfi is not None:
-                m = fi.get_metadata()
-                outm = outfi.get_metadata()
-                outfi.set_metadata({**m, **outm})
+        # Let the parent class handle the parallel execution
+        super().run(self.input()['images'].get(), self.output().get())
 
     def f(self, fi, outfs):
         """Undistort an input image using camera calibration parameters.
@@ -212,7 +211,7 @@ class Undistort(FileByFileTask):
         The output file preserves the ID of the input file and includes additional
         metadata about the processing task and camera model source.
         """
-        from plant3dvision import proc2d
+
         from plant3dvision.camera import get_camera_kwargs_from_images_metadata
         from plant3dvision.camera import get_camera_arrays_from_params
 
@@ -229,6 +228,16 @@ class Undistort(FileByFileTask):
             # Save result and add metadata
             outfi = outfs.create_file(fi.id)
             io.write_image(outfi, img)
+
+            # Add special metadata based on camera model source
+            if hasattr(self, '_poses') and self._poses is not None:
+                fi.set_metadata({'calibrated_pose': self._poses[fi.id]})
+            if hasattr(self, '_colmap_camera'):
+                if str(self._camera_model_src).lower() == 'intrinsiccalibration':
+                    fi.set_metadata({'colmap_camera': self._colmap_camera})
+                elif str(self._camera_model_src).lower() == 'extrinsiccalibration':
+                    fi.set_metadata({'colmap_camera': self._colmap_camera[fi.id]})
+
             md = {'upstream_task': str(self.upstream_task), "Camera model source": str(self.camera_model_src)}
             outfi.set_metadata(md)
             return outfi
@@ -237,19 +246,19 @@ class Undistort(FileByFileTask):
             return None
 
 
-class Masks(FileByFileTask):
+class Masks(ParallelFileTask):
     """Compute binary masks from RGB images using various filtering methods.
 
     This task applies image transformation techniques to RGB images followed by
     thresholding to create binary masks. The output is a fileset of binary mask images.
-    The class supports different types of filtering methods including linear combination
+    The class supports different types of filtering methods, including a linear combination
     of channels in different colorspace and excess green index.
 
     Parameters
     ----------
     upstream_task : luigi.TaskParameter, optional
         The task to use upstream to this task.
-        It should be a tasks that generates a ``Fileset`` of RGB images.
+        It should be a task that generates a ``Fileset`` of RGB images.
         It can be ``ImagesFilesetExists`` or ``Undistort``.
         Defaults to `'Undistort'`.
     scan_id : luigi.Parameter, optional
@@ -258,26 +267,33 @@ class Masks(FileByFileTask):
     query : luigi.DictParameter, optional
         A filtering dictionary to apply on input ```Fileset`` metadata.
         Key(s) and value(s) must be found in metadata to select the ``File``.
-        By default, no filtering is performed, all inputs are used.
+        By default, no filtering is performed; all inputs are used.
+    n_workers : luigi.IntParameter, optional
+        Number of worker threads to use for parallel processing.
+        Defaults to ``-1``, which uses the default ``ThreadPoolExecutor`` behavior.
+    parallel : luigi.BoolParameter, optional
+        Flag to enable/disable parallel processing.
+        Defaults to ``True``.
     type : luigi.Parameter, optional
         The type of image tranformation algorithm to use prior to masking by thresholding.
         Can be "linear" or "excess_green". Defaults to `'linear'`.
         Have a look at the documentation [mask_type]_ for more details.
-    colorspace : luigi.ChoiceParameter
+    colorspace : luigi.ChoiceParameter, optional
         The colorspace to use for the linear filtering ('RGB', 'HSV' or 'YCbCr')
+        Defaults to ``"RGB"``.
     parameters : luigi.ListParameter, optional
-        List of parameters, only used if `type` is `"linear"`.
-        They are the linear coefficient to apply to each channel of the image in the selected colorspace
-        ('RGB', 'HSV' or 'YCbCr').
+        A list of linear coefficients, to apply to each channel of the image in the selected
+        colorspace ('RGB', 'HSV' or 'YCbCr').
+        They are only used if the `type` is `"linear"`.
         Defaults to `[0, 1, 0]` (using only the green channel).
     min_threshold : luigi.FloatParameter, optional
-        Binarization threshold applied after transforming the image. Defaults to ``0.0``.
+        A binarization threshold applied after transforming the image. Defaults to ``0.0``.
     max_threshold : luigi.FloatParameter, optional
-        Binarization threshold applied after transforming the image. Defaults to ``0.4``.
-    invert : luigi.BoolParameter
-        Invert the mask
+        A binarization threshold applied after transforming the image. Defaults to ``0.4``.
+    invert : luigi.BoolParameter, optional
+        A boolean flag used to invert the input masks. Defaults to ``False``.
     dilation : luigi.IntParameter, optional
-        Dilation factor for the binary mask images. Applies morphological dilation
+        A dilation factor for the binary mask images. Applies morphological dilation
         to expand the masked regions. Defaults to 0 (no dilation).
 
     Returns
@@ -347,7 +363,6 @@ class Masks(FileByFileTask):
         Exception
             If the specified filter type is unknown.
         """
-        from plant3dvision import proc2d
         logger.debug(f"Image shape: {img.shape}")
         if self.type == "linear":
             return proc2d.linear(img, list(self.parameters), colorspace=self.colorspace)
@@ -357,7 +372,7 @@ class Masks(FileByFileTask):
             raise Exception(f"Unknown masking type '{self.type}'!")
 
     def f(self, fi: plantdb.commons.db.File, outfs: plantdb.commons.db.Fileset) -> plantdb.commons.db.File:
-        """Compute the binary mask image for the input image ``File``.Compute the binary mask image for the input image ``File``.
+        """Compute the binary mask image for the input image ``File``.
 
         Parameters
         ----------
@@ -371,7 +386,6 @@ class Masks(FileByFileTask):
         plantdb.commons.db.File
             The created binary mask file with metadata.
         """
-        from plant3dvision import proc2d
         logger.debug(f"Loading file: {fi.filename}")
         img = io.read_image(fi)
         # Apply the filter:
@@ -405,21 +419,26 @@ class Masks(FileByFileTask):
         outfi.set_metadata({self.get_task_family(): md})
         return outfi
 
+    def run(self):
+        """Run the task using the parallel execution framework.
 
-class Segmentation2D(Masks):
+        This method delegates the heavy lifting to the parent `ParallelFileTask` implementation.
+        It retrieves the input ``Fileset`` and output ``FilesetTarget`` from the Luigi task
+        infrastructure and then calls ``ParallelFileTask.run`` which iterates over
+        all input files, applying the `f` function to generate binary mask images.
+        """
+        # Let the parent class handle the parallel execution
+        super().run(self.input().get(), self.output().get())
+
+
+class Segmentation2D(FileByFileTask):
     """Compute masks using trained deep learning models.
-
-    Module: plant3dvision.tasks.proc2d
-    Description: compute masks using trained deep learning models
-    Default upstream tasks: Undistort
-    Upstream task format: Fileset with image files
-    Output fileset format: Fileset with grayscale image files, each corresponding to a given input image and class
 
     Attributes
     ----------
     upstream_task : luigi.TaskParameter, optional
         The task to use upstream to this task.
-        It should be a tasks that generates a ``Fileset`` of RGB images.
+        It should be a task that generates a ``Fileset`` of RGB images.
         It can thus be ``ImagesFilesetExists`` or ``Undistort``.
         Defaults to `'Undistort'`.
     scan_id : luigi.Parameter, optional
@@ -428,36 +447,36 @@ class Segmentation2D(Masks):
     query : luigi.DictParameter, optional
         A filtering dictionary to apply on input ```Fileset`` metadata.
         Key(s) and value(s) must be found in metadata to select the ``File``.
-        By default, no filtering is performed, all inputs are used.
+        By default, no filtering is performed; all inputs are used.
     model_fileset : luigi.TaskParameter, optional
-        Upstream model training task, valid values in {'ModelFilesetExists'}.
-        'ModelFilesetExists' by default.
+        The upstream model training task, valid values in ``{'ModelFilesetExists'}``.
+        `'ModelFilesetExists'` by default.
     model_id : luigi.Parameter
-        Name of the trained model to use from the 'model' `Fileset`.
+        The name of the trained model to use from the 'model' `Fileset`.
         This should be the file name without extension.
     Sx, Sy : luigi.IntParameter
-        Size of the input image in the neural network.
-        Input image are cropped, from their center, to this size.
+        The size of the images in the neural network.
+        Input images are cropped, from their center, to this size.
         Defaults to `896`.
     labels : luigi.ListParameter, optional
-        List of labels identifiers produced by the neural network to use to generate (binary) mask files.
+        A list of labels identifiers produced by the neural network to use to generate (binary) mask files.
         Defaults to `[]`, use all labels identifiers from model.
     inverted_labels : luigi.ListParameter, optional
-        List of labels identifiers that requires inversion of their predicted mask.
+        A list of labels identifiers that requires inversion of their predicted mask.
         Defaults to `["background"]`.
     binarize : luigi.BoolParameter, optional
-        If `True`, use a `threshold` to binarize predictions, else returns the prediction map.
+        A boolean flag to binarize predictions.
+        If ``True``, binarization is performed, else the prediction maps are rturned.
         Defaults to `True`.
     threshold : luigi.FloatParameter, optional
-        Threshold to binarize predictions, required if ``binarize=True``.
+        The threshold to binarize predictions, required if ``binarize=True``.
         Defaults to `0.01`.
     dilation : luigi.IntParameter, optional
-        Dilation factor to apply to a binary mask.
+        A dilation factor to apply to a binary mask.
         Defaults to `1`.
 
     """
-    type = None  # override default attribute from ``Masks``
-    parameters = None  # override default attribute from ``Masks``
+    upstream_task = luigi.TaskParameter(default=Undistort)  # override default attribute from ``RomiTask``
     model_fileset = luigi.TaskParameter(default=ModelFilesetExists)
     model_id = luigi.Parameter()
     Sx = luigi.IntParameter(default=896)
@@ -474,7 +493,7 @@ class Segmentation2D(Masks):
         """ Override default `requires` method returning `self.upstream_task()`.
 
         Computing mask using trained deep learning models requires:
-          - a set of image to segment
+          - a set of images to segment
           - a trained PyTorch model ('*.pt' file)
         """
         return {
@@ -484,7 +503,6 @@ class Segmentation2D(Masks):
 
     def run(self):
         from romiseg.predict.segmentation import fileset_segmentation
-        from plant3dvision import proc2d
 
         # Get the 'image' `Fileset` to segment and filter by `query`:
         images_fileset = self.input()["images"].get()
@@ -506,12 +524,10 @@ class Segmentation2D(Masks):
             # else use all trained labels
             label_range = range(len(labels))
 
-        # Apply trained segmentation model on list of image `File`:
+        # - Apply trained segmentation model on list of image `File`:
         predicted_label_maps = fileset_segmentation(self.Sx, self.Sy, images_path, model_file)
 
-        # Save class prediction as images, one by one, class per class
-        logger.debug("Saving the `.astype(np.uint8)` segmented images, takes around 15 s")
-
+        # - Save class prediction as images, one by one, class per class
         # Get the output `Fileset` used to save predicted label position in (binary) mask files
         output_fileset = self.output().get()
         # For every segmented image...
@@ -519,7 +535,7 @@ class Segmentation2D(Masks):
             # And for each label in the filtered label list...
             for label_id in label_range:
                 # Get the corresponding `File` object to use
-                f = output_fileset.create_file(f"{images_id[img_idx]}_{labels[label_id]}")
+                out_file = output_fileset.create_file(f"{images_id[img_idx]}_{labels[label_id]}")
                 # Get the image for given label as a numpy array
                 label_img = pred_labels[label_id, :, :].cpu().numpy()
                 # Invert the prediction map for labels in the `inverted_labels` list
@@ -531,21 +547,21 @@ class Segmentation2D(Masks):
                     # If required, dilation of the binary mask is performed
                     if self.dilation > 0:
                         label_img = proc2d.dilation(label_img, self.dilation)
-                # Convert the image to 8bits unsigned integers
+                # Convert the image to 8-bit unsigned integers
                 label_img = (label_img * 255).astype(np.uint8)
                 # Invert the binary mask for labels in `inverted_labels` list
                 if labels[label_id] in self.inverted_labels:
                     label_img = 255 - label_img
                 # Save the prediction map or binary mask
-                io.write_image(f, label_img, 'png')
+                io.write_image(out_file, label_img, 'png')
                 # Get the original metadata to add them to `File` object metadata
                 orig_metadata = images_fileset.get_file(images_id[img_idx]).get_metadata()
                 # Also add used image id & label to `File` object metadata
-                f.set_metadata({
+                out_file.set_metadata({
                     'image_id': images_id[img_idx],
                     **orig_metadata
                 })
-                f.set_metadata({
+                out_file.set_metadata({
                     'channel': labels[label_id],
                 })
         # Add the list of predicted labels to the metadata of the output `Fileset`

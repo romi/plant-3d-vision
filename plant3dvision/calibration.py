@@ -122,7 +122,7 @@ def calibrate_opencv_camera(corners, ids, img_shape, aruco_kwargs):
     corners : list
         List of detected corners from ChArUco board.
     ids : list
-        List of id associated to detected corners from ChArUco board.
+        List of id associated with detected corners from ChArUco board.
     img_shape : list
         Size of the image, used only to initialize the camera intrinsic matrix.
     aruco_kwargs : dict
@@ -176,7 +176,7 @@ def calibrate_radial_camera(corners, ids, img_shape, aruco_kwargs):
     corners : list
         List of detected corners from ChArUco board.
     ids : list
-        List of id associated to detected corners from ChArUco board.
+        List of id associated with detected corners from ChArUco board.
     img_shape : list
         Size of the image, used only to initialize the camera intrinsic matrix.
     aruco_kwargs : dict
@@ -232,7 +232,7 @@ def calibrate_simple_radial_camera(corners, ids, img_shape, aruco_kwargs):
     corners : list
         List of detected corners from ChArUco board.
     ids : list
-        List of id associated to detected corners from ChArUco board.
+        List of id associated with detected corners from ChArUco board.
     img_shape : list
         Size of the image, used only to initialize the camera intrinsic matrix.
     aruco_kwargs : dict
@@ -310,15 +310,15 @@ def pose_estimation_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_
         Name to give to the reference poses.
     pred_label : str
         Name to give to the predicted poses.
-    xlims : (float, float)
+    xlims : tuple[float, float]
         A len-2 tuple of float values to use as "x-axis limits" represented as dashed blue lines
-    ylims : (float, float)
+    ylims : tuple[float, float]
         A len-2 tuple of float values to use as "y-axis limits" represented as dashed blue lines
 
     Examples
     --------
     >>> from plantdb.commons.test_database import test_database
-    >>> from plant3dvision.tasks.colmap import get_cnc_poses
+    >>> from plant3dvision.tasks.colmap import get_cnc_poses_from_images_metadata
     >>> from plant3dvision.tasks.colmap import compute_camera_poses_from_images_metadata
     >>> from plant3dvision.tasks.colmap import pose_estimation_figure
     >>> from plant3dvision.tasks.colmap import use_precalibrated_poses
@@ -330,7 +330,7 @@ def pose_estimation_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_
     >>> scan_id = "real_plant_analyzed"
     >>> scan = db.get_scan(scan_id)
     >>> images_fileset = scan.get_fileset('images')
-    >>> cnc_poses = get_cnc_poses(scan)
+    >>> cnc_poses = get_cnc_poses_from_images_metadata(scan)
     >>> print(len(cnc_poses))
     60
     >>> colmap_poses = {im.id: im.get_metadata("estimated_pose") for im in images_fileset.get_files()}
@@ -370,10 +370,10 @@ def pose_estimation_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_
 
     # Get predicted camera pose (X, Y, Z, pan, tilt & roll):
     X, Y, Z, pan, tilt, roll = np.array(
-        [pose if pose is not None else [np.nan] * 3 for im_id, pose in pred_poses.items()]).T
+        [pose if pose is not None else [np.nan] * 6 for im_id, pose in pred_poses.items()]).T
 
     # - Plot REFERENCE XY poses coordinates as a black '+' marker:
-    # Add a black '+' marker to every non-null coordinates:
+    # Add a black '+' marker to every non-null coordinate:
     cnc_scatter = xyax.scatter(x, y, marker="+", c="black")
     cnc_scatter.set_label(ref_label)
     # Add a black "+" at the center of the CNC coordinates

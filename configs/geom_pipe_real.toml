@@ -2,19 +2,23 @@
 # Type of matcher to use with COLMAP
 # Options: "exhaustive" (matches every image against every other) or "sequential" (matches successive images)
 matcher = "exhaustive"  # Default: "exhaustive"
-# Align and scale point clouds using CNC coordinates
-align_pcd = true  # Default: true
 # Camera model to use for reconstruction
 # Options: "SIMPLE_RADIAL", "RADIAL", "OPENCV"
 camera_model = "SIMPLE_RADIAL"  # Default: "SIMPLE_RADIAL"
-# Use GPU for feature extraction and matching when available
-use_gpu = true  # Default: true
 # Whether images were taken with a single camera (shared intrinsics)
 single_camera = true  # Default: true
-# Maximum alignment error allowed during model alignment
-alignment_max_error = 10  # Default: 10
-# Maximum 3D Euclidean distance to CNC pose to validate COLMAP pose estimation
-distance_threshold = 6.0  # Default: 6.0mm
+# Whether to perform the verification of the estimated camera extrinsic
+qc_check = true
+# Median absolute deviation factor to detect outlier camera pose
+mad_factor = 3.0
+# Maximum distance to CNC pose to validate COLMAP pose estimation
+distance_threshold = 3.0  # Default: 3.0mm
+# Maximum distance to fixed CNC pose to validate COLMAP pose estimation
+fixed_distance_threshold = 1.0  # Default: 1.0mm
+# Maximum angular distance to CNC pose to validate COLMAP pose estimation
+angle_threshold = 5.0  # Default: 5.0°
+# Maximum angular distance to fixed CNC pose to validate COLMAP pose estimation
+fixed_angle_threshold = 3.5  # Default: 3.5°
 # Maximum blind angle tolerated for camera pose quality control
 max_blind_angle = 20.0  # Default: 20.0 (degrees)
 # Number of retries if the task fails
@@ -38,13 +42,15 @@ query = "{\"channel\":\"rgb\"}"  # Default: "{\"channel\":\"rgb\"}"  (only RGB i
 # The type of image transformation algorithm to use prior to masking
 # Options: "linear" (linear combination of RGB channels), "excess_green" (excess green index)
 type = "linear"  # Default: "linear"
-# Linear coefficients to apply to each RGB channel of the original image
+# The colorspace to use for the filtering
+# Options: "RGB", "HSV", "YCbCr"
+colorspace = "RGB"  # Default: "RGB"
+# Linear coefficients to apply to each channel of the original image in the selected colorspace
 # Used only when type="linear"
-parameters = "[0.2, 1, 0.1]"
+parameters = "[0.2, 1, 0.1]"  # Default: [0, 1, 0] (using only the green channel in RGB)
 # Binarization threshold applied after transforming the image
-threshold = 0.15 # Default: 0.3
-# Dilation factor for the binary mask images (morphological dilation)
-dilation = 1 # Default: 0 (no dilation)
+min_threshold = 0.2 # Default: 0.0
+max_threshold = 1.0 # Default: 0.4
 
 [Voxels]
 # Task that provides the masked images as input
@@ -70,10 +76,14 @@ z = [-125, 100]
 [PointCloud]
 # Task that provides the voxel array as input
 upstream_task = "Voxels"  # Default: "Voxels"
-# Distance of the level set on which the points are sampled
-level_set_value = 1.0  # Default: 1.0
+# The algorithm to use to compute the pointcloud
+algorithm = "marching-cubes"  # Default: "marching-cubes"
 # Threshold for the number of missing images allowed in the reconstruction
 missing_images_threshold = 2  # Default: 2
+# Standard deviation for Gaussian kernel (only for marching-cubes)
+sigma = 0.8
+# Level set value for the marching cubes algorithm
+mc_level = 0.5
 
 [TriangleMesh]
 # Task that provides the point cloud as input

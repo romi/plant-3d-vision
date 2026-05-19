@@ -1,26 +1,22 @@
-[Masks]
-upstream_task = "ImagesFilesetExists"
-query = "{\"channel\":\"rgb\"}"
-type = "linear"
-parameters = "[0, 1, 0]"
-dilation = 1
-threshold = 0.3
-
 [Voxels]
-upstream_task = "Masks"
-upstream_colmap = "Masks"  # not really but a task name is required here!
+upstream_task = "ImagesFilesetExists"
+upstream_colmap = "DummyTask"
+query = "{\"channel\":\"background\"}"  # use the (inverted) background masks
 camera_metadata = "camera"
-voxel_size = 0.1
+voxel_size = 0.06  # ~9x smaller than real plants
 type = "carving"
+invert = true
 
 [PointCloud]
 upstream_task = "Voxels"
 level_set_value = 0.0
+missing_images_threshold = 0
 
 [TriangleMesh]
 upstream_task = "PointCloud"
 library = "open3d"
 filtering = "most connected triangles"
+depth = 9  # depth parameter used by Open3D to mesh the point cloud
 
 [CurveSkeleton]
 upstream_task = "TriangleMesh"
@@ -35,11 +31,6 @@ upstream_task = "TreeGraph"
 characteristic_length = 1.0
 stem_axis_inverted = false
 
-[AnglesAndInternodesEvaluation]
-upstream_task = "AnglesAndInternodes"
-ground_truth = "ImagesFilesetExists"
-free_ends = 0.4
-free_ends_eps = 1e-2
 
 [Clean]
 no_confirm = true

@@ -17,10 +17,6 @@ from skimage.morphology import binary_dilation
 from skimage.morphology import disk
 from skimage.color import convert_colorspace
 
-from romitask.log import get_logger
-
-logger = get_logger(__name__)
-
 EPS = 1e-9
 
 
@@ -96,6 +92,25 @@ def linear(img, coefs, colorspace: Literal["RGB", "HSV", "YCbCr"]="RGB"):
         A 2D NumPy array representing the result of the linear transformation. The resulting array has
         the same height and width as the input image, with pixel intensity values normalized to the
         range [0, 1].
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import matplotlib.pyplot as plt
+    >>> from imageio.v3 import imread
+    >>> from plant3dvision import test_db_path
+    >>> from plant3dvision.proc2d import linear
+    >>> path = test_db_path()
+    >>> img = imread(path.joinpath('real_plant/images/00000_rgb.jpg'))
+    >>> coeff_img = linear(img, [0.2, 1., 0.1], 'RGB')
+    >>> mask_img = coeff_img >= 0.2
+    >>> fig, ax = plt.subplots(1, 2, figsize=(12, 5))
+    >>> ax[0].imshow(coeff_img)
+    >>> ax[0].set_title("Linear transformation image")
+    >>> ax[1].imshow(mask_img)
+    >>> ax[1].set_title("Binary mask")
+    >>> plt.tight_layout()
+    >>> plt.show()
     """
     if not img.dtype == "float":
         img = np.asarray(img, dtype=float)  # transform the uint8 RGB image into a float RGB numpy array
