@@ -30,7 +30,7 @@ RUN useradd -m -s /bin/bash github-runner \
 WORKDIR /actions-runner
 
 # Download and extract GitHub Actions Runner
-RUN curl -O -L https://github.com/actions/runner/releases/download/v2.334.0/actions-runner-linux-x64-2.334.0.tar.gz -o actions-runner.tar.gz \
+RUN curl -L -o actions-runner.tar.gz https://github.com/actions/runner/releases/download/v2.334.0/actions-runner-linux-x64-2.334.0.tar.gz \
     && tar xzf actions-runner.tar.gz \
     && rm actions-runner.tar.gz
 
