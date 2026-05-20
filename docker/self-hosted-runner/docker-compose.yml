@@ -12,6 +12,7 @@ services:
         GITHUB_RUNNER_NAME: ${GITHUB_RUNNER_NAME:-romi-github-runner}
 
     image: self-hosted-runner:latest
+    runtime: nvidia  # Enable NVIDIA runtime for GPU access
     container_name: romi-github-runner
     privileged: false  # Don't run in privileged mode
     restart: always
@@ -35,6 +36,10 @@ services:
         reservations:
           cpus: '0.5'
           memory: 1G
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+              count: 1
 
     # Security context
     security_opt:
