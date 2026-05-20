@@ -1,0 +1,53 @@
+services:
+
+  runner:
+
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        GITHUB_RUNNER_URL: ${GITHUB_RUNNER_URL}
+        GITHUB_RUNNER_TOKEN: ${GITHUB_RUNNER_TOKEN}
+        GITHUB_RUNNER_LABELS: ${GITHUB_RUNNER_LABELS:-self-hosted,linux,docker,x64}
+        GITHUB_RUNNER_NAME: ${GITHUB_RUNNER_NAME:-romi-github-runner}
+
+    image: self-hosted-runner:latest
+    container_name: romi-github-runner
+    privileged: false  # Don't run in privileged mode
+    restart: always
+
+    # Mount Docker socket for building images
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - runner-cache:/actions-runner/_work
+      - runner-certs:/usr/share/ca-certificates
+
+    # Environment variables for GitHub (only the non‑secret flag)
+    environment:
+      - GITHUB_RUNNER_EPHEMERAL=true
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+
+    # Security context
+    security_opt:
+      - no-new-privileges:true
+
+    # Capabilities (only enable what's needed)
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+
+volumes:
+  runner-cache:
+  runner-certs:
