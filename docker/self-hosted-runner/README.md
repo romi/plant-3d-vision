@@ -54,22 +54,16 @@ The `docker-compose.yml` file will run the GitHub Actions runner.
 
 ## Build the Runner
 
-Choose one option, either 1. pass directly on the _command line_ or B. define an _environment file_.
-
-### 1.Command line
-
-```bash
-docker compose build \
-  --build-arg GITHUB_RUNNER_URL=https://github.com/YOUR_USERNAME/YOUR_REPOSITORY \
-  --build-arg GITHUB_RUNNER_TOKEN=YOUR_TOKEN \
-  --build-arg GITHUB_RUNNER_NAME=runner-$(hostname) \
-  runner          # name of the service defined in docker‑compose.yml
+Then simply run:
+``` bash
+docker compose up -d --build
 ```
-### 2. Environment File
 
-Use an `.env` file to store sensitive configuration:
+## Run the Runner
 
-```bash
+Use an `.env` file to pass the configuration at runtime only:
+
+```dotenv
 # GitHub Runner Configuration
 GITHUB_RUNNER_URL=https://github.com/YOUR_USERNAME/YOUR_REPOSITORY
 GITHUB_RUNNER_TOKEN=your-registration-token-here
@@ -78,21 +72,11 @@ GITHUB_RUNNER_LABELS=self-hosted,linux,docker,x64
 GITHUB_RUNNER_NAME=runner-$(hostname)
 ```
 
-Then simply run:
-``` bash
-docker compose up -d --build
-```
-
-## Run the Runner
-
 From the directory containing your `Dockerfile` and `docker-compose.yml`:
 
 ```bash
 # Run the runner
 docker-compose up -d
-
-# Check logs
-docker-compose logs -f runner
 ```
 
 ## Verify the Runner

@@ -5,11 +5,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        GITHUB_RUNNER_URL: ${GITHUB_RUNNER_URL}
-        GITHUB_RUNNER_TOKEN: ${GITHUB_RUNNER_TOKEN}
-        GITHUB_RUNNER_LABELS: ${GITHUB_RUNNER_LABELS:-self-hosted,linux,docker,x64}
-        GITHUB_RUNNER_NAME: ${GITHUB_RUNNER_NAME:-romi-github-runner}
 
     image: self-hosted-runner:latest
     container_name: romi-github-runner
@@ -23,6 +18,10 @@ services:
 
     environment:
       - GITHUB_RUNNER_EPHEMERAL=true
+      - GITHUB_RUNNER_URL=${GITHUB_RUNNER_URL}
+      - GITHUB_RUNNER_TOKEN=${GITHUB_RUNNER_TOKEN}
+      - GITHUB_RUNNER_LABELS=${GITHUB_RUNNER_LABELS:-self-hosted,linux,docker,x64}
+      - GITHUB_RUNNER_NAME=${GITHUB_RUNNER_NAME:-romi-github-runner}
 
     deploy:
       resources:

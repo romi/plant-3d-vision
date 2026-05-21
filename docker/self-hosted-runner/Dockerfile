@@ -1,19 +1,7 @@
 FROM ubuntu:24.04
 
-# --- Build arguments ---------------------------------------------------------
-ARG GITHUB_RUNNER_URL
-ARG GITHUB_RUNNER_TOKEN
-ARG GITHUB_RUNNER_LABELS=self-hosted,linux,docker,x64
-ARG GITHUB_RUNNER_NAME=romi-github-runner
-
-ENV GITHUB_RUNNER_URL=${GITHUB_RUNNER_URL}
-ENV GITHUB_RUNNER_TOKEN=${GITHUB_RUNNER_TOKEN}
-ENV GITHUB_RUNNER_LABELS=${GITHUB_RUNNER_LABELS}
-ENV GITHUB_RUNNER_NAME=${GITHUB_RUNNER_NAME}
-
 # Disable TLS (simplifies DinD)
 ENV DOCKER_TLS_CERTDIR=""
-# -----------------------------------------------------------------------------
 
 # Install system dependencies + nvidia-container-toolkit for inner Docker daemon
 RUN apt-get update && apt-get install -y \
@@ -48,9 +36,9 @@ RUN RUNNER_VERSION=$(curl -fsSL https://api.github.com/repos/actions/runner/rele
     && curl -L -o actions-runner.tar.gz \
         "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz" \
     && tar xzf actions-runner.tar.gz \
-    && rm actions-runner.tar.gz
-
-RUN chown -R github-runner:github-runner /actions-runner
+    && rm actions-runner.tar.gz \
+    && ./bin/installdependencies.sh \
+    && chown -R github-runner:github-runner /actions-runner
 
 # Copy and set permissions BEFORE dropping to non-root user
 COPY entrypoint.sh /entrypoint.sh
