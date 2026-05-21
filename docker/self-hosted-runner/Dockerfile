@@ -29,7 +29,7 @@ RUN curl -fsSL https://get.docker.com -o get-docker.sh \
 
 # Create a dedicated user for the runner
 RUN useradd -m -s /bin/bash github-runner \
-    && echo "github-runner ALL=(ALL) NOPASSWD: /usr/bin/dockerd, /usr/bin/docker" >> /etc/sudoers.d/github-runner \
+    && echo "github-runner ALL=(ALL) NOPASSWD: /usr/bin/dockerd, /usr/bin/docker, /usr/bin/nvidia-ctk" >> /etc/sudoers.d/github-runner \
     && chmod 0440 /etc/sudoers.d/github-runner \
     && usermod -aG docker github-runner
 

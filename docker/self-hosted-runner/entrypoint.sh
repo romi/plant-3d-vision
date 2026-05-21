@@ -2,10 +2,10 @@
 set -e
 
 # Before starting dockerd, ensure nvidia runtime is configured
-sudo nvidia-ctk runtime configure --runtime=docker --config=/etc/docker/daemon.json
+nvidia-ctk runtime configure --runtime=docker --config=/etc/docker/daemon.json
 # Start Docker daemon in the background (requires privileged mode)
 echo "Starting Docker daemon..."
-sudo dockerd --host=unix:///var/run/docker.sock &
+dockerd --host=unix:///var/run/docker.sock &
 
 # Wait for Docker daemon to be ready
 echo "Waiting for Docker daemon to be ready..."
