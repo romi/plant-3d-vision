@@ -2,10 +2,10 @@
 set -e
 
 # Before starting dockerd, ensure nvidia runtime is configured
-nvidia-ctk runtime configure --runtime=docker --config=/etc/docker/daemon.json
+sudo nvidia-ctk runtime configure --runtime=docker --config=/etc/docker/daemon.json
 # Start Docker daemon in the background (requires privileged mode)
 echo "Starting Docker daemon..."
-dockerd --host=unix:///var/run/docker.sock &
+sudo dockerd --host=unix:///var/run/docker.sock &
 
 # Wait for Docker daemon to be ready
 echo "Waiting for Docker daemon to be ready..."
@@ -27,20 +27,12 @@ sudo docker --version
 # Configure the GitHub Actions runner
 echo "Configuring GitHub Actions runner..."
 ./config.sh \
+    --unattended \
     --url "${GITHUB_RUNNER_URL}" \
     --token "${GITHUB_RUNNER_TOKEN}" \
     --name "${GITHUB_RUNNER_NAME:-romi-github-runner}" \
     --labels "${GITHUB_RUNNER_LABELS:-self-hosted,linux,docker,x64}" \
-    --unattended \
-    --replace \
-    ${GITHUB_RUNNER_EPHEMERAL:+--ephemeral}
-
-# Cleanup function to remove runner on exit
-cleanup() {
-    echo "Removing runner..."
-    ./config.sh remove --token "${GITHUB_RUNNER_TOKEN}" || true
-}
-trap cleanup EXIT
+    --replace
 
 # Start the runner
 echo "Starting GitHub Actions runner..."
