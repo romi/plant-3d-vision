@@ -36,10 +36,10 @@ Running the runner in a Docker container provides several security benefits:
 └────────────────────────────────────────────────────────────┘
                            │
                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    Host System                              │
-│  - N/A (runner is isolated)                                 │
-└─────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────┐
+│                    Host System                             │
+│  - N/A (runner is isolated)                                │
+└────────────────────────────────────────────────────────────┘
 ```
 
 ## Setup Guide
@@ -69,7 +69,7 @@ GITHUB_RUNNER_URL=https://github.com/YOUR_USERNAME/YOUR_REPOSITORY
 GITHUB_RUNNER_TOKEN=your-registration-token-here
 # Runner Configuration
 GITHUB_RUNNER_LABELS=self-hosted,linux,docker,x64
-GITHUB_RUNNER_NAME=runner-$(hostname)
+GITHUB_RUNNER_NAME=romi-github-runner
 ```
 
 From the directory containing your `Dockerfile` and `docker-compose.yml`:
@@ -90,119 +90,4 @@ docker-compose up -d
 docker-compose logs runner
 ```
 
-You should see: `√ Connected to GitHub: Listening for Jobs`
-
-## Advanced Configuration Options
-
-### Enable Ephemeral Runners
-
-To ensure the runner container is destroyed after each job:
-
-```yaml
-services:
-  runner:
-    image: your-registry.com/self-hosted-runner:latest
-    # ... other configuration
-    environment:
-      - GITHUB_RUNNER_EPHEMERAL=true
-```
-
-### Use Rootless Docker (More Secure)
-
-For even better security, run the Docker daemon as a non-root user:
-
-```yaml
-services:
-  runner:
-    image: your-registry.com/self-hosted-runner:latest
-    privileged: false
-    user: "1000:1000"  # Run as a specific user
-    security_opt:
-      - no-new-privileges:true
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro  # Read-only mount
-      - runner-cache:/actions-runner/_work
-    environment:
-      - DOCKER_DAEMON_CONFIG=/etc/docker/daemon.json
-```
-
-Create a `daemon.json` file:
-
-```json
-{
-  "userns-remap": "default",
-  "log-level": "warn",
-  "live-restore": true
-}
-```
-
-### Configure Resource Limits
-
-```yaml
-deploy:
-  resources:
-    limits:
-      cpus: '2'
-      memory: 4G
-    reservations:
-      cpus: '0.5'
-      memory: 1G
-```
-
-### Set Up Health Checks
-
-```yaml
-services:
-  runner:
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:32767/_diag"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-```
-
-### Network Isolation
-
-If you're using Kubernetes, create a NetworkPolicy to restrict outbound traffic:
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: runner-egress
-  namespace: github-actions
-spec:
-  podSelector:
-    matchLabels:
-      app: github-runner
-  egress:
-    - to:
-        - ipBlock:
-            cidr: 140.82.112.0/20  # GitHub API IP range
-      ports:
-        - protocol: TCP
-          port: 443
-    - to:
-        - ipBlock:
-            cidr: 192.168.0.0/16  # Your internal registry
-      ports:
-        - protocol: TCP
-          port: 5000
-```
-
-## Security Best Practices
-
-### 1. Use Read-Only Docker Socket
-
-```yaml
-volumes:
-  - /var/run/docker.sock:/var/run/docker.sock:ro
-```
-
-This prevents the runner from modifying the Docker daemon.
-
-### 2. Restrict Capabilities
-
-```yaml
-cap
+You should see: `√ Connected to GitHub`
