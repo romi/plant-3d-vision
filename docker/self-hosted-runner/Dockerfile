@@ -29,7 +29,7 @@ RUN curl -fsSL https://get.docker.com -o get-docker.sh \
 
 # Create a dedicated user for the runner
 RUN useradd -m -s /bin/bash github-runner \
-    && echo "github-runner ALL=(ALL) NOPASSWD: /usr/bin/docker" >> /etc/sudoers.d/github-runner \
+    && echo "github-runner ALL=(ALL) NOPASSWD: /usr/bin/docker, /usr/bin/dockerd" >> /etc/sudoers.d/github-runner \
     && usermod -aG docker github-runner
 
 # Set working directory and download runner as root, then fix ownership

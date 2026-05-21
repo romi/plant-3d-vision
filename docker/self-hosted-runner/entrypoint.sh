@@ -1,35 +1,47 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/bash
+set -e
 
-# --------- start Docker daemon for DinD ----------
-# Run dockerd in the background (the container runs as the non‑root github‑runner user,
-# which already has password‑less sudo rights for /usr/bin/docker as set in the Dockerfile)
-sudo dockerd > /dev/null 2>&1 &
+# Before starting dockerd, ensure nvidia runtime is configured
+sudo nvidia-ctk runtime configure --runtime=docker --config=/etc/docker/daemon.json
+# Start Docker daemon in the background (requires privileged mode)
+echo "Starting Docker daemon..."
+sudo dockerd --host=unix:///var/run/docker.sock &
 
-# Wait until the Docker socket is responsive
-until sudo docker info > /dev/null 2>&1; do
-  sleep 1
+# Wait for Docker daemon to be ready
+echo "Waiting for Docker daemon to be ready..."
+timeout=30
+elapsed=0
+until sudo docker info >/dev/null 2>&1; do
+    if [ $elapsed -ge $timeout ]; then
+        echo "ERROR: Docker daemon failed to start within ${timeout}s"
+        exit 1
+    fi
+    sleep 1
+    elapsed=$((elapsed + 1))
 done
-# ------------------------------------------------
+echo "Docker daemon is ready!"
 
-# Working directory where the runner was unpacked
-cd /actions-runner
+# Verify Docker is working
+sudo docker --version
 
-# If the runner hasn't been configured yet, run the config script.
-# The environment variables are supplied by docker‑compose.
-if [ ! -f .runner ]; then
-  echo "Configuring GitHub Actions runner..."
-  ./config.sh \
-    --unattended \
+# Configure the GitHub Actions runner
+echo "Configuring GitHub Actions runner..."
+./config.sh \
     --url "${GITHUB_RUNNER_URL}" \
     --token "${GITHUB_RUNNER_TOKEN}" \
-    --labels "${GITHUB_RUNNER_LABELS}" \
-    --name "${GITHUB_RUNNER_NAME}" \
-    --replace
-  touch .runner   # marker to avoid re‑configuring on every start
-else
-  echo "GitHub Actions runner already configured..."
-fi
+    --name "${GITHUB_RUNNER_NAME:-romi-github-runner}" \
+    --labels "${GITHUB_RUNNER_LABELS:-self-hosted,linux,docker,x64}" \
+    --unattended \
+    --replace \
+    ${GITHUB_RUNNER_EPHEMERAL:+--ephemeral}
 
-# Finally start the runner (foreground)
-exec ./run.sh "$@"
+# Cleanup function to remove runner on exit
+cleanup() {
+    echo "Removing runner..."
+    ./config.sh remove --token "${GITHUB_RUNNER_TOKEN}" || true
+}
+trap cleanup EXIT
+
+# Start the runner
+echo "Starting GitHub Actions runner..."
+./run.sh
