@@ -12,22 +12,18 @@ services:
         GITHUB_RUNNER_NAME: ${GITHUB_RUNNER_NAME:-romi-github-runner}
 
     image: self-hosted-runner:latest
-    runtime: nvidia  # Enable NVIDIA runtime for GPU access
     container_name: romi-github-runner
-    privileged: false  # Don't run in privileged mode
+    # DinD requires privileged mode for the inner Docker daemon
+    privileged: true
     restart: always
 
-    # Mount Docker socket for building images
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - runner-cache:/actions-runner/_work
       - runner-certs:/usr/share/ca-certificates
 
-    # Environment variables for GitHub (only the non‑secret flag)
     environment:
       - GITHUB_RUNNER_EPHEMERAL=true
 
-    # Resource limits
     deploy:
       resources:
         limits:
@@ -40,18 +36,6 @@ services:
             - driver: nvidia
               capabilities: [gpu]
               count: 1
-
-    # Security context
-    security_opt:
-      - no-new-privileges:true
-
-    # Capabilities (only enable what's needed)
-    cap_drop:
-      - ALL
-    cap_add:
-      - CHOWN
-      - SETGID
-      - SETUID
 
 volumes:
   runner-cache:
