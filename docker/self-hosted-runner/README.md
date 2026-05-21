@@ -87,7 +87,7 @@ docker-compose up -d
 4. Check the Docker container logs:
 
 ```bash
-docker-compose logs runner
+docker compose logs runner
 ```
 
 You should see: `√ Connected to GitHub`

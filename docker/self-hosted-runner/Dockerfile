@@ -38,6 +38,7 @@ RUN RUNNER_VERSION=$(curl -fsSL https://api.github.com/repos/actions/runner/rele
     && tar xzf actions-runner.tar.gz \
     && rm actions-runner.tar.gz \
     && ./bin/installdependencies.sh \
+    && mkdir -p /actions-runner/_work/_tool \
     && chown -R github-runner:github-runner /actions-runner
 
 # Copy and set permissions BEFORE dropping to non-root user
