@@ -4,23 +4,28 @@ FROM ubuntu:24.04
 ENV DOCKER_TLS_CERTDIR=""
 
 # Install system dependencies + nvidia-container-toolkit for inner Docker daemon
+# but **do not** install docker.io via apt
 RUN apt-get update && apt-get install -y \
-        curl \
-        git \
-        docker.io \
-        jq \
-        sudo \
-        ca-certificates \
-        gnupg \
-    && install -m 0755 -d /etc/apt/keyrings \
-    && curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
-        | gpg --dearmor -o /etc/apt/keyrings/nvidia-container-toolkit.gpg \
-    && curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
-        | sed 's#deb https://#deb [signed-by=/etc/apt/keyrings/nvidia-container-toolkit.gpg] https://#g' \
-        > /etc/apt/sources.list.d/nvidia-container-toolkit.list \
-    && apt-get update && apt-get install -y nvidia-container-toolkit \
-    && nvidia-ctk runtime configure --runtime=docker \
-    && rm -rf /var/lib/apt/lists/*
+            curl \
+            git \
+            jq \
+            sudo \
+            ca-certificates \
+            gnupg \
+        && install -m 0755 -d /etc/apt/keyrings \
+        && curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
+            | gpg --dearmor -o /etc/apt/keyrings/nvidia-container-toolkit.gpg \
+        && curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
+            | sed 's#deb https://#deb [signed-by=/etc/apt/keyrings/nvidia-container-toolkit.gpg] https://#g' \
+            > /etc/apt/sources.list.d/nvidia-container-toolkit.list \
+        && apt-get update && apt-get install -y nvidia-container-toolkit \
+        && nvidia-ctk runtime configure --runtime=docker \
+        && rm -rf /var/lib/apt/lists/*
+
+# Install Docker Engine using Docker’s official convenience script
+RUN curl -fsSL https://get.docker.com -o get-docker.sh \
+        && sh get-docker.sh \
+        && rm get-docker.sh
 
 # Create a dedicated user for the runner
 RUN useradd -m -s /bin/bash github-runner \
