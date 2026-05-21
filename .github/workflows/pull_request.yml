@@ -5,22 +5,27 @@ name: CI
 on: pull_request
 
 jobs:
+
+  docker-clean-before:
+    runs-on: self-hosted
+    steps:
+      - name: Clean old Docker containers
+        run: |
+          docker container prune -f
+
   docker-build:
     runs-on: self-hosted
-
     steps:
       - uses: actions/checkout@v6
         with:
           submodules: true
       - name: Build Dockerfile
         run: |
-          docker container prune -f
-          ./docker/build.sh -t ${{ github.sha }} --no-cache
+          ./docker/build.sh -t ${{ github.sha }} --no-cache --plain
 
   unit-tests:
     runs-on: self-hosted
     needs: docker-build
-
     steps:
       - name: Run Unit Tests
         run: |
@@ -29,7 +34,6 @@ jobs:
   integration-tests:
     runs-on: self-hosted
     needs: docker-build
-
     steps:
       - name: Run Integration Tests
         run: |
@@ -39,7 +43,6 @@ jobs:
     runs-on: self-hosted
     needs: [ integration-tests, unit-tests ]
     if: always()
-
     steps:
       - name: Remove Docker Image
         run: |
