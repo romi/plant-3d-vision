@@ -6,15 +6,19 @@ on: pull_request
 
 jobs:
 
-  docker-clean-before:
+  colmap-docker-build:
     runs-on: self-hosted
     steps:
-      - name: Clean old Docker containers
+      - uses: actions/checkout@v6
+        with:
+          submodules: true
+      - name: Build Dockerfile
         run: |
-          docker container prune -f
+          ./docker/colmap3.8/build.sh --plain
 
-  docker-build:
+  p3dv-docker-build:
     runs-on: self-hosted
+    needs: colmap-docker-build
     steps:
       - uses: actions/checkout@v6
         with:
@@ -25,7 +29,7 @@ jobs:
 
   unit-tests:
     runs-on: self-hosted
-    needs: docker-build
+    needs: p3dv-docker-build
     steps:
       - name: Run Unit Tests
         run: |
@@ -33,7 +37,7 @@ jobs:
 
   integration-tests:
     runs-on: self-hosted
-    needs: docker-build
+    needs: p3dv-docker-build
     steps:
       - name: Run Integration Tests
         run: |
