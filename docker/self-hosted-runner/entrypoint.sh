@@ -39,6 +39,12 @@ echo "Configuring GitHub Actions runner..."
     --labels "${GITHUB_RUNNER_LABELS:-self-hosted,linux,docker,x64,gpu}" \
     --replace
 
+# Ensure Buildx can write its certs
+echo "BUILDX_DIR=${BUILDX_DIR}"
+mkdir -p "${BUILDX_DIR}/certs"
+chown -R ubuntu:ubuntu "${BUILDX_DIR}"
+chmod 700 "${BUILDX_DIR}/certs"
+
 # Start the runner
 echo "Starting GitHub Actions runner..."
 ./run.sh

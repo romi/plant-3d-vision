@@ -24,6 +24,7 @@ services:
       - GITHUB_RUNNER_TOKEN=${GITHUB_RUNNER_TOKEN}
       - GITHUB_RUNNER_LABELS=${GITHUB_RUNNER_LABELS:-self-hosted,linux,docker,x64,gpu}
       - GITHUB_RUNNER_NAME=${GITHUB_RUNNER_NAME:-romi-github-runner}
+      - BUILDX_DIR=/actions-runner/_work/.docker/buildx
 
     deploy:
       resources:
