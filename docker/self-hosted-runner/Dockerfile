@@ -14,7 +14,7 @@ RUN curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-27.
     && chmod +x /usr/local/bin/docker
 
 # Create a dedicated non-root user for the runner
-RUN useradd -m -s /bin/bash -u 1000 github-runner
+RUN useradd -m -s /bin/bash github-runner
 
 # Set working directory and download runner
 WORKDIR /actions-runner

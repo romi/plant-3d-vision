@@ -39,7 +39,7 @@ services:
               count: 1
 
     # Run as non-root user
-    user: "1000:1000"
+    user: github-runner
 
     security_opt:
       - no-new-privileges:true
