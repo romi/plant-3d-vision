@@ -3,8 +3,18 @@ set -e
 
 # Verify Docker socket is accessible (DooD approach)
 echo "Verifying Docker access..."
+
+# Try to access docker - if it fails, provide helpful error message
 if ! docker info >/dev/null 2>&1; then
-    echo "ERROR: Cannot connect to Docker daemon. Is the socket mounted correctly?"
+    echo "ERROR: Cannot connect to Docker daemon."
+    echo "Checking socket permissions..."
+    ls -la /var/run/docker.sock 2>/dev/null || echo "Socket not found at /var/run/docker.sock"
+
+    echo ""
+    echo "For rootless Docker, ensure:"
+    echo "1. Socket is mounted: -v /run/user/1000/docker.sock:/var/run/docker.sock"
+    echo "2. Socket is accessible on host: chmod 666 /run/user/1000/docker.sock"
+    echo "3. Or run container without USER directive (as root inside container)"
     exit 1
 fi
 
