@@ -10,9 +10,13 @@ services:
 
     restart: always
 
+    # Add the group ID that owns the Docker socket
+    group_add:
+      - "${DOCKER_SOCKET_GID:-1000}"
+
     volumes:
       # Mount the host's Docker socket (DooD approach)
-      - ${DOCKER_SOCK:-/run/user/1000/docker.sock}:/var/run/docker.sock:ro
+      - ${DOCKER_SOCK:-/run/user/1000/docker.sock}:/var/run/docker.sock
       # Runner work directory
       - runner-cache:/actions-runner/_work
       # Optional: share Docker build cache for faster builds
@@ -58,6 +62,7 @@ services:
     tmpfs:
       - /tmp:noexec,nosuid,nodev
       - /run:noexec,nosuid,nodev
+
 volumes:
   runner-cache:
   docker-cache:
