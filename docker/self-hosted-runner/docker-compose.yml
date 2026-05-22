@@ -16,7 +16,7 @@ services:
       # Runner work directory
       - runner-cache:/actions-runner/_work
       # Optional: share Docker build cache for faster builds
-      - docker-cache:/home/github-runner/.docker
+      - docker-cache:/home/ubuntu/.docker
 
     environment:
       - GITHUB_RUNNER_EPHEMERAL=true
@@ -37,9 +37,6 @@ services:
             - driver: nvidia
               capabilities: [gpu]
               count: 1
-
-    # Run as non-root user
-    user: github-runner
 
     security_opt:
       - no-new-privileges:true

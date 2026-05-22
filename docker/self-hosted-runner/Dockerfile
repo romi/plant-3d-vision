@@ -13,9 +13,6 @@ RUN curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-27.
     | tar xz --strip-components=1 -C /usr/local/bin docker/docker \
     && chmod +x /usr/local/bin/docker
 
-# Create a dedicated non-root user for the runner
-RUN useradd -m -s /bin/bash github-runner
-
 # Set working directory and download runner
 WORKDIR /actions-runner
 
@@ -28,14 +25,14 @@ RUN RUNNER_VERSION=$(curl -fsSL https://api.github.com/repos/actions/runner/rele
     && rm actions-runner.tar.gz \
     && ./bin/installdependencies.sh \
     && mkdir -p /actions-runner/_work/_tool \
-    && chown -R github-runner:github-runner /actions-runner
+    && chown -R ubuntu:ubuntu /actions-runner
 
 # Copy entrypoint script
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Switch to non-root user
-USER github-runner
+USER ubuntu
 
 WORKDIR /actions-runner
 ENTRYPOINT ["/entrypoint.sh"]
