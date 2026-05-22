@@ -20,6 +20,7 @@ fi
 
 echo "Docker is accessible!"
 docker --version
+docker buildx --version
 
 # Verify GPU access if available
 if docker run --rm --gpus all nvidia/cuda:11.8.0-base-ubuntu22.04 nvidia-smi >/dev/null 2>&1; then
