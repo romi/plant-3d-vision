@@ -1,42 +1,25 @@
 FROM ubuntu:24.04
 
-# Disable TLS (simplifies DinD)
-ENV DOCKER_TLS_CERTDIR=""
-
-# Install system dependencies + nvidia-container-toolkit for inner Docker daemon
-# but **do not** install docker.io via apt
+# Install minimal dependencies - NO Docker daemon needed
 RUN apt-get update && apt-get install -y \
-            curl \
-            git \
-            jq \
-            sudo \
-            ca-certificates \
-            gnupg \
-        && install -m 0755 -d /etc/apt/keyrings \
-        && curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
-            | gpg --dearmor -o /etc/apt/keyrings/nvidia-container-toolkit.gpg \
-        && curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
-            | sed 's#deb https://#deb [signed-by=/etc/apt/keyrings/nvidia-container-toolkit.gpg] https://#g' \
-            > /etc/apt/sources.list.d/nvidia-container-toolkit.list \
-        && apt-get update && apt-get install -y nvidia-container-toolkit \
-        && nvidia-ctk runtime configure --runtime=docker \
-        && rm -rf /var/lib/apt/lists/*
+        curl \
+        git \
+        jq \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install Docker Engine using Docker’s official convenience script
-RUN curl -fsSL https://get.docker.com -o get-docker.sh \
-        && sh get-docker.sh \
-        && rm get-docker.sh
+# Install Docker CLI only (not the daemon)
+RUN curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-27.0.3.tgz \
+    | tar xz --strip-components=1 -C /usr/local/bin docker/docker \
+    && chmod +x /usr/local/bin/docker
 
-# Create a dedicated user for the runner
-RUN useradd -m -s /bin/bash github-runner \
-    && echo "github-runner ALL=(ALL) NOPASSWD: /usr/bin/dockerd, /usr/bin/docker, /usr/bin/nvidia-ctk" >> /etc/sudoers.d/github-runner \
-    && chmod 0440 /etc/sudoers.d/github-runner \
-    && usermod -aG docker github-runner
+# Create a dedicated non-root user for the runner
+RUN useradd -m -s /bin/bash -u 1000 github-runner
 
-# Set working directory and download runner as root, then fix ownership
+# Set working directory and download runner
 WORKDIR /actions-runner
 
-# Fetch the latest runner version dynamically to avoid going stale
+# Fetch the latest runner version dynamically
 RUN RUNNER_VERSION=$(curl -fsSL https://api.github.com/repos/actions/runner/releases/latest \
         | jq -r '.tag_name' | sed 's/^v//') \
     && curl -L -o actions-runner.tar.gz \
@@ -47,11 +30,11 @@ RUN RUNNER_VERSION=$(curl -fsSL https://api.github.com/repos/actions/runner/rele
     && mkdir -p /actions-runner/_work/_tool \
     && chown -R github-runner:github-runner /actions-runner
 
-# Copy and set permissions BEFORE dropping to non-root user
+# Copy entrypoint script
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# Switch to runner user
+# Switch to non-root user
 USER github-runner
 
 WORKDIR /actions-runner

@@ -1,28 +1,22 @@
 #!/bin/bash
 set -e
 
-# Before starting dockerd, ensure nvidia runtime is configured
-sudo nvidia-ctk runtime configure --runtime=docker --config=/etc/docker/daemon.json
-# Start Docker daemon in the background (requires privileged mode)
-echo "Starting Docker daemon..."
-sudo dockerd --host=unix:///var/run/docker.sock &
+# Verify Docker socket is accessible (DooD approach)
+echo "Verifying Docker access..."
+if ! docker info >/dev/null 2>&1; then
+    echo "ERROR: Cannot connect to Docker daemon. Is the socket mounted correctly?"
+    exit 1
+fi
 
-# Wait for Docker daemon to be ready
-echo "Waiting for Docker daemon to be ready..."
-timeout=30
-elapsed=0
-until sudo docker info >/dev/null 2>&1; do
-    if [ $elapsed -ge $timeout ]; then
-        echo "ERROR: Docker daemon failed to start within ${timeout}s"
-        exit 1
-    fi
-    sleep 1
-    elapsed=$((elapsed + 1))
-done
-echo "Docker daemon is ready!"
+echo "Docker is accessible!"
+docker --version
 
-# Verify Docker is working
-sudo docker --version
+# Verify GPU access if available
+if docker run --rm --gpus all nvidia/cuda:11.8.0-base-ubuntu22.04 nvidia-smi >/dev/null 2>&1; then
+    echo "GPU access verified!"
+else
+    echo "WARNING: GPU access check failed. Ensure nvidia-container-toolkit is configured."
+fi
 
 # Configure the GitHub Actions runner
 echo "Configuring GitHub Actions runner..."
@@ -31,7 +25,7 @@ echo "Configuring GitHub Actions runner..."
     --url "${GITHUB_RUNNER_URL}" \
     --token "${GITHUB_RUNNER_TOKEN}" \
     --name "${GITHUB_RUNNER_NAME:-romi-github-runner}" \
-    --labels "${GITHUB_RUNNER_LABELS:-self-hosted,linux,docker,x64}" \
+    --labels "${GITHUB_RUNNER_LABELS:-self-hosted,linux,docker,x64,gpu}" \
     --replace
 
 # Start the runner

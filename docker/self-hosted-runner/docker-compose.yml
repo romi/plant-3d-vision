@@ -1,41 +1,65 @@
 services:
 
   runner:
-
     build:
       context: .
       dockerfile: Dockerfile
 
     image: self-hosted-runner:latest
     container_name: romi-github-runner
-    # DinD requires privileged mode for the inner Docker daemon
-    privileged: true
+
     restart: always
 
     volumes:
+      # Mount the host's Docker socket (DooD approach)
+      - ${DOCKER_SOCK:-/run/user/1000/docker.sock}:/var/run/docker.sock:ro
+      # Runner work directory
       - runner-cache:/actions-runner/_work
-      - runner-certs:/usr/share/ca-certificates
+      # Optional: share Docker build cache for faster builds
+      - docker-cache:/home/github-runner/.docker
 
     environment:
       - GITHUB_RUNNER_EPHEMERAL=true
       - GITHUB_RUNNER_URL=${GITHUB_RUNNER_URL}
       - GITHUB_RUNNER_TOKEN=${GITHUB_RUNNER_TOKEN}
-      - GITHUB_RUNNER_LABELS=${GITHUB_RUNNER_LABELS:-self-hosted,linux,docker,x64}
+      - GITHUB_RUNNER_LABELS=${GITHUB_RUNNER_LABELS:-self-hosted,linux,docker,x64,gpu}
       - GITHUB_RUNNER_NAME=${GITHUB_RUNNER_NAME:-romi-github-runner}
 
     deploy:
       resources:
         limits:
-          cpus: '2'
-          memory: 4G
+          cpus: '4'
+          memory: 8G
         reservations:
-          cpus: '0.5'
-          memory: 1G
+          cpus: '1'
+          memory: 2G
           devices:
             - driver: nvidia
               capabilities: [gpu]
               count: 1
 
+    # Run as non-root user
+    user: "1000:1000"
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    # Add only necessary capabilities
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+
+    read_only: true
+
+    tmpfs:
+      - /tmp:noexec,nosuid,nodev
+      - /run:noexec,nosuid,nodev
 volumes:
   runner-cache:
-  runner-certs:
+  docker-cache:
