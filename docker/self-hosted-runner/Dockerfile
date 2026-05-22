@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Docker CLI only (not the daemon)
-RUN curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-27.0.3.tgz \
+RUN curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-29.5.2.tgz \
     | tar xz --strip-components=1 -C /usr/local/bin docker/docker \
     && chmod +x /usr/local/bin/docker
 
