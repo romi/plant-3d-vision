@@ -2,6 +2,7 @@
 Reads a plantdb dataset to extract image files and initial poses from the image metadata to prepare a recontruction
 using pycolmap_reconstruction.py
 """
+import itertools
 import json
 import os
 import subprocess
@@ -51,6 +52,7 @@ def plot_transformed_axes(ax, tf, name=None, scale=1):
 
 if __name__ == '__main__':
     Path(WORK_DIR).mkdir(parents=True, exist_ok=True)
+    Path(WORK_DIR).joinpath("test_ptr").mkdir(parents=True, exist_ok=True)
 
     scan_path = Path(DATASET_PATH)
     db_path = scan_path.parent
@@ -86,12 +88,6 @@ if __name__ == '__main__':
     with open(Path(WORK_DIR) / pycolmap_reconstruction.RESULTS_PATH) as f:
         results = json.load(f)
 
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    ax.set_xlabel('x')
-    ax.set_ylabel('y')
-    ax.set_zlabel('z')
-    ax.set_title('3D Camera Path')
 
     camera_names = list({
         image_regex.match(os.path.basename(file.filename)).group(1)
@@ -112,65 +108,53 @@ if __name__ == '__main__':
         points[cname][counters[cname],:] = np.array(pose)
         counters[cname] += 1
 
-    counters = dict.fromkeys(camera_names, 0)
-    ptr = {cname: [] for cname in camera_names}
-    for iname, rot in sorted(results["rotations"].items(), key=lambda x: x[0]):
-        iname: str
-        rot: list[float]
-        cname = os.path.dirname(iname)
-        rots[cname][counters[cname],:] = np.array(rot)
-        counters[cname] += 1
-        R = Rotation.from_quat(rot, scalar_first=False)  # see https://colmap.github.io/pycolmap/pycolmap.html#pycolmap.Rotation3d.quat
-        R_c = Rotation.from_euler("YZY", (90, -90, 0), degrees=True)
-        pan, tilt, roll = (R.inv() * R_c.inv()).as_euler("ZYX", degrees=True)
-        ptr[cname].append((pan, tilt, roll))
-        print(f"rotation for {iname} -> pan: {pan}, tilt: {tilt}, roll: {roll}")
+    for R_inv, R_c_inv, R_ptr_inv, R_c_first in itertools.product((True, False), repeat=4):
+        counters = dict.fromkeys(camera_names, 0)
+        ptr = {cname: [] for cname in camera_names}
+        for iname, rot in sorted(results["rotations"].items(), key=lambda x: x[0]):
+            iname: str
+            rot: list[float]
+            cname = os.path.dirname(iname)
+            rots[cname][counters[cname],:] = np.array(rot)
+            counters[cname] += 1
+            R = Rotation.from_quat(rot, scalar_first=False)  # see https://colmap.github.io/pycolmap/pycolmap.html#pycolmap.Rotation3d.quat
+            R_c = Rotation.from_matrix(np.array([
+                [0, -1, 0],
+                [0, 0, -1],
+                [1, 0, 0]
+            ]))
+            R_c = Rotation.from_euler("YZY", (90, -90, 0), degrees=True)
+            R = R.inv() if R_inv else R
+            R_c = R_c.inv() if R_c_inv else R_c
+            R_ptr = R_c * R if R_c_first else R * R_c
+            R_ptr = R_ptr.inv() if R_ptr_inv else R_ptr
+            pan, tilt, roll = R_ptr.as_euler("ZYX", degrees=True)
+            ptr[cname].append((pan, tilt, roll))
+            #print(f"rotation for {iname} -> pan: {pan}, tilt: {tilt}, roll: {roll}")
 
-    counters = dict.fromkeys(camera_names, 0)
-    for iname, vdir in sorted(results["viewing_direction"].items(), key=lambda x: x[0]):
-        iname: str
-        vdir: list[float]
-        cname = os.path.dirname(iname)
-        view_dir[cname][counters[cname],:] = np.array(vdir)
-        counters[cname] += 1
+        fig = plt.figure()
+        axes: list[plt.Axes] = fig.subplots(3, 1, sharex=True)
+        title = "$R_{ptr}" + ("^{-1}" if R_ptr_inv else "") + " = "
+        title_rc = "R_c" + ("^{-1}" if R_c_inv else "")
+        title_r = "R" + ("^{-1}" if R_inv else "")
+        title += (title_rc + title_r + "$") if R_c_first else (title_r + title_rc + "$")
+        axes[0].set_title(title)
+        axes[0].set_ylabel("pan")
+        axes[1].set_ylabel("tilt")
+        axes[2].set_ylabel("roll")
+        for cname in camera_names:
+            pan, tilt, roll = zip(*ptr[cname])
+            axes[0].plot(pan, label=cname)
+            axes[1].plot(tilt, label=f"{cname}, {np.mean(tilt, axis=-1):.1f}")
+            axes[2].plot(roll, label=f"{cname}, {np.mean(roll, axis=-1):.1f}")
 
-    for cname in camera_names:
-        x = points[cname][:, 0]
-        y = points[cname][:, 1]
-        z = points[cname][:, 2]
-        ax.scatter3D(x, y, z, label=cname)
+        axes[0].legend(loc="upper left")
+        axes[1].legend(loc="upper left")
+        axes[2].legend(loc="upper left")
+        axes[0].set_ylim(-180, 180)
+        axes[1].set_ylim(-60, 60)
+        axes[2].set_ylim(-180, 180)
 
-    for cname in camera_names:
-        for pos, vdir, rot, rot_ptr in zip(points[cname], view_dir[cname], rots[cname], ptr[cname]):
-            x = [pos[0], pos[0] + vdir[0]*100]
-            y = [pos[1], pos[1] + vdir[1]*100]
-            z = [pos[2], pos[2] + vdir[2]*100]
-            ax.plot3D(x, y, z)
-            #tf = RigidTransform.from_components(pos, Rotation.from_quat(rot).inv())
-            tf = RigidTransform.from_components(pos, (Rotation.from_euler("ZYX", rot_ptr, degrees=True)))
-            plot_transformed_axes(ax, tf, scale=30)
+        fig.savefig(Path(WORK_DIR) / "test_ptr" / f"pycolmap_reconstruction_{int(R_inv)}_{int(R_c_inv)}_{int(R_ptr_inv)}_{int(R_c_first)}.png")
 
-
-    plt.ioff()
-    #plt.show()
-    # plot theoretical
-    # `estimated_pose` keys are original filenames; recover camera name via `image_regex`
-    expected_points: dict[str, list[tuple[float, float, float]]] = {cname: [] for cname in camera_names}
-    for fname, xyz in estimated_pose.items():
-        m = image_regex.match(os.path.basename(fname))
-        if m is None:
-            continue  # filename doesn't match expected pattern
-        cname = m.group(1)
-        expected_points[cname].append(xyz)
-
-    for cname, pts in expected_points.items():
-        arr = np.asarray(pts, dtype=float)
-        ax.scatter3D(
-            arr[:, 0], arr[:, 1], arr[:, 2],
-            marker="x", s=60, alpha=0.9,
-            label=f"{cname} (expected)",
-        )
-    ax.axis('equal')
-    ax.legend()
-    plt.show()
 

@@ -55,7 +55,7 @@ from romitask.log import get_logger
 
 logger = get_logger(__name__)
 
-COLMAP_IMG = os.getenv("P3DV_COLMAP_IMG", "roboticsmicrofarms/colmap:latest")
+COLMAP_IMG = os.getenv("P3DV_COLMAP_IMG", "roboticsmicrofarms/colmap:3.13.0-cuda_cc89")
 
 DATABASE_PATH = "database.sqlite"
 IMAGE_PATH = "images"
