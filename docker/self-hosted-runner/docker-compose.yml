@@ -15,8 +15,6 @@ services:
       - ${DOCKER_SOCK:-/run/user/1000/docker.sock}:/var/run/docker.sock
       # Runner work directory
       - runner-cache:/actions-runner/_work
-      # Optional: share Docker build cache for faster builds
-      - docker-cache:/home/ubuntu/.docker
 
     environment:
       - GITHUB_RUNNER_EPHEMERAL=true
@@ -24,7 +22,7 @@ services:
       - GITHUB_RUNNER_TOKEN=${GITHUB_RUNNER_TOKEN}
       - GITHUB_RUNNER_LABELS=${GITHUB_RUNNER_LABELS:-self-hosted,linux,docker,x64,gpu}
       - GITHUB_RUNNER_NAME=${GITHUB_RUNNER_NAME:-romi-github-runner}
-      - BUILDX_DIR=/actions-runner/_work/.docker/buildx
+      - BUILDX_HOME=/home/ubuntu/.docker/buildx
 
     deploy:
       resources:
@@ -60,4 +58,3 @@ services:
 
 volumes:
   runner-cache:
-  docker-cache:
