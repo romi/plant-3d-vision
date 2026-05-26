@@ -265,6 +265,10 @@ build_docker_image() {
   # Print build time if successful (code 0), else print exit code
   if [ ${docker_build_status} -eq 0 ]; then
     log_info "Docker build SUCCEEDED in ${elapsed_time}s!"
+    # Export the tag for GitHub Actions (if running in CI)
+    if [ -n "${GITHUB_ENV}" ]; then
+        echo "TAG=${VTAG}-cuda_cc${CUDA_CC}" >> "${GITHUB_ENV}"
+    fi
   else
     log_error "Docker build FAILED after ${elapsed_time}s with code ${docker_build_status}!"
   fi
