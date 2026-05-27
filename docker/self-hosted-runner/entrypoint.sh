@@ -40,10 +40,10 @@ echo "Configuring GitHub Actions runner..."
     --replace
 
 # Ensure Buildx can write its certs
-echo "BUILDX_DIR=${BUILDX_DIR}"
-mkdir -p "${BUILDX_DIR}/certs"
-chown -R ubuntu:ubuntu "${BUILDX_DIR}"
-chmod 700 "${BUILDX_DIR}/certs"
+echo "BUILDX_HOME=${BUILDX_HOME}"
+mkdir -p "${BUILDX_HOME}/certs"
+chown -R ubuntu:ubuntu "${BUILDX_HOME}"
+chmod 700 "${BUILDX_HOME}/certs"
 
 # Start the runner
 echo "Starting GitHub Actions runner..."
