@@ -102,7 +102,6 @@ show_usage() {
 # Command line parsing function
 # --------------------------------
 parse_arguments() {
-  docker_option=""
   while [ "$1" != "" ]; do
     case $1 in
     -t | --tag)
