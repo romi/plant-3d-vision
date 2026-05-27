@@ -24,13 +24,14 @@ jobs:
       - name: Build Dockerfile
         if: steps.pull_image.outcome != 'success'   # skip when image was pulled
         run: |
-          ./docker/colmap3.8/build.sh --plain
+          ./docker/colmap3.8/build.sh --plain --load
       - name: Log in to Docker Hub
+        if: steps.pull_image.outcome != 'success'   # log in to push only after a fresh build
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: Tag and push Colmap image
+      - name: Push Colmap image
         if: steps.pull_image.outcome != 'success'   # push only after a fresh build
         run: |
           docker push roboticsmicrofarms/colmap:${{ env.TAG }}
@@ -42,18 +43,17 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: true
+      # Define the `env.TAG` to use with './docker/colmap_tag.sh', then try to pull it
+      - name: Pull existing Colmap image (if any)
+        run: |
+          ./docker/colmap_tag.sh 3.8
+          docker pull roboticsmicrofarms/colmap:${{ env.TAG }}
+        continue-on-error: false   # fail the job if image is missing
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Build Dockerfile
         run: |
-          ./docker/build.sh -t ${{ github.sha }} \
-            --cache-from roboticsmicrofarms/colmap:${{ env.TAG }} \
-            --no-cache --plain
+          ./docker/build.sh -t ${{ github.sha }} --no-cache --plain --load
       - name: Save Docker image to tar
         run: |
           docker save -o plant-3d-vision-${{ github.sha }}.tar roboticsmicrofarms/plant-3d-vision:${{ github.sha }}
