@@ -18,12 +18,12 @@ jobs:
         run: |
           ./docker/colmap_tag.sh 3.8
           ./docker/colmap3.8/build.sh --plain \
-            # Add '--load' so the tag becomes visible to the next step:
+            # Add '--load' so the tag becomes visible to the next step: \
             --load \
-            # Get the cache from the registry:
-            --cache-from=type=registry,ref=roboticsmicrofarms/colmap:${{ env.TAG }}
-            # Optionally push the cache for the next run:
-            --cache-to=type=registry,ref=roboticsmicrofarms/colmap:${{ env.TAG }},mode=max
+            # Get the cache from the registry: \
+            --cache-from=type=registry,ref=roboticsmicrofarms/colmap:${{ env.TAG }} \
+            # Optionally push the cache for the next run: \
+            --cache-to=type=registry,ref=roboticsmicrofarms/colmap:${{ env.TAG }},mode=max \
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
