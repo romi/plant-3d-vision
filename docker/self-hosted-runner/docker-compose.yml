@@ -10,9 +10,12 @@ services:
 
     restart: always
 
+    group_add:
+      - "${DOCKER_GID:-984}"  # the mounted docker socket group id (GID)
+
     volumes:
       # Mount the host's Docker socket (DooD approach)
-      - ${DOCKER_SOCK:-/run/user/1000/docker.sock}:/var/run/docker.sock
+      - ${DOCKER_SOCK:-$XDG_RUNTIME_DIR/docker.sock}:/var/run/docker.sock
       # Runner work directory
       - runner-cache:/actions-runner/_work
 
@@ -45,7 +48,6 @@ services:
 
     # Add only necessary capabilities
     cap_add:
-      - SYS_ADMIN
       - CHOWN
       - DAC_OVERRIDE
       - FOWNER
