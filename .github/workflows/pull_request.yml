@@ -16,7 +16,7 @@ jobs:
       - name: Pull existing Colmap image (if any)
         id: pull_image
         run: |
-          TAG=$(./docker/colmap_tag.sh 3.8)
+          TAG=$(./docker/colmap_tag.sh 3.8 | tail -n 1)
           echo "Using colmap image tag: ${TAG}"
           echo "TAG=${TAG}" >> "$GITHUB_ENV"
           echo "Using colmap image: roboticsmicrofarms/colmap:${TAG}"
@@ -49,7 +49,7 @@ jobs:
       # Define the `env.TAG` to use with './docker/colmap_tag.sh', then try to pull it
       - name: Pull existing Colmap image (if any)
         run: |
-          TAG=$(./docker/colmap_tag.sh 3.8)
+          TAG=$(./docker/colmap_tag.sh 3.8 | tail -n 1)
           echo "Using colmap image tag: ${TAG}"
           echo "TAG=${TAG}" >> "$GITHUB_ENV"
           echo "Using colmap image: roboticsmicrofarms/colmap:${TAG}"
