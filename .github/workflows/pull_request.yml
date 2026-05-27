@@ -19,8 +19,8 @@ jobs:
           TAG=$(./docker/colmap_tag.sh 3.8)
           echo "Using colmap image tag: ${TAG}"
           echo "TAG=${TAG}" >> "$GITHUB_ENV"
-          echo "$GITHUB_ENV"
-          docker pull roboticsmicrofarms/colmap:${{ env.TAG }}
+          echo "Using colmap image: roboticsmicrofarms/colmap:${TAG}"
+          docker pull roboticsmicrofarms/colmap:${TAG}
         continue-on-error: true   # do not fail the job if image is missing
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -37,7 +37,7 @@ jobs:
       - name: Push Colmap image
         if: steps.pull_image.outcome != 'success'   # push only after a fresh build
         run: |
-          docker push roboticsmicrofarms/colmap:${{ env.TAG }}
+          docker push roboticsmicrofarms/colmap:${TAG}
 
   p3dv-docker-build:
     runs-on: self-hosted
@@ -52,7 +52,8 @@ jobs:
           TAG=$(./docker/colmap_tag.sh 3.8)
           echo "Using colmap image tag: ${TAG}"
           echo "TAG=${TAG}" >> "$GITHUB_ENV"
-          docker pull roboticsmicrofarms/colmap:${{ env.TAG }}
+          echo "Using colmap image: roboticsmicrofarms/colmap:${TAG}"
+          docker pull roboticsmicrofarms/colmap:${TAG}
         continue-on-error: false   # fail the job if image is missing
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
