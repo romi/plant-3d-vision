@@ -103,6 +103,9 @@ show_usage() {
   # -- General options:
   echo "  -h, --help
     Output a usage message and exit."
+
+  echo "$(bold DOCKER OPTIONS):"
+  echo "Any other option will be passed to the 'docker buildx build' command."
 }
 
 # --------------------------------
@@ -141,8 +144,7 @@ parse_arguments() {
       exit 0
       ;;
     *)
-      show_usage
-      exit 1
+      DOCKER_OPTS="${DOCKER_OPTS} $1"
       ;;
     esac
     shift
