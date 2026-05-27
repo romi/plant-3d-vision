@@ -30,11 +30,9 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '4'
-          memory: 8G
+          cpus: 0.5
         reservations:
-          cpus: '1'
-          memory: 2G
+          memory: 8G
           devices:
             - driver: nvidia
               capabilities: [gpu]
