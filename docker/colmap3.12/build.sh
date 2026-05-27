@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Load shared helpers
-source "$(dirname "$0")/utils.sh"
+source "$(dirname "$0")/../utils.sh"
 
 # --------------------------------
 # Functions for script initialization
