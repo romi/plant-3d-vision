@@ -73,13 +73,9 @@ main() {
   initialize_variables
   parse_arguments "$@"
   setup_cuda_compute_capability
-  if [ -n "${GITHUB_ENV}" ]; then
-    # Export the tag for GitHub Actions (if running in CI)
-    echo "TAG=${VTAG}-cuda_cc${CUDA_CC}" >> "${GITHUB_ENV}"
-  else
-    # Output the colmap docker image with cuda compute capability
-    echo "${COLMAP_VERSION}-cuda_cc${CUDA_CC}"
-  fi
+
+  # Output the colmap docker image with cuda compute capability
+  echo "${COLMAP_VERSION}-cuda_cc${CUDA_CC}"
 }
 
 # Execute main function with all arguments
