@@ -84,7 +84,8 @@ COPY --chown=${USER_NAME} docker/.bashrc .bashrc
 # Copy the source files starting from the root folder (relative to context build):
 COPY --chown=${USER_NAME} ./ plant-3d-vision/
 
-RUN --mount=type=cache,target=/home/${USER_NAME}/.cache/pip \
+# Pip install step (mount cache with uid/gid so romi owns it)
+RUN --mount=type=cache,target=/home/${USER_NAME}/.cache/pip,uid=${USER_ID},gid=${USER_ID} \
     cd plant-3d-vision/ && \
     # Create a virtual environment
     python3 -m venv /home/${USER_NAME}/venv && \
