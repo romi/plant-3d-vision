@@ -18,7 +18,7 @@ dependencies = [
     "open3d>= 0.9.0.0",
     "opencv-contrib-python",
     # "pybind11",
-    # "pyopencl",
+    "pyopencl",
     "scikit-image",
     "toml",
     "joblib",
