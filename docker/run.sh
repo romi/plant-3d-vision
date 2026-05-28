@@ -127,6 +127,9 @@ show_usage() {
     "Test dataset are located under 'tests/testdata'."
   echo "  --test-gpu
     Test correct access to NVIDIA GPU resources from docker container."
+
+  echo "$(bold DOCKER OPTIONS):"
+  echo "Any other option will be passed to the 'docker run' command."
 }
 
 # --------------------------------
