@@ -10,9 +10,9 @@
 ## Overview
 This Python library is part of the ROMI European project.
 It provides tools to **reconstruct digital twins of plants** from a set of RGB images acquired with the "Plant Imager".
-It also provides tools to **quantify some traits of the plant's aerial architecture** like angles between successive organs and inter-nodes length.
+It also provides tools to **quantify some traits of the plant's aerial architecture** like angles between successive organs and internodes length.
 
-A more comprehensive documentation about the "Plant Imager" project can be found [here](https://docs.romi-project.eu/plant_imager/).
+More comprehensive documentation about the "Plant Imager" project can be found [here](https://docs.romi-project.eu/plant_imager/).
 
 **WARNING**: this is an ongoing development and changes will arise unannounced!
 
@@ -39,7 +39,7 @@ You will need to install:
 
  * the **Docker Engine** (except if you plan to install COLMAP from sources, good luck with that!)
  * the appropriate **NVIDIA driver**
- * and the **NVIDIA Container Toolkit** to benefit from GPU accelerated algorithms inside the docker container.
+ * and the **NVIDIA Container Toolkit** to benefit from GPU-accelerated algorithms inside the docker container.
 
 
 ### Docker Engine
@@ -62,13 +62,13 @@ To install the **NVIDIA Container Toolkit**, follow the official [Installation G
 
 
 ## Build a docker image (recommended)
-To avoid making a big mess while installing source code, it may be easier to build a Docker image and use it to performs reconstruction and analysis tasks.
+To avoid making a big mess while installing source code, it may be easier to build a Docker image and use it to perform reconstruction and analysis tasks.
 
 ### Build the image
-To build a Docker image you have to:
+To build a Docker image, you have to:
 
 1. clone the `plant-3d-vision` git repository
-2. initialize & clone the submodules (`plantdb`, `romitask`, `romiseg`, `romicgal` & `dtw`)
+2. initialize and clone the submodules (`plantdb`, `romitask`, `romiseg`, `romicgal` & `dtw`)
 3. use the convenience build scripts
 
 This can be done as follows:
@@ -109,7 +109,7 @@ You may want to test the built image by running a container and performing some 
 
 Every test assumes you are in the `plant-3d-vision` root directory of the repository.
 
-Do NOT forget to specify your tag with the `-t` option if you changed it (_i.e._ not `latest`)
+Remember to specify your tag with the `-t` option if you changed it (_i.e._ not `latest`)
 
 #### Test GPU access
 To test if you have access to your GPU(s) can easily be done as follows:
@@ -176,13 +176,13 @@ In any case, please avoid doing horrendous things like `chmod -R 777 $ROMI_DB`!
    ```
    Where `myuser` is your username.
 
-### Enable write access to local database with bind mount
+### Enable write access to the local database with bind mount
 To avoid running the container app as `root` user, we created a non-root user named `romi` with an uid of `2020`.
-In turn, when you bind mount a local `plantdb` database,  you will not be able to write if:
+In turn, when you bind mount a local `plantdb` database, you will not be able to write if:
   - the owner does not have an uid of `2020`
   - the group is not set to `romi` or the
 
-In the `./docker/run.sh` convenience script, we added a few lines to automatically get the group id of the bind mounted host directory acting as the database location.
+In the `./docker/run.sh` convenience script, we added a few lines to automatically get the group id of the bind-mounted host directory acting as the database location.
 
 To be a bit cleaner and go further in sharing the database with other users, we suggest to:
 
@@ -194,7 +194,7 @@ To be a bit cleaner and go further in sharing the database with other users, we 
 This will also allow all users from the `romi` group to access the files within the database, effectively making this a shared database.
 
 ### Setgid on Directories
-A directory that has ‘setgid’ on it will cause all files that are created in that directory to be owned by the group of the directory as opposed to the group of the owner.
+A directory that has ‘setgid’ on it will cause all files that are created in that directory to be owned by the group of the directories as opposed to the group of the owners.
 This proves useful when sharing a database between multiple users belonging to the same group.
 
 ```shell
@@ -257,7 +257,7 @@ sudo systemctl enable romi-plant-3d.service
 
 #### Explanation of the Service File
 
-- `Unit` Section: Defines dependencies - this service will start after Docker service is running
+- `Unit` Section: Defines dependencies, this service will start after Docker service is running
 - `Service` Section:
     - `ExecStartPre`: Removes any existing container with the same name
     - `ExecStart`: Runs your Docker container
@@ -310,7 +310,7 @@ rm Miniconda3-latest-Linux-x86_64.sh
 You have two options:
 
 1. use the `roboticsmicrofarms/colmap:3.8` available from our [docker hub](https://hub.docker.com/repository/docker/roboticsmicrofarms/colmap) [recommended]
-2. follow the official install instructions to install COLMAP for linux [here](https://colmap.github.io/install.html#linux).
+2. follow the official installation instructions to install COLMAP for linux [here](https://colmap.github.io/install.html#linux).
 
 
 #### CUDA
@@ -349,7 +349,7 @@ EOF
     git submodule init
     git submodule update
     ```
-2. Create a conda environment named `plant3dvision` with Python3.8 for example:
+2. Create a conda environment named `plant3dvision` with Python3.8, for example:
     ```bash
     conda create --name plant3dvision "python=3.9"
     ```
@@ -382,15 +382,15 @@ EOF
 ## Usage
 This package is built around `luigi` and adopt a similar **pipeline oriented** philosophy with `Tasks` and `Parameters`.
 
-To reconstruct and analyse the RGB images acquired with the _Plant Imager_ you will have to define a pipeline as a series of task and set their parameters.
-To make things simpler, we provide two TOML configuration files defining the two main type of pipeline we use:
+To reconstruct and analyze the RGB images acquired with the _Plant Imager_ you will have to define a pipeline as a series of tasks and set their parameters.
+To simplify things, we provide two TOML configuration files defining the two main types of pipeline we use:
 
 * the _geometric pipeline_ in `plant-3d-vision/config/geom_pipe_real.toml`
 * the _machine learning pipeline_ in `plant-3d-vision/config/ml_pipe_real.toml.toml`
 
-This configuration files should be used on "real plant" dataset, _i.e._ on RGB images acquired with the _Plant Imager_.
+These configuration files should be used on "real plant" dataset, _i.e._ on RGB images acquired with the _Plant Imager_.
 
-To start a task defined in this configuration files, use the `romi_run_task` CLI.
+To start a task defined in a configuration file, use the `romi_run_task` CLI.
 You will have to specify which task you want to perform, on which dataset and pass the path to the configuration file using the `--config` option.
 You will find examples of this using either the Docker container or the sources installed in a conda environment.
 
@@ -398,7 +398,7 @@ For more details about the task and their parameters, have a look at the "Plant 
 
 
 ### Docker container
-There is now two options to use the previously built Docker image:
+There are now two options to use the previously built Docker image:
 
 1. you have experience with the Docker CLI and are willing to use it
 2. you prefer to use a convenience script with fewer but safer options
@@ -432,7 +432,7 @@ In details, the previous command:
 
 #### Convenience bash script
 There is a convenience bash script, named `run.sh` in the `docker/` directory, that start a docker container using the `roboticsmicrofarms/plant-3d-vision` image.
-It aims at making thing a bit simpler than with the Docker CLI.
+It aims at making things a bit simpler than with the Docker CLI.
 
 In the following example, we will use the `real_plant` dataset from the **test database** and the **geometric pipeline** configuration file shipped in this repository.
 Assuming you are in the `plant-3d-vision` root directory of the repository:
@@ -444,7 +444,7 @@ CWD=$(pwd)  # get the absolute path to the `plant-3d-vision` directory
   -c "romi_run_task AnglesAndInternodes /myapp/db/real_plant/ --config /myapp/config/geom_pipe_real.toml"
 ```
 
-In details, the previous command does (the same thing as the CLI example):
+In detail, the previous command does (the same thing as the CLI example):
 
 * get the current working directory and assign it to `CWD` variable as docker needs **absolute path** when performing bind mount
 * bind mount `$CWD/tests/testdata/` from the host to `/myapp/db` in the container (created if non-existent) with the `-db` option
@@ -459,7 +459,7 @@ Note that:
 
 
 ### Conda environment
-In the `plant3dvision` conda environment, things are a bit simpler to starts as there is no Docker options to specify.
+In the `plant3dvision` conda environment, things are a bit simpler.
 
 To execute the same series of tasks on the `real_plant` dataset from the **test database** and the **geometric pipeline** configuration file shipped in this repository we only have to call the `romi_run_task` CLI.
 Assuming you are in the `plant-3d-vision` root directory of the repository:
