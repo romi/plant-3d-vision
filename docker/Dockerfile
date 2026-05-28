@@ -38,17 +38,17 @@ ENV WEBTERM_USERS="${ROMI_USERS}/users.csv"
 ARG PYCUDA_NVCC_FLAGS=""
 ENV PYCUDA_NVCC_FLAGS="${PYCUDA_NVCC_FLAGS}"
 
-#ENV PYOPENCL_CTX='0'
+ENV PYOPENCL_CTX='0'
 # Disable OpenCL automatic platform selection
-#ENV PYOPENCL_NO_CACHE=1
+ENV PYOPENCL_NO_CACHE=1
 
 RUN apt-get update && \
     # Install the required dependencies
     apt-get install -yq --no-install-recommends \
         nano \
         wget \
-        # ocl-icd-libopencl1 opencl-headers clinfo \
-        # pocl-opencl-icd \  # CPU library
+        ocl-icd-libopencl1 opencl-headers clinfo \
+        pocl-opencl-icd \
         nvidia-cuda-toolkit \
         python3-dev python3-pip python3-venv \
         gcc build-essential \
@@ -67,8 +67,8 @@ RUN apt-get update && \
     mkdir -p ${ROMI_USERS} && \
     chown -R ${USER_NAME}:${USER_NAME} ${APP_DIR} && \
     # Proper setup for OpenCL:
-    # mkdir -p /etc/OpenCL/vendors && \
-    # echo "libnvidia-opencl.so.1" > /etc/OpenCL/vendors/nvidia.icd && \
+    mkdir -p /etc/OpenCL/vendors && \
+    echo "libnvidia-opencl.so.1" > /etc/OpenCL/vendors/nvidia.icd && \
     # Give non-root user (romi) access to all COLMAP related files by making it a member of 'colmap_users' group
     usermod -a -G colmap_users ${USER_NAME} && \
     # Make sure .bashrc gets loaded in non-interactive shells by adding to .bash_profile
