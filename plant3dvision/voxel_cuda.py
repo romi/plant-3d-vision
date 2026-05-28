@@ -27,12 +27,23 @@ from romitask.log import get_logger
 
 logger = get_logger(__name__)
 
-EPS = 1e-10
-
+# ----------------------------------------------------------------------
+# Module‑level compilation (executed once when the module is imported)
+# ----------------------------------------------------------------------
 # Path to CUDA kernel file
 prg_dir = os.path.join(os.path.dirname(__file__), 'kernels')
 with open(os.path.join(prg_dir, 'backprojection_cuda.c')) as f:
     cuda_code = f.read()
+
+# Compile the CUDA source and expose the kernel functions.
+try:
+    _mod = SourceModule(cuda_code, arch=get_capped_arch())
+    _average_kernel = _mod.get_function("average_kernel")
+    _carve_kernel = _mod.get_function("carve_kernel")
+except Exception as e:
+    # Log error and re-raise exception if compilation fails
+    logger.error(f"Failed to compile CUDA kernels: {e}")
+    raise Exception("Failed to compile CUDA kernels")
 
 
 class Backprojection(AbstractBackprojection):
@@ -163,50 +174,16 @@ class Backprojection(AbstractBackprojection):
         """
         super().__init__(shape, origin, voxel_size, method, default_value, log)
 
-        # Compile CUDA module
-        self._compile_kernels()
+        # Choose the pre‑compiled kernel – no per‑instance compilation
+        if self.method == "carving":
+            self.kernel = _carve_kernel
+        else:
+            self.kernel = _average_kernel
 
         # Initialize GPU memory buffers
         self.init_buffers()
-
         # Log memory usage
         self._log_memory_usage()
-
-    def _compile_kernels(self):
-        """
-        Compile and load the necessary CUDA kernels for processing.
-
-        This method attempts to compile the provided CUDA source code using the `SourceModule`
-        class from the PyCUDA library. It then retrieves specific functions (`average_kernel` and
-        `carve_kernel`) based on the compilation results. Depending on the specified method,
-        either the carving or averaging kernel is selected for use.
-
-        Raises
-        ------
-        Exception
-            If there is an error during the compilation of the CUDA kernels, such as syntax errors in the code.
-            The specific exception message will be logged and re-raised to notify the calling context.
-
-        Notes
-        -----
-        - The `cuda_code` variable should contain the source code for the CUDA kernels.
-        - This method uses logging to record any failures during kernel compilation.
-        """
-        try:
-            # Compile the CUDA code using PyCUDA's SourceModule
-            self.mod = SourceModule(cuda_code, arch=get_capped_arch())
-            # Get functions from the compiled module
-            self.average_kernel = self.mod.get_function("average_kernel")
-            self.carve_kernel = self.mod.get_function("carve_kernel")
-            # Select kernel based on method specified
-            if self.method == "carving":
-                self.kernel = self.carve_kernel
-            else:
-                self.kernel = self.average_kernel
-        except Exception as e:
-            # Log error and re-raise exception if compilation fails
-            logger.error(f"Failed to compile CUDA kernels: {e}")
-            raise
 
     def _log_memory_usage(self):
         """
@@ -215,11 +192,7 @@ class Backprojection(AbstractBackprojection):
         Logs the shape and required memory for the buffer. Retrieves and logs GPU
         memory information, including free and total memory.
         """
-        logger.info(f"Buffer shape is {self.shape}")
-        # Compute required memory for buffer:
-        buff_size = np.ones(self.shape, dtype=self.dtype).nbytes
-        logger.info(f"Required memory for buffer is {buff_size / 1e6:.2f} MB")
-
+        super()._log_memory_usage()
         # Get GPU memory info
         free_mem, total_mem = cuda.mem_get_info()
         logger.info(f"GPU memory: {free_mem / 1e6:.1f} MB free, {total_mem / 1e6:.1f} MB total")
@@ -273,6 +246,8 @@ class Backprojection(AbstractBackprojection):
         except Exception as e:
             logger.error(f"Buffer initialization failed: {e}")
             raise
+
+        return
 
     def process_view(self, intrinsics, rot, tvec, mask):
         """
@@ -356,6 +331,8 @@ class Backprojection(AbstractBackprojection):
             if 'mask_d' in locals():
                 mask_d.free()
 
+        return
+
     def get_values(self):
         """
         Get the values from the GPU.
@@ -372,13 +349,14 @@ class Backprojection(AbstractBackprojection):
         try:
             # Copy data from device (GPU) to host (CPU)
             cuda.memcpy_dtoh(self.values_h, self.values_d)
-            # Reshape the copied values into the specified shape and return
-            return self.values_h.reshape(self.shape)
         except Exception as e:
             # Log an error message if an exception occurs during copy or reshape
             logger.error(f"Failed to retrieve values from GPU: {e}")
             # Re-raise the exception after logging it
             raise
+
+        # Reshape the copied values into the specified shape and return
+        return self.values_h.reshape(self.shape)
 
     def clear(self):
         """
@@ -398,6 +376,7 @@ class Backprojection(AbstractBackprojection):
             logger.error(f"Failed to clear buffer: {e}")
             # Re-raise the exception after logging it
             raise
+        return
 
     def __del__(self):
         """Cleanup GPU memory when object is destroyed."""

@@ -116,30 +116,16 @@ class AbstractBackprojection(ABC):
         elif method == "averaging":
             self.dtype = np.float32
 
-    @abstractmethod
-    def _compile_kernels(self):
-        """
-        Compile and load the necessary kernels for processing.
-
-        This method must be implemented by subclasses to compile backend-specific
-        kernels (CUDA, OpenCL, etc.).
-
-        Raises
-        ------
-        NotImplementedError
-            If the subclass does not implement this method.
-        """
-        pass
-
-    @abstractmethod
     def _log_memory_usage(self):
         """
         Log memory usage information.
 
-        This method should be implemented by subclasses to log backend-specific
-        memory usage information.
+        Logs the shape and required memory for the buffer.
         """
-        pass
+        logger.info(f"Buffer shape is {self.shape}")
+        # Compute required memory for buffer:
+        buff_size = np.ones(self.shape, dtype=self.dtype).nbytes
+        logger.info(f"Required memory for buffer is {buff_size / 1e6:.2f} MB")
 
     @abstractmethod
     def init_buffers(self):

@@ -21,7 +21,6 @@ from typing import Literal
 
 import numpy as np
 import pyopencl as cl
-from skimage.util import img_as_float32
 
 from plant3dvision.proc3d import point2index
 from plant3dvision.voxel import AbstractBackprojection
@@ -29,8 +28,9 @@ from romitask.log import get_logger
 
 logger = get_logger(__name__)
 
-# A small constant used to prevent numerical operations from dividing by zero
-EPS = 1e-10
+# ----------------------------------------------------------------------
+# Module‑level compilation (executed once when the module is imported)
+# ----------------------------------------------------------------------
 # Create an OpenCL context (e.g., for managing devices and memory)
 ctx = cl.create_some_context()
 # Create a command queue to submit tasks (kernels and memory operations)
@@ -40,15 +40,22 @@ mf = cl.mem_flags
 
 # Define the directory containing the OpenCL kernel files
 prg_dir = os.path.join(os.path.dirname(__file__), 'kernels')
-# Load and compile the OpenCL program for 'backprojection.c' kernel
-with open(os.path.join(prg_dir, 'backprojection.c')) as f:
-    backprojection_kernels = cl.Program(ctx, f.read()).build(options=f"-I{prg_dir}")
-# Load and compile the OpenCL program for 'geodesics.c' kernel
-with open(os.path.join(prg_dir, 'geodesics.c')) as f:
-    geodesics_kernels = cl.Program(ctx, f.read()).build(options=f"-I{prg_dir}")
-# Load and compile the OpenCL program for 'fim.c' kernel
-with open(os.path.join(prg_dir, 'fim.c')) as f:
-    fim_kernels = cl.Program(ctx, f.read()).build(options=f"-I{prg_dir}")
+
+# Compile the OpenCL source and expose the kernel functions.
+try:
+    # Load and compile the OpenCL program for 'backprojection.c' kernel
+    with open(os.path.join(prg_dir, 'backprojection.c')) as f:
+        backprojection_kernels = cl.Program(ctx, f.read()).build(options=f"-I{prg_dir}")
+    # Load and compile the OpenCL program for 'geodesics.c' kernel
+    with open(os.path.join(prg_dir, 'geodesics.c')) as f:
+        geodesics_kernels = cl.Program(ctx, f.read()).build(options=f"-I{prg_dir}")
+    # Load and compile the OpenCL program for 'fim.c' kernel
+    with open(os.path.join(prg_dir, 'fim.c')) as f:
+        fim_kernels = cl.Program(ctx, f.read()).build(options=f"-I{prg_dir}")
+except Exception as e:
+    # Log error and re-raise exception if compilation fails
+    logger.error(f"Failed to compile OpenCL kernels: {e}")
+    raise Exception("Failed to compile OpenCL kernels")
 
 
 class Backprojection(AbstractBackprojection):
@@ -189,22 +196,11 @@ class Backprojection(AbstractBackprojection):
         elif method == "averaging":
             self.kernel = backprojection_kernels.average
 
-        # Print info about buffer array size and associated memory cost for `self.values_h`:
-        buff_size = np.ones(self.shape, dtype=self.dtype).nbytes
-        logger.info(f"Buffer shape is {self.shape}")
-        from plant3dvision.utils import auto_format_bytes
-        logger.info(f"Required memory for buffer is {auto_format_bytes(buff_size)}!")
-
-        # Define attributes used to initialize OpenCL buffers:
-        self.values_h = None
-        self.values_d = None
-        self.intrinsics_d = None
-        self.rot_d = None
-        self.tvec_d = None
-        self.volinfo_d = None
-        self.shape_d = None
-        # Set attributes values for OpenCL buffers:
+        # Initialize OpenCL buffers
         self.init_buffers()
+
+        # Log memory usage
+        self._log_memory_usage()
 
     def init_buffers(self):
         """Initializes OpenCL buffers for storing and processing data.
@@ -234,21 +230,35 @@ class Backprojection(AbstractBackprojection):
             initialized by copying from the corresponding numpy array.
 
         """
-        self.values_h = self.default_value * np.ones(self.shape, dtype=self.dtype)
+        try:
+            # Main volume buffer
+            self.values_h = self.default_value * np.ones(self.shape, dtype=self.dtype)
+            self.values_d = cl.Buffer(ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=self.values_h)
 
-        self.values_d = cl.Buffer(ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=self.values_h)
+            # Camera parameter buffers
+            self.intrinsics_d = cl.Buffer(ctx, mf.READ_ONLY, np.zeros(4, dtype=np.float32).nbytes)
+            self.rot_d = cl.Buffer(ctx, mf.READ_ONLY, np.zeros(9, dtype=np.float32).nbytes)
+            self.tvec_d = cl.Buffer(ctx, mf.READ_ONLY, np.zeros(3, dtype=np.float32).nbytes)
 
-        self.intrinsics_d = cl.Buffer(ctx, mf.READ_ONLY, np.zeros(4, dtype=np.float32).nbytes)
-        self.rot_d = cl.Buffer(ctx, mf.READ_ONLY, np.zeros(9, dtype=np.float32).nbytes)
-        self.tvec_d = cl.Buffer(ctx, mf.READ_ONLY, np.zeros(3, dtype=np.float32).nbytes)
+            # Volume info buffer
+            self.volinfo_d = cl.Buffer(
+                ctx, mf.READ_WRITE | mf.COPY_HOST_PTR,
+                hostbuf=np.array([*self.origin, self.voxel_size], dtype=np.float32)
+            )
 
-        self.volinfo_d = cl.Buffer(
-            ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=np.array([*self.origin, self.voxel_size], dtype=np.float32)
-        )
+            # Shape buffer
+            self.shape_d = cl.Buffer(
+                ctx, mf.READ_WRITE | mf.COPY_HOST_PTR,
+                hostbuf=np.array(self.shape, dtype=np.int32)
+            )
 
-        self.shape_d = cl.Buffer(
-            ctx, mf.READ_WRITE | mf.COPY_HOST_PTR, hostbuf=np.array(self.shape, dtype=np.int32)
-        )
+        except cl.LogicError as e:
+            logger.error(f"Memory allocation failed: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Buffer initialization failed: {e}")
+            raise
+
         return
 
     def process_view(self, intrinsics, rot, tvec, mask):
@@ -272,39 +282,62 @@ class Backprojection(AbstractBackprojection):
             A 2D array representing the mask image, which defines specific regions of the
             image for processing. If the dtype is not `np.float32`, it will be converted.
         """
-        if self.dtype == np.float32 and mask.dtype != np.float32:
-            mask = img_as_float32(mask)
-        if self.log and self.dtype == np.float32:
-            mask = np.log(EPS + mask)
+        # Validate inputs
+        self._validate_mask(mask)
+        # Data type conversions
+        mask = self._prepare_mask(mask)
 
+        # Ensure contiguous arrays
         intrinsics_h = np.ascontiguousarray(intrinsics)
         rot_h = np.ascontiguousarray(rot)
         tvec_h = np.ascontiguousarray(tvec)
-
         logger.debug("mask max: %.2f" % (mask.max()))
         mask_h = np.ascontiguousarray(mask, dtype=self.dtype)
 
-        mask_d = cl.image_from_array(ctx, mask_h, 1)
+        try:
+            # Allocate and copy mask to GPU
+            mask_d = cl.image_from_array(ctx, mask_h, 1)
 
-        cl.enqueue_copy(queue, self.intrinsics_d, intrinsics_h)
-        cl.enqueue_copy(queue, self.rot_d, rot_h)
-        cl.enqueue_copy(queue, self.tvec_d, tvec_h)
+            # Copy camera parameters
+            cl.enqueue_copy(queue, self.intrinsics_d, intrinsics_h)
+            cl.enqueue_copy(queue, self.rot_d, rot_h)
+            cl.enqueue_copy(queue, self.tvec_d, tvec_h)
 
-        self.kernel(queue, [np.prod(self.shape)], None, mask_d, self.values_d,
-                    self.intrinsics_d, self.rot_d,
-                    self.tvec_d, self.volinfo_d, self.shape_d)
-        queue.finish()
+            # Launch kernel with proper arguments
+            self.kernel(queue, [np.prod(self.shape)], None, mask_d, self.values_d,
+                        self.intrinsics_d, self.rot_d,
+                        self.tvec_d, self.volinfo_d, self.shape_d)
+            queue.finish()
+
+        except Exception as e:
+            logger.error(f"Kernel execution failed: {e}")
+            raise
+
         return
 
     def get_values(self):
         """Gets computed values from the OpenCL device."""
-        cl.enqueue_copy(queue, self.values_h, self.values_d)
+        try:
+            cl.enqueue_copy(queue, self.values_h, self.values_d)
+        except Exception as e:
+            # Log an error message if an exception occurs during copy or reshape
+            logger.error(f"Failed to retrieve values from buffer: {e}")
+            # Re-raise the exception after logging it
+            raise
+
+        # Reshape the copied values into the specified shape and return
         return self.values_h.reshape(self.shape)
 
     def clear(self):
         """Clear computed values from the OpenCL device."""
-        self.values_h = self.default_value * np.ones(self.shape).astype(self.dtype)
-        cl.enqueue_copy(queue, self.values_d, self.values_h)
+        try:
+            self.values_h = self.default_value * np.ones(self.shape).astype(self.dtype)
+            cl.enqueue_copy(queue, self.values_d, self.values_h)
+        except Exception as e:
+            # Log an error message if an exception occurs during copy or reshape
+            logger.error(f"Failed to clear buffer: {e}")
+            # Re-raise the exception after logging it
+            raise
         return
 
 
