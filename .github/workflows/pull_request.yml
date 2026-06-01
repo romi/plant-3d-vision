@@ -78,10 +78,10 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: Push Colmap image
+      - name: Push p3dv-base image
         if: steps.pull_p3dv_image.outcome != 'success'   # push only after a fresh build
         run: |
-          docker push roboticsmicrofarms/colmap:${TAG}
+          docker push roboticsmicrofarms/p3dv-base:${TAG}
 
   unit-tests:
     runs-on: self-hosted
