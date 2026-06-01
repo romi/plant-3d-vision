@@ -521,7 +521,7 @@ class ColmapRunner(object):
     compute_dense : bool
         If ``True``, it will compute the dense point cloud.
     all_cli_args : dict
-        Dictionary of arguments to pass to colmap command lines.
+        Dictionary of arguments to pass to COLMAP CLI.
     align_pcd : bool
         If ``True``, it will align spare (& dense) point cloud(s) coordinate system of given camera centers.
     use_calibration : bool
@@ -606,7 +606,7 @@ class ColmapRunner(object):
         --------
         >>> from plant3dvision.colmap import ColmapRunner
         >>> from plantdb.commons.test_database import test_database
-        >>> db = test_database('real_plant')
+        >>> db = test_database('real_plant', no_auth=True)
         >>> db.connect()
         >>> # - Select the dataset to reconstruct:
         >>> dataset = db.get_scan("real_plant")
@@ -615,7 +615,8 @@ class ColmapRunner(object):
         >>> image_files = images_fileset.get_files()
 
         >>> args = {"feature_extractor": {"--ImageReader.single_camera": "1"}}
-        >>> colmap = ColmapRunner(image_files, matcher_method="spatial", align_pcd=True, all_cli_args=args, colmap_exe="roboticsmicrofarms/colmap:3.8")
+        >>> colmap = ColmapRunner(image_files, matcher_method="exhaustive", align_pcd=True, all_cli_args=args, colmap_exe="roboticsmicrofarms/colmap:3.8")
+        >>> print(colmap.colmap_workdir)
         >>> colmap.feature_extractor()  #1 - Extract features from images
         >>> colmap.matcher()  #2 - Match extracted features from images, requires `feature_extractor()`
         >>> colmap.mapper()  #3 - Sparse point cloud reconstruction, requires `matcher()`
