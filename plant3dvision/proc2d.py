@@ -20,6 +20,63 @@ from skimage.color import convert_colorspace
 EPS = 1e-9
 
 
+def crop_image(img: np.ndarray, bbox: list[int]) -> np.ndarray:
+    """Crop a 2‑D image according to a bounding box.
+
+    Parameters
+    ----------
+    img : np.ndarray
+        An image as a NumPy array (H, W, C) or (H, W) for grayscale.
+    bbox : list[int]
+        Bounding box described as ``[x, y, w, h]`` where ``x`` and ``y`` are the
+        top‑left corner coordinates. ``w`` and ``h`` are the width and height.
+        If ``w`` or ``h`` are ``-1`` the function uses the remaining image size
+        in that direction (i.e. crops to the image border).
+
+    Returns
+    -------
+    np.ndarray
+        The cropped region of the original image.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import matplotlib.pyplot as plt
+    >>> from imageio.v3 import imread
+    >>> from plant3dvision import test_db_path
+    >>> from plant3dvision.proc2d import crop_image
+    >>> path = test_db_path()
+    >>> img = imread(path.joinpath('real_plant/images/00000_rgb.jpg'))
+    >>> cropped = crop_image(img, bbox=[180, 0, 1080, -1])
+    >>> plt.imshow(cropped)
+    >>> plt.title("Cropped image")
+    >>> plt.axis('off')
+    >>> plt.tight_layout()
+    >>> plt.show()
+    """
+    # Unpack bounding box
+    x, y, w, h = bbox
+
+    # Image dimensions
+    img_h, img_w = img.shape[:2]
+
+    # Resolve ``-1`` placeholders (full remaining size)
+    if w == -1:
+        w = img_w - x
+    if h == -1:
+        h = img_h - y
+
+    # Clamp coordinates to ensure they stay inside the image
+    x = max(0, min(x, img_w))
+    y = max(0, min(y, img_h))
+    w = max(0, min(w, img_w - x))
+    h = max(0, min(h, img_h - y))
+
+    # Perform the actual crop
+    cropped = img[y : y + h, x : x + w]
+
+    return cropped
+
 def undistort(img, camera_mtx, distortion_vect):
     """Use OpenCV to undistort an image thanks to a camera model.
 
