@@ -14,7 +14,7 @@ jobs:
           submodules: true
       # Define the `env.TAG` to use with './docker/colmap_tag.sh', then try to pull it
       - name: Pull existing Colmap image (if any)
-        id: pull_image
+        id: pull_colmap_image
         run: |
           TAG=$(./docker/colmap_tag.sh 3.8 | tail -n 1)
           echo "Using colmap image tag: ${TAG}"
@@ -23,31 +23,31 @@ jobs:
           docker pull roboticsmicrofarms/colmap:${TAG}
         continue-on-error: true   # do not fail the job if image is missing
       - name: Set up Docker Buildx
-        if: steps.pull_image.outcome != 'success'   # skip when image was pulled
+        if: steps.pull_colmap_image.outcome != 'success'   # skip when image was pulled
         uses: docker/setup-buildx-action@v3
       - name: Build Dockerfile
-        if: steps.pull_image.outcome != 'success'   # skip when image was pulled
+        if: steps.pull_colmap_image.outcome != 'success'   # skip when image was pulled
         run: |
           ./docker/colmap3.8/build.sh --plain --load
       - name: Log in to Docker Hub
-        if: steps.pull_image.outcome != 'success'   # log in to push only after a fresh build
+        if: steps.pull_colmap_image.outcome != 'success'   # log in to push only after a fresh build
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Push Colmap image
-        if: steps.pull_image.outcome != 'success'   # push only after a fresh build
+        if: steps.pull_colmap_image.outcome != 'success'   # push only after a fresh build
         run: |
           docker push roboticsmicrofarms/colmap:${TAG}
 
-  p3dv-docker-build:
+  p3dv-base-docker-build:
     runs-on: self-hosted
     needs: colmap-docker-build
     steps:
       - uses: actions/checkout@v6
         with:
           submodules: true
-      # Define the `env.TAG` to use with './docker/colmap_tag.sh', then try to pull it
+      # Define the `TAG` to use with './docker/colmap_tag.sh', then try to pull it
       - name: Pull existing Colmap image (if any)
         run: |
           TAG=$(./docker/colmap_tag.sh 3.8 | tail -n 1)
@@ -56,59 +56,61 @@ jobs:
           echo "Using colmap image: roboticsmicrofarms/colmap:${TAG}"
           docker pull roboticsmicrofarms/colmap:${TAG}
         continue-on-error: false   # fail the job if image is missing
+      - name: Pull existing p3dv-base image (if any)
+        id: pull_p3dv_image
+        run: |
+          TAG=colmap$(./docker/colmap_tag.sh 3.8 | tail -n 1)
+          echo "Using p3dv-base image tag: ${TAG}"
+          echo "TAG=${TAG}" >> "$GITHUB_ENV"
+          echo "Using colmap image: roboticsmicrofarms/p3dv-base:${TAG}"
+          docker pull roboticsmicrofarms/p3dv-base:${TAG}
+        continue-on-error: true   # do not fail the job if image is missing
       - name: Set up Docker Buildx
+        if: steps.pull_p3dv_image.outcome != 'success'   # skip when image was pulled
         uses: docker/setup-buildx-action@v3
       - name: Build Dockerfile
+        if: steps.pull_p3dv_image.outcome != 'success'   # skip when image was pulled
         run: |
-          ./docker/build.sh -t ${{ github.sha }} --no-cache --plain --load
-      - name: Save Docker image to tar
-        run: |
-          docker save -o plant-3d-vision-${{ github.sha }}.tar roboticsmicrofarms/plant-3d-vision:${{ github.sha }}
-      - name: Upload image artifact
-        uses: actions/upload-artifact@v4
+          ./docker/colmap3.8/build.sh --plain --load
+      - name: Log in to Docker Hub
+        if: steps.pull_p3dv_image.outcome != 'success'   # log in to push only after a fresh build
+        uses: docker/login-action@v3
         with:
-          name: plant-3d-vision-image
-          path: plant-3d-vision-${{ github.sha }}.tar
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Push Colmap image
+        if: steps.pull_p3dv_image.outcome != 'success'   # push only after a fresh build
+        run: |
+          docker push roboticsmicrofarms/colmap:${TAG}
 
   unit-tests:
     runs-on: self-hosted
-    needs: p3dv-docker-build
+    needs: p3dv-base-docker-build
     steps:
-      - name: Download image artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: plant-3d-vision-image
-          path: .
-      - name: Load Docker image
+      - name: Pull existing p3dv-base image
         run: |
-          docker load -i plant-3d-vision-${{ github.sha }}.tar
+          TAG=colmap$(./docker/colmap_tag.sh 3.8 | tail -n 1)
+          echo "Using p3dv-base image tag: ${TAG}"
+          echo "TAG=${TAG}" >> "$GITHUB_ENV"
+          echo "Using colmap image: roboticsmicrofarms/p3dv-base:${TAG}"
+          docker pull roboticsmicrofarms/p3dv-base:${TAG}
+        continue-on-error: false   # fail the job if image is missing
       - name: Run Unit Tests
         run: |
-          ./docker/run.sh -t ${{ github.sha }} --unittest
+          ./docker/p3dv-base/run.sh --rm -t ${TAG} --unittest
 
   integration-tests:
     runs-on: self-hosted
-    needs: p3dv-docker-build
+    needs: p3dv-base-docker-build
     steps:
-      - name: Download image artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: plant-3d-vision-image
-          path: .
-      - name: Load Docker image
+      - name: Pull existing p3dv-base image
         run: |
-          docker load -i plant-3d-vision-${{ github.sha }}.tar
+          TAG=colmap$(./docker/colmap_tag.sh 3.8 | tail -n 1)
+          echo "Using p3dv-base image tag: ${TAG}"
+          echo "TAG=${TAG}" >> "$GITHUB_ENV"
+          echo "Using colmap image: roboticsmicrofarms/p3dv-base:${TAG}"
+          docker pull roboticsmicrofarms/p3dv-base:${TAG}
+        continue-on-error: false   # fail the job if image is missing
       - name: Run Integration Tests
         run: |
-          ./docker/run.sh -t ${{ github.sha }} --test-integration
-
-  docker-clean:
-    runs-on: self-hosted
-    needs: [ integration-tests, unit-tests ]
-    if: always()
-    steps:
-      - name: Remove Docker Image
-        run: |
-          docker image rm roboticsmicrofarms/plant-3d-vision:${{ github.sha }} --force
-          docker container prune -f
-          docker image prune --filter label=stage=builder -f
+          ./docker/p3dv-base/run.sh --rm -t ${TAG} --test-integration
