@@ -49,6 +49,8 @@ initialize_variables() {
   update_pip_tools=0
   # Options to use with `pip`:
   pip_opt=""
+  # Boolean flag to enable GUI requirements (default disabled):
+  gui=0
   # Boolean flag to install webterm requirements:
   webterm=0
   # Boolean flag to install documentation requirements:
