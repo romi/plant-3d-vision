@@ -71,7 +71,7 @@ jobs:
       - name: Build Dockerfile
         if: steps.pull_p3dv_image.outcome != 'success'   # skip when image was pulled
         run: |
-          ./docker/colmap3.8/build.sh --plain --load
+          ./docker/p3dv/build.sh --plain --load
       - name: Log in to Docker Hub
         if: steps.pull_p3dv_image.outcome != 'success'   # log in to push only after a fresh build
         uses: docker/login-action@v3
