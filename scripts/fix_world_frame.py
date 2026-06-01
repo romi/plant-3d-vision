@@ -7,7 +7,7 @@ PlantDB/FSDB dataset to be negative and correct the pan angles to start at 0.
 
 Usage example
 -------------
-    python set_negative_z_pose.py -db /data/ROMI/test_owner \
+    python fix_world_frame.py -db /data/ROMI/test_owner \
         --scan "2023-03-*" \
         --db-user admin --db-password secret
 """
@@ -16,7 +16,6 @@ import fnmatch
 
 import click
 import toml
-from cyclopts.help.formatters import default
 from toml import TomlDecodeError
 
 from plantdb.commons.fsdb.core import FSDB, Scan, File
