@@ -1108,9 +1108,9 @@ class Colmap(RomiTask):
             dist_json.update({
                 f"{dist_name}_distances": dist_values,
             })
-        dist_outfile = self.output_file(f"ref2pred_pose_distances", create=True)
+        dist_outfile = self.output_file("ref2pred_pose_distances", create=True)
         io.write_json(dist_outfile, dist_json)
-        dist_stats_outfile = self.output_file(f"ref2pred_pose_distances_stats", create=True)
+        dist_stats_outfile = self.output_file("ref2pred_pose_distances_stats", create=True)
         io.write_json(dist_stats_outfile, dist_stats_json)
 
         def _rename_retry_file(fpath):
