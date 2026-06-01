@@ -62,7 +62,7 @@ jobs:
           TAG=colmap$(./docker/colmap_tag.sh 3.8 | tail -n 1)
           echo "Using p3dv-base image tag: ${TAG}"
           echo "TAG=${TAG}" >> "$GITHUB_ENV"
-          echo "Using colmap image: roboticsmicrofarms/p3dv-base:${TAG}"
+          echo "Using p3dv-base image: roboticsmicrofarms/p3dv-base:${TAG}"
           docker pull roboticsmicrofarms/p3dv-base:${TAG}
         continue-on-error: true   # do not fail the job if image is missing
       - name: Set up Docker Buildx
@@ -71,7 +71,7 @@ jobs:
       - name: Build Dockerfile
         if: steps.pull_p3dv_image.outcome != 'success'   # skip when image was pulled
         run: |
-          ./docker/p3dv/build.sh --plain --load
+          ./docker/p3dv-base/build.sh --plain --load
       - name: Log in to Docker Hub
         if: steps.pull_p3dv_image.outcome != 'success'   # log in to push only after a fresh build
         uses: docker/login-action@v3
