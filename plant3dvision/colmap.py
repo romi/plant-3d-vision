@@ -367,8 +367,12 @@ def estimate_rotation_translation_mat(x, y, z, pan, tilt, roll):
     """
     from scipy.spatial.transform import Rotation as R
     # Build the rotation matrix from the (pan, tilt, roll)
-    rot = R.from_euler('zxy', [pan, tilt, roll], degrees=True)
-    rot_matrix = rot.as_matrix()                     # shape (3, 3)
+    # rot = R.from_euler('zxy', [pan, tilt, roll], degrees=True)
+    # rot_matrix = rot.as_matrix()                     # shape (3, 3)
+    wRcp = R.from_euler("ZYX", (pan, tilt, roll), degrees=True)
+    cpRc = R.from_euler("YZY", (90, -90, 0), degrees=True)
+    cRw = cpRc.inv() * wRcp.inv()
+    rot_matrix = cRw.as_matrix()
 
     # Recover the translation vector (COLMAP’s “tvec”)
     #    camera_position = -R.T @ tvec -> tvec = -R @ camera_position
