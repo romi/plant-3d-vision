@@ -785,7 +785,7 @@ class Colmap(RomiTask):
     -----
     This task requires COLMAP to be installed or available as a container.
 
-    For exhaustive matching, all image pairs are compared which is suitable for datasets
+    For exhaustive matching, all image pairs are compared, which is suitable for datasets
     with up to several hundred images.
 
     For sequential matching, only consecutive frames are matched, which is suitable for
@@ -867,7 +867,7 @@ class Colmap(RomiTask):
             except:
                 pass
 
-        # An Error should not be raised as it force to know the point cloud geometry
+        # An Error should not be raised as it forces to know the point cloud geometry
         #  before even attempting its reconstruction.
         # if bounding_box is None:
         #     raise IOError(
@@ -895,7 +895,7 @@ class Colmap(RomiTask):
         self.cli_args["feature_extractor"]["--ImageReader.single_camera"] = str(self.single_camera)
 
     def set_camera_model(self):
-        """Configure COLMAP CLI parameters to defines camera model."""
+        """Configure COLMAP CLI parameters to defines a camera model."""
         if "feature_extractor" not in self.cli_args:
             self.cli_args["feature_extractor"] = {}
         # - Define the camera model:
@@ -1108,9 +1108,9 @@ class Colmap(RomiTask):
             dist_json.update({
                 f"{dist_name}_distances": dist_values,
             })
-        dist_outfile = self.output_file(f"ref2pred_pose_distances.json", create=True)
+        dist_outfile = self.output_file(f"ref2pred_pose_distances", create=True)
         io.write_json(dist_outfile, dist_json)
-        dist_stats_outfile = self.output_file(f"ref2pred_pose_distances_stats.json", create=True)
+        dist_stats_outfile = self.output_file(f"ref2pred_pose_distances_stats", create=True)
         io.write_json(dist_stats_outfile, dist_stats_json)
 
         def _rename_retry_file(fpath):
