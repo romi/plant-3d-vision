@@ -43,7 +43,7 @@ try:
 except Exception as e:
     # Log error and re-raise exception if compilation fails
     logger.error(f"Failed to compile CUDA kernels: {e}")
-    raise Exception("Failed to compile CUDA kernels")
+    raise
 
 
 class Backprojection(AbstractBackprojection):

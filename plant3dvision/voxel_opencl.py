@@ -55,7 +55,7 @@ try:
 except Exception as e:
     # Log error and re-raise exception if compilation fails
     logger.error(f"Failed to compile OpenCL kernels: {e}")
-    raise Exception("Failed to compile OpenCL kernels")
+    raise
 
 
 class Backprojection(AbstractBackprojection):
