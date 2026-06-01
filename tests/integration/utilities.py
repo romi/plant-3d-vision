@@ -5,6 +5,7 @@ from romitask.log import get_logger
 
 logger = get_logger(__name__)
 
+
 def run_task(task, dataset, config="", timeout=600):
     """Python wrapper to `romi_run_task` using subprocess.
 
@@ -27,9 +28,10 @@ def run_task(task, dataset, config="", timeout=600):
     """
     # Check if PYOPENCL_CTX is set
     if os.getenv('PYOPENCL_CTX') == None:
-       os.environ["PYOPENCL_CTX"] = '0'
+        os.environ["PYOPENCL_CTX"] = '0'
 
     command = ["romi_run_task", "--config", config, task, dataset, "--no-auth"]
+    print("Executing: " + " ".join(command))
     process = subprocess.run(command, universal_newlines=True,
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                              timeout=timeout)

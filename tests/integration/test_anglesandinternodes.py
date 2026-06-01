@@ -24,9 +24,8 @@ class TestGeomAnglesAndInternodes(unittest.TestCase):
         self.assertTrue(process.returncode == 0)
 
         # Check if a minimum number of angles and internodes were computed
-        angles_and_internodes_json_file = open(
-            glob.glob(real_plant_data + "AnglesAndInternodes_*" + "/" + "AnglesAndInternodes.json")[0])
-        json_data = json.load(angles_and_internodes_json_file)
+        with open(glob.glob(real_plant_data + "AnglesAndInternodes_*" + "/" + "AnglesAndInternodes.json")[0]) as f:
+            json_data = json.load(f)
 
         angles = json_data["angles"]
         internodes = json_data["internodes"]
@@ -37,8 +36,6 @@ class TestGeomAnglesAndInternodes(unittest.TestCase):
         # TODO : Improve the robustness of these following asserts (use appropriate metrics)
         self.assertTrue(len(angles) > 10)
         self.assertTrue(len(internodes) > 10)
-
-        angles_and_internodes_json_file.close()
 
     def test_virtual_plant(self):
         geom_pipe_virtual_conf = os.path.join(Path(__file__).parents[2], "configs/test_geom_pipe_virtual.toml")
@@ -55,9 +52,8 @@ class TestGeomAnglesAndInternodes(unittest.TestCase):
         self.assertTrue(process.returncode == 0)
 
         # Check if a minimum number of angles and internodes were computed
-        angles_and_internodes_json_file = open(
-            glob.glob(virtual_plant_data + "AnglesAndInternodes_*" + "/" + "AnglesAndInternodes.json")[0])
-        json_data = json.load(angles_and_internodes_json_file)
+        with open(glob.glob(virtual_plant_data + "AnglesAndInternodes_*" + "/" + "AnglesAndInternodes.json")[0]) as f:
+            json_data = json.load(f)
 
         angles = json_data["angles"]
         internodes = json_data["internodes"]
@@ -68,8 +64,6 @@ class TestGeomAnglesAndInternodes(unittest.TestCase):
         # TODO : Improve the robustness of these following asserts (use appropriate metrics)
         self.assertTrue(len(angles) > 10)
         self.assertTrue(len(internodes) > 10)
-
-        angles_and_internodes_json_file.close()
 
 
 class TestMLAnglesAndInternodes(unittest.TestCase):
@@ -94,9 +88,8 @@ class TestMLAnglesAndInternodes(unittest.TestCase):
         self.assertTrue(process.returncode == 0)
 
         # Check if a minimum number of angles and internodes were computed
-        angles_and_internodes_json_file = open(
-            glob.glob(real_plant_data + "AnglesAndInternodes_*" + "/" + "AnglesAndInternodes.json")[0])
-        json_data = json.load(angles_and_internodes_json_file)
+        with open(glob.glob(real_plant_data + "AnglesAndInternodes_*" + "/" + "AnglesAndInternodes.json")[0]) as f:
+            json_data = json.load(f)
 
         angles = json_data["angles"]
         internodes = json_data["internodes"]
@@ -107,8 +100,6 @@ class TestMLAnglesAndInternodes(unittest.TestCase):
         # TODO : Improve the robustness of these following asserts (use appropriate metrics)
         self.assertTrue(len(angles) > 10)
         self.assertTrue(len(internodes) > 10)
-
-        angles_and_internodes_json_file.close()
 
     def test_virtual_plant(self):
         ml_virtual_plant_conf = os.path.join(Path(__file__).parents[2], "configs/ml_pipe_virtual.toml")
@@ -131,9 +122,8 @@ class TestMLAnglesAndInternodes(unittest.TestCase):
         self.assertTrue(process.returncode == 0)
 
         # Check if a minimum number of angles and internodes were computed
-        angles_and_internodes_json_file = open(
-            glob.glob(virtual_plant_data + "AnglesAndInternodes_*" + "/" + "AnglesAndInternodes.json")[0])
-        json_data = json.load(angles_and_internodes_json_file)
+        with open(glob.glob(virtual_plant_data + "AnglesAndInternodes_*" + "/" + "AnglesAndInternodes.json")[0]) as f:
+            json_data = json.load(f)
 
         angles = json_data["angles"]
         internodes = json_data["internodes"]
@@ -144,8 +134,6 @@ class TestMLAnglesAndInternodes(unittest.TestCase):
         # TODO : Improve the robustness of these following asserts (use appropriate metrics)
         assert (len(angles) > 10)
         assert (len(internodes) > 10)
-
-        angles_and_internodes_json_file.close()
 
 
 if __name__ == "__main__":
