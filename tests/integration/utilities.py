@@ -27,7 +27,7 @@ def run_task(task, dataset, config=""):
     if os.getenv('PYOPENCL_CTX') == None:
        os.environ["PYOPENCL_CTX"] = '0'
 
-    command = ["romi_run_task", "--config", config, task, dataset]
+    command = ["romi_run_task", "--config", config, task, dataset, "--no-auth"]
     process = subprocess.run(command, universal_newlines=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     print(process.stdout)
     print(process.stderr)
