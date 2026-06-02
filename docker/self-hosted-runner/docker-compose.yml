@@ -16,7 +16,7 @@ x-runner-base: &runner-base
         memory: 8G
         devices:
           - driver: nvidia
-            capabilities: [gpu]
+            capabilities: [ gpu ]
             count: 1
 
   security_opt:
@@ -40,27 +40,30 @@ volumes:
   docker-cache:
     driver: local
     driver_opts:
-      # Set the ownership of the volume to the runner user (UID 1000, GID 1000)
       o: uid=1000,gid=1000
   runner1-work:
     driver: local
     driver_opts:
-      # Set the ownership of the volume to the runner user (UID 1000, GID 1000)
+      type: none
+      device: /tmp/runner1-work
       o: uid=1000,gid=1000
   runner2-work:
     driver: local
     driver_opts:
-      # Set the ownership of the volume to the runner user (UID 1000, GID 1000)
+      type: none
+      device: /tmp/runner2-work
       o: uid=1000,gid=1000
   runner3-work:
     driver: local
     driver_opts:
-      # Set the ownership of the volume to the runner user (UID 1000, GID 1000)
+      type: none
+      device: /tmp/runner3-work
       o: uid=1000,gid=1000
   runner4-work:
     driver: local
     driver_opts:
-      # Set the ownership of the volume to the runner user (UID 1000, GID 1000)
+      type: none
+      device: /tmp/runner4-work
       o: uid=1000,gid=1000
 
 services:
