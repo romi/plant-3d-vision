@@ -138,6 +138,15 @@ for i in 1 2 3 4; do
 done
 ```
 
+Ensure the host directories are created with the correct offset UID:
+```shell
+sudo install -d -o 100999 -g 100999 \
+  /var/lib/github-runners/runner1/_work \
+  /var/lib/github-runners/runner2/_work \
+  /var/lib/github-runners/runner3/_work \
+  /var/lib/github-runners/runner4/_work
+```
+
 ---
 
 ## Container Overview
