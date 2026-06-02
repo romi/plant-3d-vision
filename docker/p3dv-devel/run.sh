@@ -80,7 +80,7 @@ show_usage() {
   echo ""
 
   echo -e "$(bold DESCRIPTION):"
-  echo "  Start a docker container using the 'roboticsmicrofarms/p3dv-base' image.
+  echo "  Start a docker container using the 'roboticsmicrofarms/p3dv-devel' image.
 
   It must be run from the 'plant-3d-vision' repository root folder if you wish to use one of the self-testing option!"
   echo ""
@@ -273,12 +273,12 @@ run_interactive_docker() {
   docker_cmd+=" ${docker_option}"
   docker_cmd+=" -i"  # use the `-i` flag to load `~/.bashrc`.
   docker_cmd+=" ${USE_TTY}"
-  docker_cmd+=" roboticsmicrofarms/p3dv-base:${VTAG}"
+  docker_cmd+=" roboticsmicrofarms/p3dv-devel:${VTAG}"
   docker_cmd+=" bash"
 
   # Print the run configuration options
   log_debug "Run configuration:"
-  log_debug "- Docker image: roboticsmicrofarms/p3dv-base:${VTAG}"
+  log_debug "- Docker image: roboticsmicrofarms/p3dv-devel:${VTAG}"
   log_debug "- Docker bind mount: ${mount_option}"
   log_debug "- Docker options: ${docker_option}"
   # Print the full command that will be executed
@@ -296,13 +296,12 @@ run_docker_command() {
   docker_cmd+=" ${docker_option}"
   docker_cmd+=" -i"  # use the `-i` flag to load `~/.bashrc`.
   docker_cmd+=" ${USE_TTY}"
-  docker_cmd+="  -v $(pwd):/workspace"
-  docker_cmd+=" roboticsmicrofarms/p3dv-base:${VTAG}"
+  docker_cmd+=" roboticsmicrofarms/p3dv-devel:${VTAG}"
   docker_cmd+=" \"${cmd}\""
 
   # Print the run configuration options
   log_debug "Run configuration:"
-  log_debug "- Docker image: roboticsmicrofarms/p3dv-base:${VTAG}"
+  log_debug "- Docker image: roboticsmicrofarms/p3dv-devel:${VTAG}"
   log_debug "- Docker bind mount: ${mount_option}"
   log_debug "- Docker options: ${docker_option}"
   log_debug "- Command: ${cmd}"

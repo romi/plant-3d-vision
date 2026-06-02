@@ -13,7 +13,7 @@ The entrypoint handles:
 
 Start by building the image as follows:
 ```shell
-./docker/p3dv-base/build.sh 
+./docker/p3dv-devel/build.sh 
 ```
 
 ## Local Usage (Testing)
@@ -24,19 +24,19 @@ Replace `<TAG>` with the desired COLMAP/CUDA tag (_e.g._ `colmap3.8-cuda_cc75`).
 ### Unit tests
 
 ```shell
-./docker/p3dv-base/run.sh -t colmap3.8-cuda_cc75 --unittest
+./docker/p3dv-devel/run.sh -t colmap3.8-cuda_cc75 --unittest
 ```
 
 ### Integration tests
 
 ```shell
-./docker/p3dv-base/run.sh -t colmap3.8-cuda_cc75 --test-integration
+./docker/p3dv-devel/run.sh -t colmap3.8-cuda_cc75 --test-integration
 ```
 
 ### Pipeline tests
 
 ```shell
-./docker/p3dv-base/run.sh -t colmap3.8-cuda_cc75 --test-pipelines
+./docker/p3dv-devel/run.sh -t colmap3.8-cuda_cc75 --test-pipelines
 ```
 
 ## CI / GitHub Actions
@@ -58,30 +58,30 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build Docker image
-        run: ./docker/p3dv-base/build.sh
+        run: ./docker/p3dv-devel/build.sh
     
       - name: Run unit tests in Docker
         run: |
-          ./docker/p3dv-base/run.sh -t colmap3.8-cuda_cc75 --unittest
+          ./docker/p3dv-devel/run.sh -t colmap3.8-cuda_cc75 --unittest
     
       - name: Run integration tests in Docker
         run: |
-          ./docker/p3dv-base/run.sh -t colmap3.8-cuda_cc75 --test-integration
+          ./docker/p3dv-devel/run.sh -t colmap3.8-cuda_cc75 --test-integration
     
       - name: Run pipeline tests in Docker
         run: |
-          ./docker/p3dv-base/run.sh -t colmap3.8-cuda_cc75 --test-pipelines
+          ./docker/p3dv-devel/run.sh -t colmap3.8-cuda_cc75 --test-pipelines
 ``` 
 
 *Tip:* If you need to run additional commands inside the container (_e.g._, linting or custom scripts), append them after the test flags:
 ```shell
-./docker/p3dv-base/run.sh -t colmap3.8-cuda_cc75 --unittest && flake8 .
+./docker/p3dv-devel/run.sh -t colmap3.8-cuda_cc75 --unittest && flake8 .
 ```
 
 ## Advanced options
 
 - **Custom source directory** set `SOURCE_DIR` to point to a different mount point:
   ```shell
-  SOURCE_DIR=/my/code ./docker/p3dv-base/run.sh -t colmap3.8-cuda_cc75 --unittest
+  SOURCE_DIR=/my/code ./docker/p3dv-devel/run.sh -t colmap3.8-cuda_cc75 --unittest
   ```
 - **Environment variables**: the image respects the usual Docker `-e` flag; useful for tweaking OpenCL or CUDA settings (`PYCUDA_NVCC_FLAGS`, `PYOPENCL_CTX`, etc.).

@@ -62,6 +62,7 @@ RUN apt-get update && \
     chown -R ${USER_NAME}:${USER_NAME} /home/${USER_NAME} && \
     # Create the folder used to store the app data:
     mkdir -p ${APP_DIR} && \
+    mkdir -p ${APP_DIR}/plant-3d-vision && \
     mkdir -p ${ROMI_DB} && \
     mkdir -p ${ROMI_CFG} && \
     mkdir -p ${ROMI_USERS} && \
@@ -88,7 +89,7 @@ RUN python3 -m venv /home/${USER_NAME}/venv
 # Note: Source code will be mounted at runtime, not copied during build
 # The installation will happen in entrypoint.sh at container startup
 
-COPY --chown=${USER_NAME} docker/p3dv-base/entrypoint.sh .
+COPY --chown=${USER_NAME} docker/p3dv-devel/entrypoint.sh .
 # Make entrypoint executable
 RUN chmod +x entrypoint.sh
 

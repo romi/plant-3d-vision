@@ -30,7 +30,7 @@ show_usage() {
   echo ""
 
   echo -e "$(bold DESCRIPTION):"
-  echo "  Build a docker image named 'roboticsmicrofarms/p3dv-base' using 'Dockerfile' in the same location.
+  echo "  Build a docker image named 'roboticsmicrofarms/p3dv-devel' using 'Dockerfile' in the same location.
 
   It must be run from the 'plant-3d-vision' repository root folder as it is the build context and it will be copied during at image build time!
   Do not forget to initialize or update the sub-modules if necessary!"
@@ -120,9 +120,9 @@ build_docker_image() {
   docker_cmd+=" --build-arg COLMAP_VERSION=\"${COLMAP_VERSION}\""
   docker_cmd+=" --build-arg CUDA_CC=\"${CUDA_CC}\""
   docker_cmd+=" --build-arg PYCUDA_NVCC_FLAGS=\"${PYCUDA_NVCC_FLAGS}\""
-  docker_cmd+=" -t \"roboticsmicrofarms/p3dv-base:${VTAG}\""
+  docker_cmd+=" -t \"roboticsmicrofarms/p3dv-devel:${VTAG}\""
   docker_cmd+=" ${DOCKER_OPTS}"  # Additional options like --no-cache, --pull, etc.
-  docker_cmd+=" -f \"docker/p3dv-base/Dockerfile\""
+  docker_cmd+=" -f \"docker/p3dv-devel/Dockerfile\""
   docker_cmd+=" ."  # Build context
 
   # Print the build configuration options
@@ -130,7 +130,7 @@ build_docker_image() {
   log_debug "- COLMAP_VERSION: ${COLMAP_VERSION}"
   log_debug "- CUDA_CC: ${CUDA_CC}"
   log_debug "- PYCUDA_NVCC_FLAGS: ${PYCUDA_NVCC_FLAGS}"
-  log_debug "- Docker tag: roboticsmicrofarms/p3dv-base:${VTAG}"
+  log_debug "- Docker tag: roboticsmicrofarms/p3dv-devel:${VTAG}"
   log_debug "- Docker options: ${DOCKER_OPTS}"
   # Print the full command that will be executed
   log_debug "Executing command: ${docker_cmd}"
@@ -149,7 +149,7 @@ build_docker_image() {
 
   # Print build time if successful (code 0), else print exit code
   if [ ${docker_build_status} -eq 0 ]; then
-    log_debug "Docker image successfully created with tag: roboticsmicrofarms/p3dv-base:${VTAG}"
+    log_debug "Docker image successfully created with tag: roboticsmicrofarms/p3dv-devel:${VTAG}"
     log_info "Docker build SUCCEEDED in ${elapsed_time}s!"
   else
     log_error "Docker build FAILED after ${elapsed_time}s with code ${docker_build_status}!"

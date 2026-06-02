@@ -40,7 +40,7 @@ jobs:
         run: |
           docker push roboticsmicrofarms/colmap:${TAG}
 
-  p3dv-base-docker-build:
+  p3dv-devel-docker-build:
     runs-on: self-hosted
     needs: colmap-docker-build
     steps:
@@ -56,14 +56,14 @@ jobs:
           echo "Using colmap image: roboticsmicrofarms/colmap:${TAG}"
           docker pull roboticsmicrofarms/colmap:${TAG}
         continue-on-error: false   # fail the job if image is missing
-      - name: Pull existing p3dv-base image (if any)
+      - name: Pull existing p3dv-devel image (if any)
         id: pull_p3dv_image
         run: |
           TAG=colmap$(./docker/colmap_tag.sh 3.8 | tail -n 1)
-          echo "Using p3dv-base image tag: ${TAG}"
+          echo "Using p3dv-devel image tag: ${TAG}"
           echo "TAG=${TAG}" >> "$GITHUB_ENV"
-          echo "Using p3dv-base image: roboticsmicrofarms/p3dv-base:${TAG}"
-          docker pull roboticsmicrofarms/p3dv-base:${TAG}
+          echo "Using p3dv-devel image: roboticsmicrofarms/p3dv-devel:${TAG}"
+          docker pull roboticsmicrofarms/p3dv-devel:${TAG}
         continue-on-error: true   # do not fail the job if image is missing
       - name: Set up Docker Buildx
         if: steps.pull_p3dv_image.outcome != 'success'   # skip when image was pulled
@@ -71,46 +71,46 @@ jobs:
       - name: Build Dockerfile
         if: steps.pull_p3dv_image.outcome != 'success'   # skip when image was pulled
         run: |
-          ./docker/p3dv-base/build.sh --plain --load
+          ./docker/p3dv-devel/build.sh --plain --load
       - name: Log in to Docker Hub
         if: steps.pull_p3dv_image.outcome != 'success'   # log in to push only after a fresh build
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: Push p3dv-base image
+      - name: Push p3dv-devel image
         if: steps.pull_p3dv_image.outcome != 'success'   # push only after a fresh build
         run: |
-          docker push roboticsmicrofarms/p3dv-base:${TAG}
+          docker push roboticsmicrofarms/p3dv-devel:${TAG}
 
   unit-tests:
     runs-on: self-hosted
-    needs: p3dv-base-docker-build
+    needs: p3dv-devel-docker-build
     steps:
-      - name: Pull existing p3dv-base image
+      - name: Pull existing p3dv-devel image
         run: |
           TAG=colmap$(./docker/colmap_tag.sh 3.8 | tail -n 1)
-          echo "Using p3dv-base image tag: ${TAG}"
+          echo "Using p3dv-devel image tag: ${TAG}"
           echo "TAG=${TAG}" >> "$GITHUB_ENV"
-          echo "Using colmap image: roboticsmicrofarms/p3dv-base:${TAG}"
-          docker pull roboticsmicrofarms/p3dv-base:${TAG}
+          echo "Using colmap image: roboticsmicrofarms/p3dv-devel:${TAG}"
+          docker pull roboticsmicrofarms/p3dv-devel:${TAG}
         continue-on-error: false   # fail the job if image is missing
       - name: Run Unit Tests
         run: |
-          ./docker/p3dv-base/run.sh --rm -t ${TAG} --unittest
+          ./docker/p3dv-devel/run.sh -t ${TAG} --source_dir /home/romi/plant-3d-vision --unittest
 
   integration-tests:
     runs-on: self-hosted
-    needs: p3dv-base-docker-build
+    needs: p3dv-devel-docker-build
     steps:
-      - name: Pull existing p3dv-base image
+      - name: Pull existing p3dv-devel image
         run: |
           TAG=colmap$(./docker/colmap_tag.sh 3.8 | tail -n 1)
-          echo "Using p3dv-base image tag: ${TAG}"
+          echo "Using p3dv-devel image tag: ${TAG}"
           echo "TAG=${TAG}" >> "$GITHUB_ENV"
-          echo "Using colmap image: roboticsmicrofarms/p3dv-base:${TAG}"
-          docker pull roboticsmicrofarms/p3dv-base:${TAG}
+          echo "Using colmap image: roboticsmicrofarms/p3dv-devel:${TAG}"
+          docker pull roboticsmicrofarms/p3dv-devel:${TAG}
         continue-on-error: false   # fail the job if image is missing
       - name: Run Integration Tests
         run: |
-          ./docker/p3dv-base/run.sh --rm -t ${TAG} --test-integration
+          ./docker/p3dv-devel/run.sh -t ${TAG} --source_dir /home/romi/plant-3d-vision --test-integration
