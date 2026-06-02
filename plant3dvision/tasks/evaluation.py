@@ -12,11 +12,11 @@ from PIL import Image
 
 from plant3dvision.metrics import CompareMaskFilesets
 from plant3dvision.metrics import CompareSegmentedPointClouds
-from plant3dvision.tasks import voxel_reconstruction
-from plant3dvision.tasks import config
+from plant3dvision.proc3d import PointCloudColorMap
 from plant3dvision.tasks import proc2d
 from plant3dvision.tasks import proc3d
 from plant3dvision.tasks.arabidopsis import AnglesAndInternodes
+from plant3dvision.tasks.voxel_reconstruction import Voxels
 from plantdb.commons.io import read_json
 from plantdb.commons.io import read_npz
 from plantdb.commons.io import read_point_cloud
@@ -27,10 +27,10 @@ from plantdb.commons.io import write_point_cloud
 from plantdb.commons.io import write_triangle_mesh
 from plantdb.commons.utils import to_file
 from romitask.log import get_logger
-from romitask.task import ScanConfiguration
 from romitask.task import FilesetTarget
 from romitask.task import ImagesFilesetExists
 from romitask.task import RomiTask
+from romitask.task import ScanConfiguration
 from romitask.task import Segmentation2DGroundTruthFilesetExists
 from romitask.task import VirtualPlantObj
 
@@ -81,7 +81,7 @@ class VoxelsGroundTruth(RomiTask):
         If unspecified (default), the current active scan will be used.
 
     """
-    upstream_task = luigi.TaskParameter(default=VirtualPlantObj)  # override default attribute from ``RomiTask``
+    upstream_task = luigi.TaskParameter(default=VirtualPlantObj)
 
     def run(self):
         import pywavefront
@@ -98,7 +98,7 @@ class VoxelsGroundTruth(RomiTask):
             res = {}
             min = np.min(x.vertices, axis=0)
             max = np.max(x.vertices, axis=0)
-            arr_size = np.asarray((max - min) / cl.Voxels().voxel_size + 1, dtype=int) + 1
+            arr_size = np.asarray((max - min) / Voxels().voxel_size + 1, dtype=int) + 1
             for k in x.meshes.keys():
                 t = o3d.geometry.TriangleMesh()
                 t.triangles = o3d.utility.Vector3iVector(np.asarray(x.meshes[k].faces))
@@ -107,11 +107,11 @@ class VoxelsGroundTruth(RomiTask):
                 o3d.write_triangle_mesh(os.path.join(tmpdir, "tmp.stl"),
                                         t)
                 m = trimesh.load(os.path.join(tmpdir, "tmp.stl"))
-                v = m.voxelized(cl.Voxels().voxel_size)
+                v = m.voxelized(Voxels().voxel_size)
 
                 class_name = x.meshes[k].materials[0].name
                 arr = np.zeros(arr_size)
-                voxel_size = cl.Voxels().voxel_size
+                voxel_size = Voxels().voxel_size
                 origin_idx = np.asarray((v.origin - min) / voxel_size, dtype=int)
                 arr[origin_idx[0]:origin_idx[0] + v.matrix.shape[0],
                 origin_idx[1]:origin_idx[1] + v.matrix.shape[1],
@@ -146,7 +146,7 @@ class PointCloudGroundTruth(RomiTask):
         Defaults to `100000`.
 
     """
-    upstream_task = luigi.TaskParameter(default=VirtualPlantObj)  # override default attribute from ``RomiTask``
+    upstream_task = luigi.TaskParameter(default=VirtualPlantObj)
     pcd_size = luigi.IntParameter(default=100000)
 
     def run(self):
@@ -154,7 +154,7 @@ class PointCloudGroundTruth(RomiTask):
         x = self.input_file()
         mtl_file = self.input().get().get_file(x.id + "_mtl")
         outfs = self.output().get()
-        colors = config.PointCloudColorConfig().colors
+        colors = PointCloudColorMap().colors
         with tempfile.TemporaryDirectory() as tmpdir:
             to_file(x, os.path.join(tmpdir, "plant.obj"))
             to_file(x, os.path.join(tmpdir, "plant.mtl"))
@@ -208,14 +208,14 @@ class ClusteredMeshGroundTruth(RomiTask):
         If unspecified (default), the current active scan will be used.
 
     """
-    upstream_task = luigi.TaskParameter(default=VirtualPlantObj)  # override default attribute from ``RomiTask``
+    upstream_task = luigi.TaskParameter(default=VirtualPlantObj)
 
     def run(self):
         import pywavefront
         x = self.input_file()
         mtl_file = self.input().get().get_file(x.id + "_mtl")
         outfs = self.output().get()
-        colors = config.PointCloudColorConfig().colors
+        colors = PointCloudColorMap().colors
         output_fileset = self.output().get()
         with tempfile.TemporaryDirectory() as tmpdir:
             to_file(x, os.path.join(tmpdir, "plant.obj"))
@@ -312,8 +312,8 @@ class PointCloudEvaluation(EvaluationTask):
     --------
     open3d.cuda.pybind.pipelines.registration.evaluate_registration
     """
-    upstream_task = luigi.TaskParameter(default=proc3d.PointCloud)  # override default attribute from ``RomiTask``
-    ground_truth = luigi.TaskParameter(default=PointCloudGroundTruth)  # override default attribute from ``EvaluationTask``
+    upstream_task = luigi.TaskParameter(default=proc3d.PointCloud)
+    ground_truth = luigi.TaskParameter(default=PointCloudGroundTruth)
     max_distance = luigi.FloatParameter(default=2)
 
     def evaluate(self):
@@ -379,7 +379,8 @@ class Segmentation2DEvaluation(EvaluationTask):
     plant3dvision.metrics.CompareMaskFilesets
     """
     upstream_task = luigi.TaskParameter(default=proc2d.Segmentation2D)  # override default attribute from ``RomiTask``
-    ground_truth = luigi.TaskParameter(default=Segmentation2DGroundTruthFilesetExists)  # override default attribute from ``EvaluationTask``
+    ground_truth = luigi.TaskParameter(
+        default=Segmentation2DGroundTruthFilesetExists)  # override default attribute from ``EvaluationTask``
     dilation_amount = luigi.IntParameter(default=0)
     labels = luigi.ListParameter(default=[])
 
@@ -415,7 +416,7 @@ class VoxelsEvaluation(EvaluationTask):
     --------
     plant3dvision.metrics.CompareMaskFilesets
     """
-    upstream_task = luigi.TaskParameter(default=cl.Voxels)  # override default attribute from ``RomiTask``
+    upstream_task = luigi.TaskParameter(default=Voxels)  # override default attribute from ``RomiTask``
     ground_truth = luigi.TaskParameter(default=VoxelsGroundTruth)  # override default attribute from ``EvaluationTask``
 
     def evaluate(self):
@@ -447,8 +448,7 @@ class VoxelsEvaluation(EvaluationTask):
             prediction_c = prediction_c * (pred_c > (10 * pred_no_c))
 
             gt_c = gts[c]
-            gt_c = gt_c[0:prediction_c.shape[0], 0:prediction_c.shape[1],
-                   0:prediction_c.shape[2]]
+            gt_c = gt_c[0:prediction_c.shape[0], 0:prediction_c.shape[1], 0:prediction_c.shape[2]]
 
             fig = plt.figure()
             plt.subplot(2, 1, 1)

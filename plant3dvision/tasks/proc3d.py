@@ -4,13 +4,16 @@
 import luigi
 import numpy as np
 import open3d as o3d
-from plantdb.commons import io
+from tqdm import tqdm
 
 from plant3dvision import proc3d
-from plant3dvision.tasks import config
-from plant3dvision.tasks.voxel_reconstruction import Voxels
+from plant3dvision.proc3d import PointCloudColorMap
+from plant3dvision.proc3d import filter_segmented_pcd
 from plant3dvision.tasks.colmap import Colmap
 from plant3dvision.tasks.proc2d import Segmentation2D
+from plant3dvision.tasks.voxel_reconstruction import Voxels
+from plantdb.commons import io
+from plantdb.commons.fsdb.exceptions import FileNotFoundError
 from romitask import RomiTask
 from romitask.log import get_logger
 from skeleton_refinement.stochastic_registration import knn_mst
@@ -90,9 +93,9 @@ class PointCloud(RomiTask):
     If multi-class, point label information is included in the metadata.
     """
     upstream_task = luigi.TaskParameter(default=Voxels)  # override default attribute from ``RomiTask``
-    algorithm = luigi.ChoiceParameter(
-        default='marching-cubes', choices=['distance-transform', 'marching-cubes'], var_type=str
-    )
+    algorithm = luigi.ChoiceParameter(default='marching-cubes',
+                                      choices=['distance-transform', 'marching-cubes'],
+                                      var_type=str)
     level_set_value = luigi.FloatParameter(default=0.0)
 
     missing_images_threshold = luigi.IntParameter(default=2)
@@ -167,7 +170,7 @@ class PointCloud(RomiTask):
             # List to keep track of assigned labels for each point
             point_labels = []
             # Predefined color dictionary for known labels
-            colors = config.PointCloudColorConfig().colors
+            colors = PointCloudColorMap().colors
             # Iterate over all labels to generate point clouds
             for i in range(len(label)):
                 logger.debug(f"label = {label[i]}")
@@ -185,7 +188,8 @@ class PointCloud(RomiTask):
                 pred_c *= (pred_c > self.min_score)
                 # Convert filtered volume to a partial point cloud
                 if self.algorithm == 'marching-cubes':
-                    out, _ = proc3d.vol2pcd_mc(pred_c, origin, voxel_size, self.level_set_value, self.sigma, self.mc_level)
+                    out, _ = proc3d.vol2pcd_mc(pred_c, origin, voxel_size, self.level_set_value, self.sigma,
+                                               self.mc_level)
                 else:
                     out = proc3d.vol2pcd(pred_c, origin, voxel_size, self.level_set_value)
                 # Assign a color to all points in this partial cloud
@@ -243,7 +247,6 @@ class PointCloud(RomiTask):
             return voxels >= threshold
         else:
             return voxels >= 1.
-
 
     def run(self):
         """Process a volumetric data file into a point cloud representation.
@@ -322,9 +325,9 @@ class SegmentedPointCloud(RomiTask):
             If the specified file or any files are not found during retrieval.
         """
         try:
-            x = self.upstream_task().output().get().get_file("dense")
+            x = self.upstream_task().output().get().get_file("dense")  # from Colmap
         except FileNotFoundError:
-            x = self.upstream_task().output().get().get_files()[0]
+            x = self.upstream_task().output().get().get_files()[0]  # try to grab the first one, if any
 
         return io.read_point_cloud(x)
 
@@ -391,7 +394,7 @@ class SegmentedPointCloud(RomiTask):
         scores = np.zeros((len(labels), len(pts)))
 
         # Process each segmentation file
-        for fi in fs.get_files():
+        for fi in tqdm(fs.get_files(), unit="file", desc="Points backprojection"):
             label = fi.get_metadata("channel")
             if label not in labels:
                 continue
@@ -424,13 +427,13 @@ class SegmentedPointCloud(RomiTask):
                 if self.is_in_pict(px, mask.shape):
                     scores[label_idx, i] += mask[px[1], px[0]]
 
+        logger.info(f"Processing following labels: {labels}")
         # Determine final label for each point based on highest score
         pts_labels = np.argmax(scores, axis=0).flatten()
-        logger.critical(f"Processed following labels: {labels}")
 
         # Get color mapping from config
-        colors = config.PointCloudColorConfig().colors
-        logger.critical(f"Associated colors: {colors}")
+        colors = PointCloudColorMap().colors
+        logger.debug(f"Associated colors: {colors}")
 
         # Initialize arrays for point colors and labels
         color_array = np.zeros((len(pts), 3))
@@ -439,7 +442,7 @@ class SegmentedPointCloud(RomiTask):
         # Assign colors and labels to points
         for i in range(len(labels)):
             nlab_pts = (pts_labels == i).sum()
-            logger.critical(f"Number of points associated with label '{labels[i]}': {nlab_pts}")
+            logger.info(f"Number of points associated with label '{labels[i]}': {nlab_pts}")
 
             # Use predefined color if available, otherwise random color
             if labels[i] in colors:
@@ -646,6 +649,65 @@ class ClusteredMesh(RomiTask):
                 f.set_metadata("label", l)
 
 
+class FilteredSegmentedPointCloud(RomiTask):
+    """Filters small color/label patches from a ``SegmentedPointCloud`` output.
+
+    Small, isolated patches of a given label that are embedded inside a larger
+    patch of another label are a common artefact of the back-projection segmentation pipeline.
+    This task removes them by running a per-label DBSCAN clustering and discarding any cluster
+    whose size falls below a configurable threshold. Points that are discarded are re-labelled by
+    looking at the majority label among their k-nearest neighbours in the full point cloud.
+
+    Attributes
+    ----------
+    upstream_task : luigi.TaskParameter, optional
+        Task upstream of this task, should provide a **labelled** point cloud.
+        Defaults to ``SegmentedPointCloud``.
+    scan_id : luigi.Parameter, optional
+        The dataset id (scan name) to use to create the ``FilesetTarget``.
+        If unspecified (default), the current active scan will be used.
+    eps : luigi.FloatParameter, optional
+        Maximum Euclidean distance between two points for them to be considered neighbours by DBSCAN.
+        Defaults to ``2.0``.
+    min_points : luigi.IntParameter, optional
+        Minimum number of points required to form a dense region in DBSCAN.
+        Defaults to ``5``.
+    n_neighbors : luigi.IntParameter, optional
+        Number of nearest neighbours used to re-label small‑patch points via a k‑NN majority vote.
+        Defaults to ``10``.
+    mad_factor : luigi.FloatParameter, optional
+        Multiplicative factor applied to the MAD to set the lower‑side outlier threshold.
+        Clusters with `size < (median – mad_factor×MAD)` are considered small patches.
+        Defaults to ``3.0``.
+
+    Notes
+    -----
+    * Points that belong to DBSCAN noise (cluster id ``-1``) are also considered small-patch points
+      and get re-labelled.
+    * If a re-labelled point has no valid neighbour with a known label (unlikely but possible for
+      very sparse clouds) it keeps its original label.
+    """
+
+    upstream_task = luigi.TaskParameter(default=SegmentedPointCloud)
+
+    eps = luigi.FloatParameter(default=2.0)
+    min_points = luigi.IntParameter(default=5)
+    n_neighbors = luigi.IntParameter(default=10)
+    mad_factor = luigi.FloatParameter(default=3.)
+
+    def run(self):
+        # Load the labelled point cloud produced by SegmentedPointCloud
+        pcd = io.read_point_cloud(self.input_file())
+        point_labels = self.input_file().get_metadata("labels")  # list[str], one per point
+
+        pcd = filter_segmented_pcd(pcd, point_labels, self.eps, self.min_points, self.n_neighbors, self.mad_factor)
+
+        # Save the filtered point cloud
+        out_file = self.output_file(create=True)
+        io.write_point_cloud(out_file, pcd)
+        out_file.set_metadata("labels", point_labels)
+
+
 class OrganSegmentation(RomiTask):
     """Organ detection using DBSCAN clustering on the SegmentedPointCloud.
 
@@ -688,7 +750,7 @@ class OrganSegmentation(RomiTask):
     eps = luigi.FloatParameter(default=2.0)
     min_points = luigi.IntParameter(default=5)
 
-    def get_label_pointcloud(self, pcd, labels, label):
+    def get_label_pointcloud(self, pcd, labels, label, log_info=False):
         """Return a point cloud only for the selected label.
 
         Parameters
@@ -710,9 +772,12 @@ class OrganSegmentation(RomiTask):
         # Skip point cloud reconstruction if no points corresponding to label
         n_points = sum(idx_mask)
         if n_points == 0:
-            print(f"No points found for label: '{label}'!")
+            logger.warning(f"No points found for label: '{label}'!")
         else:
-            print(f"Found {n_points} point for, label '{label}'.")
+            if log_info:
+                logger.info(f"Found {n_points} point for, label '{label}'.")
+            else:
+                logger.debug(f"Found {n_points} point for, label '{label}'.")
         # Returns point cloud (colored & with normals if any):
         return pcd.select_by_index(list(idx_mask))
 
@@ -729,7 +794,7 @@ class OrganSegmentation(RomiTask):
         # Process each unique organ label separately
         for label in unique_labels:
             # Extract points corresponding to current label
-            label_pcd = self.get_label_pointcloud(labelled_pcd, labels, label)
+            label_pcd = self.get_label_pointcloud(labelled_pcd, labels, label, log_info=True)
             # Special handling for stem - no clustering needed
             if label == 'stem':
                 f = output_fileset.create_file(f"{label}_000")
@@ -747,16 +812,17 @@ class OrganSegmentation(RomiTask):
             # Get unique cluster IDs (-1 represents noise points)
             ids = np.unique(clustered_arr)
             n_ids = len(ids)
-            print(f"Found {n_ids} clusters in the point cloud!")
+            logger.info(f"Found {n_ids} clusters in the point cloud!")
             # Process each cluster separately
             for i in ids:
+                label_id = f"{label}_{str(i).zfill(len(str(n_ids)))}"
                 # Skip noise points (cluster ID -1)
                 if i == -1:
                     continue
                 # Extract points for current cluster
                 cluster_pcd = self.get_label_pointcloud(label_pcd, clustered_arr, i)
                 # Save cluster point cloud to output file
-                f = output_fileset.create_file(f"{label}_{i:03d}")
+                f = output_fileset.create_file(label_id)
                 io.write_point_cloud(f, cluster_pcd)
                 f.set_metadata("label", label)
 

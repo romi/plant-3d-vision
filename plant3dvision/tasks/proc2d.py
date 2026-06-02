@@ -10,6 +10,9 @@ import luigi
 import numpy as np
 
 from plant3dvision import proc2d
+from plant3dvision.camera import colmap_params_from_kwargs
+from plant3dvision.proc2d import crop_image
+from plant3dvision.tasks.colmap import Colmap
 from plant3dvision.utils import jsonify
 from plantdb.commons import io
 from plantdb.commons.db import File
@@ -22,6 +25,84 @@ from romitask.task import ParallelFileTask
 
 logger = get_logger(__name__, log_level="INFO")
 
+
+class CropWithBoundingBox(ParallelFileTask):
+    """Crop each 2D image cropping it to a given bounding box.
+
+    This task reads every input image, extracts a rectangular region defined by
+    ``bbox`` (x, y, width, height) and writes the cropped image to the output
+    fileset, preserving the original file identifier and metadata.
+
+    Parameters
+    ----------
+    upstream_task : luigi.TaskParameter, optional
+        The task providing the input images. Defaults to ``ImagesFilesetExists``.
+    scan_id : luigi.Parameter, optional
+        Dataset identifier (scan name) for the output fileset.
+    query : luigi.DictParameter, optional
+        Filtering dictionary applied to input ``Fileset`` metadata.
+    n_workers : luigi.IntParameter, optional
+        Number of worker threads for parallel processing. ``None`` uses the
+        default ``ThreadPoolExecutor`` behaviour.
+    parallel : luigi.BoolParameter, optional
+        Enable/disable parallel execution. Defaults to ``True``.
+    bbox : luigi.ListParameter, optional
+        List of four integers ``[x, y, w, h]`` defining the cropping rectangle.
+        ``x`` and ``y`` are the top‑left corner coordinates. ``w`` and ``h`` are the
+        width and height. If ``w`` or ``h`` are ``-1`` the full image size in that
+        direction is used. Default crops the whole image.
+
+    Returns
+    -------
+    romitask.task.FilesetTarget
+        Fileset containing the cropped copies of the input images.
+    """
+
+    upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)
+    n_workers = luigi.IntParameter(default=None)
+    parallel = luigi.BoolParameter(default=True)
+    bbox = luigi.ListParameter(default=[180, 0, 1080, -1])  # x, y, width, height
+
+    def run(self):
+        """Delegate the processing to the parent ``ParallelFileTask``."""
+        # The parent class handles iteration over all input files.
+        super().run(self.input().get(), self.output().get())
+
+    def f(self, fi, outfs):
+        """Crop a single image according to ``bbox`` and copy it to the output.
+
+        Parameters
+        ----------
+        fi : plantdb.commons.db.File
+            Input image file.
+        outfs : plantdb.commons.db.Fileset
+            Output fileset where the cropped image will be stored.
+
+        Returns
+        -------
+        plantdb.commons.db.File
+            New file containing the cropped image.
+        """
+        # Load the image
+        img = io.read_image(fi)
+
+        # Perform cropping
+        cropped = crop_image(img, bbox=list(self.bbox))
+
+        # Save the cropped image preserving the original file id
+        outfi = outfs.create_file(fi.id)
+        io.write_image(outfi, cropped)
+
+        # Preserve original metadata and add task‑specific info
+        md = {
+            'upstream_task': str(self.upstream_task.get_task_family()),
+            'bbox': self.bbox,
+        }
+        if self.query != {}:
+            md.update({'query': jsonify(self.query)})
+        outfi.set_metadata({self.get_task_family(): md})
+
+        return outfi
 
 class Undistort(ParallelFileTask):
     """Image distortion correction using camera intrinsic parameters.

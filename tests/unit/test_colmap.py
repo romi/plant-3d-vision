@@ -22,9 +22,11 @@ class TestColmap(FSDBTestCase):
                 "--ImageReader.single_camera": "1",
             }
         }
-        fileset = self.get_test_db(DATABASE_LOCATION).get_scan("arabidopsis000").get_fileset("images")
-        runner = colmap.ColmapRunner(fileset, matcher, compute_dense, all_cli_args, align_pcd, use_calibration=False,
-                                     bounding_box=fileset.scan.get_metadata("scanner")["workspace"])
+        db = self.get_test_db()
+        scan = db.get_scan("real_plant_analyzed")
+        fileset = scan.get_fileset("images")
+        runner = colmap.ColmapRunner(fileset.get_files()[::2], matcher, compute_dense, all_cli_args, align_pcd,
+                                     use_calibration=False)
         runner.run()
 
     def test_colmap_cpu(self):
@@ -40,9 +42,11 @@ class TestColmap(FSDBTestCase):
                 "--SiftMatching.use_gpu": "0"
             }
         }
-        fileset = self.get_test_db(DATABASE_LOCATION).get_scan("arabidopsis000").get_fileset("images")
-        runner = colmap.ColmapRunner(fileset, matcher, compute_dense, all_cli_args, align_pcd, use_calibration=False,
-                                     bounding_box=fileset.scan.get_metadata("scanner")["workspace"])
+        db = self.get_test_db()
+        scan = db.get_scan("real_plant_analyzed")
+        fileset = scan.get_fileset("images")
+        runner = colmap.ColmapRunner(fileset.get_files()[::2], matcher, compute_dense, all_cli_args, align_pcd,
+                                     use_calibration=False)
         runner.run()
 
 
