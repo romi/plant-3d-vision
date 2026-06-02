@@ -49,6 +49,8 @@ initialize_variables() {
   cmd=''
   # Volume mounting options:
   mount_option=""
+  # Destination directory for the repository mounting point in the container:
+  source_dir="/workspace"
   # Self-test flag (0/1 to indicate call to a test)
   SELF_TEST=0
   # Debug mode is disabled by default
@@ -89,6 +91,9 @@ show_usage() {
   echo "  -t, --tag
     Image tag to use." \
     "By default, use the '${VTAG}' tag."
+  echo "  -s, --source_dir
+    Path to the source code directory to create inside the docker container." \
+    "Defaults to '${source_dir}'."
   echo "  -db, --database
     Path to the host database to mount inside the docker container." \
     "By default, use the 'ROMI_DB' environment variable (if defined)."
@@ -187,6 +192,10 @@ parse_arguments() {
       shift
       VTAG=$1
       ;;
+    -s | --source_dir)
+      shift
+      source_dir=$1
+      ;;
     -db | --database)
       shift
       host_db=$1
@@ -271,6 +280,7 @@ run_interactive_docker() {
   docker_cmd+=" ${mount_option}"
   docker_cmd+=" --user romi:${gid}"
   docker_cmd+=" ${docker_option}"
+  docker_cmd+="  -v $(pwd):${source_dir}"
   docker_cmd+=" -i"  # use the `-i` flag to load `~/.bashrc`.
   docker_cmd+=" ${USE_TTY}"
   docker_cmd+=" roboticsmicrofarms/p3dv-devel:${VTAG}"
@@ -294,6 +304,7 @@ run_docker_command() {
   docker_cmd+=" ${mount_option}"
   docker_cmd+=" --user romi:${gid}"
   docker_cmd+=" ${docker_option}"
+  docker_cmd+="  -v $(pwd):${source_dir}"
   docker_cmd+=" -i"  # use the `-i` flag to load `~/.bashrc`.
   docker_cmd+=" ${USE_TTY}"
   docker_cmd+=" roboticsmicrofarms/p3dv-devel:${VTAG}"
