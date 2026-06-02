@@ -1150,12 +1150,19 @@ class Colmap(RomiTask):
 
 
 class CameraPoseQC(object):
-    """Verify the quality of COLMAP camera pose estimation against CNC ground truth.
+    """Verify and quantify the quality of COLMAP camera pose estimations against CNC
+    ground‑truth poses.
 
-    This class compares camera poses estimated by COLMAP with ground truth poses from a CNC machine.
-    It computes the Euclidean distance between estimated and ground truth poses, visualizes the comparison,
-    and verifies if the estimated poses are within acceptable thresholds. For circular scans, it also
-    checks for unacceptable "blind angles" where consecutive pose estimations have failed.
+    This class provides tools to:
+    - Compute Euclidean and angular distances between the estimated poses
+      (obtained from COLMAP) and the reference poses (obtained from the CNC
+      machine).
+    - Detect outlier poses using a Median Absolute Deviation (MAD) based
+      statistical test.
+    - Visualise the pose comparison on XY‑plane, Z‑axis and as box‑plots of the
+      distance metrics.
+    - Validate that the estimated poses respect user‑defined distance and angle
+      thresholds, and flag “blind angles” for circular scans.
 
     Attributes
     ----------
@@ -1163,12 +1170,44 @@ class CameraPoseQC(object):
         The list of image file objects containing the metadata, notably the estimated camera poses.
     mad_factor : float
         The multiplicative factor applied to the Median Absolute Deviation to set the outlier threshold.
-    intrinsic_calibration_scan_id : str | None
-        ID for the calibration scan, used to retrieve camera intrinsic parameters.
-    _colmap_poses : dict | None
-        Dictionary mapping image IDs to their COLMAP estimated poses.
-    _cnc_poses : dict | None
-        Dictionary mapping image IDs to their CNC ground truth poses.
+    metrics : list[str] | None, optional
+        Metrics to be used for outlier detection. Valid entries are the elements of `ALL_METRICS`.
+        If ``None``, the default set `DEF_METRICS` is used.
+    fixed_params : list[str] | None, optional
+        Parameters that are considered fixed during the scan (e.g. ``["z", "tilt", "roll"]``).
+        These parameters use the *fixed* distance/angle thresholds when validating poses.
+    distance_threshold : float
+        Threshold for Euclidean distance of non‑fixed parameters.
+    fixed_distance_threshold : float
+        Threshold for Euclidean distance of fixed parameters.
+    angle_threshold : float
+        Threshold for angular distance of non‑fixed angles.
+    fixed_angle_threshold : float
+        Threshold for angular distance of fixed angles.
+    max_blind_angle : float
+        Maximum allowed blind angle for circular scans.
+    current_scan : Scan
+        The scan object to which the images belong.
+    intrinsic_calibration_scan_id : str
+        Identifier of the intrinsic calibration scan (empty string if none).
+    outlier_ids : list[str]
+        Image identifiers flagged as outliers after the latest call to ``flag_outlier_poses``.
+    image_ids : list[str]
+        Ordered list of image identifiers (derived from ``image_files``).
+    dist_dict : dict[str, dict[str, float]]
+        Mapping of metric name to a dictionary of image‑wise distances.
+    _colmap_poses : dict[str, list[float]] | None
+        Cached COLMAP estimated poses (populated on first access).
+    _cnc_poses : dict[str, list[float]] | None
+        Cached CNC reference poses (populated on first access).
+
+    Notes
+    -----
+    * Angular distances are expressed in **degrees**, Euclidean distances in
+      **millimetres**.
+    * For circular scans, the *blind angle* check evaluates whether a
+      consecutive sequence of failed pose estimations would leave a
+      non‑imaged sector larger than ``max_blind_angle``.
 
     Examples
     --------
@@ -1206,12 +1245,26 @@ class CameraPoseQC(object):
         metrics : list[str] | None
             The list of metrics to use to detect the outliers using the Median Absolute Deviation method.
             Only those defined in ``ALL_METRICS`` are valid.
+            If ``None``, the default set `DEF_METRICS` is used.
         calibration_scan : plantdb.commons.core.fsdb.Scan | None
             The scan object used to calibrate the camera intrinsics.
             Dy default, ``None`` indicates that the camera intrinsics have been estimated by Colmap.
         fixed_params : list[str] | None
             The list of camera parameters that are "fixed", meaning they do not move during a scan.
             Defaults to ``["z", "tilt", "roll"]``.
+        
+        Other Parameters
+        ----------------
+        distance_threshold : float, default ``3.0``
+            Maximum Euclidean distance (mm) allowed for non‑fixed parameters.
+        fixed_distance_threshold : float, default ``1.0``
+            Maximum Euclidean distance (mm) for fixed parameters.
+        angle_threshold : float, default ``5.0``
+            Maximum angular distance (degrees) for non‑fixed angles.
+        fixed_angle_threshold : float, default ``3.5``
+            Maximum angular distance (degrees) for fixed angles.
+        max_blind_angle : float, default ``30.0``
+            Maximum allowed blind angle (degrees) for circular scans.
         """
         self.image_files: list[File] = image_files
         self.mad_factor: float = mad_factor
@@ -1332,11 +1385,61 @@ class CameraPoseQC(object):
         return prefix + indenter + camera_str
 
     @staticmethod
-    def _euclidean_dist(image_ids, cnc_poses, colmap_poses) -> dict[str, float]:
+    def _euclidean_dist(
+            image_ids: list[str],
+            cnc_poses: dict[str, list[float]],
+            colmap_poses: dict[str, list[float]],
+    ) -> dict[str, float]:
+        """Compute Euclidean distance between corresponding poses for a collection of images.
+
+        Parameters
+        ----------
+        image_ids : list of str
+            Collection of identifiers for the images whose pose differences are to be evaluated.
+        cnc_poses : dict
+            Mapping from image identifier to pose data obtained from the CNC system.
+        colmap_poses : dict
+            Mapping from image identifier to pose data obtained from COLMAP.
+
+        Returns
+        -------
+        dict[str, float]
+            Dictionary where each key is an image identifier from ``image_ids`` and the value is
+            the Euclidean distance between the CNC pose and the COLMAP pose for that image.
+
+        See Also
+        --------
+        scipy.spatial.distance.euclidean
+        """
         return {im_id: euclidean(cnc_poses.get(im_id), colmap_poses.get(im_id)) for im_id in image_ids}
 
     @staticmethod
-    def _angular_dist(image_ids, cnc_poses, colmap_poses) -> dict[str, float]:
+    def _angular_dist(
+            image_ids: list[str],
+            cnc_poses: dict[str, list[float]],
+            colmap_poses: dict[str, list[float]],
+    ) -> dict[str, float]:
+        """Compute angular distance between corresponding poses for a collection of images.
+
+        Parameters
+        ----------
+        image_ids : list of str
+            Collection of identifiers for the images whose pose differences are to be evaluated.
+        cnc_poses : dict
+            Mapping from image identifier to pose data obtained from the CNC system.
+        colmap_poses : dict
+            Mapping from image identifier to pose data obtained from COLMAP.
+
+        Returns
+        -------
+        dict[str, float]
+            Dictionary where each key is an image identifier from ``image_ids`` and the value is
+            the angular distance between the CNC pose and the COLMAP pose for that image.
+
+        See Also
+        --------
+        plant3dvision.utils.angular_distance
+        """
         return {im_id: angular_distance(cnc_poses.get(im_id), colmap_poses.get(im_id)) for im_id in image_ids}
 
     def flag_outlier_poses(self, mad_factor=None) -> dict:
@@ -1379,6 +1482,33 @@ class CameraPoseQC(object):
         return outlier_report
 
     def _boxplot_estimation_distance(self, ax, outlier_ids: list[str], vert=False, **kwargs) -> None:
+        """Plot distance measurements as boxplots and annotate outlier images.
+
+        This method extracts distance data for each configured metric, renders a
+        box‑plot on the supplied axis, and overlays markers for images identified as
+        outliers.  Labels for the outlier points are added using the corresponding image
+        identifiers, and optional keyword arguments allow customisation of the plot
+        title and other Matplotlib properties.
+
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes
+            The Axes instance on which the boxplot and annotations will be drawn.
+        outlier_ids : list of str
+            Image identifiers that have been classified as outliers.  The identifiers
+            must exist in the ``image_ids`` attribute of the parent object.
+        vert : bool, optional
+            If ``True`` (default), the boxplot is oriented vertically; otherwise it is
+            drawn horizontally.
+
+        Notes
+        -----
+        * Distance data are collected from ``self.dist_dict`` for each metric listed in ``self.metrics``.
+        * Tick labels are generated from the metric names in uppercase.
+        * Outlier markers are plotted with a red “+” symbol and annotated with the corresponding image index.
+        * A legend is added automatically; the first outlier series receives the label “outlier”.
+        * The plot grid is drawn with major ticks on both axes using a dotted line style.
+        """
         dist_data = [list(self.dist_dict[metric].values()) for metric in self.metrics]
         tick_labels = [metric.upper() for metric in self.metrics]
 
@@ -1428,6 +1558,30 @@ class CameraPoseQC(object):
 
     def _xy_plane_scatter_plot(self, ax, outlier_ids: list[str], use_image_id=False,
                                ref_label='CNC', pred_label='Colmap', **kwargs) -> None:
+        """Scatter plot of reference and predicted poses on the XY plane.
+
+        This private helper creates a detailed visualisation of CNC reference
+        poses and Colmap predicted poses, indicating good and bad (outlier)
+        samples, optional image identifiers, and custom legends that describe
+        both scatter markers and orientation arrows. The plot is rendered on
+        the supplied Matplotlib ``Axes`` object.
+
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes
+            Axes on which the plot will be drawn.
+        outlier_ids : list of str
+            Identifiers of images that are treated as outliers and will be displayed with distinct styling.
+        use_image_id : bool, optional
+            If ``True``, image identifiers are displayed next to the reference
+            points; otherwise a numeric index is used.  Default is ``False``.
+        ref_label : str, optional
+            Label for the reference (CNC) data series in the legend.
+            Default is ``'CNC'``.
+        pred_label : str, optional
+            Label for the predicted (Colmap) data series in the legend.
+            Default is ``'Colmap'``.
+        """
         ref_poses = self.cnc_poses
         pred_poses = self.colmap_poses
         scan_path_md = self._get_scan_path_metadata()
@@ -1551,6 +1705,26 @@ class CameraPoseQC(object):
         ax.set_aspect('equal')
 
     def _z_scatter_plot(self, ax, outlier_ids: list[str], ref_label='CNC', pred_label='Colmap', **kwargs) -> None:
+        """Scatter plot of reference and predicted poses on the Z axis plane.
+
+        This private helper creates a detailed visualisation of CNC reference
+        poses and Colmap predicted poses, indicating good and bad (outlier)
+        samples, optional image identifiers, and custom legends that describe
+        both scatter markers and orientation arrows. The plot is rendered on
+        the supplied Matplotlib ``Axes`` object.
+
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes
+            Axes object on which the scatter plot will be drawn.
+        outlier_ids : list of str
+            Identifiers of images that are treated as outliers and will be displayed with distinct styling.
+        ref_label : str, optional
+            Legend label for the reference data series. Default is ``'CNC'``.
+        pred_label : str, optional
+            Base legend label for the predicted data series. The function appends
+            ``' (good)'`` or ``' (bad)'`` depending on outlier status.  Default is ``'Colmap'``.
+        """
         ref_poses = self.cnc_poses
         pred_poses = self.colmap_poses
 
@@ -1588,28 +1762,32 @@ class CameraPoseQC(object):
         # Add the legend
         ax.legend()
 
-    def plot_xy_plane_poses(self):
+    def plot_xy_plane_poses(self) -> None:
+        """Generate a scatter plot visualizing poses projected onto the XY plane."""
         from matplotlib import pyplot as plt
         fig, ax = plt.subplots(figsize=(12, 12))
         self._xy_plane_scatter_plot(ax, self.outlier_ids, use_image_id=False,
                                     title="XY Plane Poses")
         plt.show()
 
-    def plot_z_poses(self):
+    def plot_z_poses(self) -> None:
+        """Generate a scatter plot visualizing poses projected onto the Z axis."""
         from matplotlib import pyplot as plt
         fig, ax = plt.subplots(figsize=(12, 8))
         self._z_scatter_plot(ax, self.outlier_ids,
                              title="Z Axis Poses")
         plt.show()
 
-    def plot_boxplot_estimation_distance(self):
+    def plot_boxplot_estimation_distance(self) -> None:
+        """Generate a box-plot visualizing the distances between the CNC pose and the COLMAP pose."""
         from matplotlib import pyplot as plt
         fig, ax = plt.subplots(figsize=(12, 5))
         self._boxplot_estimation_distance(ax, self.outlier_ids,
                                           title=f"Boxplot of Theoretical vs. Estimated Pose Distances")
         plt.show()
 
-    def plot_pose_estimation_figure(self, figname=None):
+    def plot_pose_estimation_figure(self, figname=None) -> None:
+        """Generate a complete figure with multiple plots."""
         from matplotlib import pyplot as plt
         gs_kw = dict(height_ratios=[9, 3], width_ratios=[9, 3])
         fig, axd = plt.subplots(nrows=2, ncols=2, figsize=(12, 12), constrained_layout=True, gridspec_kw=gs_kw)
@@ -1659,6 +1837,11 @@ class CameraPoseQC(object):
         max_blind_angle : float
             Maximum allowed angle (in degrees) between consecutive failed pose estimations.
             Only valid for circular path scans (`ScanPath.class_name` is 'Circle' in `scan.toml`).
+
+        Returns
+        -------
+        bool
+            ``True`` if estimated poses are within acceptable thresholds, ``False`` otherwise.
         """
         # Get scan information
         scan_cfg = self._get_scan_config()
@@ -1702,7 +1885,16 @@ class CameraPoseQC(object):
 
         return True
 
-    def _validate_median_distances(self):
+    def _validate_median_distances(self) -> dict[str, bool]:
+        """Validate median Euclidean distances against configured thresholds.
+
+        Returns
+        -------
+        valid_median_dist : dict
+            Mapping of metric identifiers (e.g., ``'xy'``, ``'z'``) to booleans.
+            ``True`` indicates the median distance for that metric does not exceed the
+            applicable threshold; ``False`` indicates it does.
+        """
         valid_median_dist = {}
         # Check the median Euclidean distance between theoretical and estimated poses is not above the threshold
         for metric in ["xy", "z"]:
@@ -1720,7 +1912,16 @@ class CameraPoseQC(object):
 
         return valid_median_dist
 
-    def _validate_median_angular_distances(self):
+    def _validate_median_angular_distances(self) -> dict[str, bool]:
+        """Validate median angular distances for configured metrics.
+
+        Returns
+        -------
+        dict
+            Mapping from metric name (``str``) to validation result (``bool``).
+            ``True`` indicates the median distance does not exceed the
+            applicable threshold, while ``False`` signals a validation failure.
+        """
         valid_median_dist = {}
         # Check the median angular distance between theoretical and estimated poses is not above the threshold
         for metric in ["pan", "tilt", "roll"]:
@@ -1739,7 +1940,7 @@ class CameraPoseQC(object):
 
         return valid_median_dist
 
-    def _is_blind_angle_acceptable(self):
+    def _is_blind_angle_acceptable(self) -> bool:
         """Checks whether the blind angle, caused by consecutive failed pose estimations, exceeds the allowed threshold.
 
         This method evaluates the angular gap between images in a circular scan, which arises due to failed pose
@@ -1751,7 +1952,7 @@ class CameraPoseQC(object):
         Returns
         -------
         bool
-            True if the calculated blind angle is within the allowed threshold, False otherwise.
+            ``True`` if the calculated blind angle is within the allowed threshold, ``False`` otherwise.
         """
         # Calculate the angle between consecutive images in a circular scan
         n_imgs = len(self.image_files)
