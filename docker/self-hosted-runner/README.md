@@ -132,9 +132,10 @@ chmod 660 /run/user/$(id -u)/docker.sock
 ### 4. Create the work directories
 
 ```shell
-mkdir -p /tmp/github-runners/runner{1,2,3,4}/_work/_tool
-chown -R 1000:1000 /tmp/github-runners/runner{1,2,3,4}/_work
-chmod 755 /tmp/github-runners/runner{1,2,3,4}/_work
+for i in 1 2 3 4; do
+  sudo mkdir -p /var/lib/github-runners/runner${i}/_work
+  sudo chown -R 1000:1000 /var/lib/github-runners/runner${i}
+done
 ```
 
 ---

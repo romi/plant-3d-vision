@@ -51,8 +51,9 @@ services:
       <<: *runner-common-env
       GITHUB_RUNNER_TOKEN: ${GITHUB_RUNNER_TOKEN_1}
       GITHUB_RUNNER_NAME: romi-github-runner-1
+      RUNNER_WORK_DIR: /var/lib/github-runners/runner1/_work
     volumes:
-      - /tmp/github-runners/runner1/_work:/tmp/github-runners/runner1/_work
+      - /var/lib/github-runners/runner1/_work:/var/lib/github-runners/runner1/_work
       - "${DOCKER_SOCK:-$XDG_RUNTIME_DIR/docker.sock}:/var/run/docker.sock"
 
   runner2:
@@ -62,8 +63,9 @@ services:
       <<: *runner-common-env
       GITHUB_RUNNER_TOKEN: ${GITHUB_RUNNER_TOKEN_2}
       GITHUB_RUNNER_NAME: romi-github-runner-2
+      RUNNER_WORK_DIR: /var/lib/github-runners/runner2/_work
     volumes:
-      - /tmp/github-runners/runner2/_work:/tmp/github-runners/runner2/_work
+      - /var/lib/github-runners/runner2/_work:/var/lib/github-runners/runner2/_work
       - "${DOCKER_SOCK:-$XDG_RUNTIME_DIR/docker.sock}:/var/run/docker.sock"
 
   runner3:
@@ -73,8 +75,9 @@ services:
       <<: *runner-common-env
       GITHUB_RUNNER_TOKEN: ${GITHUB_RUNNER_TOKEN_3}
       GITHUB_RUNNER_NAME: romi-github-runner-3
+      RUNNER_WORK_DIR: /var/lib/github-runners/runner3/_work
     volumes:
-      - /tmp/github-runners/runner3/_work:/tmp/github-runners/runner3/_work
+      - /var/lib/github-runners/runner3/_work:/var/lib/github-runners/runner3/_work
       - "${DOCKER_SOCK:-$XDG_RUNTIME_DIR/docker.sock}:/var/run/docker.sock"
 
   runner4:
@@ -84,6 +87,7 @@ services:
       <<: *runner-common-env
       GITHUB_RUNNER_TOKEN: ${GITHUB_RUNNER_TOKEN_4}
       GITHUB_RUNNER_NAME: romi-github-runner-4
+      RUNNER_WORK_DIR: /var/lib/github-runners/runner4/_work
     volumes:
-      - /tmp/github-runners/runner4/_work:/tmp/github-runners/runner4/_work
+      - /var/lib/github-runners/runner4/_work:/var/lib/github-runners/runner4/_work
       - "${DOCKER_SOCK:-$XDG_RUNTIME_DIR/docker.sock}:/var/run/docker.sock"
