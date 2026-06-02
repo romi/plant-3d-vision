@@ -32,9 +32,9 @@ if [ -d "$SOURCE_DIR" ]; then
 
     echo "Installing/updating plant-3d-vision from ${INSTALL_DIR}..."
     cd ${INSTALL_DIR}
-    # Run installation script in editable mode
+    # Run installation script
     # The --no-env flag prevents creating a new venv since we're already in one
-    bash install.sh --no-env --webterm --update-tools
+    bash install.sh --no-env --update-tools
 
     # Download the trained CNN model if needed
     if [ -f "./get_model.sh" ]; then

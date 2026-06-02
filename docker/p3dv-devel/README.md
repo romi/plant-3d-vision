@@ -5,7 +5,7 @@ It is designed specifically for **automated testing** and **GitHub CI pipelines*
 
 The entrypoint handles:
 - mounting the repository,
-- installing the package in editable mode,
+- installing the packages,
 - downloading optional models,
 - and finally executing the command passed to the container.
 
