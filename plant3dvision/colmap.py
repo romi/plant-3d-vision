@@ -321,9 +321,13 @@ def estimate_camera_pose(rot_matrix, tvec):
     # Compute the camera position in world coordinates
     camera_position = -np.transpose(rot_matrix) @ tvec
     # Extract Euler angles (ZXY) from rotation matrix
-    rotation = R.from_matrix(rot_matrix)
-    pan, tilt, roll = rotation.as_euler('zxy', degrees=True)
-    pan = (180 - pan) % 360  # change rotation orientation and range from [-180, 180] to [0, 360]
+    #rotation = R.from_matrix(rot_matrix)
+    #pan, tilt, roll = rotation.inv().as_euler('zxy', degrees=True)
+    cRw = R.from_matrix(rot_matrix)  # see https://colmap.github.io/pycolmap/pycolmap.html#pycolmap.Rotation3d.quat
+    cpRc = R.from_euler("YZY", (90, -90, 0), degrees=True)
+    wRcp = cRw.inv() * cpRc.inv()
+    pan, tilt, roll = wRcp.as_euler("ZYX", degrees=True)
+    pan = pan % 360  # change rotation orientation and range from [-180, 180] to [0, 360]
     return list(camera_position) + [pan, tilt, roll]
 
 def estimate_rotation_translation_mat(x, y, z, pan, tilt, roll):
@@ -363,8 +367,12 @@ def estimate_rotation_translation_mat(x, y, z, pan, tilt, roll):
     """
     from scipy.spatial.transform import Rotation as R
     # Build the rotation matrix from the (pan, tilt, roll)
-    rot = R.from_euler('zxy', [pan, tilt, roll], degrees=True)
-    rot_matrix = rot.as_matrix()                     # shape (3, 3)
+    # rot = R.from_euler('zxy', [pan, tilt, roll], degrees=True)
+    # rot_matrix = rot.as_matrix()                     # shape (3, 3)
+    wRcp = R.from_euler("ZYX", (pan, tilt, roll), degrees=True)
+    cpRc = R.from_euler("YZY", (90, -90, 0), degrees=True)
+    cRw = cpRc.inv() * wRcp.inv()
+    rot_matrix = cRw.as_matrix()
 
     # Recover the translation vector (COLMAP’s “tvec”)
     #    camera_position = -R.T @ tvec -> tvec = -R @ camera_position
