@@ -54,7 +54,7 @@ upstream_task = "Segmentation2D"
 query = "{}"
 camera_metadata = "colmap_camera"
 voxel_size = 1.0
-type = "averaging"
+method = "averaging"
 invert = false
 labels = "[\"background\"]"
 

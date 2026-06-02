@@ -4,7 +4,7 @@ upstream_colmap = "DummyTask"
 query = "{\"channel\":\"background\"}"  # use the (inverted) background masks
 camera_metadata = "camera"
 voxel_size = 0.06  # ~9x smaller than real plants
-type = "carving"
+method = "carving"
 invert = true
 
 [PointCloud]

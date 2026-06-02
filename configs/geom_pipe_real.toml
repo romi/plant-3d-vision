@@ -41,7 +41,7 @@ upstream_task = "Undistort"  # Default: "Undistort"
 query = "{\"channel\":\"rgb\"}"  # Default: "{\"channel\":\"rgb\"}"  (only RGB images)
 # The type of image transformation algorithm to use prior to masking
 # Options: "linear" (linear combination of RGB channels), "excess_green" (excess green index)
-type = "linear"  # Default: "linear"
+method = "linear"  # Default: "linear"
 # The colorspace to use for the filtering
 # Options: "RGB", "HSV", "YCbCr"
 colorspace = "RGB"  # Default: "RGB"
@@ -63,7 +63,7 @@ query = "{}" # all masks may be used with `type="averaging"`, even those with in
 voxel_size = 1.0  # Default: 1.0
 # Type of backprojection algorithm to use
 # Options: "carving", "averaging"
-type = "averaging"  # Default: "averaging"
+method = "averaging"  # Default: "averaging"
 
 [Voxels.bounding_box]
 # 3D bounding box defining the region of interest for reconstruction

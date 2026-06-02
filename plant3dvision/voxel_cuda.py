@@ -15,28 +15,38 @@ Key Features:
 """
 
 import os
+from typing import Literal
+
 import numpy as np
-import pycuda.autoinit
 import pycuda.driver as cuda
 from pycuda.compiler import SourceModule
-from skimage.util import img_as_float32
 
 from plant3dvision.cuda_utils import get_capped_arch
+from plant3dvision.voxel import AbstractBackprojection
 from romitask.log import get_logger
-
-from plantdb.commons import io
-from plantdb.commons.db import Fileset
 
 logger = get_logger(__name__)
 
-EPS = 1e-10
-
+# ----------------------------------------------------------------------
+# Module‑level compilation (executed once when the module is imported)
+# ----------------------------------------------------------------------
 # Path to CUDA kernel file
 prg_dir = os.path.join(os.path.dirname(__file__), 'kernels')
 with open(os.path.join(prg_dir, 'backprojection_cuda.c')) as f:
     cuda_code = f.read()
 
-class Backprojection:
+# Compile the CUDA source and expose the kernel functions.
+try:
+    _mod = SourceModule(cuda_code, arch=get_capped_arch())
+    _average_kernel = _mod.get_function("average_kernel")
+    _carve_kernel = _mod.get_function("carve_kernel")
+except Exception as e:
+    # Log error and re-raise exception if compilation fails
+    logger.error(f"Failed to compile CUDA kernels: {e}")
+    raise
+
+
+class Backprojection(AbstractBackprojection):
     """
     Backprojection implementation using PyCUDA to process and construct volumes from multiple input views.
     
@@ -73,6 +83,7 @@ class Backprojection:
     >>> from plantdb.commons.test_database import test_database
     >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plant3dvision.voxel_cuda import Backprojection
+    >>> from plant3dvision.tasks.voxel_reconstruction import camera_metadata_from_colmap
     >>> from plant3dvision.tasks.voxel_reconstruction import remap_averaging
     >>> from plant3dvision.tasks.voxel_reconstruction import origin_from_bounding_box
     >>> from plant3dvision.tasks.voxel_reconstruction import shape_from_bounding_box
@@ -86,6 +97,7 @@ class Backprojection:
     >>> mask_fs = scan.get_fileset(mask_fs_id)
     >>> # List of input mask files (2D images) to process
     >>> mask_files = mask_fs.get_files(query={"channel": "rgb"})
+    >>> mask_fp = {mask.id: mask.path() for mask in mask_files}
     >>> # Example setup: define a bounding box and voxel configuration
     >>> bounding_box = {"x": [300, 435], "y": [300, 435], "z": [-200, 100]}
     >>> voxel_size = 0.6
@@ -94,18 +106,19 @@ class Backprojection:
     >>> origin = origin_from_bounding_box(bounding_box)  # in real units
     >>> camera_md = "colmap_camera"  # The camera metadata key in the fileset that provides intrinsic & pose data
     >>> invert_masks = False  # Whether to invert the mask values
+    >>> mask_md = {mask.id: camera_metadata_from_colmap(mask.get_metadata(camera_md)) for mask in mask_files}
 
     >>> # EXAMPLE 1 - Carving mode
-    >>> bp_carving = Backprojection(shape, origin, voxel_size, type="carving", labels=None)
-    >>> volume = bp_carving.process_fileset(mask_files, camera_md, invert_masks)
+    >>> bp_carving = Backprojection(shape, origin, voxel_size, "carving")
+    >>> volume = bp_carving.process_fileset(mask_fp, mask_md, invert_masks)
     >>> # 'volume' is now a NumPy array holding the 3D backprojected binary data
     >>> vol_values = np.unique(volume)
     >>> print(f"Unique values in the volume: {vol_values}")
     >>> plt_volume_slice_viewer(volume, cmap="viridis")
 
     >>> # EXAMPLE 2 - Averaging mode
-    >>> bp_averaging = Backprojection(shape, origin, voxel_size, type="averaging", labels=None, log=True)
-    >>> volume = bp_averaging.process_fileset(mask_files, camera_md, invert_masks)
+    >>> bp_averaging = Backprojection(shape, origin, voxel_size, "averaging", log=True)
+    >>> volume = bp_averaging.process_fileset(mask_fp, mask_md, invert_masks)
     >>> # 'volume' is now a NumPy array holding the 3D backprojected data
     >>> vol_values = np.unique(volume)
     >>> print(f"Unique values in the volume: {vol_values}")
@@ -127,96 +140,50 @@ class Backprojection:
     >>> db.disconnect()
     """
 
-    def __init__(self, shape, origin, voxel_size, type="carving", default_value=0, labels=None, log=False):
+    def __init__(
+            self,
+            shape: list[int],
+            origin: list[float],
+            voxel_size: float,
+            method: Literal["carving", "averaging"] = "carving",
+            default_value: float = 0,
+            log: bool = False,
+    ) -> None:
         """Initializes the class instance.
 
         Parameters
         ----------
-        shape : list of int
+        shape : list[int]
             The shape of the voxel volume as a list [nx, ny, nz].
-        origin : list of float
+        origin : list[float]
             The location of the origin of the voxel space as a list [x0, y0, z0].
         voxel_size : float
             The size of each voxel in the volume.
+        method : {'carving', 'averaging'}, optional
+            Type of backprojection to perform, either 'carving' (default) or 'averaging'.
         default_value : float, optional
-            The default voxel data value used during initialization. Default is 0.0.
+            The default voxel data value used during initialization. Default is ``0.0``.
         log : bool, optional
-            A boolean flag indicating whether logarithmic transformation is applied to a mask in 'averaging' mode. Default is False.
-        labels : list of str or None, optional
-            A list of labels for multi-class processing in machine learning pipelines. Default is None.
-        method : {'carving', 'averaging'}
-            Type of backprojection to perform, either 'carving' or 'averaging'.
-        dtype : type
-            The data type of the voxel values, determined by the backprojection type ('carving' or 'averaging').
+            A boolean flag indicating whether logarithmic transformation is applied to a mask in 'averaging' mode.
+            Default is ``False``.
 
         Raises
         ------
         ValueError
             If the specified kernel type is not 'carving' or 'averaging'.
         """
-        self.shape = shape
-        self.origin = origin
-        self.voxel_size = voxel_size
-        self.default_value = default_value
-        self.log = log
-        self.labels = labels
-        self.method = type
+        super().__init__(shape, origin, voxel_size, method, default_value, log)
 
-        # Validate input parameters
-        if type not in ["carving", "averaging"]:
-            raise ValueError(f"Unknown kernel type {type}, valid values are 'averaging' or 'carving'!")
-
-        # Set data type and compile kernels
-        if type == "carving":
-            self.dtype = np.int32
-        elif type == "averaging":
-            self.dtype = np.float32
-
-        # Compile CUDA module
-        self._compile_kernels()
+        # Choose the pre‑compiled kernel – no per‑instance compilation
+        if self.method == "carving":
+            self.kernel = _carve_kernel
+        else:
+            self.kernel = _average_kernel
 
         # Initialize GPU memory buffers
         self.init_buffers()
-
         # Log memory usage
         self._log_memory_usage()
-
-    def _compile_kernels(self):
-        """
-        Compile and load the necessary CUDA kernels for processing.
-
-        This method attempts to compile the provided CUDA source code using the `SourceModule`
-        class from the PyCUDA library. It then retrieves specific functions (`average_kernel` and
-        `carve_kernel`) based on the compilation results. Depending on the specified method,
-        either the carving or averaging kernel is selected for use.
-
-        Raises
-        ------
-        Exception
-            If there is an error during the compilation of the CUDA kernels, such as syntax errors in the code.
-            The specific exception message will be logged and re-raised to notify the calling context.
-
-        Notes
-        -----
-        - The `cuda_code` variable should contain the source code for the CUDA kernels.
-        - This method uses logging to record any failures during kernel compilation.
-        """
-        try:
-            # Compile the CUDA code using PyCUDA's SourceModule
-            self.mod = SourceModule(cuda_code, arch=get_capped_arch())
-            # Get functions from the compiled module
-            self.average_kernel = self.mod.get_function("average_kernel")
-            self.carve_kernel = self.mod.get_function("carve_kernel")
-            # Select kernel based on method specified
-            if self.method == "carving":
-                self.kernel = self.carve_kernel
-            else:
-                self.kernel = self.average_kernel
-        except Exception as e:
-            # Log error and re-raise exception if compilation fails
-            logger.error(f"Failed to compile CUDA kernels: {e}")
-            raise
-
 
     def _log_memory_usage(self):
         """
@@ -225,14 +192,10 @@ class Backprojection:
         Logs the shape and required memory for the buffer. Retrieves and logs GPU
         memory information, including free and total memory.
         """
-        logger.info(f"Buffer shape is {self.shape}")
-        # Compute required memory for buffer:
-        buff_size = np.ones(self.shape, dtype=self.dtype).nbytes
-        logger.info(f"Required memory for buffer is {buff_size/1e6:.2f} MB")
-
+        super()._log_memory_usage()
         # Get GPU memory info
         free_mem, total_mem = cuda.mem_get_info()
-        logger.info(f"GPU memory: {free_mem/1e6:.1f} MB free, {total_mem/1e6:.1f} MB total")
+        logger.info(f"GPU memory: {free_mem / 1e6:.1f} MB free, {total_mem / 1e6:.1f} MB total")
 
     def init_buffers(self):
         """
@@ -284,6 +247,8 @@ class Backprojection:
             logger.error(f"Buffer initialization failed: {e}")
             raise
 
+        return
+
     def process_view(self, intrinsics, rot, tvec, mask):
         """
         Process a view by copying data to GPU and launching a kernel.
@@ -319,15 +284,9 @@ class Backprojection:
         is contiguous and of type float32 before copying it to the GPU.
         """
         # Validate inputs
-        if mask.size == 0:
-            logger.warning("Empty mask provided, skipping view")
-            return
-
+        self._validate_mask(mask)
         # Data type conversions
-        if self.dtype == np.float32 and mask.dtype != np.float32:
-            mask = img_as_float32(mask)
-        if self.log and self.dtype == np.float32:
-            mask = np.log(EPS + mask)
+        mask = self._prepare_mask(mask)
 
         # Ensure contiguous arrays
         intrinsics_h = np.ascontiguousarray(intrinsics, dtype=np.float32)
@@ -372,6 +331,8 @@ class Backprojection:
             if 'mask_d' in locals():
                 mask_d.free()
 
+        return
+
     def get_values(self):
         """
         Get the values from the GPU.
@@ -388,131 +349,14 @@ class Backprojection:
         try:
             # Copy data from device (GPU) to host (CPU)
             cuda.memcpy_dtoh(self.values_h, self.values_d)
-            # Reshape the copied values into the specified shape and return
-            return self.values_h.reshape(self.shape)
         except Exception as e:
             # Log an error message if an exception occurs during copy or reshape
             logger.error(f"Failed to retrieve values from GPU: {e}")
             # Re-raise the exception after logging it
             raise
 
-    def process_fileset(self, fs, camera_metadata, invert=False):
-        """
-        Process a fileset and generate results based on the labels.
-
-        This method processes a given fileset with provided camera metadata.
-        If labels are present, it processes each label separately and returns a result array.
-        Otherwise, it directly calls process_label for the entire dataset.
-
-        Parameters
-        ----------
-        fs : plantdb.commons.db.Fileset or list[plantdb.commons.db.File]
-            The images ``Fileset`` or list of images ``File`` to process.
-        camera_metadata : str or dict[str, dict]
-            If a string, it is the key used to retrieve the camera parameters from the files metadata.
-            Else, a dictionary with the file ID as keys and a dictionary with camera parameters as values.
-        invert : bool, optional
-            Whether to invert the mask image before processing.
-            Defaults to ``False``.
-
-        Returns
-        -------
-        numpy.ndarray
-            Processed result array if labels are present, otherwise a single processed label result.
-        """
-        # Check if labels are available for processing
-        if self.labels is not None:
-            # Initialize a result array with zeros based on shape and dtype
-            result = np.zeros((len(self.labels), *self.shape), dtype=self.dtype)
-            # Process each label separately
-            for i, label in enumerate(self.labels):
-                logger.info(f"Processing label '{label}' ({i+1}/{len(self.labels)})...")
-                if i != 0:
-                    self.clear()  # Clear the previous state before processing the next label
-                result[i, :] = self.process_label(fs, camera_metadata, label, invert)
-            return result
-        else:
-            # If no labels, process the entire dataset at once
-            return self.process_label(fs, camera_metadata, None, invert=invert)
-
-
-    def process_label(self, fs, camera_metadata, label=None, invert=False):
-        """
-        Processes labels in a set of files, applying transformations based on camera metadata.
-
-        This method iterates through each file in the provided set (or list), checks if
-        the file's channel matches the specified label, retrieves camera parameters,
-        and processes the view using these parameters. If the 'invert' flag is set to
-        True, the mask image will be inverted before processing.
-
-        Parameters
-        ----------
-        fs : plantdb.commons.db.Fileset or list[plantdb.commons.db.File]
-            The images `Fileset` or list of images `File` to process.
-        camera_metadata : str or dict[str, dict]
-            If a string, it is the key used to retrieve the camera parameters from the files metadata.
-            Else, a dictionary with the file ID as keys and a dictionary with camera parameters as values.
-        label : str, optional
-            The label to filter files by channel. By defaults ``None`` ensures no filtering is performed.
-        invert : bool, optional
-            Whether to invert the mask image before processing.
-            Defaults to ``False``.
-
-        Returns
-        -------
-        dict
-            A dictionary containing the processed values.
-
-        Notes
-        -----
-        The camera parameters are expected to be in a specific format within the file metadata.
-
-        - 'rotmat': 3x3 array describing the rotation matrix
-        - 'tvec': 3x1 array describing the translation vector
-        - 'camera_model': the camera model parameters
-            - 'model': the type of the model, we need an "OPENCV" model
-            - 'params': the camera parameters of the OPENCV model ``[fx, fy, cx, cy, k1, k2, p1, p2]``
-        """
-        if isinstance(fs, Fileset):
-            fs = fs.get_files()
-
-        processed_count = 0  # Counter for processed files
-        skipped_count = 0  # Counter for skipped files
-
-        for fi in fs:
-            # Skip if the label is specified and doesn't match the current file's channel
-            if label is not None and fi.get_metadata("channel") != label:
-                continue
-            logger.debug(f"Processing file {fi.id}")
-            # Get camera parameters from metadata
-            if isinstance(camera_metadata, str):
-                cam = fi.get_metadata(camera_metadata, default=None)
-            else:
-                cam = camera_metadata.get(fi.id, None)
-
-            if cam is None:
-                logger.warning(f"Could not get camera params from '{camera_metadata}' for {fi.id}, skipping...")
-                skipped_count += 1
-                continue
-
-            # Extract intrinsics, rotation matrix and translation vector from camera parameters
-            assert cam["camera_model"]['model'] == 'OPENCV'
-            intrinsics = np.array(cam["camera_model"]['params'][0:4], dtype=np.float32)
-            rot = np.array(cam['rotmat'], dtype=np.float32).flatten()
-            tvec = np.array(cam['tvec'], dtype=np.float32)
-
-            # Load mask image
-            mask = io.read_image(fi)
-            if invert:
-                # Invert the mask if requested
-                mask = np.invert(mask)
-
-            # Process view with extracted parameters and mask
-            self.process_view(intrinsics, rot, tvec, mask)
-            processed_count += 1
-
-        logger.info(f"Processed {processed_count} files, skipped {skipped_count} files")
-        return self.get_values()
+        # Reshape the copied values into the specified shape and return
+        return self.values_h.reshape(self.shape)
 
     def clear(self):
         """
@@ -532,6 +376,7 @@ class Backprojection:
             logger.error(f"Failed to clear buffer: {e}")
             # Re-raise the exception after logging it
             raise
+        return
 
     def __del__(self):
         """Cleanup GPU memory when object is destroyed."""

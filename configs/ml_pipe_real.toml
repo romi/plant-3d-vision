@@ -36,7 +36,7 @@ threshold = 0.01
 [Voxels]
 upstream_task = "Segmentation2D"
 voxel_size = 1
-type = "averaging"
+method = "averaging"
 invert = true
 labels = "[\"background\"]"
 

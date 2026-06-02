@@ -7,16 +7,16 @@ import concurrent.futures
 import sys
 
 import luigi
-import numpy
 import numpy as np
 
-import plantdb.commons.db
 from plant3dvision import proc2d
 from plant3dvision.camera import colmap_params_from_kwargs
 from plant3dvision.proc2d import crop_image
 from plant3dvision.tasks.colmap import Colmap
 from plant3dvision.utils import jsonify
 from plantdb.commons import io
+from plantdb.commons.db import File
+from plantdb.commons.db import Fileset
 from romitask.log import get_logger
 from romitask.task import FileByFileTask
 from romitask.task import ImagesFilesetExists
@@ -211,6 +211,7 @@ class Undistort(ParallelFileTask):
             logger.info(f"Using extrinsic calibration scan: {self.extrinsic_calib_scan_id}...")
             return {"camera": extrinsic_calib_scan, "images": self.upstream_task()}
         else:
+            from plant3dvision.tasks.colmap import Colmap
             return {"camera": Colmap(), "images": self.upstream_task()}
 
     def run(self):
@@ -244,6 +245,7 @@ class Undistort(ParallelFileTask):
         # Handle intrinsic calibration case
         if str(self.camera_model_src).lower() == 'intrinsiccalibration':
             from plant3dvision.camera import get_camera_params_from_arrays
+            from plant3dvision.camera import colmap_params_from_kwargs
             camera_params = get_camera_params_from_arrays(self.camera_model)
             params = colmap_params_from_kwargs(**camera_params)
             colmap_camera = {"camera_model": {"camera_model": self.camera_model, "params": params}}
@@ -353,10 +355,10 @@ class Masks(ParallelFileTask):
     parallel : luigi.BoolParameter, optional
         Flag to enable/disable parallel processing.
         Defaults to ``True``.
-    type : luigi.Parameter, optional
+    method : luigi.Parameter, optional
         The type of image tranformation algorithm to use prior to masking by thresholding.
         Can be "linear" or "excess_green". Defaults to `'linear'`.
-        Have a look at the documentation [mask_type]_ for more details.
+        Have a look at the documentation [mask_methods]_ for more details.
     colorspace : luigi.ChoiceParameter, optional
         The colorspace to use for the linear filtering ('RGB', 'HSV' or 'YCbCr')
         Defaults to ``"RGB"``.
@@ -394,7 +396,7 @@ class Masks(ParallelFileTask):
 
     References
     ----------
-    .. [mask_type] https://docs.romi-project.eu/plant_imager/explanations/masks/
+    .. [mask_methods] https://docs.romi-project.eu/plant_imager/explanations/masks/
 
     Examples
     --------
@@ -424,7 +426,7 @@ class Masks(ParallelFileTask):
     invert = luigi.BoolParameter(default=False)
     dilation = luigi.IntParameter(default=0)
 
-    def f_raw(self, img: numpy.ndarray) -> numpy.ndarray:
+    def f_raw(self, img: np.ndarray) -> np.ndarray:
         """Apply the selected filter to the image.
 
         Parameters
@@ -443,14 +445,14 @@ class Masks(ParallelFileTask):
             If the specified filter type is unknown.
         """
         logger.debug(f"Image shape: {img.shape}")
-        if self.type == "linear":
+        if self.method == "linear":
             return proc2d.linear(img, list(self.parameters), colorspace=self.colorspace)
-        elif self.type == "excess_green":
+        elif self.method == "excess_green":
             return proc2d.excess_green(img)
         else:
-            raise Exception(f"Unknown masking type '{self.type}'!")
+            raise Exception(f"Unknown masking method '{self.method}'!")
 
-    def f(self, fi: plantdb.commons.db.File, outfs: plantdb.commons.db.Fileset) -> plantdb.commons.db.File:
+    def f(self, fi: File, outfs: Fileset) -> File:
         """Compute the binary mask image for the input image ``File``.
 
         Parameters
@@ -472,7 +474,7 @@ class Masks(ParallelFileTask):
         # Threshold the filtered image to make a binary mask:
         img = (img >= self.min_threshold) & (img <= self.max_threshold)
         if self.invert:
-            img = not img
+            img = np.logical_not(img)
         # Apply dilation to the binary mask, if any:
         if self.dilation > 0:
             img = proc2d.dilation(img, self.dilation)
@@ -484,14 +486,14 @@ class Masks(ParallelFileTask):
         # Add metadata to the binary mask image:
         md = {
             'upstream_task': str(self.upstream_task.get_task_family()),
-            'filter': str(self.type),
+            'filter': str(self.method),
             'colorspace': str(self.colorspace),
             'min_threshold': self.min_threshold,
             'max_threshold': self.max_threshold,
             'invert': self.invert,
             'dilation': self.dilation
         }
-        if self.type == "linear":
+        if self.method == "linear":
             md.update({'linear_coeff': list(self.parameters)})
         if self.query != {}:
             md.update({'query': jsonify(self.query)})

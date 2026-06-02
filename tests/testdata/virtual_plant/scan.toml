@@ -28,7 +28,7 @@ render_ground_truth = true
 lpy_file_id = "arabidopsis_notex"
 
 [Voxels]
-type = "averaging"
+method = "averaging"
 voxel_size = 0.05
 
 [retcode]
