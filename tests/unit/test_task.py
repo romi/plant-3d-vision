@@ -54,14 +54,15 @@ class ImageIdentityTask(FileByFileTask):
 
 
 class TestFilesetTarget(DummyDBTestCase):
+
     def test_target(self):
         scan = self.db.get_scan("myscan_001")
         target = FilesetTarget(scan, "testfileset2")
         with self.assertRaises(FilesetNotFoundError):
             target.get()
-        self.assertFalse(not target.exists())
+        self.assertFalse(target.exists())
         target.create()
-        self.assertFalse(not target.exists())  # Target `Fileset` exist but is empty
+        self.assertFalse(target.exists())  # Target `Fileset` exist but is empty
         self.assertIn("testfileset2", scan.list_filesets())
         fs = scan.get_fileset("testfileset2")
         fs.create_file('dummy_test_file')  # Now target `Fileset` exist and is not empty
