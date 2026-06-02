@@ -40,6 +40,8 @@ volumes:
   docker-cache:
     driver: local
     driver_opts:
+      type: none
+      device: /tmp/docker-cache
       o: uid=1000,gid=1000
   runner1-work:
     driver: local
