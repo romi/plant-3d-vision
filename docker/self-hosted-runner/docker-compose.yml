@@ -5,6 +5,7 @@ x-runner-base: &runner-base
 
   image: self-hosted-runner:latest
   restart: always
+  user: "1000:1000"
 
   group_add:
     - "${DOCKER_GID:-984}"  # the mounted docker socket group id (GID)

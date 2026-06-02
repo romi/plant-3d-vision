@@ -27,8 +27,7 @@ RUN RUNNER_VERSION=$(curl -fsSL https://api.github.com/repos/actions/runner/rele
     && tar xzf actions-runner.tar.gz \
     && rm actions-runner.tar.gz \
     && ./bin/installdependencies.sh \
-    && mkdir -p /actions-runner/_work/_tool \
-    && chown -R ubuntu:ubuntu /actions-runner
+    && chown -R 1000:1000 /actions-runner
 
 # Copy entrypoint script
 COPY entrypoint.sh /entrypoint.sh
