@@ -37,6 +37,11 @@ x-runner-base: &runner-base
     - /run:noexec,nosuid,nodev
 
 volumes:
+  docker-cache:
+    driver: local
+    driver_opts:
+      # Set the ownership of the volume to the runner user (UID 1000, GID 1000)
+      o: uid=1000,gid=1000
   runner1-work:
     driver: local
     driver_opts:
