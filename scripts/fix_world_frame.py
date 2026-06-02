@@ -2,14 +2,31 @@
 # -*- coding: utf-8 -*-
 
 """
-CLI tool to force the *z* coordinate of every image pose stored in a
-PlantDB/FSDB dataset to be negative and correct the pan angles to start at 0.
+Fix World Frame
+================
+
+    A command‑line utility that normalizes the world frame of images poses stored in a PlantDB/FSDB dataset.
+It enforces a negative *z* coordinate for every image pose and re‑aligns pan angles so they start at 0°,
+making downstream processing pipelines aligned a standard world‑axis orientation.
+
+Key Features
+------------
+- **Negative‑z enforcement**: Converts any positive *z* values in image pose metadata to
+  negative values, preserving the original magnitude.
+- **Pan‑offset normalization**: Calculates the pan offset from the first image in each
+  scan and adjusts all subsequent images, wrapping the result into the 0‑360° range.
+- **Bounding‑box correction**: Lowers the Z‑axis limits of a scan’s ``pipeline.toml``
+  configuration to match the corrected poses.
+- **Selective processing**: Flags ``--no-z`` and ``--no-pan`` allow users to skip individual correction steps.
+- **Batch scan support**: Accepts glob patterns to process multiple scans in a single run.
 
 Usage example
 -------------
-    python fix_world_frame.py -db /data/ROMI/test_owner \
-        --scan "2023-03-*" \
-        --db-user admin --db-password secret
+```bash
+python fix_world_frame.py -db /data/ROMI/test_owner \
+    --scan "2023-03-*" \
+    --db-user admin --db-password secret
+```
 """
 
 import fnmatch
@@ -18,7 +35,9 @@ import click
 import toml
 from toml import TomlDecodeError
 
-from plantdb.commons.fsdb.core import FSDB, Scan, File
+from plantdb.commons.fsdb.core import FSDB
+from plantdb.commons.fsdb.core import File
+from plantdb.commons.fsdb.core import Scan
 
 
 def set_negative_z_pose(image_f):
@@ -29,16 +48,19 @@ def set_negative_z_pose(image_f):
     image_f : plantdb.commons.fsdb.core.Fileset
         The image file with metadata to update to negative z-values.
     """
+    # Retrieve current pose metadata; may be 5 (no roll) or 6 values
     pose = image_f.get_metadata('approximate_pose')
     if len(pose) == 5:
         x, y, z, pan, tilt = pose
-        roll = 0
+        roll = 0  # default roll when missing
     else:
         x, y, z, pan, tilt, roll = pose
 
+    # Force z to be negative if it is positive
     if z > 0:
         z = -abs(z)
 
+    # Write back the corrected pose (always 6 elements)
     image_f.set_metadata('approximate_pose', [x, y, z, pan, tilt, roll])
 
 
@@ -55,6 +77,7 @@ def lower_z_bbox(toml_dict):
     dict
         The dictionary with the updated Z bounding box values.
     """
+    # Adjust Z‑axis bbox by fixed offsets if present
     if "bounding_box" in toml_dict["Voxels"]:
         z_bbox = toml_dict["Voxels"]["bounding_box"]["z"]
         toml_dict["Voxels"]["bounding_box"]["z"] = sorted([z_bbox[0] - 250, z_bbox[1] - 210])
@@ -81,7 +104,7 @@ def get_offset(scan: Scan):
     float
         The calculated pan offset as a negative value of the original pan angle of the first image in the scan.
     """
-    x_vals = []
+    x_vals = []  # collect (x, pan, image_id) for all images
     for image in scan.get_fileset("images").get_files():
         image: File
         pose = image.get_metadata('approximate_pose')
@@ -90,6 +113,7 @@ def get_offset(scan: Scan):
         else:
             x, y, z, pan, tilt, roll = pose
         x_vals.append((x, pan, image.id))
+    # Find pan of the image with smallest ID (assumed first) and invert it
     original_pan = min(x_vals, key=lambda x: x[2])[1]
     return -original_pan
 
@@ -115,12 +139,14 @@ def correct_pan(image_f: File, offset: float | int):
     pose = image_f.get_metadata('approximate_pose')
     if len(pose) == 5:
         x, y, z, pan, tilt = pose
-        roll = 0
+        roll = 0  # default roll when missing
     else:
         x, y, z, pan, tilt, roll = pose
 
+    # Apply offset and wrap into [0, 360) degrees
     pan = (pan + offset) % 360
 
+    # Save the updated pose
     image_f.set_metadata('approximate_pose', [x, y, z, pan, tilt, roll])
 
 
@@ -129,37 +155,39 @@ def correct_pan(image_f: File, offset: float | int):
 @click.option('--scan', 'scan_patterns', multiple=True, default=('*',),
               help='Glob pattern(s) to select scans (e.g. "2023‑03‑*"). '
                    'Multiple patterns can be given; they are OR‑combined.')
-@click.option('--db-user', 'db_user', default='guest', help='FSDB username (optional).')
-@click.option('--db-password', 'db_password', default='guest', help='FSDB password (optional).')
-@click.option("--no-z", default=False, is_flag=True, help="Do not correct negative z values")
-@click.option("--no-pan", default=False, is_flag=True, help="Do not correct pan offset")
-def main(db_path, scan_patterns, db_user, db_password, no_z, no_pan):
-    """Connect to the FSDB, optionally filter scans, and apply the negative‑z fix and pan correction (start at 0).
-
-    Parameters
-    ----------
-    db_path : str
-        Path to the FSDB database directory.
-    scan_patterns : list
-        Glob pattern(s) to select scans (e.g. "2023‑03‑*").
-        Multiple patterns can be given; they are OR‑combined.
-    db_user : str
-        FSDB username.
-    db_password : str
-        FSDB password.
-    no_z : bool
-        Do not correct negative z values.
-    no_pan : bool
-        Do not correct pan offset.
+@click.option('--db-user', 'db_user', default='guest',
+              help='FSDB username (optional).')
+@click.option('--db-password', 'db_password', default='guest',
+              help='FSDB password (optional).')
+@click.option('--no-auth', default=False, is_flag=True,
+              help="Use a database with automatic 'admin' user log in, for local database or testing purposes.")
+@click.option("--no-z", default=False, is_flag=True,
+              help="Do not correct negative z values.")
+@click.option("--no-pan", default=False, is_flag=True,
+              help="Do not correct pan offset.")
+def main(
+        db_path: str,
+        scan_patterns: tuple[str, ...],
+        db_user: str,
+        db_password: str,
+        no_auth: bool,
+        no_z: bool,
+        no_pan: bool,
+) -> None:
     """
-    # Initialise the database
-    db = FSDB(db_path)
+    A command‑line utility that normalizes the world frame of images poses stored in a PlantDB/FSDB dataset.
+    It enforces a negative *z* coordinate for every image pose and re‑aligns pan angles so they start at 0°,
+    making downstream processing pipelines aligned a standard world‑axis orientation.
+    """
+    # Initialize the database
+    db = FSDB(db_path, no_auth=no_auth)
     db.connect()
 
-    if db_user and db_password:
+    # Authenticate unless explicitly disabled
+    if not no_auth and (db_user and db_password):
         db.login(db_user, db_password)
 
-    # Resolve scan selection
+    # Resolve scan selection based on provided glob patterns
     selected_scans = []
     for scan_id in db.scans:
         scan = db.get_scan(scan_id)
@@ -171,20 +199,23 @@ def main(db_path, scan_patterns, db_user, db_password, no_z, no_pan):
             selected_scans.append(scan)
 
     if not selected_scans:
-        click.echo("No scans matched the supplied pattern(s).")
+        click.echo(f"No scans matched the supplied pattern(s): {scan_patterns}")
         return
 
     # Process each selected scan
     for scan in selected_scans:
-        click.echo(f"Processing scan: {getattr(scan, 'name', 'unknown')}")
+        scan_id = scan.id
+        click.echo(f"Processing scan: {scan_id}")
 
         images_fs = scan.get_fileset('images')
-        offset = get_offset(scan)
+        offset = get_offset(scan)  # compute pan offset for this scan
 
+        # Apply corrections to each image file
         for image_f in images_fs.get_files():
-            if not no_z: set_negative_z_pose(image_f)
-            if not no_pan: correct_pan(image_f, offset)
+            if not no_z: set_negative_z_pose(image_f)  # ensure z is negative
+            if not no_pan: correct_pan(image_f, offset)  # normalize pan angles
 
+        # Load pipeline configuration (TOML) for possible bbox updates
         try:
             toml_dict = toml.load(scan.path() / "pipeline.toml")
         except FileNotFoundError:
@@ -197,12 +228,18 @@ def main(db_path, scan_patterns, db_user, db_password, no_z, no_pan):
             click.echo(f"Unexpected error: {e}")
             continue
 
-        toml_dict = lower_z_bbox(toml_dict)
+        edited = False
+        if not no_z:
+            edited = True
+            toml_dict = lower_z_bbox(toml_dict)  # adjust Z bounding box
 
-        with open(scan.path() / "pipeline.toml", "w") as f:
-            toml.dump(toml_dict, f)
+        # Save modified configuration if any changes were made
+        if edited:
+            with open(scan.path() / "pipeline.toml", "w") as f:
+                toml.dump(toml_dict, f)
 
     click.echo("All done!")
+    db.disconnect()
 
 
 if __name__ == '__main__':
