@@ -3,6 +3,12 @@ x-runner-base: &runner-base
     context: .
     dockerfile: Dockerfile
 
+  environment:
+    - GITHUB_RUNNER_EPHEMERAL=true
+    - GITHUB_RUNNER_URL=${GITHUB_RUNNER_URL}
+    - GITHUB_RUNNER_LABELS=${GITHUB_RUNNER_LABELS:-self-hosted,linux,docker,x64,gpu}
+    - BUILDX_HOME=/home/ubuntu/.docker/buildx
+
   image: self-hosted-runner:latest
   restart: always
 
@@ -32,6 +38,10 @@ x-runner-base: &runner-base
     - SETGID
     - SETUID
 
+  volumes:
+    - ${DOCKER_SOCK:-$XDG_RUNTIME_DIR/docker.sock}:/var/run/docker.sock
+    - docker-cache:/home/ubuntu/.docker
+
   tmpfs:
     - /tmp:noexec,nosuid,nodev
     - /run:noexec,nosuid,nodev
@@ -39,88 +49,48 @@ x-runner-base: &runner-base
 volumes:
   docker-cache:
     driver: local
-    driver_opts:
-      type: none
-      device: /tmp/docker-cache
-      o: uid=1000,gid=1000
   runner1-work:
     driver: local
-    driver_opts:
-      type: none
-      device: /tmp/runner1-work
-      o: uid=1000,gid=1000
   runner2-work:
     driver: local
-    driver_opts:
-      type: none
-      device: /tmp/runner2-work
-      o: uid=1000,gid=1000
   runner3-work:
     driver: local
-    driver_opts:
-      type: none
-      device: /tmp/runner3-work
-      o: uid=1000,gid=1000
   runner4-work:
     driver: local
-    driver_opts:
-      type: none
-      device: /tmp/runner4-work
-      o: uid=1000,gid=1000
 
 services:
   runner1:
     <<: *runner-base
     container_name: romi-github-runner-1
     environment:
-      - GITHUB_RUNNER_EPHEMERAL=true
-      - GITHUB_RUNNER_URL=${GITHUB_RUNNER_URL}
       - GITHUB_RUNNER_TOKEN=${GITHUB_RUNNER_TOKEN_1}
-      - GITHUB_RUNNER_LABELS=${GITHUB_RUNNER_LABELS:-self-hosted,linux,docker,x64,gpu}
       - GITHUB_RUNNER_NAME=romi-github-runner-1
     volumes:
-      - ${DOCKER_SOCK:-$XDG_RUNTIME_DIR/docker.sock}:/var/run/docker.sock
       - runner1-work:/actions-runner/_work
-      - docker-cache:/home/ubuntu/.docker
 
   runner2:
     <<: *runner-base
     container_name: romi-github-runner-2
     environment:
-      - GITHUB_RUNNER_EPHEMERAL=true
-      - GITHUB_RUNNER_URL=${GITHUB_RUNNER_URL}
       - GITHUB_RUNNER_TOKEN=${GITHUB_RUNNER_TOKEN_2}
-      - GITHUB_RUNNER_LABELS=${GITHUB_RUNNER_LABELS:-self-hosted,linux,docker,x64,gpu}
       - GITHUB_RUNNER_NAME=romi-github-runner-2
     volumes:
-      - ${DOCKER_SOCK:-$XDG_RUNTIME_DIR/docker.sock}:/var/run/docker.sock
       - runner2-work:/actions-runner/_work
-      - docker-cache:/home/ubuntu/.docker
 
   runner3:
     <<: *runner-base
     container_name: romi-github-runner-3
     environment:
-      - GITHUB_RUNNER_EPHEMERAL=true
-      - GITHUB_RUNNER_URL=${GITHUB_RUNNER_URL}
       - GITHUB_RUNNER_TOKEN=${GITHUB_RUNNER_TOKEN_3}
-      - GITHUB_RUNNER_LABELS=${GITHUB_RUNNER_LABELS:-self-hosted,linux,docker,x64,gpu}
       - GITHUB_RUNNER_NAME=romi-github-runner-3
     volumes:
-      - ${DOCKER_SOCK:-$XDG_RUNTIME_DIR/docker.sock}:/var/run/docker.sock
       - runner3-work:/actions-runner/_work
-      - docker-cache:/home/ubuntu/.docker
 
   runner4:
     <<: *runner-base
     container_name: romi-github-runner-4
     environment:
-      - GITHUB_RUNNER_EPHEMERAL=true
-      - GITHUB_RUNNER_URL=${GITHUB_RUNNER_URL}
       - GITHUB_RUNNER_TOKEN=${GITHUB_RUNNER_TOKEN_4}
-      - GITHUB_RUNNER_LABELS=${GITHUB_RUNNER_LABELS:-self-hosted,linux,docker,x64,gpu}
       - GITHUB_RUNNER_NAME=romi-github-runner-4
     volumes:
-      - ${DOCKER_SOCK:-$XDG_RUNTIME_DIR/docker.sock}:/var/run/docker.sock
       - runner4-work:/actions-runner/_work
-      - docker-cache:/home/ubuntu/.docker
