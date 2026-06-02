@@ -43,8 +43,6 @@ x-runner-common-env: &runner-common-env
   BUILDX_HOME: "/home/ubuntu/.docker/buildx"
 
 volumes:
-  docker-cache:
-    driver: local
   runner1-work:
     driver: local
   runner2-work:
@@ -65,7 +63,6 @@ services:
     volumes:
       - runner1-work:/actions-runner/_work
       - "${DOCKER_SOCK:-$XDG_RUNTIME_DIR/docker.sock}:/var/run/docker.sock"
-      - "docker-cache:/home/ubuntu/.docker"
 
   runner2:
     <<: *runner-base
@@ -77,7 +74,6 @@ services:
     volumes:
       - runner2-work:/actions-runner/_work
       - "${DOCKER_SOCK:-$XDG_RUNTIME_DIR/docker.sock}:/var/run/docker.sock"
-      - "docker-cache:/home/ubuntu/.docker"
 
   runner3:
     <<: *runner-base
@@ -89,7 +85,6 @@ services:
     volumes:
       - runner3-work:/actions-runner/_work
       - "${DOCKER_SOCK:-$XDG_RUNTIME_DIR/docker.sock}:/var/run/docker.sock"
-      - "docker-cache:/home/ubuntu/.docker"
 
   runner4:
     <<: *runner-base
@@ -101,4 +96,3 @@ services:
     volumes:
       - runner4-work:/actions-runner/_work
       - "${DOCKER_SOCK:-$XDG_RUNTIME_DIR/docker.sock}:/var/run/docker.sock"
-      - "docker-cache:/home/ubuntu/.docker"
