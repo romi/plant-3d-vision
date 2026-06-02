@@ -753,6 +753,9 @@ class Colmap(RomiTask):
         Whether to perform the verification of the estimated camera extrinsic
     mad_factor : float, optional
         Median absolute deviation factor to detect outlier camera pose
+    metrics : list[str], optional
+        The list of metrics to use to detect the outliers using the Median Absolute Deviation method.
+        Only those defined in ``ALL_METRICS`` are valid.
     distance_threshold : float, optional
         Maximum distance to CNC pose to validate COLMAP pose estimation
     fixed_distance_threshold : float, optional
@@ -831,6 +834,7 @@ class Colmap(RomiTask):
     # Camera poses quality check parameters
     qc_check = luigi.BoolParameter(default=True)
     mad_factor = luigi.FloatParameter(default=3.)
+    metrics = luigi.ListParameter(default=DEF_METRICS)
     distance_threshold = luigi.FloatParameter(default=3.)
     fixed_distance_threshold = luigi.FloatParameter(default=1.)
     angle_threshold = luigi.FloatParameter(default=5.)
@@ -1086,6 +1090,7 @@ class Colmap(RomiTask):
 
         # Initialize an instance to perform camera pose estimations quality check:
         camera_pose_qc = CameraPoseQC(image_files, self.mad_factor,
+                                      metrics=self.metrics,
                                       distance_threshold=self.distance_threshold,
                                       fixed_distance_threshold=self.fixed_distance_threshold,
                                       angle_threshold=self.angle_threshold,
