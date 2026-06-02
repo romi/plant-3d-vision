@@ -5,7 +5,7 @@
 Fix World Frame
 ================
 
-    A command‑line utility that normalizes the world frame of images poses stored in a PlantDB/FSDB dataset.
+A command‑line utility that normalizes the world frame of images poses stored in a PlantDB/FSDB dataset.
 It enforces a negative *z* coordinate for every image pose and re‑aligns pan angles so they start at 0°,
 making downstream processing pipelines aligned a standard world‑axis orientation.
 
@@ -34,13 +34,14 @@ import fnmatch
 import click
 import toml
 from toml import TomlDecodeError
+from typing import Any, Dict
 
 from plantdb.commons.fsdb.core import FSDB
 from plantdb.commons.fsdb.core import File
 from plantdb.commons.fsdb.core import Scan
 
 
-def set_negative_z_pose(image_f):
+def set_negative_z_pose(image_f: File) -> None:
     """Make the *z* component of an image pose negative (if it is positive).
 
     Parameters
@@ -64,7 +65,7 @@ def set_negative_z_pose(image_f):
     image_f.set_metadata('approximate_pose', [x, y, z, pan, tilt, roll])
 
 
-def lower_z_bbox(toml_dict):
+def lower_z_bbox(toml_dict: Dict[str, Any]) -> Dict[str, Any]:
     """Lower the Z‑axis bounding box limits in a configuration dictionary.
 
     Parameters
@@ -85,9 +86,8 @@ def lower_z_bbox(toml_dict):
     return toml_dict
 
 
-def get_offset(scan: Scan):
-    """
-    Calculates the offset of the pan angle relative to the original pan angle of the first image in the scan.
+def get_offset(scan: Scan) -> float:
+    """Calculates the offset of the pan angle relative to the original pan angle of the first image in the scan.
 
     The function extracts metadata from image files in a given scan, retrieves positional and orientation data
     from each image's approximate pose, and calculates the offset by determining the pan angle of the first
@@ -118,15 +118,13 @@ def get_offset(scan: Scan):
     return -original_pan
 
 
-def correct_pan(image_f: File, offset: float | int):
-    """
-    Adjusts the pan component of a file's approximate pose metadata.
+def correct_pan(image_f: File, offset: float | int) -> None:
+    """Adjusts the pan component of a file's approximate pose metadata.
 
     This function retrieves the approximate pose metadata from the given file,
     adjusts the pan value by the specified offset, normalizes it to fall within
     the 0-360 degree range, and updates the file's metadata with the modified
-    values. If the metadata does not contain a roll value, a default of 0
-    is assumed.
+    values. If the metadata does not contain a roll value, a default of 0 is assumed.
 
     Parameters
     ----------
