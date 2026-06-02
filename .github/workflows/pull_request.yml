@@ -97,7 +97,7 @@ jobs:
         continue-on-error: false   # fail the job if image is missing
       - name: Run Unit Tests
         run: |
-          ./docker/p3dv-devel/run.sh -t ${TAG} --source_dir /home/romi/plant-3d-vision --unittest
+          ./docker/p3dv-devel/run.sh -t ${TAG} --no-copy --unittest
 
   integration-tests:
     runs-on: self-hosted
@@ -113,4 +113,4 @@ jobs:
         continue-on-error: false   # fail the job if image is missing
       - name: Run Integration Tests
         run: |
-          ./docker/p3dv-devel/run.sh -t ${TAG} --source_dir /home/romi/plant-3d-vision --test-integration
+          ./docker/p3dv-devel/run.sh -t ${TAG} --no-copy --test-integration

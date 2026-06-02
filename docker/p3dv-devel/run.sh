@@ -55,6 +55,8 @@ initialize_variables() {
   SELF_TEST=0
   # Debug mode is disabled by default
   DEBUG_MODE=false
+  # New flag: skip copying source code into the container
+  NO_COPY=false
 
   # Define test commands
   unittest_cmd="python3 -m unittest discover -s plant-3d-vision/tests/unit/"
@@ -196,6 +198,10 @@ parse_arguments() {
       shift
       source_dir=$1
       ;;
+    --no-copy)
+      NO_COPY=true
+      log_debug "NO_COPY flag enabled"
+      ;;
     -db | --database)
       shift
       host_db=$1
@@ -280,7 +286,8 @@ run_interactive_docker() {
   docker_cmd+=" ${mount_option}"
   docker_cmd+=" --user romi:${gid}"
   docker_cmd+=" ${docker_option}"
-  docker_cmd+="  -v $(pwd):${source_dir}"
+  docker_cmd+=" -v $(pwd):${source_dir}"
+  docker_cmd+=" -e NO_COPY=${NO_COPY}"
   docker_cmd+=" -i"  # use the `-i` flag to load `~/.bashrc`.
   docker_cmd+=" ${USE_TTY}"
   docker_cmd+=" roboticsmicrofarms/p3dv-devel:${VTAG}"
@@ -304,7 +311,8 @@ run_docker_command() {
   docker_cmd+=" ${mount_option}"
   docker_cmd+=" --user romi:${gid}"
   docker_cmd+=" ${docker_option}"
-  docker_cmd+="  -v $(pwd):${source_dir}"
+  docker_cmd+=" -v $(pwd):${source_dir}"
+  docker_cmd+=" -e NO_COPY=${NO_COPY}"
   docker_cmd+=" -i"  # use the `-i` flag to load `~/.bashrc`.
   docker_cmd+=" ${USE_TTY}"
   docker_cmd+=" roboticsmicrofarms/p3dv-devel:${VTAG}"

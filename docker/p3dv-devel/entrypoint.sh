@@ -12,16 +12,22 @@ source "/home/${USER_NAME}/venv/bin/activate"
 SOURCE_DIR="${SOURCE_DIR:-/workspace}"
 INSTALL_DIR="/home/${USER_NAME}/plant-3d-vision"
 
+NO_COPY="false"
+# Disable source code copy if the same directory is used
+if [ "${SOURCE_DIR}" == "${INSTALL_DIR}" ]; then
+  NO_COPY="true"
+fi
+
 # Check if source code is mounted
 if [ -d "$SOURCE_DIR" ]; then
     echo "Source code detected at $SOURCE_DIR"
 
-    if [ "${SOURCE_DIR}" != "${INSTALL_DIR}" ]; then
-      echo "Copying source code from ${SOURCE_DIR} to ${INSTALL_DIR} ..."
-      mkdir -p "${INSTALL_DIR}"
-      cp -R "${SOURCE_DIR}/." "${INSTALL_DIR}/."
+    if [ "${NO_COPY}" = "true" ]; then
+        echo "Variable NO_COPY is 'true', skipping copy of source code..."
     else
-        echo "Source and install directories are the same; skipping copy."
+        echo "Copying source code from ${SOURCE_DIR} to ${INSTALL_DIR} ..."
+        mkdir -p "${INSTALL_DIR}"
+        cp -R "${SOURCE_DIR}/." "${INSTALL_DIR}/."
     fi
 
     echo "Installing/updating plant-3d-vision from ${INSTALL_DIR}..."
