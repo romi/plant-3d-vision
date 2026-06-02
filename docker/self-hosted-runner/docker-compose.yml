@@ -1,59 +1,94 @@
-services:
+x-runner-base: &runner-base
+  build:
+    context: .
+    dockerfile: Dockerfile
 
-  runner:
-    build:
-      context: .
-      dockerfile: Dockerfile
+  image: self-hosted-runner:latest
+  container_name: romi-github-runner
 
-    image: self-hosted-runner:latest
-    container_name: romi-github-runner
+  restart: always
 
-    restart: always
+  group_add:
+    - "${DOCKER_GID:-984}"  # the mounted docker socket group id (GID)
 
-    group_add:
-      - "${DOCKER_GID:-984}"  # the mounted docker socket group id (GID)
+  volumes:
+    # Mount the host's Docker socket (DooD approach)
+    - ${DOCKER_SOCK:-$XDG_RUNTIME_DIR/docker.sock}:/var/run/docker.sock
+    # Runner work directory
+    - runner-cache:/actions-runner/_work
 
-    volumes:
-      # Mount the host's Docker socket (DooD approach)
-      - ${DOCKER_SOCK:-$XDG_RUNTIME_DIR/docker.sock}:/var/run/docker.sock
-      # Runner work directory
-      - runner-cache:/actions-runner/_work
+  deploy:
+    resources:
+      reservations:
+        cpus: 4
+        memory: 8G
+        devices:
+          - driver: nvidia
+            capabilities: [gpu]
+            count: 1
 
-    environment:
-      - GITHUB_RUNNER_EPHEMERAL=true
-      - GITHUB_RUNNER_URL=${GITHUB_RUNNER_URL}
-      - GITHUB_RUNNER_TOKEN=${GITHUB_RUNNER_TOKEN}
-      - GITHUB_RUNNER_LABELS=${GITHUB_RUNNER_LABELS:-self-hosted,linux,docker,x64,gpu}
-      - GITHUB_RUNNER_NAME=${GITHUB_RUNNER_NAME:-romi-github-runner}
-      - BUILDX_HOME=/home/ubuntu/.docker/buildx
+  security_opt:
+    - no-new-privileges:true
 
-    deploy:
-      resources:
-        reservations:
-          cpus: 4
-          memory: 8G
-          devices:
-            - driver: nvidia
-              capabilities: [gpu]
-              count: 1
+  cap_drop:
+    - ALL
 
-    security_opt:
-      - no-new-privileges:true
+  # Add only necessary capabilities
+  cap_add:
+    - CHOWN
+    - DAC_OVERRIDE
+    - FOWNER
+    - SETGID
+    - SETUID
 
-    cap_drop:
-      - ALL
-
-    # Add only necessary capabilities
-    cap_add:
-      - CHOWN
-      - DAC_OVERRIDE
-      - FOWNER
-      - SETGID
-      - SETUID
-
-    tmpfs:
-      - /tmp:noexec,nosuid,nodev
-      - /run:noexec,nosuid,nodev
+  tmpfs:
+    - /tmp:noexec,nosuid,nodev
+    - /run:noexec,nosuid,nodev
 
 volumes:
   runner-cache:
+   driver: local
+   driver_opts:
+     # Set the ownership of the volume to the runner user (UID 1000, GID 1000)
+     o: uid=1000,gid=1000
+
+services:
+  runner1:
+    <<: *runner-base
+    container_name: romi-github-runner-1
+    environment:
+      - GITHUB_RUNNER_EPHEMERAL=true
+      - GITHUB_RUNNER_URL=${GITHUB_RUNNER_URL}
+      - GITHUB_RUNNER_TOKEN=${GITHUB_RUNNER_TOKEN_1}
+      - GITHUB_RUNNER_LABELS=${GITHUB_RUNNER_LABELS:-self-hosted,linux,docker,x64,gpu}
+      - GITHUB_RUNNER_NAME=romi-github-runner-1
+
+  runner2:
+    <<: *runner-base
+    container_name: romi-github-runner-2
+    environment:
+      - GITHUB_RUNNER_EPHEMERAL=true
+      - GITHUB_RUNNER_URL=${GITHUB_RUNNER_URL}
+      - GITHUB_RUNNER_TOKEN=${GITHUB_RUNNER_TOKEN_2}
+      - GITHUB_RUNNER_LABELS=${GITHUB_RUNNER_LABELS:-self-hosted,linux,docker,x64,gpu}
+      - GITHUB_RUNNER_NAME=romi-github-runner-2
+
+  runner3:
+    <<: *runner-base
+    container_name: romi-github-runner-3
+    environment:
+      - GITHUB_RUNNER_EPHEMERAL=true
+      - GITHUB_RUNNER_URL=${GITHUB_RUNNER_URL}
+      - GITHUB_RUNNER_TOKEN=${GITHUB_RUNNER_TOKEN_3}
+      - GITHUB_RUNNER_LABELS=${GITHUB_RUNNER_LABELS:-self-hosted,linux,docker,x64,gpu}
+      - GITHUB_RUNNER_NAME=romi-github-runner-3
+
+  runner4:
+    <<: *runner-base
+    container_name: romi-github-runner-4
+    environment:
+      - GITHUB_RUNNER_EPHEMERAL=true
+      - GITHUB_RUNNER_URL=${GITHUB_RUNNER_URL}
+      - GITHUB_RUNNER_TOKEN=${GITHUB_RUNNER_TOKEN_4}
+      - GITHUB_RUNNER_LABELS=${GITHUB_RUNNER_LABELS:-self-hosted,linux,docker,x64,gpu}
+      - GITHUB_RUNNER_NAME=romi-github-runner-4
