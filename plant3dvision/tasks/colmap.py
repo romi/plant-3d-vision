@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import csv
 import json
 import os
 import re
@@ -24,10 +25,14 @@ from plant3dvision.camera import get_camera_kwargs_from_images_metadata
 from plant3dvision.camera import get_colmap_cameras_from_calib_scan
 from plant3dvision.colmap import COLMAP_EXE
 from plant3dvision.colmap import ColmapRunner
+from plant3dvision.colmap import colmap_keypoints_per_image
+from plant3dvision.colmap import colmap_matches_per_pair
 from plant3dvision.colmap import estimate_camera_pose
 from plant3dvision.filenames import COLMAP_CAMERAS_ID
 from plant3dvision.filenames import COLMAP_DENSE_ID
 from plant3dvision.filenames import COLMAP_IMAGES_ID
+from plant3dvision.filenames import COLMAP_KEYPOINTS_ID
+from plant3dvision.filenames import COLMAP_MATCHES_ID
 from plant3dvision.filenames import COLMAP_POINTS_ID
 from plant3dvision.filenames import COLMAP_SPARSE_ID
 from plant3dvision.utils import angular_distance
@@ -1102,6 +1107,29 @@ class Colmap(RomiTask):
         for log_path in workdir.glob('*.log'):
             outfile = self.output_file(log_path.stem)
             outfile.import_file(log_path)
+
+        db_path = Path(colmap_runner.colmap_workdir) / "database.db"
+        # - Export the number of keypoints found per image
+        kp_counts = colmap_keypoints_per_image(db_path)
+        outfile = self.output_file(COLMAP_KEYPOINTS_ID, create=True)
+        with open(outfile.path(), "w", newline="", encoding="utf-8") as file:
+            writer = csv.writer(file)
+            # Write header
+            writer.writerow(["Image_ID", "Nb_KeyPoints"])
+            # Write each key-value pair as a row
+            for key, value in kp_counts.items():
+                writer.writerow([key, value])
+
+        # - Export the number of matches and the average descriptor distance for each image pair
+        stats = colmap_matches_per_pair(db_path)
+        outfile = self.output_file(COLMAP_MATCHES_ID, create=True)
+        with open(outfile.path(), "w", newline="", encoding="utf-8") as file:
+            writer = csv.writer(file)
+            # Write header
+            writer.writerow(["Image_ID", "Image_ID", "Nb_Matches", "Avg_Distance"])
+            # Write each key-value pair as a row
+            for key, value in stats.items():
+                writer.writerow([key[0], key[1], value[0], value[1]])
 
         # Initialize an instance to perform camera pose estimations quality check:
         camera_pose_qc = CameraPoseQC(image_files, self.mad_factor,
