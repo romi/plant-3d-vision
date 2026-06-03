@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Annotated
 from typing import Any
 from typing import Literal
+from typing import get_args
 
 import luigi
 import numpy as np
@@ -33,7 +34,6 @@ from plant3dvision.utils import angular_distance
 from plant3dvision.utils import mad_outlier
 from plantdb.commons import io
 from plantdb.commons.fsdb.core import File
-from plantdb.commons.fsdb.core import Fileset
 from plantdb.commons.fsdb.core import Scan
 from romitask import SCAN_TOML
 from romitask import ScanConfiguration
@@ -49,6 +49,7 @@ Axes = Annotated[str, re.compile(r'^[xyzptr]*$', re.IGNORECASE)]
 DEF_AXES = 'xyzptr'
 #: Valid metrics values for image pose quality control
 Metrics = Literal["xy", "z", "pan", "tilt", "roll"]
+ALLOWED_METRICS: set[str] = set(get_args(Metrics))   # {'xy', 'z', 'pan', 'tilt', 'roll'}
 #: Default metrics for image pose quality control
 DEF_METRICS = ["xy", "z", "pan", "roll"]
 
@@ -1293,7 +1294,7 @@ class CameraPoseQC(object):
         """
         self.image_files: list[File] = image_files
         self.mad_factor: float = mad_factor
-        self.metrics: set[str] = set(metrics) & set(Metrics) if metrics is not None else set(DEF_METRICS)
+        self.metrics: set[str] = set(metrics) & set(ALLOWED_METRICS) if metrics is not None else set(DEF_METRICS)
         self.fixed_params = fixed_params if fixed_params is not None else ["z", "tilt", "roll"]
 
         self.distance_threshold = kwargs.get('distance_threshold', 3.)
