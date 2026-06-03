@@ -33,6 +33,8 @@ use_calibration_camera = false  # Default: false
 qc_check = true  # Default: true
 # Median absolute deviation factor to detect outlier camera pose
 mad_factor = 3.0  # Default: 3.
+# The list of metrics to use to detect the outliers using the MAD method.
+metrics = '["xy", "z", "pan", "roll"]'
 # Maximum distance to CNC pose to validate COLMAP pose estimation
 distance_threshold = 3.0  # Default: 3.0mm
 # Maximum distance to fixed CNC pose to validate COLMAP pose estimation
