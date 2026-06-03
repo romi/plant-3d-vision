@@ -12,6 +12,7 @@ Using docker image requires the docker engine to be available on your system and
 """
 import os
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -449,6 +450,204 @@ def export_camera_parameters(image_files, intrinsics, extrinsics):
             fi.set_metadata("estimated_pose", estimated_pose)
 
     return image_files
+
+
+def colmap_keypoints_per_image(db_path: str | bytes | Path) -> dict[str, int]:
+    """Retrieve the number of COLMAP keypoints for each image stored in a COLMAP database.
+
+    Parameters
+    ----------
+    db_path : str | bytes | pathlib.Path
+        The path to the SQLite COLMAP database file.
+
+    Returns
+    -------
+    dict[str, int]
+        Mapping from image name to the number of keypoints detected for that image.
+
+    Raises
+    ------
+    sqlite3.Error
+        If an error occurs while connecting to or querying the database.
+
+    Notes
+    -----
+    The function opens a read‑only connection to the SQLite database, extracts the
+    image identifiers and their corresponding filenames from the ``images`` table,
+    and then retrieves the keypoint row counts from the ``keypoints`` table. The
+    connection is closed before the result is returned.
+
+    References
+    ----------
+    https://colmap.github.io/database.html#keypoints-and-descriptors
+    """
+    con = sqlite3.connect(db_path)
+    cur = con.cursor()
+
+    # 1. Map image_id -> image name
+    cur.execute("SELECT image_id, name FROM images")
+    id2name = {row[0]: row[1] for row in cur.fetchall()}
+
+    # 2. Get number of keypoints (rows) for each image_id
+    cur.execute("SELECT image_id, rows FROM keypoints")
+    kp_counts = {id2name[row[0]]: row[1] for row in cur.fetchall()}
+
+    con.close()
+    return kp_counts
+
+def _pair_id_to_image_ids(pair_id: int) -> tuple[int, int]:
+    """Decode COLMAP's linear `pair_id` back to the two image IDs.
+
+    The constant 2147483647 (``=2^31‑1``) is the maximum signed 32‑bit int.
+
+    Returns
+    -------
+    tuple[int, int]
+        The decoded image ID pair.
+
+    References
+    ----------
+    https://colmap.github.io/database.html#matches-and-two-view-geometries
+    """
+    max_id = 2147483647
+    img_id2 = pair_id % max_id
+    img_id1 = (pair_id - img_id2) // max_id
+    return int(img_id1), int(img_id2)
+
+
+def colmap_matches_per_pair(db_path: str | bytes | Path) -> dict[tuple[str, str], tuple[int, float]]:
+    """Compute the number of matches and the average descriptor distance for each image pair in a COLMAP SQLite database.
+
+    Returns {(img_a, img_b): (num_matches, avg_descriptor_distance)}.
+
+    Parameters
+    ----------
+    db_path : str | bytes | pathlib.Path
+        The path to the SQLite COLMAP database file.
+
+    Returns
+    -------
+    pair_stats : dict of tuple(str, str) to tuple(int, float)
+        Mapping from image name pairs ``(img_a, img_b)`` to a tuple containing
+
+        * ``num_matches``: the number of raw matches (`rows` column of the ``matches`` table).
+        * ``avg_descriptor_distance``: mean L2 distance between the paired descriptors.
+          If descriptors cannot be read (e.g., missing table) the value is `nan`.
+
+    Raises
+    ------
+    RuntimeError
+        If the required columns ``pair_id``, ``rows``, ``cols`` and ``data`` are missing from the ``matches`` table.
+
+    Notes
+    -----
+    * The function expects the standard COLMAP schema (tables ``images``, ``matches`` and ``descriptors``).
+    * Descriptor blobs are interpreted as ``uint8`` (e.g., SIFT) or ``float32`` (e.g., ALIKED) based on their size.
+    * Out‑of‑range match indices are ignored; such a case usually indicates a corrupted database.
+
+    See Also
+    --------
+    plant3dvision.colmap._pair_id_to_image_ids
+
+    References
+    ----------
+    https://colmap.github.io/database.html#keypoints-and-descriptors
+    https://github.com/colmap/colmap/blob/main/src/colmap/estimators/two_view_geometry.h
+    https://github.com/colmap/colmap/blob/main/src/colmap/feature/types.h
+
+    Examples
+    --------
+    >>> from pathlib import Path
+    >>> from plant3dvision.colmap import colmap_matches_per_pair
+    >>> db_file = Path('colmap/database.db')
+    >>> stats = colmap_matches_per_pair(db_file)
+    >>> for (img1, img2), (n_matches, avg_dist) in stats.items(): print(f"{img1} - {img2}: {n_matches} matches, avg L2 distance = {avg_dist:.2f}")
+    img1.jpg - img2.jpg: 124 matches, avg L2 distance = 45.67
+    """
+    import sqlite3, numpy as np
+
+    con = sqlite3.connect(db_path)
+    cur = con.cursor()
+
+    # 1. Map image_id → name (used for the final dict keys)
+    cur.execute("SELECT image_id, name FROM images")
+    id2name = {row[0]: row[1] for row in cur.fetchall()}
+
+    # 2. Gather raw match statistics from the ``matches`` table
+    cur.execute("PRAGMA table_info(matches)")
+    match_cols = {info[1] for info in cur.fetchall()}
+
+    required_match_cols = {"pair_id", "rows", "cols", "data"}
+    if not required_match_cols.issubset(match_cols):
+        raise RuntimeError("Missing required columns in 'matches' table.")
+
+    cur.execute("SELECT pair_id, rows, cols, data FROM matches")
+    match_rows = cur.fetchall()
+
+    # 3. Helper to decode a BLOB of uint32 pairs
+    def decode_match_blob(blob: bytes, cols: int) -> np.ndarray:
+        """Return a (N, cols) uint32 array."""
+        if not blob:
+            return np.empty((0, cols), dtype=np.uint32)
+        return np.frombuffer(blob, dtype=np.uint32).reshape(-1, cols)
+
+    # 4. Helper to load descriptors for a given image_id
+    def load_descriptors(img_id: int) -> np.ndarray | None:
+        cur.execute("SELECT rows, cols, data FROM descriptors WHERE image_id=?", (img_id,))
+        row = cur.fetchone()
+        if row is None:
+            return None
+        rows, cols, blob = row
+        if rows == 0 or cols == 0 or not blob:
+            return None
+        # Descriptors are stored as uint8 (SIFT) or float32 (ALIKED, etc.), we can infer the dtype from the size:
+        if blob.__len__() == rows * cols:  # uint8
+            dtype = np.uint8
+        elif blob.__len__() == rows * cols * 4:  # float32
+            dtype = np.float32
+        else:
+            # Fallback: assume uint8 (most common)
+            dtype = np.uint8
+        return np.frombuffer(blob, dtype=dtype).reshape(rows, cols)
+
+    # 5. Process each pair
+    pair_stats: dict[tuple[str, str], tuple[int, float]] = {}
+    for pair_id, num_matches, cols, match_blob in match_rows:
+        img_id1, img_id2 = _pair_id_to_image_ids(pair_id)
+        name1 = id2name.get(img_id1, f"<unknown-{img_id1}>")
+        name2 = id2name.get(img_id2, f"<unknown-{img_id2}>")
+
+        # Decode the match index list (uint32, 2 columns)
+        matches_idx = decode_match_blob(match_blob, cols)
+        if matches_idx.shape[0] == 0:
+            continue
+
+        # Load descriptors for both images
+        desc1 = load_descriptors(img_id1)
+        desc2 = load_descriptors(img_id2)
+        if desc1 is None or desc2 is None:
+            pair_stats[(name1, name2)] = (int(num_matches), float("nan"))
+            continue
+
+        # Compute L2 distance for each matched pair
+        idx1 = matches_idx[:, 0]
+        idx2 = matches_idx[:, 1]
+        # Guard against out‑of‑range indices (should not happen in a valid DB)
+        valid = (idx1 < desc1.shape[0]) & (idx2 < desc2.shape[0])
+        if not np.all(valid):
+            idx1, idx2 = idx1[valid], idx2[valid]
+
+        # Cast to float for distance computation (necessary if uint8)
+        d1 = desc1[idx1].astype(np.float32)
+        d2 = desc2[idx2].astype(np.float32)
+
+        # Euclidean distance (L2)
+        dists = np.linalg.norm(d1 - d2, axis=1)
+        avg_dist = float(dists.mean()) if dists.size > 0 else float("nan")
+        pair_stats[(name1, name2)] = (int(num_matches), avg_dist)
+
+    con.close()
+    return pair_stats
 
 
 #: List of valid COLMAP matcher methods:
