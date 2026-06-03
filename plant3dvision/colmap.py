@@ -507,6 +507,15 @@ def colmap_keypoints_per_image(db_path: str | bytes | Path) -> dict[str, int]:
     >>> kp_counts = colmap_keypoints_per_image(db_file)
     >>> print(kp_counts['00000_rgb.jpg'])
     1277
+    >>> import matplotlib.pyplot as plt
+    >>> counts = list(kp_counts.values())
+    >>> fig, ax = plt.subplots(figsize=(9, 3))
+    >>> ax.boxplot(counts, vert=False, patch_artist=True, boxprops=dict(facecolor="#8da0cb"), medianprops=dict(color="red"))
+    >>> ax.set_xlabel("Number of keypoints")
+    >>> ax.set_title("Distribution of COLMAP keypoints per image")
+    >>> ax.grid(True, linestyle="--", alpha=0.5)
+    >>> plt.tight_layout()
+    >>> plt.show()
     """
     con = sqlite3.connect(db_path)
     cur = con.cursor()
@@ -543,7 +552,7 @@ def _pair_id_to_image_ids(pair_id: int) -> tuple[int, int]:
     return int(img_id1), int(img_id2)
 
 
-def colmap_matches_per_pair(db_path: str | bytes | Path) -> dict[tuple[str, str], tuple[int, float]]:
+def colmap_matches_per_pair(db_path: str | bytes | Path) -> dict[tuple[str, str], tuple[int, float, float]]:
     """Compute the number of matches and the average descriptor distance for each image pair in a COLMAP SQLite database.
 
     Returns {(img_a, img_b): (num_matches, avg_descriptor_distance)}.
@@ -555,11 +564,13 @@ def colmap_matches_per_pair(db_path: str | bytes | Path) -> dict[tuple[str, str]
 
     Returns
     -------
-    pair_stats : dict of tuple(str, str) to tuple(int, float)
+    pair_stats : dict of tuple(str, str) to tuple(int, float, float)
         Mapping from image name pairs ``(img_a, img_b)`` to a tuple containing
 
         * ``num_matches``: the number of raw matches (`rows` column of the ``matches`` table).
         * ``avg_descriptor_distance``: mean L2 distance between the paired descriptors.
+          If descriptors cannot be read (e.g., missing table) the value is `nan`.
+        * ``median_descriptor_distance``: median L2 distance between the paired descriptors.
           If descriptors cannot be read (e.g., missing table) the value is `nan`.
 
     Raises
@@ -602,8 +613,47 @@ def colmap_matches_per_pair(db_path: str | bytes | Path) -> dict[tuple[str, str]
     >>> colmap.matcher()  #2 - Match extracted features from images, requires `feature_extractor()`
     >>> db_file = Path(colmap.colmap_workdir) / "database.db"
     >>> stats = colmap_matches_per_pair(db_file)
-    >>> for (img1, img2), (n_matches, avg_dist) in stats.items(): print(f"{img1} - {img2}: {n_matches} matches, avg L2 distance = {avg_dist:.2f}")
+    >>> for (img1, img2), (n_matches, avg_dist, _) in stats.items(): print(f"{img1} - {img2}: {n_matches} matches, avg L2 distance = {avg_dist:.2f}")
     00000_rgb.jpg - 00001_rgb.jpg: 330 matches, avg L2 distance = 117.95
+    >>> # --- Build a pairwise distance matrix from the stats ---
+    >>> import pandas as pd
+    >>> import numpy as np
+    >>> import matplotlib.pyplot as plt
+    >>> # Gather the unique image names
+    >>> imgs = sorted({img for pair in stats.keys() for img in pair})
+    >>> # Initialise a matrix filled with NaN
+    >>> n_match_matrix = pd.DataFrame(np.nan, index=imgs, columns=imgs, dtype=float)
+    >>> dist_matrix = pd.DataFrame(np.nan, index=imgs, columns=imgs, dtype=float)
+    >>> mdist_matrix = pd.DataFrame(np.nan, index=imgs, columns=imgs, dtype=float)
+    >>> # Populate the matrix with average descriptor distances
+    >>> for (img_a, img_b), (n_match, avg_dist, m_dist) in stats.items():
+    ...     n_match_matrix.loc[img_a, img_b] = n_match
+    ...     n_match_matrix.loc[img_b, img_a] = n_match  # symmetric
+    ...     dist_matrix.loc[img_a, img_b] = avg_dist
+    ...     dist_matrix.loc[img_b, img_a] = avg_dist  # symmetric
+    ...     mdist_matrix.loc[img_a, img_b] = m_dist
+    ...     mdist_matrix.loc[img_b, img_a] = m_dist  # symmetric
+    >>> # Plot the Number of Matches matrix as a heat‑map
+    >>> fig, ax = plt.subplots(figsize=(9, 8))
+    >>> im = ax.imshow(n_match_matrix, cmap="viridis")
+    >>> fig.colorbar(im, ax=ax)
+    >>> plt.title("Pairwise Number of Matches")
+    >>> plt.tight_layout()
+    >>> plt.show()
+    >>> # Plot the Average Descriptor Distance matrix as a heat‑map
+    >>> fig, ax = plt.subplots(figsize=(9, 8))
+    >>> im = ax.imshow(dist_matrix, cmap="viridis")
+    >>> fig.colorbar(im, ax=ax)
+    >>> plt.title("Pairwise Average Descriptor Distance")
+    >>> plt.tight_layout()
+    >>> plt.show()
+    >>> # Plot the Median Descriptor Distance matrix as a heat‑map
+    >>> fig, ax = plt.subplots(figsize=(9, 8))
+    >>> im = ax.imshow(mdist_matrix, cmap="viridis")
+    >>> fig.colorbar(im, ax=ax)
+    >>> plt.title("Pairwise Median Descriptor Distance")
+    >>> plt.tight_layout()
+    >>> plt.show()
     """
     import sqlite3, numpy as np
 
@@ -685,7 +735,8 @@ def colmap_matches_per_pair(db_path: str | bytes | Path) -> dict[tuple[str, str]
         # Euclidean distance (L2)
         dists = np.linalg.norm(d1 - d2, axis=1)
         avg_dist = float(dists.mean()) if dists.size > 0 else float("nan")
-        pair_stats[(name1, name2)] = (int(num_matches), avg_dist)
+        med_dist = float(np.nanmedian(dists)) if dists.size > 0 else float("nan")
+        pair_stats[(name1, name2)] = (int(num_matches), avg_dist, med_dist)
 
     con.close()
     return pair_stats
