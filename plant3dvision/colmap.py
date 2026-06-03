@@ -480,6 +480,27 @@ def colmap_keypoints_per_image(db_path: str | bytes | Path) -> dict[str, int]:
     References
     ----------
     https://colmap.github.io/database.html#keypoints-and-descriptors
+
+    Examples
+    --------
+    >>> from plant3dvision.colmap import colmap_keypoints_per_image
+    >>> from pathlib import Path
+    >>> from plant3dvision.colmap import ColmapRunner
+    >>> from plantdb.commons.test_database import test_database
+    >>> db = test_database('real_plant', no_auth=True)
+    >>> db.connect()
+    >>> # - Select the dataset to reconstruct:
+    >>> dataset = db.get_scan("real_plant")
+    >>> # - Get the corresponding 'images' fileset:
+    >>> images_fileset = dataset.get_fileset('images')
+    >>> image_files = images_fileset.get_files()
+    >>> args = {"feature_extractor": {"--ImageReader.single_camera": "1"}}
+    >>> colmap = ColmapRunner(image_files, matcher_method="exhaustive", align_pcd=True, all_cli_args=args, colmap_exe="roboticsmicrofarms/colmap:3.8")
+    >>> colmap.feature_extractor()  #1 - Extract features from images
+    >>> db_file = Path(colmap.colmap_workdir) / "database.db"
+    >>> kp_counts = colmap_keypoints_per_image(db_file)
+    >>> print(kp_counts['00000_rgb.jpg'])
+    1277
     """
     con = sqlite3.connect(db_path)
     cur = con.cursor()
@@ -557,12 +578,25 @@ def colmap_matches_per_pair(db_path: str | bytes | Path) -> dict[tuple[str, str]
 
     Examples
     --------
-    >>> from pathlib import Path
     >>> from plant3dvision.colmap import colmap_matches_per_pair
-    >>> db_file = Path('colmap/database.db')
+    >>> from pathlib import Path
+    >>> from plant3dvision.colmap import ColmapRunner
+    >>> from plantdb.commons.test_database import test_database
+    >>> db = test_database('real_plant', no_auth=True)
+    >>> db.connect()
+    >>> # - Select the dataset to reconstruct:
+    >>> dataset = db.get_scan("real_plant")
+    >>> # - Get the corresponding 'images' fileset:
+    >>> images_fileset = dataset.get_fileset('images')
+    >>> image_files = images_fileset.get_files()
+    >>> args = {"feature_extractor": {"--ImageReader.single_camera": "1"}}
+    >>> colmap = ColmapRunner(image_files, matcher_method="exhaustive", align_pcd=True, all_cli_args=args, colmap_exe="roboticsmicrofarms/colmap:3.8")
+    >>> colmap.feature_extractor()  #1 - Extract features from images
+    >>> colmap.matcher()  #2 - Match extracted features from images, requires `feature_extractor()`
+    >>> db_file = Path(colmap.colmap_workdir) / "database.db"
     >>> stats = colmap_matches_per_pair(db_file)
     >>> for (img1, img2), (n_matches, avg_dist) in stats.items(): print(f"{img1} - {img2}: {n_matches} matches, avg L2 distance = {avg_dist:.2f}")
-    img1.jpg - img2.jpg: 124 matches, avg L2 distance = 45.67
+    00000_rgb.jpg - 00001_rgb.jpg: 330 matches, avg L2 distance = 117.95
     """
     import sqlite3, numpy as np
 
