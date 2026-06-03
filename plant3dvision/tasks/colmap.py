@@ -2,10 +2,14 @@
 # -*- coding: utf-8 -*-
 import json
 import os
+import re
 import sys
 from os.path import join
 from os.path import splitext
 from pathlib import Path
+from typing import Annotated
+from typing import Any
+from typing import Literal
 
 import luigi
 import numpy as np
@@ -29,6 +33,7 @@ from plant3dvision.utils import angular_distance
 from plant3dvision.utils import mad_outlier
 from plantdb.commons import io
 from plantdb.commons.fsdb.core import File
+from plantdb.commons.fsdb.core import Fileset
 from plantdb.commons.fsdb.core import Scan
 from romitask import SCAN_TOML
 from romitask import ScanConfiguration
@@ -38,15 +43,17 @@ from romitask.task import RomiTask
 
 logger = get_logger(__name__)
 
+# Valid axes values for the standard world‑axis orientation.
+Axes = Annotated[str, re.compile(r'^[xyzptr]*$', re.IGNORECASE)]
 #: Default order of axes in pose coordinates
 DEF_AXES = 'xyzptr'
-#: All metrics for image pose quality control
-ALL_METRICS = ["xy", "z", "pan", "tilt", "roll"]
+#: Valid metrics values for image pose quality control
+Metrics = Literal["xy", "z", "pan", "tilt", "roll"]
 #: Default metrics for image pose quality control
 DEF_METRICS = ["xy", "z", "pan", "roll"]
 
 
-def get_camera_poses_from_files_metadata(image_files: list[File], md: str = "calibrated_pose", axes: str | None = None,
+def get_camera_poses_from_files_metadata(image_files: list[File], md: str = "calibrated_pose", axes: Axes | None = None,
                                          default: float | None = 0.) -> dict[str, list[float]]:
     """Get the camera poses from the specified metadata of a list of files.
 
@@ -62,9 +69,9 @@ def get_camera_poses_from_files_metadata(image_files: list[File], md: str = "cal
         - "approximate_pose": the requested camera poses from the CNC
         - "calibrated_pose": the camera poses from an extrinsics calibration procedure
         - "estimated_pose": the camera poses estimated by Colmap
-    axes : str, optional
+    axes : plant3dvision.tasks.colmap.Axes, optional
         A string specifying which axes to return.
-        Defaults to ``DEF_AXES`` (xyzptr).
+        Defaults to ``DEF_AXES`` (``'xyzptr'``).
         Must contain only characters from 'xyzptr' (case-insensitive).
     default : float | None
         The default value to use if an axis has no value.
@@ -127,7 +134,7 @@ def get_camera_poses_from_files_metadata(image_files: list[File], md: str = "cal
     return cam_poses
 
 
-def get_camera_poses_from_images_metadata(scan_dataset: Scan, md: str = "calibrated_pose", axes: str | None = 'xyzptr',
+def get_camera_poses_from_images_metadata(scan_dataset: Scan, md: str = "calibrated_pose", axes: Axes | None = 'xyzptr',
                                           default: float | None = 0.) -> dict[str, list[float]]:
     """Get the camera poses from the 'images' fileset from specified metadata.
 
@@ -143,9 +150,9 @@ def get_camera_poses_from_images_metadata(scan_dataset: Scan, md: str = "calibra
         - "approximate_pose": the requested camera poses from the CNC
         - "calibrated_pose": the camera poses from an extrinsics calibration procedure
         - "estimated_pose": the camera poses estimated by Colmap
-    axes : str, optional
+    axes : plant3dvision.tasks.colmap.Axes, optional
         A string specifying which axes to return.
-        Defaults to ``DEF_AXES`` (xyzptr).
+        Defaults to ``DEF_AXES`` (``'xyzptr'``).
         Must contain only characters from 'xyzptr' (case-insensitive).
     default : float | None
         The default value to use if an axis has no value.
@@ -188,7 +195,7 @@ def get_camera_poses_from_images_metadata(scan_dataset: Scan, md: str = "calibra
     return get_camera_poses_from_files_metadata(image_files, md, axes=axes, default=default)
 
 
-def get_cnc_poses_from_files_metadata(image_files: list[File], axes: str | None = None,
+def get_cnc_poses_from_files_metadata(image_files: list[File], axes: Axes | None = None,
                                       default: float | None = 0.) -> dict[str, list[float]]:
     """Get the camera poses, requested to the CNC, for a given list of files.
 
@@ -196,9 +203,9 @@ def get_cnc_poses_from_files_metadata(image_files: list[File], axes: str | None 
     ----------
     image_files : list[plantdb.commons.db.File]
         A list of image files containing pose metadata for each image.
-    axes : str, optional
+    axes : plant3dvision.tasks.colmap.Axes, optional
         A string specifying which axes to return.
-        Defaults to ``DEF_AXES`` (xyzptr).
+        Defaults to ``DEF_AXES`` (``'xyzptr'``).
         Must contain only characters from 'xyzptr' (case-insensitive).
     default : float | None
         The default value to use if an axis has no value.
@@ -244,7 +251,7 @@ def get_cnc_poses_from_files_metadata(image_files: list[File], axes: str | None 
     return get_camera_poses_from_files_metadata(image_files, md="approximate_pose", axes=axes, default=default)
 
 
-def get_cnc_poses_from_images_metadata(scan_dataset: Scan, axes: str | None = None,
+def get_cnc_poses_from_images_metadata(scan_dataset: Scan, axes: Axes | None = None,
                                        default: float | None = 0.) -> dict[str, list[float]]:
     """Get the camera poses, requested to the CNC, for a given scan dataset.
 
@@ -252,9 +259,9 @@ def get_cnc_poses_from_images_metadata(scan_dataset: Scan, axes: str | None = No
     ----------
     scan_dataset : plantdb.commons.db.Scan
         The scan to get the pose metadata from.
-    axes : str, optional
+    axes : plant3dvision.tasks.colmap.Axes, optional
         A string specifying which axes to return.
-        Defaults to ``DEF_AXES`` (xyzptr).
+        Defaults to ``DEF_AXES`` (``'xyzptr'``).
         Must contain only characters from 'xyzptr' (case-insensitive).
     default : float | None
         The default value to use if an axis has no value.
@@ -444,13 +451,13 @@ def compute_colmap_poses_from_images_json(scan_dataset: Scan) -> dict[str, list[
     return colmap_poses
 
 
-def use_precalibrated_poses(images_fileset: list[File], calibration_scan: Scan):
+def use_precalibrated_poses(images_fileset: list[File], calibration_scan: Scan) -> list[File]:
     """Use a calibration scan to add its 'calibrated_pose' to an 'images' fileset.
 
     Parameters
     ----------
     images_fileset : list of plantdb.commons.db.File
-        List of `File`s refering to images that should receive 'calibrated_pose' metadata.
+        List of `File`s referring to images that should receive 'calibrated_pose' metadata.
         Later, this will be used during reconstruction, instead of performing an estimation of each image pose.
     calibration_scan : plantdb.commons.db.Scan
         Dataset containing calibrated poses to use for reconstruction.
@@ -467,6 +474,11 @@ def use_precalibrated_poses(images_fileset: list[File], calibration_scan: Scan):
     ------
     ValueError
         If the `images_fileset` & `calibration_scan` do not have the same scanning (acquisition) parameters.
+
+    Returns
+    -------
+    list of plantdb.commons.db.File
+        The lis of image `Files` augmented with 'calibrated_pose' metadata.
 
     Examples
     --------
@@ -498,7 +510,7 @@ def use_precalibrated_poses(images_fileset: list[File], calibration_scan: Scan):
     >>> db.disconnect()
 
     """
-    # Check, that the two `Scan` are compatible:
+    # Check that the two `Scan` are compatible:
     try:
         assert check_scan_parameters(images_fileset.scan, calibration_scan)
     except AssertionError:
@@ -517,7 +529,7 @@ def use_precalibrated_poses(images_fileset: list[File], calibration_scan: Scan):
     calib_img_files = calibration_scan.get_fileset("images").get_files()
     # - Assign the calibrated pose of the i-th calibration image to the i-th image of the fileset to reconstruct
     for i, fi in enumerate(images_fileset):
-        # - Assignment is order based...
+        # - Assignment is order-based...
         pose = calib_img_files[i].get_metadata("calibrated_pose")
         # - Assign this calibrated pose to the metadata of the image of the fileset to reconstruct
         fi.set_metadata("calibrated_pose", pose)
@@ -557,7 +569,7 @@ def get_scan_config(scan_path: str | Path) -> dict:
     raise FileNotFoundError(f"Could not load scan config from either 'scan.toml' or 'metadata.json'!")
 
 
-def check_scan_parameters(scan_to_calibrate, calibration_scan):
+def check_scan_parameters(scan_to_calibrate: Scan, calibration_scan: Scan) -> bool:
     """Check the calibration scan and scan to calibrate have the same scanning configuration.
 
     Parameters
@@ -628,7 +640,7 @@ def check_scan_parameters(scan_to_calibrate, calibration_scan):
     return same_type and same_params
 
 
-def check_colmap_cfg(current_cfg, current_scan, calibration_scan):
+def check_colmap_cfg(current_cfg: dict[str, Any], current_scan: Scan, calibration_scan: Scan) -> None:
     """Compare the current configuration and the calibration scan configuration.
 
     Parameters
@@ -668,7 +680,7 @@ def check_colmap_cfg(current_cfg, current_scan, calibration_scan):
     return
 
 
-def _get_diff_between_dict(d1, d2):
+def _get_diff_between_dict(d1: dict[Any, Any], d2: dict[Any, Any]) -> tuple[dict[Any, Any], dict[Any, Any]]:
     """Return the entries that are different between two dictionaries."""
     diff_keys = list(dict(set(d1.items()) ^ set(d2.items())).keys())
     diff1 = {k: d1.get(k, None) for k in diff_keys}
@@ -753,9 +765,10 @@ class Colmap(RomiTask):
         Whether to perform the verification of the estimated camera extrinsic
     mad_factor : float, optional
         Median absolute deviation factor to detect outlier camera pose
-    metrics : list[str], optional
+    metrics : Metrics, optional
         The list of metrics to use to detect the outliers using the Median Absolute Deviation method.
-        Only those defined in ``ALL_METRICS`` are valid.
+        Valid values are in ``Metrics``, that is ``["xy", "z", "pan", "tilt", "roll"]``.
+        If ``None``, the default set ``["xy", "z", "pan", "roll"]`` is used.
     distance_threshold : float, optional
         Maximum distance to CNC pose to validate COLMAP pose estimation
     fixed_distance_threshold : float, optional
@@ -799,6 +812,7 @@ class Colmap(RomiTask):
     --------
     plant3dvision.colmap.ColmapRunner : Low-level COLMAP execution class
     plant3dvision.colmap.CameraPoseQC : Camera pose quality control
+    plant3dvision.tasks.colmap.Metrics : The list of valid metrics.
 
     Raises
     ------
@@ -1170,9 +1184,10 @@ class CameraPoseQC(object):
         The list of image file objects containing the metadata, notably the estimated camera poses.
     mad_factor : float
         The multiplicative factor applied to the Median Absolute Deviation to set the outlier threshold.
-    metrics : list[str] | None, optional
-        Metrics to be used for outlier detection. Valid entries are the elements of `ALL_METRICS`.
-        If ``None``, the default set `DEF_METRICS` is used.
+    metrics : plant3dvision.tasks.colmap.Metrics | None, optional
+        The list of metrics to use to detect the outliers using the Median Absolute Deviation method.
+        Valid values are in ``Metrics``, that is ``["xy", "z", "pan", "tilt", "roll"]``.
+        If ``None``, the default set ``["xy", "z", "pan", "roll"]`` is used.
     fixed_params : list[str] | None, optional
         Parameters that are considered fixed during the scan (e.g. ``["z", "tilt", "roll"]``).
         These parameters use the *fixed* distance/angle thresholds when validating poses.
@@ -1233,7 +1248,13 @@ class CameraPoseQC(object):
     >>> cam_qc.validate_camera_poses()
     """
 
-    def __init__(self, image_files, mad_factor, metrics=None, calibration_scan=None, fixed_params=None, **kwargs):
+    def __init__(self,
+                 image_files: list[File],
+                 mad_factor: float,
+                 metrics: Metrics | None = None,
+                 calibration_scan: Scan | None = None,
+                 fixed_params: Metrics | None = None,
+                 **kwargs: Any) -> None:
         """Initialize the class.
 
         Parameters
@@ -1242,15 +1263,15 @@ class CameraPoseQC(object):
             The list of image file objects containing the metadata, notably the estimated camera poses.
         mad_factor : float
             The multiplicative factor applied to the Median Absolute Deviation to set the outlier threshold.
-        metrics : list[str] | None
+        metrics : plant3dvision.tasks.colmap.Metrics or None
             The list of metrics to use to detect the outliers using the Median Absolute Deviation method.
-            Only those defined in ``ALL_METRICS`` are valid.
-            If ``None``, the default set `DEF_METRICS` is used.
-        calibration_scan : plantdb.commons.core.fsdb.Scan | None
+            Valid values are in ``Metrics``, that is ``["xy", "z", "pan", "tilt", "roll"]``.
+            If ``None``, the default set ``["xy", "z", "pan", "roll"]`` is used.
+        calibration_scan : plantdb.commons.core.fsdb.Scan or None
             The scan object used to calibrate the camera intrinsics.
             Dy default, ``None`` indicates that the camera intrinsics have been estimated by Colmap.
-        fixed_params : list[str] | None
-            The list of camera parameters that are "fixed", meaning they do not move during a scan.
+        fixed_params : plant3dvision.tasks.colmap.Metrics or None
+            The list of metrics (camera parameters) that are "fixed", meaning they do not move during a scan.
             Defaults to ``["z", "tilt", "roll"]``.
         
         Other Parameters
@@ -1265,10 +1286,14 @@ class CameraPoseQC(object):
             Maximum angular distance (degrees) for fixed angles.
         max_blind_angle : float, default ``30.0``
             Maximum allowed blind angle (degrees) for circular scans.
+
+        See Also
+        --------
+        plant3dvision.tasks.colmap.Metrics
         """
         self.image_files: list[File] = image_files
         self.mad_factor: float = mad_factor
-        self.metrics: set[str] = set(metrics) & set(ALL_METRICS) if metrics is not None else set(DEF_METRICS)
+        self.metrics: set[str] = set(metrics) & set(Metrics) if metrics is not None else set(DEF_METRICS)
         self.fixed_params = fixed_params if fixed_params is not None else ["z", "tilt", "roll"]
 
         self.distance_threshold = kwargs.get('distance_threshold', 3.)
