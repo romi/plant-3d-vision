@@ -7,15 +7,16 @@ import concurrent.futures
 import sys
 
 import luigi
-import numpy
 import numpy as np
 
-import plantdb.commons.db
 from plant3dvision import proc2d
 from plant3dvision.camera import colmap_params_from_kwargs
+from plant3dvision.proc2d import crop_image
 from plant3dvision.tasks.colmap import Colmap
 from plant3dvision.utils import jsonify
 from plantdb.commons import io
+from plantdb.commons.db import File
+from plantdb.commons.db import Fileset
 from romitask.log import get_logger
 from romitask.task import FileByFileTask
 from romitask.task import ImagesFilesetExists
@@ -24,6 +25,84 @@ from romitask.task import ParallelFileTask
 
 logger = get_logger(__name__, log_level="INFO")
 
+
+class CropWithBoundingBox(ParallelFileTask):
+    """Crop each 2D image cropping it to a given bounding box.
+
+    This task reads every input image, extracts a rectangular region defined by
+    ``bbox`` (x, y, width, height) and writes the cropped image to the output
+    fileset, preserving the original file identifier and metadata.
+
+    Parameters
+    ----------
+    upstream_task : luigi.TaskParameter, optional
+        The task providing the input images. Defaults to ``ImagesFilesetExists``.
+    scan_id : luigi.Parameter, optional
+        Dataset identifier (scan name) for the output fileset.
+    query : luigi.DictParameter, optional
+        Filtering dictionary applied to input ``Fileset`` metadata.
+    n_workers : luigi.IntParameter, optional
+        Number of worker threads for parallel processing. ``None`` uses the
+        default ``ThreadPoolExecutor`` behaviour.
+    parallel : luigi.BoolParameter, optional
+        Enable/disable parallel execution. Defaults to ``True``.
+    bbox : luigi.ListParameter, optional
+        List of four integers ``[x, y, w, h]`` defining the cropping rectangle.
+        ``x`` and ``y`` are the top‑left corner coordinates. ``w`` and ``h`` are the
+        width and height. If ``w`` or ``h`` are ``-1`` the full image size in that
+        direction is used. Default crops the whole image.
+
+    Returns
+    -------
+    romitask.task.FilesetTarget
+        Fileset containing the cropped copies of the input images.
+    """
+
+    upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)
+    n_workers = luigi.IntParameter(default=None)
+    parallel = luigi.BoolParameter(default=True)
+    bbox = luigi.ListParameter(default=[180, 0, 1080, -1])  # x, y, width, height
+
+    def run(self):
+        """Delegate the processing to the parent ``ParallelFileTask``."""
+        # The parent class handles iteration over all input files.
+        super().run(self.input().get(), self.output().get())
+
+    def f(self, fi, outfs):
+        """Crop a single image according to ``bbox`` and copy it to the output.
+
+        Parameters
+        ----------
+        fi : plantdb.commons.db.File
+            Input image file.
+        outfs : plantdb.commons.db.Fileset
+            Output fileset where the cropped image will be stored.
+
+        Returns
+        -------
+        plantdb.commons.db.File
+            New file containing the cropped image.
+        """
+        # Load the image
+        img = io.read_image(fi)
+
+        # Perform cropping
+        cropped = crop_image(img, bbox=list(self.bbox))
+
+        # Save the cropped image preserving the original file id
+        outfi = outfs.create_file(fi.id)
+        io.write_image(outfi, cropped)
+
+        # Preserve original metadata and add task‑specific info
+        md = {
+            'upstream_task': str(self.upstream_task.get_task_family()),
+            'bbox': self.bbox,
+        }
+        if self.query != {}:
+            md.update({'query': jsonify(self.query)})
+        outfi.set_metadata({self.get_task_family(): md})
+
+        return outfi
 
 class Undistort(ParallelFileTask):
     """Image distortion correction using camera intrinsic parameters.
@@ -132,6 +211,7 @@ class Undistort(ParallelFileTask):
             logger.info(f"Using extrinsic calibration scan: {self.extrinsic_calib_scan_id}...")
             return {"camera": extrinsic_calib_scan, "images": self.upstream_task()}
         else:
+            from plant3dvision.tasks.colmap import Colmap
             return {"camera": Colmap(), "images": self.upstream_task()}
 
     def run(self):
@@ -165,6 +245,7 @@ class Undistort(ParallelFileTask):
         # Handle intrinsic calibration case
         if str(self.camera_model_src).lower() == 'intrinsiccalibration':
             from plant3dvision.camera import get_camera_params_from_arrays
+            from plant3dvision.camera import colmap_params_from_kwargs
             camera_params = get_camera_params_from_arrays(self.camera_model)
             params = colmap_params_from_kwargs(**camera_params)
             colmap_camera = {"camera_model": {"camera_model": self.camera_model, "params": params}}
@@ -274,10 +355,10 @@ class Masks(ParallelFileTask):
     parallel : luigi.BoolParameter, optional
         Flag to enable/disable parallel processing.
         Defaults to ``True``.
-    type : luigi.Parameter, optional
+    method : luigi.Parameter, optional
         The type of image tranformation algorithm to use prior to masking by thresholding.
         Can be "linear" or "excess_green". Defaults to `'linear'`.
-        Have a look at the documentation [mask_type]_ for more details.
+        Have a look at the documentation [mask_methods]_ for more details.
     colorspace : luigi.ChoiceParameter, optional
         The colorspace to use for the linear filtering ('RGB', 'HSV' or 'YCbCr')
         Defaults to ``"RGB"``.
@@ -315,7 +396,7 @@ class Masks(ParallelFileTask):
 
     References
     ----------
-    .. [mask_type] https://docs.romi-project.eu/plant_imager/explanations/masks/
+    .. [mask_methods] https://docs.romi-project.eu/plant_imager/explanations/masks/
 
     Examples
     --------
@@ -337,7 +418,7 @@ class Masks(ParallelFileTask):
 
     """
     upstream_task = luigi.TaskParameter(default=Undistort)  # override default attribute from ``RomiTask``
-    type = luigi.Parameter("linear")
+    method = luigi.Parameter("linear")
     colorspace = luigi.ChoiceParameter(default="RGB", choices=["RGB", "HSV", "YCbCr"], var_type=str)
     parameters = luigi.ListParameter(default=[0, 1, 0])
     min_threshold = luigi.FloatParameter(default=0.0)
@@ -345,7 +426,7 @@ class Masks(ParallelFileTask):
     invert = luigi.BoolParameter(default=False)
     dilation = luigi.IntParameter(default=0)
 
-    def f_raw(self, img: numpy.ndarray) -> numpy.ndarray:
+    def f_raw(self, img: np.ndarray) -> np.ndarray:
         """Apply the selected filter to the image.
 
         Parameters
@@ -364,14 +445,14 @@ class Masks(ParallelFileTask):
             If the specified filter type is unknown.
         """
         logger.debug(f"Image shape: {img.shape}")
-        if self.type == "linear":
+        if self.method == "linear":
             return proc2d.linear(img, list(self.parameters), colorspace=self.colorspace)
-        elif self.type == "excess_green":
+        elif self.method == "excess_green":
             return proc2d.excess_green(img)
         else:
-            raise Exception(f"Unknown masking type '{self.type}'!")
+            raise Exception(f"Unknown masking method '{self.method}'!")
 
-    def f(self, fi: plantdb.commons.db.File, outfs: plantdb.commons.db.Fileset) -> plantdb.commons.db.File:
+    def f(self, fi: File, outfs: Fileset) -> File:
         """Compute the binary mask image for the input image ``File``.
 
         Parameters
@@ -393,7 +474,7 @@ class Masks(ParallelFileTask):
         # Threshold the filtered image to make a binary mask:
         img = (img >= self.min_threshold) & (img <= self.max_threshold)
         if self.invert:
-            img = not img
+            img = np.logical_not(img)
         # Apply dilation to the binary mask, if any:
         if self.dilation > 0:
             img = proc2d.dilation(img, self.dilation)
@@ -405,14 +486,14 @@ class Masks(ParallelFileTask):
         # Add metadata to the binary mask image:
         md = {
             'upstream_task': str(self.upstream_task.get_task_family()),
-            'filter': str(self.type),
+            'filter': str(self.method),
             'colorspace': str(self.colorspace),
             'min_threshold': self.min_threshold,
             'max_threshold': self.max_threshold,
             'invert': self.invert,
             'dilation': self.dilation
         }
-        if self.type == "linear":
+        if self.method == "linear":
             md.update({'linear_coeff': list(self.parameters)})
         if self.query != {}:
             md.update({'query': jsonify(self.query)})

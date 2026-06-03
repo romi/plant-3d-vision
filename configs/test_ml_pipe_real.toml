@@ -20,22 +20,32 @@ max_blind_angle = 20.0
 upstream_task = "ImagesFilesetExists"
 query = "{\"channel\":\"rgb\", \"pose_estimation\":\"correct\"}"  # RGB images with a valid COLMAP pose
 
-[Masks]
+[ModelFilesetExists]
+scan_id = "models"
+
+[Segmentation2D]
 upstream_task = "Undistort"
-query = "{\"channel\":\"rgb\"}"
-method = "linear"
-colorspace = "RGB"
-parameters = "[0.2, 1, 0.1]"
-min_threshold = 0.2 # Default: 0.0
-max_threshold = 1.0 # Default: 0.4
-dilation = 1 # Default: 0 (no dilation)
+model_fileset = "ModelFilesetExists"
+model_id = "Resnet_896_896_epoch50"  # no default value
+query = "{\"channel\":\"rgb\"}"  # default is an empty dict '{}'
+Sx = 896
+Sy = 896
+binarize = true
+resize = true
+dilation = 1
+epochs = 1
+batch = 1
+learning_rate = 0.0001
+threshold = 0.01
 
 [Voxels]
-upstream_task = "Masks"
+upstream_task = "Segmentation2D"
 upstream_colmap = "Colmap"
 camera_metadata = "colmap_camera"
 voxel_size = 0.6
-method = "averaging"
+type = "averaging"
+labels = "[\"background\"]"
+invert = true
 [Voxels.bounding_box]
 x = [300, 450]
 y = [300, 450]
@@ -43,33 +53,47 @@ z = [-175, 105]
 
 [PointCloud]
 upstream_task = "Voxels"
+labels = "[\"background\"]"
 missing_images_threshold = 2  # Default: 2
 algorithm = "marching-cubes"  # Default: "marching-cubes"
-level_set_value = 1.0
+level_set_value = 0.0
 sigma = 0.8
 mc_level = 0.5
 
-[TriangleMesh]
+[SegmentedPointCloud]
 upstream_task = "PointCloud"
-library = "open3d"
-filtering = "most connected triangles"
+upstream_segmentation = "Segmentation2D"
+use_colmap_poses = true
 
-[CurveSkeleton]
-upstream_task = "TriangleMesh"
+[FilteredSegmentedPointCloud]
+upstream_task = "SegmentedPointCloud"
+eps = 4.0
+min_points = 5
+n_neighbors = 20
+mad_factor = 2.0
 
-[TreeGraph]
-upstream_task = "CurveSkeleton"
-z_axis = 2
-stem_axis_inverted = false
+[ClusteredMesh]
+upstream_task = "FilteredSegmentedPointCloud"
+min_vol = 1.0
+min_length = 10.0
+
+[OrganSegmentation]
+upstream_task = "FilteredSegmentedPointCloud"
+eps = 2.0
+min_points = 5
 
 [AnglesAndInternodes]
-upstream_task = "TreeGraph"
+upstream_task = "OrganSegmentation"
 characteristic_length = 1.0
+organ_type = "fruit"
+stem_axis = 2
 stem_axis_inverted = false
+min_elongation_ratio = 2.0
+min_fruit_size = 0.1
 
 [AnglesAndInternodesEvaluation]
 upstream_task = "AnglesAndInternodes"
-ground_truth = "ImagesFilesetExists"
+ground_truth = "ImagesFilesetExists"  # "ImagesFilesetExists" with manual measures / "VirtualPlantObj" with computer generated plants
 free_ends = 0.4
 free_ends_eps = 1e-2
 

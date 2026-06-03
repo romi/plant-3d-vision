@@ -11,6 +11,8 @@ single_camera = true  # Default: true
 qc_check = true
 # Median absolute deviation factor to detect outlier camera pose
 mad_factor = 3.0
+# The list of metrics to use to detect the outliers using the MAD method.
+metrics = '["xy", "z", "pan", "roll"]'
 # Maximum distance to CNC pose to validate COLMAP pose estimation
 distance_threshold = 3.0  # Default: 3.0mm
 # Maximum distance to fixed CNC pose to validate COLMAP pose estimation
@@ -41,7 +43,7 @@ upstream_task = "Undistort"  # Default: "Undistort"
 query = "{\"channel\":\"rgb\"}"  # Default: "{\"channel\":\"rgb\"}"  (only RGB images)
 # The type of image transformation algorithm to use prior to masking
 # Options: "linear" (linear combination of RGB channels), "excess_green" (excess green index)
-type = "linear"  # Default: "linear"
+method = "linear"  # Default: "linear"
 # The colorspace to use for the filtering
 # Options: "RGB", "HSV", "YCbCr"
 colorspace = "RGB"  # Default: "RGB"
@@ -63,7 +65,7 @@ query = "{}" # all masks may be used with `type="averaging"`, even those with in
 voxel_size = 1.0  # Default: 1.0
 # Type of backprojection algorithm to use
 # Options: "carving", "averaging"
-type = "averaging"  # Default: "averaging"
+method = "averaging"  # Default: "averaging"
 
 [Voxels.bounding_box]
 # 3D bounding box defining the region of interest for reconstruction

@@ -5,6 +5,8 @@ from os import rmdir
 import luigi
 
 from plantdb.commons import io
+from plantdb.commons.fsdb.exceptions import FilesetNotFoundError
+from plantdb.commons.testing import DummyDBTestCase
 from plantdb.commons.testing import FSDBTestCase
 from romitask import FilesetTarget
 from romitask import RomiTask
@@ -51,15 +53,16 @@ class ImageIdentityTask(FileByFileTask):
         return ImagesFilesetExists(fileset_id=self.fileset_id)
 
 
-class TestFilesetTarget(FSDBTestCase):
+class TestFilesetTarget(DummyDBTestCase):
     def test_target(self):
-        db = self.get_test_db()
-        scan = db.get_scan("myscan_001")
+        scan = self.db.get_scan("myscan_001")
         target = FilesetTarget(scan, "testfileset2")
-        assert (target.get(create=False) is None)
+        with self.assertRaises(FilesetNotFoundError):
+            target.get()
         assert (not target.exists())
         target.create()
         assert (not target.exists())  # Target `Fileset` exist but is empty
+        assert "testfileset2" in scan.list_filesets()
         fs = scan.get_fileset("testfileset2")
         fs.create_file('dummy_test_file')  # Now target `Fileset` exist and is not empty
         assert (target.exists())
@@ -67,11 +70,10 @@ class TestFilesetTarget(FSDBTestCase):
         rmdir(path.join(target.scan.db.basedir, target.scan.id, target.fileset_id))
 
 
-class TestRomiTask(FSDBTestCase):
+class TestRomiTask(DummyDBTestCase):
     def test_romi_task(self):
-        db = self.get_test_db()
-        ScanConfiguration.db = db
-        ScanConfiguration.scan = db.get_scan("myscan_001")
+        ScanConfiguration.db = self.db
+        ScanConfiguration.scan = self.db.get_scan("myscan_001")
         task = TouchFileTask()
         assert (not task.complete())
         luigi.build(tasks=[task], local_scheduler=True)

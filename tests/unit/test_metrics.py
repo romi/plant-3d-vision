@@ -12,6 +12,9 @@ from plant3dvision.metrics import CompareMaskFilesets
 from plant3dvision.metrics import CompareSegmentedPointClouds
 from plantdb.commons import io
 from plantdb.commons import fsdb
+from plantdb.commons.test_database import dummy_db
+from plantdb.commons.testing import DummyDBTestCase
+
 
 class TestMaskMetrics(unittest.TestCase):
     square_left = np.array([[1, 1, 0, 0],
@@ -173,16 +176,12 @@ class TestCompareMaskFilesets(unittest.TestCase):
     # UTILITY
     
     def make_db(self, groundtruths, predictions):
-        db = self.init_db()
-        db.connect()
+        db = dummy_db(with_scan=False, with_fileset=False, with_file=False)
         scan = db.create_scan("test")
         groundtruth_fileset = self.create_groundtruth_fileset(scan, groundtruths)
         prediction_fileset = self.create_prediction_fileset(scan, predictions)
         return groundtruth_fileset, prediction_fileset
     
-    def init_db(self):
-        return fsdb.dummy_db()
-
     def create_groundtruth_fileset(self, scan, groundtruths):
         fileset = scan.create_fileset("groundtruth")
         self.populate_fileset(fileset, groundtruths)

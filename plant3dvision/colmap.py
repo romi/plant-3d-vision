@@ -324,9 +324,13 @@ def estimate_camera_pose(rot_matrix, tvec):
     # Compute the camera position in world coordinates
     camera_position = -np.transpose(rot_matrix) @ tvec
     # Extract Euler angles (ZXY) from rotation matrix
-    rotation = R.from_matrix(rot_matrix)
-    pan, tilt, roll = rotation.as_euler('zxy', degrees=True)
-    pan = (180 - pan) % 360  # change rotation orientation and range from [-180, 180] to [0, 360]
+    #rotation = R.from_matrix(rot_matrix)
+    #pan, tilt, roll = rotation.inv().as_euler('zxy', degrees=True)
+    cRw = R.from_matrix(rot_matrix)  # see https://colmap.github.io/pycolmap/pycolmap.html#pycolmap.Rotation3d.quat
+    cpRc = R.from_euler("YZY", (90, -90, 0), degrees=True)
+    wRcp = cRw.inv() * cpRc.inv()
+    pan, tilt, roll = wRcp.as_euler("ZYX", degrees=True)
+    pan = pan % 360  # change rotation orientation and range from [-180, 180] to [0, 360]
     return list(camera_position) + [pan, tilt, roll]
 
 def estimate_rotation_translation_mat(x, y, z, pan, tilt, roll):
@@ -366,8 +370,12 @@ def estimate_rotation_translation_mat(x, y, z, pan, tilt, roll):
     """
     from scipy.spatial.transform import Rotation as R
     # Build the rotation matrix from the (pan, tilt, roll)
-    rot = R.from_euler('zxy', [pan, tilt, roll], degrees=True)
-    rot_matrix = rot.as_matrix()                     # shape (3, 3)
+    # rot = R.from_euler('zxy', [pan, tilt, roll], degrees=True)
+    # rot_matrix = rot.as_matrix()                     # shape (3, 3)
+    wRcp = R.from_euler("ZYX", (pan, tilt, roll), degrees=True)
+    cpRc = R.from_euler("YZY", (90, -90, 0), degrees=True)
+    cRw = cpRc.inv() * wRcp.inv()
+    rot_matrix = cRw.as_matrix()
 
     # Recover the translation vector (COLMAP’s “tvec”)
     #    camera_position = -R.T @ tvec -> tvec = -R @ camera_position
@@ -527,7 +535,7 @@ class ColmapRunner(object):
     compute_dense : bool
         If ``True``, it will compute the dense point cloud.
     all_cli_args : dict
-        Dictionary of arguments to pass to colmap command lines.
+        Dictionary of arguments to pass to COLMAP CLI.
     align_pcd : bool
         If ``True``, it will align spare (& dense) point cloud(s) coordinate system of given camera centers.
     use_calibration : bool
@@ -615,7 +623,7 @@ class ColmapRunner(object):
         --------
         >>> from plant3dvision.colmap import ColmapRunner
         >>> from plantdb.commons.test_database import test_database
-        >>> db = test_database('real_plant')
+        >>> db = test_database('real_plant', no_auth=True)
         >>> db.connect()
         >>> # - Select the dataset to reconstruct:
         >>> dataset = db.get_scan("real_plant")
@@ -624,7 +632,8 @@ class ColmapRunner(object):
         >>> image_files = images_fileset.get_files()
 
         >>> args = {"feature_extractor": {"--ImageReader.single_camera": "1"}}
-        >>> colmap = ColmapRunner(image_files, matcher_method="spatial", align_pcd=True, all_cli_args=args, colmap_exe="roboticsmicrofarms/colmap:3.8")
+        >>> colmap = ColmapRunner(image_files, matcher_method="exhaustive", align_pcd=True, all_cli_args=args, colmap_exe="roboticsmicrofarms/colmap:3.8")
+        >>> print(colmap.colmap_workdir)
         >>> colmap.feature_extractor()  #1 - Extract features from images
         >>> colmap.matcher()  #2 - Match extracted features from images, requires `feature_extractor()`
         >>> colmap.mapper()  #3 - Sparse point cloud reconstruction, requires `matcher()`

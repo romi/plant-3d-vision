@@ -94,7 +94,7 @@ def _find_two_closest(values):
     """Find the pair with the closest values for all combination of given `values`."""
     from itertools import combinations
     idx = range(len(values))
-    diff = np.infty
+    diff = np.inf
     pairs = (None, None)
     for combi in combinations(idx, 2):
         new_diff = np.abs(np.diff([values[c] for c in combi]))[0]

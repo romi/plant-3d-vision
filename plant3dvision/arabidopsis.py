@@ -14,6 +14,7 @@ import sys
 
 import networkx as nx
 import numpy as np
+import open3d as o3d
 
 from romitask.log import get_logger
 
@@ -376,34 +377,74 @@ def get_organ_features(organ_bb, stem_skeleton):
     return organ_features
 
 
-def angles_and_internodes_from_point_cloud(stem_pcd, organ_pcd_list, characteristic_length, stem_axis,
-                                           stem_axis_inverted, min_elongation_ratio, min_fruit_size):
-    """Get angles and internodes from point cloud.
+def angles_and_internodes_from_point_cloud(
+        stem_pcd: o3d.geometry.PointCloud,
+        organ_pcd_list: list[o3d.geometry.PointCloud],
+        characteristic_length: int,
+        stem_axis: int,
+        stem_axis_inverted: bool,
+        min_elongation_ratio: float,
+        min_fruit_size: float,
+        min_pts_threshold: int = 50,
+) -> dict[str, list[float]]:
+    """
+    Compute internode lengths and angular deviations between successive organs
+    (e.g., fruits) along a stem represented by a point cloud.
+
+    The function first builds a coarse skeleton of the stem by sampling points along the specified
+    ``stem_axis`` at intervals defined by ``characteristic_length``.
+    Each organ point cloud is then filtered, bounded, and characterised (direction, width, node id).
+    Organs that satisfy the size and elongation criteria are ordered along the stem skeleton, and
+    the angle between the projections of successive organ directions onto the plane orthogonal to the
+    local stem direction is calculated.
+    The Euclidean distance between the corresponding skeleton nodes gives the internode length.
 
     Parameters
     ----------
     stem_pcd : o3d.geometry.PointCloud
-        point cloud of the stem
-    organ_pcd_list : list
-        list of o3d.geometry.PointCloud organs
+        Point cloud representing the stem.
+    organ_pcd_list : list[o3d.geometry.PointCloud]
+        List of point clouds, each corresponding to an individual organ (e.g., fruit) attached to the stem.
     characteristic_length : int
-        distance between 2 elements for the "stem skeletonization"
+        Distance (in the same units as the point cloud) between two sampled points used for constructing the
+        stem skeleton.
     stem_axis : int
-        [0,1,2] for the projection of the stem on the x, y or z axis
+        Axis index (``0`` for *x*, ``1`` for *y*, ``2`` for *z*) along which the stem is projected.
     stem_axis_inverted : bool
-        whether the stem is inverted
+        If ``True``, the ordered skeleton is reversed to match a stem that grows in the negative
+        direction of ``stem_axis``.
     min_elongation_ratio : float
-        minimum elongation ratio for the organ to be considered for the angles and internodes calculation
+        Minimum ratio of organ length to width for an organ to be considered.
     min_fruit_size : float
-        minimum fruit size
+        Minimum Euclidean norm of the organ's direction vector; organs with a shorter direction are ignored.
+    min_pts_threshold : int, optional
+        The minimum number of points required for an organ point cloud to be considered valid.
+        Default to `50`
 
     Returns
     -------
-    dict
-        list of angles, internodes and fruit points
-    """
-    import open3d as o3d
+    dict[str, list[float]]
+        Dictionary with three keys:
 
+        "angles" : list[float]
+            Angles (in radians) between successive organs measured anticlockwise around the stem axis.
+            Values are in the range ``[0, 2π]``.
+
+        "internodes" : list[float]
+            Euclidean distances between consecutive skeleton nodes that correspond to the paired organs.
+
+        "fruit_points" : list[list[float]]
+            The original point coordinates for each organ in order of appearance along the stem.
+
+    Notes
+    -----
+    * The function assumes that the stem point cloud is roughly aligned with one of the principal axes;
+      the ``stem_axis`` argument selects which axis to use for the skeleton projection.
+    * ``characteristic_length`` should be chosen such that at least a few skeleton points are generated;
+      otherwise the skeleton may be too coarse to capture organ positions accurately.
+    * The angle calculation returns anticlockwise angles; a post‑processing step converts them to the
+      smaller complementary angle when the median exceeds ``π``).
+    """
     stem_points = np.asarray(stem_pcd.points)
 
     idx_min = np.argmin(stem_points[:, stem_axis])
@@ -445,7 +486,23 @@ def angles_and_internodes_from_point_cloud(stem_pcd, organ_pcd_list, characteris
     # calculate features as direction and corresponding node id for each organ
     organs_features_list = []
     for i, o in enumerate(organ_pcd_list):
-        bb = o3d.geometry.OrientedBoundingBox.create_from_points(o.points)
+        # Convert to numpy for rank/size checks
+        pts_np = np.asarray(o.points)
+
+        # If the cloud is too small, skip it
+        if pts_np.shape[0] <= min_pts_threshold:
+            continue
+        else:
+            try:
+                bb = o3d.geometry.OrientedBoundingBox.create_from_points(o.points)
+            except RuntimeError:
+                # Qhull failed (degenerate geometry). Add a tiny jitter and retry.
+                jitter = np.random.normal(scale=1e-3, size=pts_np.shape)
+                jittered_pts = pts_np + jitter
+                bb = o3d.geometry.OrientedBoundingBox.create_from_points(
+                    o3d.utility.Vector3dVector(jittered_pts)
+                )
+
         organ_features = get_organ_features(bb, ordered_stem_skeleton)
         organ_features["points"] = np.asarray(o.points).tolist()
         elongation_ratio = np.linalg.norm(organ_features["direction"]) / np.linalg.norm(organ_features["width"])

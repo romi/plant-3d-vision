@@ -8,7 +8,7 @@ extrinsic_calib_scan_id = "extrinsic_calib_1"  # use a dataset with calibrated i
 [Masks]
 upstream_task = "Undistort"
 query = "{\"channel\":\"rgb\"}"
-type = "linear"
+method = "linear"
 colorspace = "RGB"
 parameters = "[0.2, 1, 0.1]"
 min_threshold = 0.2
@@ -19,7 +19,7 @@ dilation = 1
 upstream_task = "Masks"
 camera_metadata = "colmap_camera"
 voxel_size = 0.5
-type = "averaging"  # {"averaging", "carving"}
+method = "averaging"  # {"averaging", "carving"}
 [Voxels.bounding_box]
 x = [ 260, 440,]
 y = [ 260, 440,]
