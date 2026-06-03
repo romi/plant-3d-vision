@@ -1126,10 +1126,10 @@ class Colmap(RomiTask):
         with open(outfile.path(), "w", newline="", encoding="utf-8") as file:
             writer = csv.writer(file)
             # Write header
-            writer.writerow(["Image_ID", "Image_ID", "Nb_Matches", "Avg_Distance"])
+            writer.writerow(["Image_ID", "Image_ID", "Nb_Matches", "Avg_Distance", "Median_Distance"])
             # Write each key-value pair as a row
             for key, value in stats.items():
-                writer.writerow([key[0], key[1], value[0], value[1]])
+                writer.writerow([key[0], key[1], value[0], value[1], value[2]])
 
         # Initialize an instance to perform camera pose estimations quality check:
         camera_pose_qc = CameraPoseQC(image_files, self.mad_factor,
