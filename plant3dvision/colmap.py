@@ -17,6 +17,9 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any
+from typing import Literal
+from typing import get_args
 
 import imageio
 import numpy as np
@@ -26,6 +29,7 @@ from packaging import version
 from plant3dvision import proc3d
 from plant3dvision.thirdparty import read_model
 from plantdb.commons import io
+from plantdb.commons.db import File
 from romitask.log import get_logger
 
 logger = get_logger(__name__)
@@ -322,14 +326,15 @@ def estimate_camera_pose(rot_matrix, tvec):
     # Compute the camera position in world coordinates
     camera_position = -np.transpose(rot_matrix) @ tvec
     # Extract Euler angles (ZXY) from rotation matrix
-    #rotation = R.from_matrix(rot_matrix)
-    #pan, tilt, roll = rotation.inv().as_euler('zxy', degrees=True)
+    # rotation = R.from_matrix(rot_matrix)
+    # pan, tilt, roll = rotation.inv().as_euler('zxy', degrees=True)
     cRw = R.from_matrix(rot_matrix)  # see https://colmap.github.io/pycolmap/pycolmap.html#pycolmap.Rotation3d.quat
     cpRc = R.from_euler("YZY", (90, -90, 0), degrees=True)
     wRcp = cRw.inv() * cpRc.inv()
     pan, tilt, roll = wRcp.as_euler("ZYX", degrees=True)
     pan = pan % 360  # change rotation orientation and range from [-180, 180] to [0, 360]
     return list(camera_position) + [pan, tilt, roll]
+
 
 def estimate_rotation_translation_mat(x, y, z, pan, tilt, roll):
     """Estimate the rotation (3×3) and translation (3,) matrices from the camera pose (position & orientation).
@@ -378,9 +383,10 @@ def estimate_rotation_translation_mat(x, y, z, pan, tilt, roll):
     # Recover the translation vector (COLMAP’s “tvec”)
     #    camera_position = -R.T @ tvec -> tvec = -R @ camera_position
     camera_position = np.array([x, y, z], dtype=float)
-    tvec = -rot_matrix @ camera_position           # shape (3,)
+    tvec = -rot_matrix @ camera_position  # shape (3,)
 
     return rot_matrix, tvec
+
 
 def export_camera_parameters(image_files, intrinsics, extrinsics):
     """Export camera intrinsics and extrinsic to images metadata.
@@ -515,6 +521,7 @@ def colmap_keypoints_per_image(db_path: str | bytes | Path) -> dict[str, int]:
 
     con.close()
     return kp_counts
+
 
 def _pair_id_to_image_ids(pair_id: int) -> tuple[int, int]:
     """Decode COLMAP's linear `pair_id` back to the two image IDs.
@@ -685,9 +692,10 @@ def colmap_matches_per_pair(db_path: str | bytes | Path) -> dict[tuple[str, str]
 
 
 #: List of valid COLMAP matcher methods:
-MATCHER_METHODS = ['exhaustive', 'sequential', 'spatial']
+MatcherMethods = Literal['exhaustive', 'sequential', 'spatial']
+MATCHER_METHODS = get_args(MatcherMethods)
 #: Default COLMAP matcher method:
-DEF_MATCHER_METHODS = MATCHER_METHODS[0]
+DEF_MATCHER_METHOD = 'exhaustive'
 
 
 def search_closest_tag(available_images, requested_tag):
@@ -757,8 +765,9 @@ class ColmapRunner(object):
     ----------
     image_files : list of plantdb.commons.db.File
         The list of image ``File`` to use for reconstruction.
-    matcher_method : {'exhaustive', 'sequential', 'spatial'}
+    matcher_method : MatcherMethods
         Method to use to perform feature matching operation.
+        Valid methods are ``['exhaustive', 'sequential', 'spatial']``.
     compute_dense : bool
         If ``True``, it will compute the dense point cloud.
     all_cli_args : dict
@@ -807,19 +816,26 @@ class ColmapRunner(object):
 
     """
 
-    def __init__(self, img_files, matcher_method="exhaustive", compute_dense=False, all_cli_args={}, align_pcd=False,
-                 use_calibration=False, bounding_box=None, **kwargs):
+    def __init__(self,
+                 img_files: list[File],
+                 matcher_method: MatcherMethods = "exhaustive",
+                 compute_dense: bool = False,
+                 all_cli_args: dict[str, dict[str, str]] = {},
+                 align_pcd: bool = False,
+                 use_calibration: bool = False,
+                 bounding_box: dict[str, list[float]] | None = None,
+                 **kwargs: Any) -> None:
         """ColmapRunner constructor.
 
         Parameters
         ----------
         img_files : list of plantdb.commons.db.File
             The list of image ``File`` to use for reconstruction.
-        matcher_method : {'exhaustive', 'sequential', 'spatial'}, optional
+        matcher_method : MatcherMethods, optional
             Method to use to perform feature matching operation, default is 'exhaustive'.
         compute_dense : bool, optional
             If ``True`` (default ``False``), compute dense point cloud.
-            This is time consumming & requires a lot of memory resources.
+            This is time consuming & requires a lot of memory resources.
         all_cli_args : dict, optional
             Dictionary of arguments to pass to colmap command lines, empty by default.
         align_pcd : bool, optional
@@ -937,7 +953,7 @@ class ColmapRunner(object):
         """
         # -- Initialize attributes:
         self.image_files = img_files  # list of plantdb.commons.fsdb.File
-        self.matcher_method = matcher_method if matcher_method in MATCHER_METHODS else DEF_MATCHER_METHODS
+        self.matcher_method = matcher_method if matcher_method in MATCHER_METHODS else DEF_MATCHER_METHOD
         self.compute_dense = compute_dense
         self.all_cli_args = all_cli_args
         self.align_pcd = align_pcd
@@ -1001,7 +1017,7 @@ class ColmapRunner(object):
 
         return
 
-    def _init_poses(self, excluded_ids:list[str] | None = None):
+    def _init_poses(self, excluded_ids: list[str] | None = None):
         """Initialize the ``poses.txt`` file for COLMAP.
 
         If the use of an "extrinsic calibration" is requested, this will try to get the "calibrated_poses" from the 'images' fileset metadata.
