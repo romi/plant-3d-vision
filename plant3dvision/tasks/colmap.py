@@ -49,6 +49,7 @@ Axes = Annotated[str, re.compile(r'^[xyzptr]*$', re.IGNORECASE)]
 DEF_AXES = 'xyzptr'
 #: Valid metrics values for image pose quality control
 Metrics = Literal["xy", "z", "pan", "tilt", "roll"]
+ALLOWED_METRICS: set[str] = set(get_args(Metrics))   # {'xy', 'z', 'pan', 'tilt', 'roll'}
 #: Default metrics for image pose quality control
 DEF_METRICS = ["xy", "z", "pan", "roll"]
 
@@ -1293,7 +1294,7 @@ class CameraPoseQC(object):
         """
         self.image_files: list[File] = image_files
         self.mad_factor: float = mad_factor
-        self.metrics: set[str] = set(metrics) & set(get_args(Metrics)) if metrics is not None else set(DEF_METRICS)
+        self.metrics: set[str] = set(metrics) & set(ALLOWED_METRICS) if metrics is not None else set(DEF_METRICS)
         self.fixed_params = fixed_params if fixed_params is not None else ["z", "tilt", "roll"]
 
         self.distance_threshold = kwargs.get('distance_threshold', 3.)
