@@ -177,9 +177,13 @@ def main(
     It enforces a negative *z* coordinate for every image pose and re‑aligns pan angles so they start at 0°,
     making downstream processing pipelines aligned a standard world‑axis orientation.
     """
+    if not (no_auth or (db_user and db_password)):
+        raise click.UsageError("Requires using either the --no-auth flag or using both --db-user and --db-password")
+
     # Initialize the database
     db = FSDB(db_path, no_auth=no_auth)
     db.connect()
+
 
     # Authenticate unless explicitly disabled
     if not no_auth and (db_user and db_password):
