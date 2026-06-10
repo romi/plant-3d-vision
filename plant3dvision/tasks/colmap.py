@@ -5,6 +5,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 from os.path import join
 from os.path import splitext
 from pathlib import Path
@@ -54,7 +55,7 @@ Axes = Annotated[str, re.compile(r'^[xyzptr]*$', re.IGNORECASE)]
 DEF_AXES = 'xyzptr'
 #: Valid metrics values for image pose quality control
 Metrics = Literal["xy", "z", "pan", "tilt", "roll"]
-ALLOWED_METRICS: set[str] = set(get_args(Metrics))   # {'xy', 'z', 'pan', 'tilt', 'roll'}
+ALLOWED_METRICS: set[str] = set(get_args(Metrics))  # {'xy', 'z', 'pan', 'tilt', 'roll'}
 #: Default metrics for image pose quality control
 DEF_METRICS = ["xy", "z", "pan", "roll"]
 
@@ -1112,24 +1113,28 @@ class Colmap(RomiTask):
         # - Export the number of keypoints found per image
         kp_counts = colmap_keypoints_per_image(db_path)
         outfile = self.output_file(COLMAP_KEYPOINTS_ID, create=True)
-        with open(outfile.path(), "w", newline="", encoding="utf-8") as file:
+        with tempfile.NamedTemporaryFile("w", suffix=".csv", newline="", encoding="utf-8") as file:
             writer = csv.writer(file)
             # Write header
             writer.writerow(["Image_ID", "Nb_KeyPoints"])
             # Write each key-value pair as a row
             for key, value in kp_counts.items():
                 writer.writerow([key, value])
+            file.flush()
+            outfile.import_file(file.name)
 
-        # - Export the number of matches and the average descriptor distance for each image pair
+        # - Export the number of matches, the average & median descriptor distance for each image pair
         stats = colmap_matches_per_pair(db_path)
         outfile = self.output_file(COLMAP_MATCHES_ID, create=True)
-        with open(outfile.path(), "w", newline="", encoding="utf-8") as file:
+        with tempfile.NamedTemporaryFile("w", suffix=".csv", newline="", encoding="utf-8") as file:
             writer = csv.writer(file)
             # Write header
             writer.writerow(["Image_ID", "Image_ID", "Nb_Matches", "Avg_Distance", "Median_Distance"])
             # Write each key-value pair as a row
             for key, value in stats.items():
                 writer.writerow([key[0], key[1], value[0], value[1], value[2]])
+            file.flush()
+            outfile.import_file(file.name)
 
         # Initialize an instance to perform camera pose estimations quality check:
         camera_pose_qc = CameraPoseQC(image_files, self.mad_factor,
@@ -1302,7 +1307,7 @@ class CameraPoseQC(object):
         fixed_params : plant3dvision.tasks.colmap.Metrics or None
             The list of metrics (camera parameters) that are "fixed", meaning they do not move during a scan.
             Defaults to ``["z", "tilt", "roll"]``.
-        
+
         Other Parameters
         ----------------
         distance_threshold : float, default ``3.0``
@@ -1338,7 +1343,7 @@ class CameraPoseQC(object):
         self._cnc_poses = None
         self.outlier_ids = []
 
-        self.image_ids: list[str] = [im.id for im in self.image_files]
+        self.image_ids: list[str] = sorted([im.id for im in self.image_files])
         # Build the distance dictionary: {"dist_name": {"img_id": distance}}
         self.dist_dict: dict[str, dict[str, float]] = {}
         self.dist_dict["xy"] = self._euclidean_dist(self.image_ids,
