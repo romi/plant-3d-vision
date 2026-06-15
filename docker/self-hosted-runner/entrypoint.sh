@@ -37,6 +37,7 @@ echo "Configuring GitHub Actions runner..."
     --token "${GITHUB_RUNNER_TOKEN}" \
     --name "${GITHUB_RUNNER_NAME:-romi-github-runner}" \
     --labels "${GITHUB_RUNNER_LABELS:-self-hosted,linux,docker,x64,gpu}" \
+    --work "${RUNNER_WORK_DIR}" \
     --replace
 
 # Ensure Buildx can write its certs

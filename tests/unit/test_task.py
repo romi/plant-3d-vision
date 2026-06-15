@@ -54,42 +54,47 @@ class ImageIdentityTask(FileByFileTask):
 
 
 class TestFilesetTarget(DummyDBTestCase):
+
     def test_target(self):
         scan = self.db.get_scan("myscan_001")
         target = FilesetTarget(scan, "testfileset2")
         with self.assertRaises(FilesetNotFoundError):
             target.get()
-        assert (not target.exists())
+        self.assertFalse(target.exists())
         target.create()
-        assert (not target.exists())  # Target `Fileset` exist but is empty
-        assert "testfileset2" in scan.list_filesets()
+        self.assertFalse(target.exists())  # Target `Fileset` exist but is empty
+        self.assertIn("testfileset2", scan.list_filesets())
         fs = scan.get_fileset("testfileset2")
         fs.create_file('dummy_test_file')  # Now target `Fileset` exist and is not empty
-        assert (target.exists())
-        assert (target.get() is not None)
+        self.assertTrue(target.exists())
+        self.assertTrue(target.get() is not None)
         rmdir(path.join(target.scan.db.basedir, target.scan.id, target.fileset_id))
 
 
 class TestRomiTask(DummyDBTestCase):
-    def test_romi_task(self):
+
+    def test_TouchFileTask(self):
         ScanConfiguration.db = self.db
         ScanConfiguration.scan = self.db.get_scan("myscan_001")
         task = TouchFileTask()
-        assert (not task.complete())
+        self.assertFalse(task.complete())
         luigi.build(tasks=[task], local_scheduler=True)
-        assert (task.complete())
+        self.assertTrue(task.complete())
 
 
 class TestFileByFileTask(FSDBTestCase):
-    def test_romi_task(self):
+
+    def test_ImageIdentityTask(self):
         db = self.get_test_db()
         ScanConfiguration.db = db
         ScanConfiguration.scan_id = "myscan_001"
         ScanConfiguration.scan = self.get_test_scan()
+        fs = ScanConfiguration.scan.create_fileset("testfileset")
+        fs.create_file("dummy_test_file")
         # task = ImageIdentityTask(fileset_id="testfileset")
-        # assert (not task.complete())
+        # self.assertFalse(task.complete())
         # luigi.build(tasks=[task], local_scheduler=True)
-        # assert (task.complete())
+        # self.assertTrue(task.complete())
         luigi.build(tasks=[ImageIdentityTask(fileset_id="testfileset")], local_scheduler=True)
 
 

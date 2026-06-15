@@ -129,6 +129,23 @@ chmod 660 /run/user/$(id -u)/docker.sock
 > Setting the socket to `600` grants read/write access to the owner only (`srw-------`).
 > Setting the socket to `660` grants read/write access to the owner and group (`srw-rw----`).
 
+### 4. Create the work directories
+
+```shell
+for i in 1 2 3 4; do
+  sudo mkdir -p /var/lib/github-runners/runner${i}/_work
+  sudo chown -R 1000:1000 /var/lib/github-runners/runner${i}
+done
+```
+
+Ensure the host directories are created with the correct offset UID:
+```shell
+sudo install -d -o 100999 -g 100999 \
+  /var/lib/github-runners/runner1/_work \
+  /var/lib/github-runners/runner2/_work \
+  /var/lib/github-runners/runner3/_work \
+  /var/lib/github-runners/runner4/_work
+```
 
 ---
 
