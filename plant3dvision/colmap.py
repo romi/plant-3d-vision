@@ -520,13 +520,8 @@ def colmap_keypoints_per_image(db_path: str | bytes | Path) -> dict[str, int]:
     con = sqlite3.connect(db_path)
     cur = con.cursor()
 
-    # 1. Map image_id -> image name
-    cur.execute("SELECT image_id, name FROM images")
-    id2name = {row[0]: row[1] for row in cur.fetchall()}
-
-    # 2. Get number of keypoints (rows) for each image_id
-    cur.execute("SELECT image_id, rows FROM keypoints")
-    kp_counts = {id2name[row[0]]: row[1] for row in cur.fetchall()}
+    cur.execute("SELECT name, rows FROM images INNER JOIN keypoints ON images.image_id==keypoints.image_id")
+    kp_counts = {row[0]: row[1] for row in cur.fetchall()}
 
     con.close()
     return kp_counts
