@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import csv
 import json
 import os
 import re
 import sys
+import tempfile
 from os.path import join
 from os.path import splitext
 from pathlib import Path
@@ -24,10 +26,14 @@ from plant3dvision.camera import get_camera_kwargs_from_images_metadata
 from plant3dvision.camera import get_colmap_cameras_from_calib_scan
 from plant3dvision.colmap import COLMAP_EXE
 from plant3dvision.colmap import ColmapRunner
+from plant3dvision.colmap import colmap_keypoints_per_image
+from plant3dvision.colmap import colmap_matches_per_pair
 from plant3dvision.colmap import estimate_camera_pose
 from plant3dvision.filenames import COLMAP_CAMERAS_ID
 from plant3dvision.filenames import COLMAP_DENSE_ID
 from plant3dvision.filenames import COLMAP_IMAGES_ID
+from plant3dvision.filenames import COLMAP_KEYPOINTS_ID
+from plant3dvision.filenames import COLMAP_MATCHES_ID
 from plant3dvision.filenames import COLMAP_POINTS_ID
 from plant3dvision.filenames import COLMAP_SPARSE_ID
 from plant3dvision.utils import angular_distance
@@ -49,7 +55,7 @@ Axes = Annotated[str, re.compile(r'^[xyzptr]*$', re.IGNORECASE)]
 DEF_AXES = 'xyzptr'
 #: Valid metrics values for image pose quality control
 Metrics = Literal["xy", "z", "pan", "tilt", "roll"]
-ALLOWED_METRICS: set[str] = set(get_args(Metrics))   # {'xy', 'z', 'pan', 'tilt', 'roll'}
+ALLOWED_METRICS: set[str] = set(get_args(Metrics))  # {'xy', 'z', 'pan', 'tilt', 'roll'}
 #: Default metrics for image pose quality control
 DEF_METRICS = ["xy", "z", "pan", "roll"]
 
@@ -1103,6 +1109,33 @@ class Colmap(RomiTask):
             outfile = self.output_file(log_path.stem)
             outfile.import_file(log_path)
 
+        db_path = Path(colmap_runner.colmap_workdir) / "database.db"
+        # - Export the number of keypoints found per image
+        kp_counts = colmap_keypoints_per_image(db_path)
+        outfile = self.output_file(COLMAP_KEYPOINTS_ID, create=True)
+        with tempfile.NamedTemporaryFile("w", suffix=".csv", newline="", encoding="utf-8") as file:
+            writer = csv.writer(file)
+            # Write header
+            writer.writerow(["Image_ID", "Nb_KeyPoints"])
+            # Write each key-value pair as a row
+            for key, value in kp_counts.items():
+                writer.writerow([key, value])
+            file.flush()
+            outfile.import_file(file.name)
+
+        # - Export the number of matches, the average & median descriptor distance for each image pair
+        stats = colmap_matches_per_pair(db_path)
+        outfile = self.output_file(COLMAP_MATCHES_ID, create=True)
+        with tempfile.NamedTemporaryFile("w", suffix=".csv", newline="", encoding="utf-8") as file:
+            writer = csv.writer(file)
+            # Write header
+            writer.writerow(["Image_ID", "Image_ID", "Nb_Matches", "Avg_Distance", "Median_Distance"])
+            # Write each key-value pair as a row
+            for key, value in stats.items():
+                writer.writerow([key[0], key[1], value[0], value[1], value[2]])
+            file.flush()
+            outfile.import_file(file.name)
+
         # Initialize an instance to perform camera pose estimations quality check:
         camera_pose_qc = CameraPoseQC(image_files, self.mad_factor,
                                       metrics=self.metrics,
@@ -1274,7 +1307,7 @@ class CameraPoseQC(object):
         fixed_params : plant3dvision.tasks.colmap.Metrics or None
             The list of metrics (camera parameters) that are "fixed", meaning they do not move during a scan.
             Defaults to ``["z", "tilt", "roll"]``.
-        
+
         Other Parameters
         ----------------
         distance_threshold : float, default ``3.0``
@@ -1310,7 +1343,7 @@ class CameraPoseQC(object):
         self._cnc_poses = None
         self.outlier_ids = []
 
-        self.image_ids: list[str] = [im.id for im in self.image_files]
+        self.image_ids: list[str] = sorted([im.id for im in self.image_files])
         # Build the distance dictionary: {"dist_name": {"img_id": distance}}
         self.dist_dict: dict[str, dict[str, float]] = {}
         self.dist_dict["xy"] = self._euclidean_dist(self.image_ids,
@@ -1367,6 +1400,8 @@ class CameraPoseQC(object):
         """Get the scan path metadata from the image fileset scan."""
         # Get scan configuration
         scan_cfg = self._get_scan_config()
+        if scan_cfg.get('ScanPath') is None:
+            return {}
         path = scan_cfg['ScanPath']['class_name']
         radius = scan_cfg['ScanPath']['kwargs']['radius']
         center = [scan_cfg['ScanPath']['kwargs']['center_x'], scan_cfg['ScanPath']['kwargs']['center_y']]
@@ -1611,8 +1646,9 @@ class CameraPoseQC(object):
         ref_poses = self.cnc_poses
         pred_poses = self.colmap_poses
         scan_path_md = self._get_scan_path_metadata()
-        radius = scan_path_md['radius']
-        center = scan_path_md['center']
+        radius = scan_path_md.get('radius', 300)
+        center = scan_path_md.get('center')
+        scatter_handles = []
 
         # Get the REFERENCE XY coordinates
         x, y, _, p, _, _ = np.array([ref_poses.get(im_id, [np.nan] * 6) for im_id in self.image_ids]).T
@@ -1621,18 +1657,22 @@ class CameraPoseQC(object):
         Xg, Yg, _, Pg, _, _ = np.array(
             [pred_poses.get(im_id, [np.nan] * 6) for im_id in self.image_ids if im_id not in outlier_ids]).T
 
-        # - Plot the REFERENCE center point
-        x_c, y_c = center  # 2D center point
-        center_scatter = ax.scatter(x_c, y_c, marker="x", c="black", s=50)
-        center_scatter.set_label("Path center")
+        if center:
+            # - Plot the REFERENCE center point
+            x_c, y_c = center  # 2D center point
+            center_scatter = ax.scatter(x_c, y_c, marker="x", c="black", s=50)
+            center_scatter.set_label("Path center")
+            scatter_handles.append(center_scatter)
 
         # - Plot REFERENCE XY poses coordinates as a black '+' marker:
         cnc_scatter = ax.scatter(x, y, marker="+", c="black")
         cnc_scatter.set_label(ref_label + " (theoritical)")
+        scatter_handles.append(cnc_scatter)
 
         # - Plot PREDICTED XY poses coordinates as a blue 'x' marker:
         colmap_scatter_g = ax.scatter(Xg, Yg, marker="x", c='blue')
         colmap_scatter_g.set_label(pred_label + " (good)")
+        scatter_handles.append(colmap_scatter_g)
 
         # - Plot the REFERENCE pan orientation as blue arrows:
         for xi, yi, angle in zip(x, y, p):
@@ -1663,6 +1703,7 @@ class CameraPoseQC(object):
             # - Plot the PREDICTED XY poses coordinates as a red 'x' marker:
             colmap_scatter_w = ax.scatter(Xw, Yw, marker="x", c="red")
             colmap_scatter_w.set_label(pred_label + " (bad)")
+            scatter_handles.append(colmap_scatter_w)
 
             # - Plot the PREDICTED pan orientation as dashed gray lines:
             for xi, yi, angle in zip(Xw, Yw, Pw):
@@ -1683,19 +1724,24 @@ class CameraPoseQC(object):
             # Get the image index
             im_ids = list(range(len(self.image_ids)))
 
-        # Add image or point ids as text:
+        # Add image or point ids as text (positioned opposite the reference pan angle):
         for i, im_id in enumerate(im_ids):
-            x_off = 0.05 * np.diff(sorted([x[i], x_c]))
-            y_off = 0.05 * np.diff(sorted([y[i], y_c]))
-            xt = x[i] - x_off if x[i] < x_c else x[i] + x_off
-            yt = y[i] - y_off if y[i] < y_c else y[i] + y_off
-            ax.text(xt, yt, f"{im_id}", ha='center', va='center', fontfamily='monospace')
+            # Original reference pan angle (degrees) for this point
+            ref_angle = p[i]  # pan angle from the reference data
+            # Compute the opposite direction (+180°) and convert to radians
+            opp_angle_rad = np.deg2rad(ref_angle + 180.0)
+            # Choose a modest offset length (5% of the visualised radius)
+            offset_len = 0.05 * radius
+            # Offset components in the opposite direction
+            dx = np.cos(opp_angle_rad) * offset_len
+            dy = np.sin(opp_angle_rad) * offset_len
+            # Position the label using the offset from the reference point
+            xt = x[i] + dx
+            yt = y[i] + dy
+            ax.text(xt, yt, f"{im_id}", ha='center', va='center',
+                    fontfamily='monospace')
 
         # - Build a custom legend that includes the arrows
-        # Original scatter handles (they already have labels)
-        scatter_handles = [center_scatter, cnc_scatter, colmap_scatter_g]
-        if outlier_ids:
-            scatter_handles.append(colmap_scatter_w)
         # Proxy handles for the three arrow styles: a simple line/marker combo that mimics the visual style
         ref_arrow_proxy = Line2D([0], [0], color='blue', lw=1.2,
                                  marker='>', markersize=8, label='CNC Pan')
@@ -1883,7 +1929,10 @@ class CameraPoseQC(object):
             logger.info("All poses distance medians are within acceptable thresholds.")
 
         # Verify the scan path type when using max blind angle parameter
-        path_type = scan_cfg['ScanPath']['class_name']
+        try:
+            path_type = scan_cfg['ScanPath']['class_name']
+        except KeyError:
+            path_type = ""
         if self.max_blind_angle != 0. and path_type != "Circle":
             logger.info("Max blind angle is only valid for circular scans.")
             self.max_blind_angle = None
