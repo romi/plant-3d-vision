@@ -1646,7 +1646,7 @@ class ColmapRunner(object):
         elif matcher_method == 'custom':
             match_list_path = f'{self.colmap_workdir}/match_list.txt'
             write_match_list(
-                [im_f.path().name for im_f in self.image_files],
+                sorted([im_f.path().name for im_f in self.image_files]),
                 match_list_path,
                 window=self.circular_match_window
             )
