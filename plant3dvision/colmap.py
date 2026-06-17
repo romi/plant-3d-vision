@@ -979,7 +979,7 @@ class ColmapRunner(object):
             The executable to use to run the colmap reconstruction steps.
             'colmap' requires that you compile and install it from sources, see [colmap]_.
             The others use pre-built docker images, available from docker hub.
-        custom_match_window : int
+        circular_match_window : int
             Number of neighbours to match on each side when manually defining image pairs for circular
             sequential matching. Used when `matcher_method='custom'`.
             Defaults to ``2``.
@@ -1096,7 +1096,7 @@ class ColmapRunner(object):
         self.align_pcd = align_pcd
         self.use_calibration = use_calibration
         self.bounding_box = bounding_box
-        self.custom_match_window = kwargs.get('custom_match_window', 2)
+        self.circular_match_window = kwargs.get('circular_match_window', 2)
         # -- Initialize COLMAP directories, poses file & log file:
         # - Get / create a temporary COLMAP working directory
         self.colmap_workdir = Path(os.environ.get("COLMAP_WD", tempfile.mkdtemp(prefix='colmap_')))
@@ -1538,7 +1538,7 @@ class ColmapRunner(object):
             write_match_list(
                 [im_f.path().name for im_f in self.image_files],
                 match_list_path,
-                window=self.custom_match_window
+                window=self.circular_match_window
             )
             args.extend(["--match_list_path", match_list_path])
             args.extend(["--match_type", "pairs"])
