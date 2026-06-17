@@ -691,7 +691,7 @@ def colmap_matches_per_pair(db_path: str | bytes | Path) -> dict[tuple[str, str]
     >>> stats = colmap_matches_per_pair(db_file)
     >>> for (img1, img2), (n_matches, avg_dist, _) in stats.items(): print(f"{img1} - {img2}: {n_matches} matches, avg L2 distance = {avg_dist:.2f}")
     00000_rgb.jpg - 00001_rgb.jpg: 330 matches, avg L2 distance = 117.95
-    >>> # --- Build a pairwise distance matrix from the stats ---
+    >>> # Build a pairwise distance matrix from the stats ---
     >>> import pandas as pd
     >>> import numpy as np
     >>> import matplotlib.pyplot as plt
@@ -816,6 +816,116 @@ def colmap_matches_per_pair(db_path: str | bytes | Path) -> dict[tuple[str, str]
 
     con.close()
     return pair_stats
+
+
+def colmap_matches_fig(kp_match, scan_id, filepath=None, cmap='viridis', vmin=None, vmax=None):
+    """Plot a circular‑ordered heat‑map of pairwise image matches.
+
+    The function builds an ``N×N`` matrix of the number of feature matches
+    between every pair of images contained in a COLMAP matches dataframe.
+    For each reference image (row) the columns are reordered so that the
+    reference image appears in the centre and its neighbours are displayed
+    with increasing offset to the left and right, yielding a “circular”
+    ordering that is convenient for visual inspection of match consistency
+    across a scan.
+
+    Parameters
+    ----------
+    kp_match : pandas.DataFrame
+        DataFrame produced by COLMAP containing at least the columns ``'Image_ID'``, ``'Image_ID.1'``
+        and ``'Nb_Matches'``. Each row represents a match between two images and the number of feature
+        matches between them.
+    scan_id : str or int
+        Identifier of the scan (or scene) that is shown in the plot title.
+    filepath : str, optional
+        Path where the generated figure should be saved.
+        If ``None`` (default) the figure is only displayed and not written to disk.
+    cmap : str, optional
+        Matplotlib colormap name used for the heat‑map. Defaults to ``'viridis'``.
+    vmin : float, optional
+        Minimum data value that maps to the colormap start.
+        If ``None`` the minimum of the data is used.
+    vmax : float, optional
+        Maximum data value that maps to the colormap end.
+        If ``None`` the maximum of the data is used.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        The created Matplotlib figure object, allowing further customization or saving by the caller.
+
+    Examples
+    --------
+    >>> import pandas as pd
+    >>> import numpy as np
+    >>> import matplotlib.pyplot as plt
+    >>> from plant3dvision.colmap import colmap_matches_fig
+    >>> # Construct a minimal example dataframe
+    >>> data = {
+    ...     'Image_ID':   ['00001_rgb.png', '00002_rgb.png', '00001_rgb.png'],
+    ...     'Image_ID.1': ['00002_rgb.png', '00003_rgb.png', '00003_rgb.png'],
+    ...     'Nb_Matches': [120, 85, 30]
+    ... }
+    >>> df = pd.DataFrame(data)
+    >>> fig = colmap_matches_fig(df, scan_id='scan_001')
+    >>> # The figure can be shown inline in a notebook
+    >>> fig.show()
+    """
+    import matplotlib.pyplot as plt
+    # Build the full NxN matches matrix
+
+    # Extract the numeric part of the filename so we can sort them correctly
+    def img_key(fname: str) -> int:
+        # “00044_rgb.png” -> 44
+        return int(fname.split("_")[0])
+
+    # Sorted list of unique images (circular order)
+    imgs = sorted(
+        set(kp_match["Image_ID"]).union(kp_match["Image_ID.1"]),
+        key=img_key,
+    )
+    N = len(imgs)
+
+    # Mapping image name / index
+    idx = {img: i for i, img in enumerate(imgs)}
+
+    # Empty matrix – we’ll fill only the upper-triangle and mirror it
+    matches = np.full((N, N), np.nan, dtype=float)
+
+    # Fill with Nb_Matches (symmetrical)
+    for _, row in kp_match.iterrows():
+        i, j = idx[row["Image_ID"]], idx[row["Image_ID.1"]]
+        matches[i, j] = row["Nb_Matches"]
+        matches[j, i] = row["Nb_Matches"]  # make it symmetric
+
+    # Re-order columns *per row* so the “image of interest” is centred
+
+    half = N // 2  # number of neighbours on each side
+    circular = np.empty_like(matches)  # will hold the reordered rows
+
+    for i in range(N):
+        # column order for row i :   (i-half) ... (i-1) , i , (i+1) ... (i+half-1)
+        col_order = [(i - half + k) % N for k in range(N)]
+        circular[i, :] = matches[i, col_order]
+
+    fig = plt.figure(figsize=(10, 8), dpi=150)
+    # Plot the heat-map
+    im = plt.imshow(circular, aspect='auto', cmap=cmap, vmin=vmin, vmax=vmax)
+    # Hide x-tick labels
+    plt.xticks([])
+    # Show y-tick labels (image names)
+    plt.yticks(ticks=np.arange(N), labels=[imgs[i] for i in range(N)])
+    # Add a colour bar with the same label as Seaborn
+    cbar = plt.colorbar(im, label="Nb. Matches")
+
+    plt.title(f"Circular-ordered match heat-map - {scan_id}")
+    plt.ylabel("Reference image (row-wise)")
+    plt.xlabel("Neighbour offset (left ← → right)")
+    plt.tight_layout()
+    if filepath is not None:
+        plt.savefig(filepath)
+
+    return fig
 
 
 #: List of valid COLMAP matcher methods:
@@ -1542,7 +1652,7 @@ class ColmapRunner(object):
             )
             args.extend(["--match_list_path", match_list_path])
             args.extend(["--match_type", "pairs"])
-            custom_opt={
+            custom_opt = {
                 "--SiftMatching.guided_matching": 1,
             }
             cli_args.update(**custom_opt)
