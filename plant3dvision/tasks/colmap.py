@@ -16,6 +16,7 @@ from typing import get_args
 
 import luigi
 import numpy as np
+import pandas as pd
 import toml
 from matplotlib.lines import Line2D
 from scipy.spatial.distance import euclidean
@@ -27,6 +28,7 @@ from plant3dvision.camera import get_colmap_cameras_from_calib_scan
 from plant3dvision.colmap import COLMAP_EXE
 from plant3dvision.colmap import ColmapRunner
 from plant3dvision.colmap import colmap_keypoints_per_image
+from plant3dvision.colmap import colmap_matches_fig
 from plant3dvision.colmap import colmap_matches_per_pair
 from plant3dvision.colmap import estimate_camera_pose
 from plant3dvision.filenames import COLMAP_CAMERAS_ID
@@ -1146,6 +1148,18 @@ class Colmap(RomiTask):
                 writer.writerow([key[0], key[1], value[0], value[1], value[2]])
             file.flush()
             outfile.import_file(file.name)
+
+        scan_cfg = get_scan_config(self.output().get().path()/'..')
+        # Verify the scan path type when using max blind angle parameter
+        try:
+            path_type = scan_cfg['ScanPath']['class_name']
+        except KeyError:
+            path_type = ""
+
+        if path_type == "Circle":
+            kp_counts = pd.read_csv(outfile.path())
+            match_fig_fpath = f"{self.output().get().path()}/circular_match_heatmap.png"
+            colmap_matches_fig(kp_counts, self.scan_id, filepath=match_fig_fpath)
 
         # Initialize an instance to perform camera pose estimations quality check:
         camera_pose_qc = CameraPoseQC(image_files, self.mad_factor,
