@@ -751,6 +751,9 @@ class Colmap(RomiTask):
         Defaults to NO bounding-box.
     cli_args : luigi.DictParameter, optional
         Dictionary of arguments to pass to colmap command lines, empty by default.
+    circular_match_window : luigi.IntParameter
+        Number of neighbours to match on each side when manually defining image pairs for circular
+        sequential matching. Used when `matcher='custom'`. Defaults to ``2``.
     intrinsic_calibration_scan_id : luigi.Parameter, optional
         If set, get the intrinsic camera parameters from this scan dataset.
         These intrinsic parameters will be set in COLMAP ``feature_extractor`` and will not be refined by ``mapper``.
@@ -847,6 +850,7 @@ class Colmap(RomiTask):
     camera_model = luigi.Parameter(default="SIMPLE_RADIAL")
     bounding_box = luigi.DictParameter(default=None)
     cli_args = luigi.DictParameter(default={})
+    circular_match_window = luigi.IntParameter(default=2)
 
     intrinsic_calibration_scan_id = luigi.Parameter(default="")
     extrinsic_calibration_scan_id = luigi.Parameter(default="")
@@ -1074,7 +1078,8 @@ class Colmap(RomiTask):
             align_pcd=bool(self.align_pcd),
             use_calibration=extrinsic_calibration,  # impact the ``poses.txt`` file: use calibrated instead of cnc poses
             bounding_box=bounding_box,
-            colmap_exe=str(self.colmap_exe)
+            colmap_exe=str(self.colmap_exe),
+            circular_match_window = self.circular_match_window
         )
 
         # Perform reconstruction and get results
@@ -1108,6 +1113,12 @@ class Colmap(RomiTask):
         for log_path in workdir.glob('*.log'):
             outfile = self.output_file(log_path.stem)
             outfile.import_file(log_path)
+
+        # Export the image pair match list file if it exists
+        match_list = workdir / "match_list.txt"
+        if match_list.is_file():
+            outfile = self.output_file("match_list")
+            outfile.import_file(match_list)
 
         db_path = Path(colmap_runner.colmap_workdir) / "database.db"
         # - Export the number of keypoints found per image
