@@ -458,6 +458,87 @@ def export_camera_parameters(image_files, intrinsics, extrinsics):
     return image_files
 
 
+def circular_match_pairs(image_names: list[str], window: int = 2) -> list[tuple[str, str]]:
+    """Return all unique image pairs for circular sequential matching.
+
+    Each image at index i is paired with the `window` images before it
+    and the `window` images after it, wrapping around (circular path).
+    Pairs are deduplicated so that (A, B) and (B, A) appear only once.
+
+    Parameters
+    ----------
+    image_names : list[str]
+        Ordered list of image filenames (relative paths inside the COLMAP
+        image folder), e.g. ["img_0000.jpg", "img_0001.jpg", ...].
+    window : int
+        Number of neighbours to match on each side (default = 2).
+
+    Returns
+    -------
+    list[tuple[str, str]]
+        Sorted list of unique (imageA, imageB) pairs.
+
+    Example
+    -------
+    >>> from plant3dvision.colmap import circular_match_pairs
+    >>> names = [f"img_{i:04d}.jpg" for i in range(5)]
+    >>> pairs = circular_match_pairs(names, window=1)
+    >>> for p in pairs: print(' '.join(p))
+    img_0000.jpg img_0001.jpg
+    img_0000.jpg img_0004.jpg
+    img_0001.jpg img_0002.jpg
+    img_0002.jpg img_0003.jpg
+    img_0003.jpg img_0004.jpg
+    """
+    n = len(image_names)
+    if n < 2:
+        raise ValueError("Need at least 2 images to form pairs.")
+    if window < 1:
+        raise ValueError("window must be >= 1.")
+
+    seen: set[tuple[int, int]] = set()
+    pairs: list[tuple[str, str]] = []
+
+    for i in range(n):
+        for delta in range(1, window + 1):
+            j = (i + delta) % n  # forward neighbour (circular)
+            key = (min(i, j), max(i, j))
+            if key not in seen:
+                seen.add(key)
+                pairs.append((image_names[key[0]], image_names[key[1]]))
+
+    pairs.sort()
+    return pairs
+
+
+def write_match_list(image_names: list[str], output_path: str | Path, window: int = 2) -> Path:
+    """Generate circular match pairs and write them to a text file suitable for COLMAP's ``matches_importer``.
+
+    Each line of the file contains two image names separated by a space: `image1.jpg image2.jpg`
+
+    Parameters
+    ----------
+    image_names : list[str]
+        Ordered list of image filenames relative to the COLMAP image folder.
+    output_path : str or Path
+        Destination file path (e.g. ``"match_list.txt"``).
+    window : int
+        Number of neighbours to match on each side (default = 2).
+
+    Returns
+    -------
+    Path
+        Resolved path to the written file.
+    """
+    pairs = circular_match_pairs(image_names, window=window)
+    output_path = Path(output_path).resolve()
+    with output_path.open("w") as f:
+        for a, b in pairs:
+            f.write(f"{a} {b}\n")
+    print(f"Wrote {len(pairs)} pairs to {output_path}")
+    return output_path
+
+
 def colmap_keypoints_per_image(db_path: str | bytes | Path) -> dict[str, int]:
     """Retrieve the number of COLMAP keypoints for each image stored in a COLMAP database.
 
@@ -738,7 +819,7 @@ def colmap_matches_per_pair(db_path: str | bytes | Path) -> dict[tuple[str, str]
 
 
 #: List of valid COLMAP matcher methods:
-MatcherMethods = Literal['exhaustive', 'sequential', 'spatial']
+MatcherMethods = Literal['exhaustive', 'sequential', 'spatial', 'custom']
 MATCHER_METHODS = get_args(MatcherMethods)
 #: Default COLMAP matcher method:
 DEF_MATCHER_METHOD = 'exhaustive'
@@ -898,6 +979,10 @@ class ColmapRunner(object):
             The executable to use to run the colmap reconstruction steps.
             'colmap' requires that you compile and install it from sources, see [colmap]_.
             The others use pre-built docker images, available from docker hub.
+        custom_match_window : int
+            Number of neighbours to match on each side when manually defining image pairs for circular
+            sequential matching. Used when `matcher_method='custom'`.
+            Defaults to ``2``.
 
         References
         ----------
@@ -907,6 +992,7 @@ class ColmapRunner(object):
 
         Examples
         --------
+        >>> import numpy as np
         >>> from plant3dvision.colmap import ColmapRunner
         >>> from plantdb.commons.test_database import test_database
         >>> db = test_database('real_plant', no_auth=True)
@@ -917,20 +1003,25 @@ class ColmapRunner(object):
         >>> images_fileset = dataset.get_fileset('images')
         >>> image_files = images_fileset.get_files()
 
+        >>> # -- Example of Colmap reconstruction with the custom circular image pair matcher
         >>> args = {"feature_extractor": {"--ImageReader.single_camera": "1"}}
-        >>> colmap = ColmapRunner(image_files, matcher_method="exhaustive", align_pcd=True, all_cli_args=args, colmap_exe="roboticsmicrofarms/colmap:3.8")
-        >>> print(colmap.colmap_workdir)
+        >>> colmap = ColmapRunner(image_files, matcher_method="custom", align_pcd=True, all_cli_args=args, colmap_exe="roboticsmicrofarms/colmap:3.8")
+        >>> print(colmap.colmap_workdir)  # print Colmap temporary working directory
+        >>> # Perform the steps necessary to the estimation of the camera poses (extrinsics)
         >>> colmap.feature_extractor()  #1 - Extract features from images
         >>> colmap.matcher()  #2 - Match extracted features from images, requires `feature_extractor()`
         >>> colmap.mapper()  #3 - Sparse point cloud reconstruction, requires `matcher()`
         >>> colmap.model_aligner()  #4 - OPTIONAL, align sparse point cloud to coordinate system of given camera centers
+        >>> colmap.export_camera_parameters()  # Export estimated camera parameters to the images' metadata
+        >>> # Retrieve the estimated camera parameters from the images' metadata
+        >>> colmap_poses = {im.id: list(map(float, im.get_metadata("estimated_pose"))) for im in images_fileset.get_files()}
+        >>> print(np.round(colmap_poses['00000_rgb'], 2))  # x, y, z, pan, tilt, roll
+        [ 74.92 379.    77.84   2.77  20.    -2.28]
+        >>> # Create and Visualize the Sparse Point cloud:
         >>> from plant3dvision.colmap import colmap_points_to_pcd
         >>> sparse_pcd = colmap_points_to_pcd(f'{colmap.sparse_dir}/0/points3D.bin')
         >>> import open3d as o3d
         >>> o3d.visualization.draw(sparse_pcd)
-
-        >>> colmap_poses = {im.id: im.get_metadata("approximate_pose") for im in images_fileset.get_files()}
-
 
         >>> import time
         >>> # -- Example comparing the CPU vs. GPU performances (requires a CUDA capable NVIDIA GPU):
@@ -1005,6 +1096,7 @@ class ColmapRunner(object):
         self.align_pcd = align_pcd
         self.use_calibration = use_calibration
         self.bounding_box = bounding_box
+        self.custom_match_window = kwargs.get('custom_match_window', 2)
         # -- Initialize COLMAP directories, poses file & log file:
         # - Get / create a temporary COLMAP working directory
         self.colmap_workdir = Path(os.environ.get("COLMAP_WD", tempfile.mkdtemp(prefix='colmap_')))
@@ -1441,6 +1533,20 @@ class ColmapRunner(object):
             _ = self._colmap_cmd('spatial_matcher', args, cli_args)
         elif matcher_method == 'transitive':
             _ = self._colmap_cmd('transitive_matcher', args, cli_args)
+        elif matcher_method == 'custom':
+            match_list_path = f'{self.colmap_workdir}/match_list.txt'
+            write_match_list(
+                [im_f.path().name for im_f in self.image_files],
+                match_list_path,
+                window=self.custom_match_window
+            )
+            args.extend(["--match_list_path", match_list_path])
+            args.extend(["--match_type", "pairs"])
+            custom_opt={
+                "--SiftMatching.guided_matching": 1,
+            }
+            cli_args.update(**custom_opt)
+            _ = self._colmap_cmd('matches_importer', args, cli_args)
         else:
             raise ValueError(f"Unknown matcher '{matcher_method}'!")
         return
