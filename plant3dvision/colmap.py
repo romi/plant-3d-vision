@@ -1639,7 +1639,11 @@ class ColmapRunner(object):
         elif matcher_method == 'sequential':
             _ = self._colmap_cmd('sequential_matcher', args, cli_args)
         elif matcher_method == 'spatial':
-            cli_args["--SpatialMatching.is_gps"] = "0"
+            spatial_opt = {
+                # Forcefully deactivate "is_gps" as we have cartesian coordinates in our case
+                "--SpatialMatching.is_gps" : "0"
+            }
+            cli_args.update(**spatial_opt)
             _ = self._colmap_cmd('spatial_matcher', args, cli_args)
         elif matcher_method == 'transitive':
             _ = self._colmap_cmd('transitive_matcher', args, cli_args)
@@ -1653,7 +1657,8 @@ class ColmapRunner(object):
             args.extend(["--match_list_path", match_list_path])
             args.extend(["--match_type", "pairs"])
             custom_opt = {
-                "--SiftMatching.guided_matching": 1,
+                # Forcefully deactivate "guided_matching" as it break matching in our case
+                "--SiftMatching.guided_matching": 0,
             }
             cli_args.update(**custom_opt)
             _ = self._colmap_cmd('matches_importer', args, cli_args)
