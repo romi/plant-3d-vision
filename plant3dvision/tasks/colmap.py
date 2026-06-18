@@ -1201,6 +1201,7 @@ class Colmap(RomiTask):
             fpath.rename(str(fpath).replace(ext, suffix))
 
         if self.qc_check:
+            logger.info(f"Checking pose coherence between CNC (theoretical) and Colmap (estimated)...")
             # - Add a "pose_estimation" metadata and performs estimation accuracy checks if requested:
             correctly_estimated = camera_pose_qc.validate_camera_poses()
             if not correctly_estimated:
@@ -1549,7 +1550,7 @@ class CameraPoseQC(object):
             mad_factor = self.mad_factor
         else:
             self.mad_factor = mad_factor
-
+        logger.info(f"Detecting image ids whose pose estimations deviate by a MAD factor of '{mad_factor}'...")
         image_ids = [im.id for im in self.image_files]
 
         # Determine outliers for each metric using the shared helper
@@ -1965,6 +1966,9 @@ class CameraPoseQC(object):
             return False
         else:
             logger.info("All poses distance medians are within acceptable thresholds.")
+
+        # Flag the outliers using the selected metrics and defined MAD factor (defines `self.outlier_ids`)
+        self.flag_outlier_poses()
 
         # Verify the scan path type when using max blind angle parameter
         try:
