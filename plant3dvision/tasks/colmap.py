@@ -40,6 +40,7 @@ from plant3dvision.filenames import COLMAP_POINTS_ID
 from plant3dvision.filenames import COLMAP_SPARSE_ID
 from plant3dvision.utils import angular_distance
 from plant3dvision.utils import mad_outlier
+from plant3dvision.utils import mad_threshold
 from plantdb.commons import io
 from plantdb.commons.fsdb.core import File
 from plantdb.commons.fsdb.core import Scan
@@ -1081,7 +1082,7 @@ class Colmap(RomiTask):
             use_calibration=extrinsic_calibration,  # impact the ``poses.txt`` file: use calibrated instead of cnc poses
             bounding_box=bounding_box,
             colmap_exe=str(self.colmap_exe),
-            circular_match_window = self.circular_match_window
+            circular_match_window=self.circular_match_window
         )
 
         # Perform reconstruction and get results
@@ -1149,7 +1150,7 @@ class Colmap(RomiTask):
             file.flush()
             outfile.import_file(file.name)
 
-        scan_cfg = get_scan_config(self.output().get().path()/'..')
+        scan_cfg = get_scan_config(self.output().get().path() / '..')
         # Verify the scan path type when using max blind angle parameter
         try:
             path_type = scan_cfg['ScanPath']['class_name']
@@ -1610,6 +1611,7 @@ class CameraPoseQC(object):
             ax.set_yticklabels(tick_labels)
             ax.set_xlabel("Distance from CNC [mm or degrees]")
 
+        scatter_handles = []
         # - Add the outlier labels
         outlier_idx = [self.image_ids.index(i) for i in outlier_ids]
         # Overlay outlier points and annotate with image IDs
@@ -1625,12 +1627,32 @@ class CameraPoseQC(object):
 
             # Plot outlier points
             xy = (y_positions, vals) if vert else (vals, y_positions)
-            ax.plot(*xy, "+", color="#d73027", markersize=4, alpha=0.7, label="outlier" if idx == 0 else "")
+            outliers_sc = ax.scatter(*xy, marker="+", c="#d73027", s=40, alpha=0.7)
 
             # Annotate each outlier with its image index
             for x, y, out_idx in zip(vals, y_positions, outlier_idx):
-                xy = (y + 0.15, x) if vert else (x + 0.1, y)
+                xy = (y + 0.1, x) if vert else (x + 0.1, y)
                 ax.text(*xy, out_idx, fontsize=8, ha="center", va="center", color="#d73027")
+        outliers_sc.set_label("Outliers")
+        scatter_handles.append(outliers_sc)
+
+        # - Add the MAD thresholds
+        for idx, metric_vals in enumerate(dist_data):
+            thresholds = [2, 3, 4]
+            mad_thresholds = mad_threshold(metric_vals, thresholds)
+            hw = 0.2
+            line_style = {"linestyle": "--", "colors": "green"}
+            txt_style = {"fontfamily": 'monospace', "fontsize": 8, "color": "green"}
+            if vert:
+                lines_sc = ax.hlines(mad_thresholds, idx + 1 - hw, idx + 1 + hw, **line_style)
+                [ax.text(idx + 1 - hw, mad_th, str(th), ha= "right", va= "center", **txt_style) for th, mad_th in
+                 zip(thresholds, mad_thresholds)]
+            else:
+                lines_sc = ax.vlines(mad_thresholds, idx + 1 - hw, idx + 1 + hw, **line_style)
+                [ax.text(mad_th, idx + 1 - hw, str(th), ha= "center", va= "top", **txt_style) for th, mad_th in
+                 zip(thresholds, mad_thresholds)]
+        lines_sc.set_label("MAD thresholds")
+        scatter_handles.append(lines_sc)
 
         # Add a title
         title = kwargs.get('title', None)
@@ -1640,7 +1662,7 @@ class CameraPoseQC(object):
         # Add a grid
         ax.grid(True, which='major', axis='both', linestyle='dotted')
         # Agg a legend
-        ax.legend()
+        ax.legend(handles=scatter_handles)
 
     def _xy_plane_scatter_plot(self, ax, outlier_ids: list[str], use_image_id=False,
                                ref_label='CNC', pred_label='Colmap', **kwargs) -> None:
@@ -1923,17 +1945,8 @@ class CameraPoseQC(object):
         else:
             plt.show()
 
-    def validate_camera_poses(self):
+    def validate_camera_poses(self) -> bool:
         """Check if estimated poses are within acceptable thresholds.
-
-        Parameters
-        ----------
-        distance_threshold : float
-            Maximum allowed distance (in mm) between estimated and ground truth poses.
-            If 0 or negative, no verification is performed.
-        max_blind_angle : float
-            Maximum allowed angle (in degrees) between consecutive failed pose estimations.
-            Only valid for circular path scans (`ScanPath.class_name` is 'Circle' in `scan.toml`).
 
         Returns
         -------
