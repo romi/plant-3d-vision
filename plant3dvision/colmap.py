@@ -535,7 +535,7 @@ def write_match_list(image_names: list[str], output_path: str | Path, window: in
     with output_path.open("w") as f:
         for a, b in pairs:
             f.write(f"{a} {b}\n")
-    print(f"Wrote {len(pairs)} pairs to {output_path}")
+    logger.info(f"Exported {len(pairs)} image pairs to {output_path}")
     return output_path
 
 
