@@ -19,8 +19,9 @@ RUN curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-29.
 # Set working directory and download runner
 WORKDIR /actions-runner
 
-# Fetch the latest runner version dynamically
-RUN curl -L -o actions-runner.tar.gz "https://github.com/actions/runner/releases/tag/v2.335.1" \
+# Fetch & install the action-runner
+RUN curl -L -o actions-runner.tar.gz \
+        "https://github.com/actions/runner/releases/download/v2.335.1/actions-runner-linux-arm64-2.335.1.tar.gz" \
     && tar xzf actions-runner.tar.gz \
     && rm actions-runner.tar.gz \
     && ./bin/installdependencies.sh \
