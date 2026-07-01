@@ -21,7 +21,7 @@ WORKDIR /actions-runner
 
 # Fetch & install the action-runner
 RUN curl -L -o actions-runner.tar.gz \
-        "https://github.com/actions/runner/releases/download/v2.335.1/actions-runner-linux-arm64-2.335.1.tar.gz" \
+        "https://github.com/actions/runner/releases/download/v2.335.1/actions-runner-linux-x64-2.335.1.tar.gz" \
     && tar xzf actions-runner.tar.gz \
     && rm actions-runner.tar.gz \
     && ./bin/installdependencies.sh \
