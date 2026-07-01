@@ -9,21 +9,18 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Docker CLI & buildx only (not the daemon)
-RUN curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-29.5.2.tgz \
+RUN curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-29.6.1.tgz \
     | tar xz --strip-components=1 -C /usr/local/bin docker/docker \
     && chmod +x /usr/local/bin/docker \
     && mkdir -p /usr/local/lib/docker/cli-plugins \
-    && curl -fsSL https://github.com/docker/buildx/releases/download/v0.34.1/buildx-v0.34.1.linux-amd64 -o /usr/local/lib/docker/cli-plugins/docker-buildx \
+    && curl -fsSL https://github.com/docker/buildx/releases/download/v0.35.0/buildx-v0.35.0.linux-amd64 -o /usr/local/lib/docker/cli-plugins/docker-buildx \
     && chmod +x /usr/local/lib/docker/cli-plugins/docker-buildx
 
 # Set working directory and download runner
 WORKDIR /actions-runner
 
 # Fetch the latest runner version dynamically
-RUN RUNNER_VERSION=$(curl -fsSL https://api.github.com/repos/actions/runner/releases/latest \
-        | jq -r '.tag_name' | sed 's/^v//') \
-    && curl -L -o actions-runner.tar.gz \
-        "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz" \
+RUN curl -L -o actions-runner.tar.gz "https://github.com/actions/runner/releases/tag/v2.335.1" \
     && tar xzf actions-runner.tar.gz \
     && rm actions-runner.tar.gz \
     && ./bin/installdependencies.sh \
