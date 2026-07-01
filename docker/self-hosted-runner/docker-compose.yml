@@ -32,10 +32,6 @@ x-runner-base: &runner-base
     - FOWNER
     - SETGID
     - SETUID
-    - NET_ADMIN
-
-  sysctls:
-    net.ipv4.ip_forward: "1"
 
   tmpfs:
     - /tmp:noexec,nosuid,nodev
