@@ -32,6 +32,7 @@ x-runner-base: &runner-base
     - FOWNER
     - SETGID
     - SETUID
+    - NET_ADMIN
 
   tmpfs:
     - /tmp:noexec,nosuid,nodev
