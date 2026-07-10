@@ -49,6 +49,7 @@ from PySide6.QtWidgets import QVBoxLayout
 from PySide6.QtWidgets import QWidget
 # Switched to backend_qtagg for Qt6 compatibility (PySide6)
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 
 from plant3dvision.proc2d import linear
@@ -193,10 +194,7 @@ class RGBFilterApp(QMainWindow):
         # Load and process buttons
         buttons_layout = QHBoxLayout()
         self.load_button = QPushButton("Load Image")
-        self.process_button = QPushButton("Process")
-        self.process_button.setEnabled(False)
         buttons_layout.addWidget(self.load_button)
-        buttons_layout.addWidget(self.process_button)
         sliders_layout.addLayout(buttons_layout)
 
         # Add sliders to controls
@@ -211,22 +209,80 @@ class RGBFilterApp(QMainWindow):
         # Add controls to main layout
         main_layout.addWidget(controls_container)
 
-        # Image display area
+        # --------------------------------------------------------------
+        # Image display area with a navigation toolbar above the canvas
+        # --------------------------------------------------------------
         self.figure = Figure(figsize=(8, 6))
         self.canvas = FigureCanvas(self.figure)
         self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)  # canvas expands
         main_layout.addWidget(self.canvas)
 
+        # Toolbar gives Zoom In, Zoom Out, Pan, Home, Save, etc.
+        self.toolbar = NavigationToolbar(self.canvas, self)
+
+        # Mouse‑wheel zoom (adds a smoother, intuitive zoom)
+        self.canvas.mpl_connect("scroll_event", self._on_scroll)
+
+        # Insert toolbar then canvas into the vertical layout
+        main_layout.addWidget(self.toolbar)
+        main_layout.addWidget(self.canvas)
+
         # Make the layout responsive: give canvas the remaining stretch
-        main_layout.setStretch(0, 0)  # controls (index 0) – no stretch
-        main_layout.setStretch(1, 1)  # canvas (index 1) – occupies extra space
+        main_layout.setStretch(0, 0)  # controls with controls (index 0) – no stretch
+        main_layout.setStretch(1, 0)  # toolbar
+        main_layout.setStretch(2, 1)  # canvas (index 2) – occupies extra space
 
         # Connect signals
         self.ch1_slider.valueChanged.connect(self.update_ch1_value)
+        self.ch1_slider.valueChanged.connect(self.process_image)
         self.ch2_slider.valueChanged.connect(self.update_ch2_value)
+        self.ch2_slider.valueChanged.connect(self.process_image)
         self.ch3_slider.valueChanged.connect(self.update_ch3_value)
+        self.ch3_slider.valueChanged.connect(self.process_image)
+        self.color_space_combo.currentTextChanged.connect(self.process_image)
+        self.min_threshold_spinbox.valueChanged.connect(self.process_image)
+        self.max_threshold_spinbox.valueChanged.connect(self.process_image)
         self.load_button.clicked.connect(self.load_image)
-        self.process_button.clicked.connect(self.process_image)
+
+    def _on_scroll(self, event):
+        """Zoom all three axes with the mouse wheel."""
+        if not self.figure.axes:
+            return
+
+        # Find which axes the event occurred in
+        target_ax = None
+        for ax in self.figure.axes:
+            if ax.contains(event)[0]:
+                target_ax = ax
+                break
+
+        if target_ax is None or event.xdata is None or event.ydata is None:
+            return  # ignore scrolls outside the image area
+
+        # Determine zoom direction
+        scale_factor = 1.1 if event.button == 'up' else 0.9
+
+        # Current limits of the target axes
+        cur_xlim = target_ax.get_xlim()
+        cur_ylim = target_ax.get_ylim()
+
+        # Compute new limits keeping the mouse position stationary
+        xdata, ydata = event.xdata, event.ydata
+        new_width = (cur_xlim[1] - cur_xlim[0]) * scale_factor
+        new_height = (cur_ylim[1] - cur_ylim[0]) * scale_factor
+
+        relx = (xdata - cur_xlim[0]) / (cur_xlim[1] - cur_xlim[0])
+        rely = (ydata - cur_ylim[0]) / (cur_ylim[1] - cur_ylim[0])
+
+        new_xlim = [xdata - relx * new_width, xdata + (1 - relx) * new_width]
+        new_ylim = [ydata - rely * new_height, ydata + (1 - rely) * new_height]
+
+        # Apply the same limits to all axes
+        for ax in self.figure.axes:
+            ax.set_xlim(new_xlim)
+            ax.set_ylim(new_ylim)
+
+        self.canvas.draw_idle()
 
     def update_channel_labels(self, mode):
         """Update channel‐label texts according to the selected color space.
@@ -308,8 +364,8 @@ class RGBFilterApp(QMainWindow):
                 ax.axis('off')
                 self.canvas.draw()
 
-                # Enable process button
-                self.process_button.setEnabled(True)
+                # Process image immediately after loading
+                self.process_image()
             except Exception as e:
                 print(f"Error loading image: {e}")
 
@@ -340,8 +396,8 @@ class RGBFilterApp(QMainWindow):
                 ax.axis('off')
                 self.canvas.draw()
 
-                # Enable process button
-                self.process_button.setEnabled(True)
+                # Process image immediately after loading
+                self.process_image()
             except Exception as e:
                 print(f"Error loading image from path '{file_path}': {e}")
 
@@ -408,6 +464,45 @@ class RGBFilterApp(QMainWindow):
 
         self.figure.tight_layout()
         self.canvas.draw()
+
+        # Synchronize axes limits for pan/zoom
+        self._sync_axes_limits()
+
+    def _sync_axes_limits(self):
+        """Synchronize the pan and zoom limits across all three axes."""
+        if len(self.figure.axes) < 3:
+            return
+
+        # Use the first axes as the reference
+        ref_ax = self.figure.axes[0]
+        xlim = ref_ax.get_xlim()
+        ylim = ref_ax.get_ylim()
+
+        # Apply to all other axes
+        for ax in self.figure.axes[1:]:
+            ax.set_xlim(xlim)
+            ax.set_ylim(ylim)
+
+        # Connect pan/zoom events to sync handler
+        for ax in self.figure.axes:
+            ax.callbacks.connect('xlim_changed', self._on_axes_changed)
+            ax.callbacks.connect('ylim_changed', self._on_axes_changed)
+
+    def _on_axes_changed(self, ax):
+        """Callback when any axes limits change (pan/zoom via toolbar)."""
+        if not hasattr(self, '_syncing') or not self._syncing:
+            self._syncing = True
+            xlim = ax.get_xlim()
+            ylim = ax.get_ylim()
+
+            # Apply to all axes
+            for other_ax in self.figure.axes:
+                if other_ax != ax:
+                    other_ax.set_xlim(xlim)
+                    other_ax.set_ylim(ylim)
+
+            self.canvas.draw_idle()
+            self._syncing = False
 
 
 @click.command()
