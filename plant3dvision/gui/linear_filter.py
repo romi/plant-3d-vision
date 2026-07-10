@@ -2,9 +2,10 @@
 # -*- coding: utf-8 -*-
 
 import sys
-from typing import Optional
 
+import click
 import numpy as np
+from PIL import Image
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 from PySide6.QtWidgets import QComboBox
@@ -17,8 +18,6 @@ from PySide6.QtWidgets import QPushButton
 from PySide6.QtWidgets import QSlider
 from PySide6.QtWidgets import QVBoxLayout
 from PySide6.QtWidgets import QWidget
-from PIL import Image
-
 # Switched to backend_qtagg for Qt6 compatibility (PySide6)
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -33,7 +32,7 @@ class RGBFilterApp(QMainWindow):
         self.setGeometry(100, 100, 800, 600)
 
         # Image placeholders
-        self.source_image: Optional[Image] = None  # PIL source image
+        self.source_image: Image = None  # PIL source image
         self.original_img = None
         self.filtered_img = None
         self.mask = None
@@ -203,6 +202,26 @@ class RGBFilterApp(QMainWindow):
             except Exception as e:
                 print(f"Error loading image: {e}")
 
+    def load_image_from_path(self, file_path: str) -> None:
+        if file_path:
+            try:
+                self.source_image = Image.open(file_path).convert("RGB")
+                img = np.array(self.source_image) / 255.0
+                self.original_img = img
+
+                # Display the original image
+                self.figure.clear()
+                ax = self.figure.add_subplot(111)
+                ax.imshow(self.original_img)
+                ax.set_title("Original Image")
+                ax.axis('off')
+                self.canvas.draw()
+
+                # Enable process button
+                self.process_button.setEnabled(True)
+            except Exception as e:
+                print(f"Error loading image from path '{file_path}': {e}")
+
     def process_image(self):
         if self.original_img is None:
             return
@@ -255,8 +274,20 @@ class RGBFilterApp(QMainWindow):
         self.canvas.draw()
 
 
-if __name__ == "__main__":
+@click.command()
+@click.argument('image_path', required=False, type=click.Path(exists=True, dir_okay=False))
+def main(image_path: str | None = None):
+    """Start the RGB linear filter GUI.
+
+    Optionally, provide an image file path to load at launch.
+    """
     app = QApplication(sys.argv)
     window = RGBFilterApp()
+    if image_path:
+        window.load_image_from_path(image_path)
     window.show()
     sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()
