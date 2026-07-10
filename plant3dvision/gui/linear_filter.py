@@ -43,6 +43,7 @@ from PySide6.QtWidgets import QHBoxLayout
 from PySide6.QtWidgets import QLabel
 from PySide6.QtWidgets import QMainWindow
 from PySide6.QtWidgets import QPushButton
+from PySide6.QtWidgets import QSizePolicy
 from PySide6.QtWidgets import QSlider
 from PySide6.QtWidgets import QVBoxLayout
 from PySide6.QtWidgets import QWidget
@@ -201,13 +202,24 @@ class RGBFilterApp(QMainWindow):
         # Add sliders to controls
         controls_layout.addLayout(sliders_layout)
 
+        # Ensure the controls panel stays compact
+        controls_container = QWidget()
+        controls_container.setLayout(controls_layout)
+        controls_container.setMaximumHeight(180)  # limit height
+        controls_container.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)  # fixed vertical size
+
         # Add controls to main layout
-        main_layout.addLayout(controls_layout)
+        main_layout.addWidget(controls_container)
 
         # Image display area
         self.figure = Figure(figsize=(8, 6))
         self.canvas = FigureCanvas(self.figure)
+        self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)  # canvas expands
         main_layout.addWidget(self.canvas)
+
+        # Make the layout responsive: give canvas the remaining stretch
+        main_layout.setStretch(0, 0)  # controls (index 0) – no stretch
+        main_layout.setStretch(1, 1)  # canvas (index 1) – occupies extra space
 
         # Connect signals
         self.ch1_slider.valueChanged.connect(self.update_ch1_value)
