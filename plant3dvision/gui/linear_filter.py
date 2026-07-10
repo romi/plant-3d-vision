@@ -1,6 +1,34 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+"""
+# Linear Filter GUI
+
+A small graphical application that lets you load an image, apply a customizable linear combination of its color channels, and visualize the filtered result together with a binary threshold mask.
+It is useful for quickly exploring channel‑mixing effects and extracting regions of interest based on intensity thresholds.
+
+## Key Features
+
+- **Interactive UI** built with PySide6 offering sliders for three channel coefficients (range 0‑1).
+- **Multiple color‑space support**: RGB, HSV, and YCbCr can be selected on‑the‑fly.
+- **Real‑time preview** of the original image, the filtered grayscale image, and the binary mask using Matplotlib.
+- **Adjustable thresholding** with minimum and maximum spin boxes to create precise binary masks.
+- **Command‑line entry point** via Click, allowing the app to start with a pre‑loaded image.
+
+## Usage Examples
+
+```shell
+# Run the GUI without an image (you can load one later via the “Load Image” button)
+linear_filter
+
+# Start the GUI and preload an image
+linear_filter path/to/your/photo.jpg
+```
+
+When the application launches, use the sliders to set the weighting of each channel, choose a color space from the dropdown, and adjust the threshold spin boxes.
+Press **Process** to see the filtered image and the corresponding mask.
+"""
+
 import sys
 
 import click
