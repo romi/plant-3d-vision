@@ -418,6 +418,12 @@ class RGBFilterApp(QMainWindow):
         if self.original_img is None:
             return
 
+        # Save current axis limits before clearing (if axes exist)
+        saved_xlim, saved_ylim = None, None
+        if self.figure.axes:
+            saved_xlim = self.figure.axes[0].get_xlim()
+            saved_ylim = self.figure.axes[0].get_ylim()
+
         # Get values from sliders
         c1_coef = self.ch1_slider.value() / 100.0
         c2_coef = self.ch2_slider.value() / 100.0
@@ -463,9 +469,16 @@ class RGBFilterApp(QMainWindow):
         ax3.axis('off')
 
         self.figure.tight_layout()
+
+        # Restore saved axis limits (pan/zoom state)
+        if saved_xlim is not None and saved_ylim is not None:
+            for ax in self.figure.axes:
+                ax.set_xlim(saved_xlim)
+                ax.set_ylim(saved_ylim)
+
         self.canvas.draw()
 
-        # Synchronize axes limits for pan/zoom
+        # Synchronize axes limits for pan/zoom (only sets up callbacks)
         self._sync_axes_limits()
 
     def _sync_axes_limits(self):
