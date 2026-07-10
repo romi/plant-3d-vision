@@ -26,7 +26,33 @@ from plant3dvision.proc2d import linear
 
 
 class RGBFilterApp(QMainWindow):
+    """RGB linear filter GUI application.
+
+    Provides an interactive interface to load an image, apply a linear
+    combination of its color channels, and visualize the resulting filtered
+    image and threshold mask.
+
+    Attributes
+    ----------
+    source_image : Image.Image
+        The original image loaded via :pymod:`PIL`, converted to ``RGB``.
+    original_img : numpy.ndarray
+        Normalized (``[0, 1]``) NumPy array of the original image.
+    filtered_img : numpy.ndarray
+        Image obtained after applying the linear filter.
+    mask : numpy.ndarray
+        Boolean mask where ``True`` indicates pixel values within the chosen
+        threshold range.
+    ch1_value, ch2_value, ch3_value : PySide6.QtWidgets.QLabel
+        Labels that display the current scaling factors for the three channels.
+    """
+
     def __init__(self):
+        """Initialize the main window and UI elements.
+
+        Set the window title, geometry and creates placeholders for image data and channel coefficients.
+        Then call `initUI` to build the graphical user interface.
+        """
         super().__init__()
         self.setWindowTitle("Linear Filter and Threshold")
         self.setGeometry(100, 100, 800, 600)
@@ -45,6 +71,11 @@ class RGBFilterApp(QMainWindow):
         self.initUI()
 
     def initUI(self):
+        """Create and arrange all widgets of the GUI.
+
+        The layout consists of three slider panels (one per channel), a color‑space selector, threshold spin boxes,
+        and a Matplotlib canvas for image display. Signal/slot connections are also set up here.
+        """
         # Main widget and layout
         main_widget = QWidget()
         main_layout = QVBoxLayout()
@@ -54,7 +85,7 @@ class RGBFilterApp(QMainWindow):
         # Controls panel
         controls_layout = QHBoxLayout()
 
-        # Sliders sliders
+        # Sliders
         sliders_layout = QVBoxLayout()
 
         # Color Space Selector
@@ -158,6 +189,13 @@ class RGBFilterApp(QMainWindow):
         self.process_button.clicked.connect(self.process_image)
 
     def update_channel_labels(self, mode):
+        """Update channel‐label texts according to the selected color space.
+
+        Parameters
+        ----------
+        mode : str
+            The color space selected in the combo box. Accepted values are ``'RGB'``, ``'HSV'`` and ``'YCbCr'``.
+        """
         labels = {
             "RGB": ("Red:", "Green:", "Blue:"),
             "HSV": ("Hue:", "Saturation:", "Value:"),
@@ -169,15 +207,48 @@ class RGBFilterApp(QMainWindow):
         self.ch3_label.setText(l3)
 
     def update_ch1_value(self, value):
+        """Refresh the displayed value for channel 1.
+
+        Parameters
+        ----------
+        value : int
+            Slider position in the range ``0``–``100``.
+            The displayed coefficient is ``value / 100``.
+        """
         self.ch1_value.setText(f"{value / 100:.2f}")
 
     def update_ch2_value(self, value):
+        """Refresh the displayed value for channel 2.
+
+        Parameters
+        ----------
+        value : int
+            Slider position in the range ``0``–``100``.
+        """
         self.ch2_value.setText(f"{value / 100:.2f}")
 
     def update_ch3_value(self, value):
+        """Refresh the displayed value for channel 3.
+
+        Parameters
+        ----------
+        value : int
+            Slider position in the range ``0``–``100``.
+
+        """
         self.ch3_value.setText(f"{value / 100:.2f}")
 
     def load_image(self):
+        """Open a file‑dialog, load an image, and display it.
+
+        The image is converted to ``RGB`` and normalized to ``[0, 1]``.
+        If loading succeeds, the *Process* button becomes enabled.
+
+        Raises
+        ------
+        Exception
+            Any exception raised by `PIL.Image.Image.open` is caught and printed to stdout.
+        """
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Open Image", "", "Image Files (*.png *.jpg *.jpeg *.bmp *.tif *.tiff)"
         )
@@ -203,6 +274,18 @@ class RGBFilterApp(QMainWindow):
                 print(f"Error loading image: {e}")
 
     def load_image_from_path(self, file_path: str) -> None:
+        """Load an image from an absolute path (used for CLI start‑up).
+
+        Parameters
+        ----------
+        file_path : str
+            Absolute path to an image file supported by Pillow.
+
+        Raises
+        ------
+        Exception
+            Propagates any error raised while opening or converting the file.
+        """
         if file_path:
             try:
                 self.source_image = Image.open(file_path).convert("RGB")
@@ -223,6 +306,19 @@ class RGBFilterApp(QMainWindow):
                 print(f"Error loading image from path '{file_path}': {e}")
 
     def process_image(self):
+        """Apply the linear filter and threshold, then display results.
+
+        The method reads the current slider positions to obtain channel coefficients, converts the source image
+        to the selected color space (if needed), calls `plant3dvision.proc2d.linear` and finally creates a binary
+        mask based on the user‑defined thresholds.
+
+        Notes
+        -----
+        The function updates three sub‑plots:
+        * original image,
+        * filtered grayscale image,
+        * binary mask.
+        """
         if self.original_img is None:
             return
 
