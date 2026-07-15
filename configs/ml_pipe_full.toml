@@ -1,95 +1,238 @@
+# =============================================================================
+# This configuration file defines a complete end‑to‑end pipeline for plant 3D
+# reconstruction, using CNN-based plant semantic segmentation, and downstream
+# analysis.
+# The pipeline is built from a set of Luigi tasks (see `plant3dvision/tasks`),
+# each of which consumes the output of the previous step.
+#
+# The high‑level flow is:
+#
+#  1. Colmap              – Sparse (and optionally dense) 3‑D reconstruction
+#                           from raw images.
+#  2. Undistort           – Optional image undistortion using the chosen
+#                           camera model or calibration data.
+#  3. ModelFilesetExists  – Verify the availability of the trained CNN model
+#                           required by `Segmentation2D`.
+#  4. Segmentation2D      – 2‑D semantic segmentation of undistorted images.
+#  5. Voxels              – Back-projection of the segmented images.
+#  6. PointCloud          – Generation of a (multi‑class) point cloud from the
+#                           voxels.
+#  7. SegmentedPointCloud – Point‑cloud post‑processing, optionally using
+#                           COLMAP poses.
+#  8. ClusteredMesh       – Mesh creation and cleaning.
+#  9. OrganSegmentation   – Clustering of mesh elements into biological organs.
+# 10. AnglesAndInternodes – Extraction of phenotypic traits (angles,
+#                           internode lengths, etc.).
+#
+# Each section below contains the task‑specific parameters with defaults
+# (comments) matching the implementation in `plant3dvision/tasks/*.py`.
+# Adjust the values as needed for your dataset and hardware.
+# =============================================================================
+
 [Colmap]
-upstream_task = "ImagesFilesetExists"  # where to get the images from, here requires the 'images' fileset to exists
-matcher = "exhaustive"  # type of matcher to use cith COLMAP, in {'exhaustive', 'sequential'}
-compute_dense = false  # wether a dense point cloud should be computed by COLMAP
-align_pcd = true  # align and scale spare (& dense) point cloud(s) using CNC coordinates
-use_gpu = true  # use GPU when possible, either use CPU
-single_camera = true  # wether a single camera was used for acquisition
-alignment_max_error = 10  # the maximum alignment error allowed during ``model_aligner``
-intrinsic_calibration_scan_id = ""  # use a dataset with calibrated intrinsic camera poses
-extrinsic_calibration_scan_id = ""  # use a dataset with calibrated extrinsic camera poses
-distance_threshold = 0  # the maximum 3D Euclidean distance to CNC pose to validate COLMAP pose estimation
-#[Colmap.cli_args.feature_extractor]
-#"--ImageReader.single_camera" = "1"  # equivalent to `single_camera = true`
-#"--SiftExtraction.use_gpu" = "1"  # equivalent to `use_gpu = true`
-#[Colmap.cli_args.exhaustive_matcher]
-#"--SiftMatching.use_gpu" = "1"  # equivalent to `use_gpu = true`
-#[Colmap.cli_args.model_aligner]
-#"--alignment_max_error" = "10"  # equivalent to `alignment_max_error = 10`
-#[Colmap.bounding_box] # default to None
+# Upstream task that provides the input files
+upstream_task = "ImagesFilesetExists"  # Default: "ImagesFilesetExists"
+# Query to filter files from upstream task by metadata
+query = "{}"  # Default: "{}" (empty dictionary, no filtering)
+# Colmap "executable" to use
+colmap_exe = "roboticsmicrofarms/colmap:3.8"
+# Type of matcher to use with COLMAP
+# Options: "exhaustive" (matches every image against every other) or "sequential" (matches successive images)
+matcher = "exhaustive"  # Default: "exhaustive"
+# Use GPU for feature extraction and matching when available
+use_gpu = true  # Default: true
+# Whether images were taken with a single camera (shared intrinsics)
+single_camera = true  # Default: true
+# Whether to compute a dense point cloud after sparse reconstruction
+compute_dense = false  # Default: false
+# Maximum alignment error allowed during model alignment
+alignment_max_error = 10  # Default: 10
+# Align and scale point clouds using CNC coordinates
+align_pcd = true  # Default: true
+# Camera model to use for reconstruction
+# Options: "SIMPLE_RADIAL", "RADIAL", "OPENCV"
+camera_model = "SIMPLE_RADIAL"  # Default: "SIMPLE_RADIAL"
+# Additional command-line arguments to pass to COLMAP
+cli_args = "{}"  # Default: "{}"
+# Dataset ID containing calibrated intrinsic camera parameters to use
+intrinsic_calibration_scan_id = ""  # Default: "" (empty, no intrinsic calibration)
+# Dataset ID containing calibrated extrinsic camera parameters to use
+extrinsic_calibration_scan_id = ""  # Default: "" (empty, no extrinsic calibration)
+# Whether to use the intrinsic parameters from extrinsic_calibration_scan_id
+use_calibration_camera = false  # Default: false
+# Whether to perform the verification of the estimated camera extrinsic
+qc_check = true  # Default: true
+# Median absolute deviation factor to detect outlier camera pose
+mad_factor = 3.0  # Default: 3.
+# List of metrics to use to detect the outliers using the MAD method.
+metrics = '["xy", "z", "pan", "roll"]'
+# Maximum distance to CNC pose to validate COLMAP pose estimation
+distance_threshold = 3.0  # Default: 3.0mm
+# Maximum distance to fixed CNC pose to validate COLMAP pose estimation
+fixed_distance_threshold = 1.0  # Default: 1.0mm
+# Maximum angular distance to CNC pose to validate COLMAP pose estimation
+angle_threshold = 5.0  # Default: 5.0°
+# Maximum angular distance to fixed CNC pose to validate COLMAP pose estimation
+fixed_angle_threshold = 3.5  # Default: 3.5°
+# Maximum blind angle tolerated for camera pose quality control
+max_blind_angle = 20.0  # Default: 20.0 (degrees)
+# Number of retries if the task fails
+retry_count = 10  # Default: 10
+# Optional bounding box to limit reconstruction volume
+# Default: None
+#[Colmap.bounding_box]
 #x = [150, 650]
 #y = [150, 650]
 #z = [-90, 300]
 
 [Undistort]
-upstream_task = "ImagesFilesetExists"  # where to get the images from, here requires the 'images' fileset to exists
-query = "{\"channel\":\"rgb\", \"pose_estimation\":\"correct\"}"  # RGB images with a valid COLMAP pose
-camera_model_src = "Colmap"  # source of the camera model to use to undistort images, in {'Colmap', 'IntrinsicCalibration', 'ExtrinsicCalibration'}
-camera_model = "SIMPLE_RADIAL"  # name of the camera model to get if `camera_model_src='IntrinsicCalibration'`.
-intrinsic_calib_scan_id = ""  # use a dataset with calibrated intrinsic camera poses
-extrinsic_calib_scan_id = ""  # use a dataset with calibrated extrinsic camera poses
+# Upstream task that provides the input files
+upstream_task = "ImagesFilesetExists"  # Default: "ImagesFilesetExists"
+# Query to filter files from upstream task by metadata
+query = "{}"  # Default: "{}" (empty dictionary, no filtering)
+# Flag to enable/disable parallel processing
+parallel = true  # Default: true
+# Number of worker threads to use for parallel processing.
+n_workers = -1  # Default: -1 (Default ``concurrent.futures.ThreadPoolExecutor`` behavior)
+# Source of the camera model
+# Options: 'Colmap', 'IntrinsicCalibration', 'ExtrinsicCalibration'
+camera_model_src = "Colmap"  # Default: "Colmap"
+# Camera model to use if using IntrinsicCalibration
+# Options: "SIMPLE_RADIAL", "RADIAL", "OPENCV"
+camera_model = "SIMPLE_RADIAL"  # Default: "SIMPLE_RADIAL"
+# Dataset ID containing calibrated intrinsic camera parameters to use
+intrinsic_calibration_scan_id = ""  # Default: "" (empty, no intrinsic calibration)
+# Dataset ID containing calibrated extrinsic camera parameters to use
+extrinsic_calibration_scan_id = ""  # Default: "" (empty, no extrinsic calibration)
 
 [ModelFilesetExists]
 scan_id = "models"
 
 [Segmentation2D]
-upstream_task = "Undistort"
-model_fileset = "ModelFilesetExists"
+# Upstream task that provides the input images
+upstream_task = "Undistort"  # Default: "Undistort"
+# Upstream model training task
+model_fileset = "ModelFilesetExists"  # Default: "ModelFilesetExists"
+# Name of the trained model to use from the 'model' Fileset
 model_id = "Resnet_896_896_epoch50"  # no default value
-query = "{\"channel\":\"rgb\"}"  # default is an empty dict '{}'
-labels = "[]"  # default is empty list to use all trained labels from model
-inverted_labels = "[\"background\"]"
-Sx = 896
-Sy = 896
-binarize = true
-resize = true
-dilation = 1
-epochs = 1
-batch = 1
-learning_rate = 0.0001
-threshold = 0.01
+# Query to filter files from upstream task by metadata
+query = "{\"channel\":\"rgb\"}"  # Default: "{}" (empty dictionary, no filtering)
+# List of labels identifiers produced by the neural network to use to generate (binary) mask files
+labels = "[]"  # Default: [] (use all labels identifiers from model)
+# List of labels identifiers that requires inversion of their predicted mask
+inverted_labels = "[\"background\"]"  # Default: ["background"]
+# Size of the images in the neural network (width)
+Sx = 896  # Default: 896
+# Size of the images in the neural network (height)
+Sy = 896  # Default: 896
+# Boolean flag to binarize predictions
+binarize = true  # Default: true
+# Boolean flag to resize predictions
+resize = true  # Default: true
+# Dilation factor to apply to a binary mask
+dilation = 1  # Default: 1
+# Number of epochs for training (only used when training a model)
+epochs = 1  # Default: 1
+# Batch size for training (only used when training a model)
+batch = 1  # Default: 1
+# Learning rate for training (only used when training a model)
+learning_rate = 0.0001  # Default: 0.0001
+# Threshold to binarize predictions, required if binarize=True
+threshold = 0.01  # Default: 0.01
 
 [Voxels]
-upstream_task = "Segmentation2D"
-query = "{}"
-camera_metadata = "colmap_camera"
-voxel_size = 1.0
-method = "averaging"
-invert = false
-labels = "[\"background\"]"
+# Upstream task that provides the masked images as input
+upstream_task = "Segmentation2D"  # Default: "Masks"
+# Query to filter files from upstream task by metadata
+query = "{}"  # Default: "{}" (empty dictionary, no filtering)
+# Metadata entry to use to access camera poses
+camera_metadata = "colmap_camera"  # Default: "colmap_camera"
+# Size of the voxel to reconstruct, defines the resolution of the 3D array
+voxel_size = 1.0  # Default: 1.0
+# Type of backprojection algorithm to use
+# Options: "carving", "averaging"
+method = "averaging"  # Default: "averaging"
+# Whether to convert mask images to logarithmic values for 'averaging' type prior to back-projection
+log = true  # Default: true
+# Whether to invert the mask values
+invert = true  # Default: false
+# List of labels to use for multi-class voxel reconstruction (requires a labeled mask dataset)
+labels = "[\"background\"]"  # Default: [] (empty list)
+
+[Voxels.bounding_box]
+# 3D bounding box defining the region of interest for reconstruction
+# Default: None (uses the entire volume)
+# These values work with the 'real_plant' test data
+x = [330, 450]
+y = [300, 430]
+z = [-125, 100]
+
 
 [PointCloud]
-upstream_task = "Voxels"
-labels = "[\"background\"]"
-missing_images_threshold = 2
-level_set_value = 0.5 # default to 1.0
-background_prior= 1.0
-min_contrast = 10.0
-min_score = 0.01 # default to 0.2
+# Upstream task that provides the voxel array as input
+upstream_task = "Voxels"  # Default: "Voxels"
+# Algorithm to use to compute the pointcloud
+algorithm = "marching-cubes"  # Default: "marching-cubes"
+# Distance of the level set on which the points are sampled
+level_set_value = 0.0  # Default: 1.0
+# Threshold for the number of missing images allowed in the reconstructed volume
+missing_images_threshold = 2  # Default: 2
+# List of labels to use for multi-class point cloud generation
+labels = "[\"background\"]"  # Default: [] (empty list)
+# Prior probability assigned to background points in multi-class segmentation
+# Only used if labels are defined (multi-class)
+background_prior = 1.0  # Default: 1.0
+# Minimum contrast required between object and background in multi-class segmentation
+# Only used if labels are defined (multi-class)
+min_contrast = 10.0  # Default: 10.0
+# Minimum score threshold for points in multi-class segmentation
+# Only used if labels are defined (multi-class)
+min_score = 0.2  # Default: 0.2
+# Standard deviation for Gaussian kernel (only for marching-cubes)
+sigma = 0.8
+# Level set value for the marching cubes algorithm
+mc_level = 0.5
 
 [SegmentedPointCloud]
-upstream_segmentation = "Segmentation2D"
-upstream_task = "PointCloud"
-use_colmap_poses = true
+# Upstream task that provides a point cloud
+upstream_task = "PointCloud"  # Default: "PointCloud"
+# Upstream task that provides 2D semantic segmentation of the 'images'
+upstream_segmentation = "Segmentation2D"  # Default: "Segmentation2D"
+# Whether to use COLMAP poses for back-projection
+use_colmap_poses = true  # Default: true
 
 [ClusteredMesh]
-upstream_task = "SegmentedPointCloud"
-min_vol = 1.0
-min_length = 10.0
+# Upstream task that provides a segmented point cloud
+upstream_task = "SegmentedPointCloud"  # Default: "SegmentedPointCloud"
+# Minimum volume threshold for mesh components
+min_vol = 1.0  # Default: 1.0
+# Minimum length threshold for mesh components
+min_length = 10.0  # Default: 10.0
 
 [OrganSegmentation]
-upstream_task = "SegmentedPointCloud"
-eps = 2.0
-min_points = 5
+# Upstream task that provides a segmented point cloud
+upstream_task = "SegmentedPointCloud"  # Default: "SegmentedPointCloud"
+# Maximum Euclidean distance between two samples for one to be considered as in the neighborhood of the other
+eps = 2.0  # Default: 2.0
+# Number of points in a neighborhood for a point to be considered as a core point
+min_points = 5  # Default: 5
 
 [AnglesAndInternodes]
-upstream_task = "OrganSegmentation"
-characteristic_length = 1.0
-organ_type = "fruit"
-stem_axis = 2
-stem_axis_inverted = false
-min_elongation_ratio = 2.0
-min_fruit_size = 0.1
+# Upstream task that provides organized point clouds or meshes
+upstream_task = "OrganSegmentation"  # Default: "OrganSegmentation"
+# Characteristic length for phenotypic trait calculations
+characteristic_length = 1.0  # Default: 1.0
+# Type of organ to analyze (e.g., 'fruit')
+organ_type = "fruit"  # Default: "fruit"
+# Index of the stem axis (0=x, 1=y, 2=z)
+stem_axis = 2  # Default: 2
+# Whether the stem axis is inverted
+stem_axis_inverted = false  # Default: false
+# Minimum elongation ratio for valid organs
+min_elongation_ratio = 2.0  # Default: 2.0
+# Minimum fruit size for valid detections
+min_fruit_size = 0.1  # Default: 0.1
 
 [Clean]
-no_confirm = true
+# Whether NOT to ask for confirmation before cleaning a dataset
+no_confirm = true  # Default: false
