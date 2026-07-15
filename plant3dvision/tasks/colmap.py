@@ -707,7 +707,7 @@ class Colmap(RomiTask):
     Parameters
     ----------
     upstream_task : luigi.TaskParameter, optional
-        Task upstream of this task. Defaults to ``ImagesFilesetExists``.
+        The upstream task. Defaults to ``ImagesFilesetExists``.
     scan_id : luigi.Parameter, optional
         The dataset ID (scan name) to use to create the ``FilesetTarget``.
         If unspecified (default), the current active scan will be used.
