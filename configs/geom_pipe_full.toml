@@ -1,9 +1,37 @@
+# =============================================================================
+# This configuration file defines a complete end‑to‑end pipeline for plant 3D
+# reconstruction, using geometric image processing and downstream analysis.
+# The pipeline is built from a set of Luigi tasks (see `plant3dvision/tasks`),
+# each of which consumes the output of the previous step.
+#
+# The high‑level flow is:
+#
+#  1. Colmap              – Sparse (and optionally dense) 3‑D reconstruction
+#                           from raw images.
+#  2. Undistort           – Optional image undistortion using the chosen
+#                           camera model or calibration data.
+#  3. Masks               – 2‑D binary mask generation from undistorted images.
+#  4. Voxels              – Back-projection of the masked images.
+#  5. PointCloud          – Generation of a point cloud from the voxels.
+#  6. TriangleMesh        – Generation of a triangle mesh from the point cloud.
+#  7. CurveSkeleton       – Extraction of a skeleton from the triangle mesh.
+#  8. RefineSkeleton      – Refinement of the skeleton against the point cloud.
+#  9. TreeGraph           – Construction of a tree graph from the refined
+#                           skeleton.
+# 10. AnglesAndInternodes – Extraction of phenotypic traits (angles,
+#                           internode lengths, etc.).
+#
+# Each section below contains the task‑specific parameters with defaults
+# (comments) matching the implementation in `plant3dvision/tasks/*.py`.
+# Adjust the values as needed for your dataset and hardware.
+# =============================================================================
+
 [Colmap]
-# The upstream task that provides the input files
+# Upstream task that provides the input files
 upstream_task = "ImagesFilesetExists"  # Default: "ImagesFilesetExists"
 # Query to filter files from upstream task by metadata
-query = "{}"  # Default: "{}"  (empty dictionary, no filtering)
-# The colmap "executable" to use
+query = "{}"  # Default: "{}" (empty dictionary, no filtering)
+# Colmap "executable" to use
 colmap_exe = "roboticsmicrofarms/colmap:3.8"
 # Type of matcher to use with COLMAP
 # Options: "exhaustive" (matches every image against every other) or "sequential" (matches successive images)
@@ -33,7 +61,7 @@ use_calibration_camera = false  # Default: false
 qc_check = true  # Default: true
 # Median absolute deviation factor to detect outlier camera pose
 mad_factor = 3.0  # Default: 3.
-# The list of metrics to use to detect the outliers using the MAD method.
+# List of metrics to use to detect the outliers using the MAD method.
 metrics = '["xy", "z", "pan", "roll"]'
 # Maximum distance to CNC pose to validate COLMAP pose estimation
 distance_threshold = 3.0  # Default: 3.0mm
@@ -55,7 +83,7 @@ retry_count = 10  # Default: 10
 #z = [-90, 300]
 
 [Undistort]
-# The upstream task that provides the input files
+# Upstream task that provides the input files
 upstream_task = "ImagesFilesetExists"  # Default: "ImagesFilesetExists"
 # Query to filter files from upstream task by metadata
 query = "{}"  # Default: "{}" (empty dictionary, no filtering)
@@ -75,19 +103,19 @@ intrinsic_calibration_scan_id = ""  # Default: "" (empty, no intrinsic calibrati
 extrinsic_calibration_scan_id = ""  # Default: "" (empty, no extrinsic calibration)
 
 [Masks]
-# The upstream task that provides input images
+# Upstream task that provides input images
 # Options: "Undistort", "ImagesFilesetExists"
 upstream_task = "Undistort"  # Default: "Undistort"
 # Query to filter files from upstream task by metadata
-query = "{\"channel\":\"rgb\"}"  # Default: "{\"channel\":\"rgb\"}"  (only RGB images)
+query = "{\"channel\":\"rgb\"}"  # Default: "{\"channel\":\"rgb\"}" (only RGB images)
 # Flag to enable/disable parallel processing
 parallel = true  # Default: true
 # Number of worker threads to use for parallel processing.
 n_workers = -1  # Default: -1 (Default ``concurrent.futures.ThreadPoolExecutor`` behavior)
-# The type of image transformation algorithm to use prior to masking
+# Type of image transformation algorithm to use prior to masking
 # Options: "linear" (linear combination of the channels (RGB, HSV, YCbCr), "excess_green" (excess green index)
 method = "linear"  # Default: "linear"
-# The colorspace to use for the filtering
+# Colorspace to use for the filtering
 # Options: "RGB", "HSV", "YCbCr"
 colorspace = "RGB"  # Default: "RGB"
 # Linear coefficients to apply to each channel of the original image in the selected colorspace
@@ -105,7 +133,7 @@ dilation = 1 # Default: 0 (no dilation)
 # Task that provides the masked images as input
 upstream_task = "Masks"  # Default: "Masks"
 # Query to filter files from upstream task by metadata
-query = "{}"  # Default: "{}"  (empty dictionary, no filtering)
+query = "{}"  # Default: "{}" (empty dictionary, no filtering)
 # Metadata entry to use to access camera poses
 camera_metadata = "colmap_camera"  # Default: "colmap_camera"
 # Size of the voxel to reconstruct, defines the resolution of the 3D array
@@ -123,7 +151,7 @@ labels = "[]"  # Default: [] (empty list)
 [Voxels.bounding_box]
 # 3D bounding box defining the region of interest for reconstruction
 # Default: None (uses the entire volume)
-# The values works with the 'real_plant' test data
+# These values work with the 'real_plant' test data
 x = [330, 450]
 y = [300, 430]
 z = [-125, 100]
@@ -131,7 +159,7 @@ z = [-125, 100]
 [PointCloud]
 # Task that provides the voxel array as input
 upstream_task = "Voxels"  # Default: "Voxels"
-# The algorithm to use to compute the pointcloud
+# Algorithm to use to compute the pointcloud
 algorithm = "marching-cubes"  # Default: "marching-cubes"
 # Distance of the level set on which the points are sampled
 level_set_value = 0.0  # Default: 1.0
@@ -156,7 +184,7 @@ mc_level = 0.5
 [TriangleMesh]
 # Task that provides the point cloud as input
 upstream_task = "PointCloud"  # Default: "PointCloud"
-# The library to use for meshing the point cloud
+# Library to use for meshing the point cloud
 # Options: 'open3d', 'cgal'
 library = "open3d"  # Default: "open3d"
 # Filtering method to apply to the obtained triangle mesh
@@ -228,11 +256,11 @@ stem_axis_inverted = false  # Default: false
 min_elongation_ratio = 2.0  # Default: 2.0
 
 [PlantMetrics]
-# The upstream task that provides the input files
+# Upstream task that provides the input files
 upstream_task = "ImagesFilesetExists"  # Default: "ImagesFilesetExists"
-# The list of matrics to compute
+# List of metrics to compute
 metrics = ["stem_length", "q_hull_volume"]
 
 [Clean]
-# Whether NOT to ask for confirmation prior to cleaning a dataset
+# Whether NOT to ask for confirmation before cleaning a dataset
 no_confirm = false  # Default: false
