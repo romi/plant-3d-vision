@@ -36,7 +36,7 @@ class CropWithBoundingBox(ParallelFileTask):
     Parameters
     ----------
     upstream_task : luigi.TaskParameter, optional
-        The task providing the input images. Defaults to ``ImagesFilesetExists``.
+        The upstream task, should provide the input images. Defaults to ``ImagesFilesetExists``.
     scan_id : luigi.Parameter, optional
         Dataset identifier (scan name) for the output fileset.
     query : luigi.DictParameter, optional
@@ -114,8 +114,7 @@ class Undistort(ParallelFileTask):
     Parameters
     ----------
     upstream_task : luigi.TaskParameter, optional
-        The task to use upstream to the `Undistort` tasks.
-        It should be a tasks that generates a ``Fileset`` of RGB images.
+        The upstream task, should be a tasks that generates a ``Fileset`` of RGB images.
         Defaults to ``'ImagesFilesetExists'``.
     scan_id : luigi.Parameter, optional
         The dataset id (scan name) to use to create the ``FilesetTarget``.
@@ -338,8 +337,7 @@ class Masks(ParallelFileTask):
     Parameters
     ----------
     upstream_task : luigi.TaskParameter, optional
-        The task to use upstream to this task.
-        It should be a task that generates a ``Fileset`` of RGB images.
+        The upstream task, should be a task that generates a ``Fileset`` of RGB images.
         It can be ``ImagesFilesetExists`` or ``Undistort``.
         Defaults to `'Undistort'`.
     scan_id : luigi.Parameter, optional
@@ -518,8 +516,7 @@ class Segmentation2D(FileByFileTask):
     Attributes
     ----------
     upstream_task : luigi.TaskParameter, optional
-        The task to use upstream to this task.
-        It should be a task that generates a ``Fileset`` of RGB images.
+        The upstream task, should be a task that generates a ``Fileset`` of RGB images.
         It can thus be ``ImagesFilesetExists`` or ``Undistort``.
         Defaults to `'Undistort'`.
     scan_id : luigi.Parameter, optional
