@@ -1,90 +1,122 @@
 [Colmap]
-upstream_task = "ImagesFilesetExists"
-matcher = "exhaustive"
-intrinsic_calibration_scan_id = ""
-extrinsic_calibration_scan_id = ""
-compute_dense = false
-align_pcd = true
-use_gpu = true
-single_camera = true
-robust_alignment_max_error = 10
-distance_threshold = 4
-retry_count = 10
+# Type of matcher to use with COLMAP
+# Options: "exhaustive" (matches every image against every other) or "sequential" (matches successive images)
+matcher = "exhaustive"  # Default: "exhaustive"
+# Camera model to use for reconstruction
+# Options: "SIMPLE_RADIAL", "RADIAL", "OPENCV"
+camera_model = "SIMPLE_RADIAL"  # Default: "SIMPLE_RADIAL"
+# Whether images were taken with a single camera (shared intrinsics)
+single_camera = true  # Default: true
+# Whether to perform the verification of the estimated camera extrinsic
+qc_check = true
+# Median absolute deviation factor to detect outlier camera pose
+mad_factor = 3.0
+# List of metrics to use to detect the outliers using the MAD method.
+metrics = '["xy", "z", "pan"]'
+# Maximum blind angle tolerated for camera pose quality control
+max_blind_angle = 20.0  # Default: 20.0 (degrees)
+# Number of retries if the task fails
+retry_count = 10  # Default: 10
 
 [Undistort]
-upstream_task = "ImagesFilesetExists"
+# Upstream task that provides the input files
+upstream_task = "ImagesFilesetExists"  # Default: "ImagesFilesetExists"
+# Query to filter files from upstream task by metadata
 query = "{\"channel\":\"rgb\", \"pose_estimation\":\"correct\"}"  # RGB images with a valid COLMAP pose
 
 [ModelFilesetExists]
 scan_id = "models"
 
 [Segmentation2D]
-upstream_task = "Undistort"
-model_fileset = "ModelFilesetExists"
+# Upstream task that provides the input images
+upstream_task = "Undistort"  # Default: "Undistort"
+# Upstream model training task
+model_fileset = "ModelFilesetExists"  # Default: "ModelFilesetExists"
+# Name of the trained model to use from the 'model' Fileset
 model_id = "Resnet_896_896_epoch50"  # no default value
-query = "{\"channel\":\"rgb\"}"  # default is an empty dict '{}'
-Sx = 896
-Sy = 896
-binarize = true
-resize = true
-dilation = 1
-epochs = 1
-batch = 1
-learning_rate = 0.0001
-threshold = 0.01
+# Query to filter files from upstream task by metadata
+query = "{\"channel\":\"rgb\"}"  # Default: "{}" (empty dictionary, no filtering)
+# List of labels identifiers that requires inversion of their predicted mask
+inverted_labels = "[\"background\"]"  # Default: ["background"]
+# Boolean flag to binarize predictions
+binarize = true  # Default: true
+# Threshold to binarize predictions, required if binarize=True
+threshold = 0.01  # Default: 0.01
+# Dilation factor to apply to a binary mask
+dilation = 1  # Default: 1
 
 [Voxels]
-upstream_task = "Segmentation2D"
-voxel_size = 1
-method = "averaging"
-invert = true
-labels = "[\"background\"]"
+# Upstream task that provides the masked images as input
+upstream_task = "Segmentation2D"  # Default: "Masks"
+# Metadata entry to use to access camera poses
+camera_metadata = "colmap_camera"  # Default: "colmap_camera"
+# Size of the voxel to reconstruct, defines the resolution of the 3D array
+voxel_size = 1.0  # Default: 1.0
+# Type of backprojection algorithm to use
+# Options: "carving", "averaging"
+method = "averaging"  # Default: "averaging"
+# Whether to invert the mask values
+invert = true  # Default: false
+# List of labels to use for multi-class voxel reconstruction (requires a labeled mask dataset)
+labels = "[\"background\"]"  # Default: [] (empty list)
 
 [Voxels.bounding_box]
-# Needs to be defined according to scanned data
-x = [ 300, 435,]
-y = [ 300, 435,]
-z = [ -300, 60,]
+# 3D bounding box defining the region of interest for reconstruction
+# Default: None (uses the entire volume)
+# These values work with the 'real_plant' test data
+x = [330, 450]
+y = [300, 430]
+z = [-125, 100]
 
 [PointCloud]
-upstream_task = "Voxels"
-labels = "[\"background\"]"
-missing_images_threshold = 2
-level_set_value = 0.5 # default to 1.0
-log = false
-background_prior= 1.0
-min_contrast = 10.0
-min_score = 0.01 # default to 0.2
+# Upstream task that provides the voxel array as input
+upstream_task = "Voxels"  # Default: "Voxels"
+# Algorithm to use to compute the pointcloud
+algorithm = "marching-cubes"  # Default: "marching-cubes"
+# Distance of the level set on which the points are sampled
+level_set_value = 0.0  # Default: 1.0
+# Threshold for the number of missing images allowed in the reconstructed volume
+missing_images_threshold = 2  # Default: 2
+# List of labels to use for multi-class point cloud generation
+labels = "[\"background\"]"  # Default: [] (empty list)
+# Prior probability assigned to background points in multi-class segmentation
+# Only used if labels are defined (multi-class)
+background_prior = 1.0  # Default: 1.0
+# Minimum contrast required between object and background in multi-class segmentation
+# Only used if labels are defined (multi-class)
+min_contrast = 10.0  # Default: 10.0
+# Minimum score threshold for points in multi-class segmentation
+# Only used if labels are defined (multi-class)
+min_score = 0.2  # Default: 0.2
+# Standard deviation for Gaussian kernel (only for marching-cubes)
+sigma = 0.8
+# Level set value for the marching cubes algorithm
+mc_level = 0.5
 
 [SegmentedPointCloud]
-upstream_task = "PointCloud"
-upstream_segmentation = "Segmentation2D"
-use_colmap_poses = true
+# Upstream task that provides a point cloud
+upstream_task = "PointCloud"  # Default: "PointCloud"
+# Upstream task that provides 2D semantic segmentation of the 'images'
+upstream_segmentation = "Segmentation2D"  # Default: "Segmentation2D"
+# Whether to use COLMAP poses for back-projection
+use_colmap_poses = true  # Default: true
 
 [ClusteredMesh]
-upstream_task = "SegmentedPointCloud"
-min_vol = 1.0
-min_length = 10.0
+# Upstream task that provides a segmented point cloud
+upstream_task = "SegmentedPointCloud"  # Default: "SegmentedPointCloud"
 
 [OrganSegmentation]
-upstream_task = "SegmentedPointCloud"
-eps = 2.0
-min_points = 5
+# Upstream task that provides a segmented point cloud
+upstream_task = "SegmentedPointCloud"  # Default: "SegmentedPointCloud"
 
 [AnglesAndInternodes]
-upstream_task = "OrganSegmentation"
-characteristic_length = 1.0
-organ_type = "fruit"
-stem_axis = 2
-stem_axis_inverted = false
-min_elongation_ratio = 2.0
-min_fruit_size = 0.1
-
-[AnglesAndInternodesEvaluation]
-upstream_task = "AnglesAndInternodes"
-ground_truth = "ImagesFilesetExists"  # "ImagesFilesetExists" with manual measures / "VirtualPlantObj" with computer generated plants
-free_ends = 0.4
-free_ends_eps = 1e-2
+# Upstream task that provides organized point clouds or meshes
+upstream_task = "OrganSegmentation"  # Default: "OrganSegmentation"
+# Type of organ to analyze (e.g., 'fruit')
+organ_type = "fruit"  # Default: "fruit"
+# Whether the stem axis is inverted
+stem_axis_inverted = false  # Default: false
 
 [Clean]
-no_confirm = true
+# Whether NOT to ask for confirmation before cleaning a dataset
+no_confirm = true  # Default: false
