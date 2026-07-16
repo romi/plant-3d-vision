@@ -129,16 +129,16 @@ class Undistort(ParallelFileTask):
     parallel : luigi.BoolParameter, optional
         Flag to enable/disable parallel processing.
         Defaults to ``True``.
-    camera_model_src : luigi.Parameter, optional
+    upstream_camera_model : luigi.Parameter, optional
         Source of the camera model, can be in ['Colmap', 'IntrinsicCalibration', 'ExtrinsicCalibration']
     camera_model : luigi.Parameter, optional
-        Name of the camera model to get if `camera_model_src='IntrinsicCalibration'`.
+        Name of the camera model to get if `upstream_camera_model='IntrinsicCalibration'`.
     intrinsic_calib_scan_id : luigi.Parameter, optional
         Name of the intrinsic calibration scan (dataset) to use. 
-        Used only if  `camera_model_src='IntrinsicCalibration'`.
+        Used only if `upstream_camera_model='IntrinsicCalibration'`.
     extrinsic_calib_scan_id : luigi.Parameter, optional
         Name of the extrinsic calibration scan (dataset) to use.
-        Used only if  `camera_model_src='ExtrinsicCalibration'`.
+        Used only if `upstream_camera_model='ExtrinsicCalibration'`.
 
     Returns
     -------
@@ -174,7 +174,7 @@ class Undistort(ParallelFileTask):
     upstream_task = luigi.TaskParameter(default=ImagesFilesetExists)
 
     # Parameter to specify source of camera calibration data
-    camera_model_src = luigi.Parameter("Colmap")  # Options: Colmap, IntrinsicCalibration, ExtrinsicCalibration
+    upstream_camera_model = luigi.Parameter("Colmap")  # Options: Colmap, IntrinsicCalibration, ExtrinsicCalibration
 
     # Parameters for intrinsic calibration
     camera_model = luigi.Parameter(default="SIMPLE_RADIAL")  # Camera model type for intrinsic calibration
@@ -190,7 +190,7 @@ class Undistort(ParallelFileTask):
         from plant3dvision.tasks.calibration import IntrinsicCalibrationExists
 
         # Validate configuration for intrinsic calibration
-        if self.extrinsic_calib_scan_id == "" and str(self.camera_model_src).lower() == 'intrinsiccalibration':
+        if self.extrinsic_calib_scan_id == "" and str(self.upstream_camera_model).lower() == 'intrinsiccalibration':
             logger.critical(
                 "If you use an IntrinsicCalibration as source for camera model, you have to define `extrinsic_calib_scan_id`!")
             sys.exit("Missing poses estimation in IntrinsicCalibration.")
@@ -203,10 +203,10 @@ class Undistort(ParallelFileTask):
             extrinsic_calib_scan = ExtrinsicCalibrationExists(scan_id=self.extrinsic_calib_scan_id)
 
         # Return required tasks based on camera model source
-        if str(self.camera_model_src).lower() == 'intrinsiccalibration':
+        if str(self.upstream_camera_model).lower() == 'intrinsiccalibration':
             logger.info(f"Using intrinsic calibration scan: {self.intrinsic_calib_scan_id}...")
             return {"camera": intrinsic_calib_scan, "images": self.upstream_task()}
-        elif str(self.camera_model_src).lower() == 'extrinsiccalibration':
+        elif str(self.upstream_camera_model).lower() == 'extrinsiccalibration':
             logger.info(f"Using extrinsic calibration scan: {self.extrinsic_calib_scan_id}...")
             return {"camera": extrinsic_calib_scan, "images": self.upstream_task()}
         else:
@@ -242,21 +242,21 @@ class Undistort(ParallelFileTask):
         colmap_camera = None
 
         # Handle intrinsic calibration case
-        if str(self.camera_model_src).lower() == 'intrinsiccalibration':
+        if str(self.upstream_camera_model).lower() == 'intrinsiccalibration':
             from plant3dvision.camera import get_camera_params_from_arrays
             from plant3dvision.camera import colmap_params_from_kwargs
             camera_params = get_camera_params_from_arrays(self.camera_model)
             params = colmap_params_from_kwargs(**camera_params)
             colmap_camera = {"camera_model": {"camera_model": self.camera_model, "params": params}}
         # Handle extrinsic calibration case
-        elif str(self.camera_model_src).lower() == 'extrinsiccalibration':
+        elif str(self.upstream_camera_model).lower() == 'extrinsiccalibration':
             from plant3dvision.camera import get_camera_arrays_from_params
             colmap_camera, poses = self.input()['camera']
 
         # Store these for use in the f method
         self._poses = poses
         self._colmap_camera = colmap_camera
-        self._camera_model_src = self.camera_model_src
+        self._upstream_camera_model = self.upstream_camera_model
 
         # Let the parent class handle the parallel execution
         super().run(self.input()['images'].get(), self.output().get())
@@ -313,12 +313,12 @@ class Undistort(ParallelFileTask):
             if hasattr(self, '_poses') and self._poses is not None:
                 fi.set_metadata({'calibrated_pose': self._poses[fi.id]})
             if hasattr(self, '_colmap_camera'):
-                if str(self._camera_model_src).lower() == 'intrinsiccalibration':
+                if str(self._upstream_camera_model).lower() == 'intrinsiccalibration':
                     fi.set_metadata({'colmap_camera': self._colmap_camera})
-                elif str(self._camera_model_src).lower() == 'extrinsiccalibration':
+                elif str(self._upstream_camera_model).lower() == 'extrinsiccalibration':
                     fi.set_metadata({'colmap_camera': self._colmap_camera[fi.id]})
 
-            md = {'upstream_task': str(self.upstream_task), "Camera model source": str(self.camera_model_src)}
+            md = {'upstream_task': str(self.upstream_task), "Camera model source": str(self.upstream_camera_model)}
             outfi.set_metadata(md)
             return outfi
         else:
