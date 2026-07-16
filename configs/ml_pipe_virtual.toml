@@ -1,105 +1,166 @@
+# =============================================================================
+# This configuration file defines a machine learning-based pipeline for plant 3D
+# reconstruction and analysis, using deep learning models for semantic segmentation
+# and downstream morphological analysis.
+#
+# The high-level flow is:
+#
+#  1. ModelFilesetExists    – Verification that trained CNN weights are available.
+#  2. Segmentation2D        – 2‑D semantic segmentation using a trained deep learning
+#                             model to generate labeled masks from images.
+#  3. Voxels                – Back-projection of the segmented 2D masks into a 3D
+#                             voxel grid for multi-label reconstruction.
+#  4. PointCloud            – Generation of a point cloud from the voxels with optional
+#                             per-class segmentation filtering.
+#  5. SegmentedPointCloud   – Fusion of point cloud and 2D segmentation data to assign
+#                             class labels to 3D points.
+#  6. ClusteredMesh         – Generation of a triangle mesh from clustered point cloud
+#                             components, separated by organ class.
+#  7. OrganSegmentation     – Instance segmentation of plant organs (fruits, leaves, etc.)
+#                             using clustering and morphological analysis.
+#  8. AnglesAndInternodes   – Extraction of phenotypic traits (branch angles,
+#                             internode lengths, etc.) from organ skeletons.
+#  9. Visualization         – Rendering of reconstructed 3D models, point clouds,
+#                             and segmentations for inspection and validation.
+# 10. Evaluation tasks      – Comparison of reconstructed models against ground truth
+#                             data (from synthetic plant models).
+#
+# Each section below contains the task-specific parameters with defaults
+# (comments) matching the implementation in `plant3dvision/tasks/*.py`.
+# Adjust the values as needed for your dataset and hardware.
+# =============================================================================
+
 [ModelFilesetExists]
-scan_id = "models"
+# Fileset ID where the trained model weights are stored
+scan_id = "models"  # Default: "models"
 
 [Segmentation2D]
-upstream_task = "ImagesFilesetExists"
-model_fileset = "ModelFilesetExists"
-model_id = "Resnet_896_896_epoch50"  # no default value
-query = "{\"channel\":\"rgb\"}"  # default is an empty dict '{}'
-Sx = 896
-Sy = 896
-binarize = true
-resize = true
-dilation = 1
-epochs = 1
-batch = 1
-learning_rate = 0.0001
-threshold = 0.01
+# Upstream task that provides the input images
+upstream_task = "ImagesFilesetExists"  # Default: "ImagesFilesetExists"
+# Model fileset reference that must exist prior to running this task
+model_fileset = "ModelFilesetExists"  # Required dependency on trained weights
+# ID of the trained CNN model to use for inference
+model_id = "Resnet_896_896_epoch50"  # No default value - must be specified
+# Query to filter files from upstream task by metadata (e.g., select RGB channel only)
+query = "{\"channel\":\"rgb\"}"  # Default: "{}" (empty dict, no filtering)
+# Whether to binarize the segmentation output into a binary mask
+binarize = true  # Default: true
+# Confidence threshold for the model output
+threshold = 0.01  # Default: 0.01
+# Morphological dilation factor applied to the mask after segmentation
+dilation = 1  # Default: 1 (no dilation)
 
 [Voxels]
-upstream_task = "Segmentation2D"
-use_colmap_poses = false
-voxel_size = 0.3
-method = "averaging"
-log = false # default to true
-invert = false
-labels = "[\"background\", \"fruit\", \"leaf\", \"pedicel\", \"stem\"]"
+# Upstream task that provides the segmented 2D masks
+upstream_task = "Segmentation2D"  # Default: "Segmentation2D"
+# Whether to use camera poses from COLMAP (if available)
+use_colmap_poses = false  # Default: false
+# Size of each voxel, defines the resolution of the 3D grid
+voxel_size = 0.3  # Default: 1.0
+# Back-projection method to use
+# Options: "carving" (binary space partitioning), "averaging" (probabilistic weighting)
+method = "averaging"  # Default: "averaging"
+# Whether to apply logarithmic scaling to mask values before averaging (for 'averaging' method)
+log = false  # Default: true
+# Whether to invert the mask values (treat background as foreground)
+invert = false  # Default: false
+# List of semantic class labels corresponding to the segmentation classes
+# Used for multi-class voxel reconstruction
+labels = "[\"background\", \"fruit\", \"leaf\", \"pedicel\", \"stem\"]"  # Default: "[]"
 
 [PointCloud]
-upstream_task = "Voxels"
-level_set_value = 0.5 # default to 1.0
-log = false
-background_prior= 1.0
-min_contrast = 1.0
-min_score = 0.01 # default to 0.2
+# Upstream task that provides the voxel array
+upstream_task = "Voxels"  # Default: "Voxels"
+# Distance of the level set at which to extract the isosurface (for marching cubes)
+level_set_value = 0.5  # Default: 1.0
+# Whether to log the voxel values
+log = false  # Default: true
+# Prior probability assigned to background points in multi-class segmentation
+background_prior = 1.0  # Default: 1.0
+# Minimum contrast required between object and background
+min_contrast = 1.0  # Default: 10.0
+# Minimum score threshold for valid points in the point cloud
+min_score = 0.01  # Default: 0.2
 
 [SegmentedPointCloud]
-upstream_segmentation = "Segmentation2D"
-upstream_task = "PointCloud"
-use_colmap_poses = false
+# Upstream task providing the 2D segmentation labels
+upstream_segmentation = "Segmentation2D"  # Required reference
+# Upstream task providing the 3D point cloud
+upstream_task = "PointCloud"  # Default: "PointCloud"
+# Whether to use camera poses from COLMAP
+use_colmap_poses = false  # Default: false
 
 [ClusteredMesh]
-upstream_task = "SegmentedPointCloud"
-min_vol = 1.0
-min_length = 10.0
+# Upstream task that provides a segmented point cloud
+upstream_task = "SegmentedPointCloud"  # Default: "SegmentedPointCloud"
+# Minimum volume threshold for a connected component to be kept as a separate organ
+min_vol = 1.0  # Default: 1.0
+# Minimum length threshold for skeletons (to filter out small branches)
+min_length = 10.0  # Default: 10.0
 
 [OrganSegmentation]
-upstream_task = "SegmentedPointCloud"
-eps = 2.0
-min_points = 5
+# Upstream task that provides a segmented point cloud
+upstream_task = "SegmentedPointCloud"  # Default: "SegmentedPointCloud"
+# Distance threshold for DBSCAN clustering (epsilon parameter)
+eps = 2.0  # Default: 2.0
+# Minimum number of points required to form a cluster
+min_points = 5  # Default: 5
 
 [AnglesAndInternodes]
-upstream_task = "OrganSegmentation"
-characteristic_length = 1.0
-organ_type = "fruit"
-stem_axis = 2
-stem_axis_inverted = false
-min_elongation_ratio = 2.0
-min_fruit_size = 0.1
+# Upstream task providing the organ segmentation data
+upstream_task = "OrganSegmentation"  # Default: "OrganSegmentation"
+# Distance scale for skeleton sampling (characteristic length of the plant)
+characteristic_length = 1.0  # Default: 1.0
+# Type of organ to analyze when using morphological features (e.g., 'fruit')
+organ_type = "fruit"  # Default: "fruit"
+# Projection axis for stem orientation: 0 (x), 1 (y), or 2 (z)
+stem_axis = 2  # Default: 2 (z-axis)
+# Whether the stem direction along the specified axis is inverted
+stem_axis_inverted = false  # Default: false
+# Minimum elongation ratio (length/width) for an organ to be valid
+min_elongation_ratio = 2.0  # Default: 2.0
+# Minimum size threshold for organs to be considered (e.g., fruit size)
+min_fruit_size = 0.1  # Default: 0.1
 
-[Visualization]
-upstream_point_cloud = "PointCloud"
-upstream_mesh = "TriangleMesh"
-upstream_colmap = "Colmap"
-upstream_angles = "AnglesAndInternodes"
-upstream_skeleton = "CurveSkeleton"
-upstream_images = "ImagesFilesetExists"
-query = "{\"channel\":\"rgb\"}"  # default is an empty dict '{}'
-use_colmap_poses = false
-upstream_virtualplantobj = "VirtualPlantObj"
-max_image_size = 1500
-max_point_cloud_size = 10000000
-thumbnail_size = 150
-
-### Evaluation ###
-
-## PointCloud
+# ------------------------------- Evaluation ------------------------------- #
 [PointCloudGroundTruth]
-upstream_task = "VirtualPlantObj" # The dataset must have an obj in VirtualPlant
-pcd_size = 100000 # default 100000
+# The dataset must have an OBJ file in VirtualPlant
+upstream_task = "VirtualPlantObj"
+# Number of points to sample from the ground‑truth OBJ
+pcd_size = 100000  # default 100000
 
 [PointCloudEvaluation]
+# Task that provides the reconstructed point cloud
 upstream_task = "PointCloud"
+# Ground‑truth point cloud to compare against
 ground_truth = "PointCloudGroundTruth"
-max_distance = 2.0 # default to 2.0
+# Maximum allowed distance (in mm) for a point to be considered correct
+max_distance = 2.0  # default to 2.0
 
-## Segmentation2D
 [Segmentation2DEvaluation]
-upstream_task = "Segmentation2D"
-labels = "[\"flower\", \"fruit\", \"leaf\", \"pedicel\", \"stem\"]"
-dilation_amount = 0
+# Upstream task providing the predicted 2D segmentation masks
+upstream_task = "Segmentation2D"  # Default: "Segmentation2D"
+# List of semantic class labels used in the segmentation
+labels = "[\"flower\", \"fruit\", \"leaf\", \"pedicel\", \"stem\"]"  # Default: "[]"
+# Dilation amount to apply when comparing segmentation masks
+dilation_amount = 0  # Default: 0
 
-## SegmentedPointCloud
 [SegmentedPointCloudEvaluation]
-upstream_task = "SegmentedPointCloud"
-ground_truth = "PointCloudGroundTruth"
+# Upstream task providing the reconstructed segmented point cloud
+upstream_task = "SegmentedPointCloud"  # Default: "SegmentedPointCloud"
+# Reference ground truth point cloud for semantic comparison
+ground_truth = "PointCloudGroundTruth"  # Required for evaluation
 
-## AnglesAndInternodes
 [AnglesAndInternodesEvaluation]
-upstream_task = "AnglesAndInternodes"
-ground_truth = "VirtualPlantObj"
-free_ends = 0.4
-free_ends_eps = 1e-2
+# Upstream task providing the extracted angles and internode measurements
+upstream_task = "AnglesAndInternodes"  # Default: "AnglesAndInternodes"
+# Ground‑truth virtual plant OBJ for comparison
+ground_truth = "VirtualPlantObj"  # Required for evaluation
+# Tolerance for free (unattached) endpoints in matching (as a ratio)
+free_ends = 0.4  # Default: 0.4
+# Epsilon tolerance for free endpoint matching
+free_ends_eps = 1e-2  # Default: 1e-2
 
 [Clean]
-no_confirm = true
+# Whether NOT to ask for confirmation before cleaning results
+no_confirm = true  # Default: false

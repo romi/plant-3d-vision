@@ -198,17 +198,17 @@ use_colmap_poses = true  # Default: true
 [ClusteredMesh]
 # Upstream task that provides a segmented point cloud
 upstream_task = "SegmentedPointCloud"  # Default: "SegmentedPointCloud"
-# Minimum volume threshold for mesh components
+# Minimum volume threshold for a connected component to be kept as a separate organ
 min_vol = 1.0  # Default: 1.0
-# Minimum length threshold for mesh components
+# Minimum length threshold for skeletons (to filter out small branches)
 min_length = 10.0  # Default: 10.0
 
 [OrganSegmentation]
 # Upstream task that provides a segmented point cloud
 upstream_task = "SegmentedPointCloud"  # Default: "SegmentedPointCloud"
-# Maximum Euclidean distance between two samples for one to be considered as in the neighborhood of the other
+# Distance threshold for DBSCAN clustering (epsilon parameter)
 eps = 2.0  # Default: 2.0
-# Number of points in a neighborhood for a point to be considered as a core point
+# Minimum number of points required to form a cluster
 min_points = 5  # Default: 5
 
 [AnglesAndInternodes]
@@ -216,15 +216,15 @@ min_points = 5  # Default: 5
 upstream_task = "OrganSegmentation"  # Default: "OrganSegmentation"
 # Characteristic length for phenotypic trait calculations
 characteristic_length = 1.0  # Default: 1.0
-# Type of organ to analyze (e.g., 'fruit')
+# Type of organ to analyze when using morphological features (e.g., 'fruit')
 organ_type = "fruit"  # Default: "fruit"
 # Index of the stem axis (0=x, 1=y, 2=z)
 stem_axis = 2  # Default: 2
-# Whether the stem axis is inverted
+# Whether the stem direction along the specified axis is inverted
 stem_axis_inverted = false  # Default: false
-# Minimum elongation ratio for valid organs
+# Minimum elongation ratio (length/width) for an organ to be valid
 min_elongation_ratio = 2.0  # Default: 2.0
-# Minimum fruit size for valid detections
+# Minimum size threshold for organs to be considered (e.g., fruit size)
 min_fruit_size = 0.1  # Default: 0.1
 
 [Clean]
