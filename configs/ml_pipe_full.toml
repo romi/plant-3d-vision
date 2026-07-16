@@ -96,7 +96,7 @@ parallel = true  # Default: true
 n_workers = -1  # Default: -1 (Default ``concurrent.futures.ThreadPoolExecutor`` behavior)
 # Source of the camera model
 # Options: 'Colmap', 'IntrinsicCalibration', 'ExtrinsicCalibration'
-camera_model_src = "Colmap"  # Default: "Colmap"
+upstream_camera_model = "Colmap"  # Default: "Colmap"
 # Camera model to use if using IntrinsicCalibration
 # Options: "SIMPLE_RADIAL", "RADIAL", "OPENCV"
 camera_model = "SIMPLE_RADIAL"  # Default: "SIMPLE_RADIAL"
