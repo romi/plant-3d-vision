@@ -22,7 +22,7 @@ dependencies = [
     # "pybind11",
     "pyopencl",
     "scikit-image",
-    "toml",
+    "tomlkit",
     "joblib",
     "matplotlib",
     "dash",
