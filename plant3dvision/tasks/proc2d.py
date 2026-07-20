@@ -181,9 +181,6 @@ class Undistort(ParallelFileTask):
     intrinsic_calib_scan_id = luigi.Parameter(default="")  # ID of scan containing intrinsic calibration
     extrinsic_calib_scan_id = luigi.Parameter(default="")  # ID of scan containing extrinsic calibration
 
-    n_workers = luigi.IntParameter(default=None)
-    parallel = luigi.BoolParameter(default=True)
-
     def requires(self):
         """Determines the dependencies required for the task execution."""
         from plant3dvision.tasks.calibration import ExtrinsicCalibrationExists
