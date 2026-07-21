@@ -724,9 +724,10 @@ class Colmap(RomiTask):
         Default to ``plant3dvision.colmap.COLMAP_EXE``, that is the `'COLMAP_EXE'` environment variable
         or ``'plant3dvision.colmap.DEFAULT_COLMAP'``
     matcher : luigi.Parameter, optional
-        Type of matcher to use, either "exhaustive" or "sequential".
+        Type of matcher to use, either "custom", "exhaustive", "sequential" or "spatial".
         *Exhaustive matcher* tries to match every other image.
         *Sequential matcher* tries to match successive image, this requires a sequential file name ordering.
+        *Custom matcher* tries to match N images on a sliding window, usefull for the circular path.
         Defaults to "exhaustive".
     use_gpu : luigi.BoolParameter
         Whether to use GPU for feature extraction (feature_extractor) and matching (*_matcher).
@@ -742,9 +743,9 @@ class Colmap(RomiTask):
         Whether to "world-align" (scale and geo-reference) the reconstructed model using 'calibrated' or 'estimated' poses.
         Default to ``True``.
     camera_model : luigi.Parameter, optional
-        If no intrinsic or extrinsic calibration scan is defined, this select the camera model to estimate by COLMAP.
+        If no intrinsic or extrinsic calibration scan is defined, this selects the camera model to estimate by COLMAP.
         Valid models are in {'SIMPLE_RADIAL', 'RADIAL', 'OPENCV'}.
-        If an ``intrinsic_calibration_scan_id`` is specified, this select the intrinsic parameters to set in COLMAP.
+        If an ``intrinsic_calibration_scan_id`` is specified, this selects the intrinsic parameters to set in COLMAP.
         If an ``extrinsic_calibration_scan_id`` is specified and `use_calibration_camera` is ``True``, this does nothing!
         Defaults to "SIMPLE_RADIAL" camera model.
     bounding_box : luigi.DictParameter, optional
@@ -755,45 +756,45 @@ class Colmap(RomiTask):
     cli_args : luigi.DictParameter, optional
         Dictionary of arguments to pass to colmap command lines, empty by default.
     circular_match_window : luigi.IntParameter
-        Number of neighbours to match on each side when manually defining image pairs for circular
+        Number of neighbors to match on each side when manually defining image pairs for circular
         sequential matching. Used when `matcher='custom'`. Defaults to ``2``.
     intrinsic_calibration_scan_id : luigi.Parameter, optional
         If set, get the intrinsic camera parameters from this scan dataset.
         These intrinsic parameters will be set in COLMAP ``feature_extractor`` and will not be refined by ``mapper``.
-        Using this requires to set the ``camera_model`` attribute, in order to select one model from those estimated.
-        Obviously, it requires to run the ``IntrinsicCalibration`` task on this dataset prior to using it here.
+        Using this requires setting the ``camera_model`` attribute, to select one model from those estimated.
+        It requires to run the ``IntrinsicCalibration`` task on this dataset prior to using it here.
         If ``extrinsic_calibration_scan_id`` is specified this does nothing!
         Defaults to NO intrinsic calibration scan.
     extrinsic_calibration_scan_id : luigi.Parameter, optional
         If set, get the extrinsic camera parameters from this scan dataset.
         These extrinsic parameter will be set in COLMAP ``poses.txt`` file using the estimated "calibrated_poses" metadata.
-        Obviously, it requires to run the ``ExtrinsicCalibration`` task on this dataset prior to using it here.
+        It requires to run the ``ExtrinsicCalibration`` task on this dataset prior to using it here.
         If set and ``use_calibration_camera`` is ``True``, also get the intrinsic camera parameters from this scan dataset.
-        That case does NOT require to set the ``camera_model`` attribute, as they will be in "OPENCV" format.
+        That case does NOT require setting the ``camera_model`` attribute, as they will be in "OPENCV" format.
         Defaults to NO extrinsic calibration scan.
     use_calibration_camera : luigi.BoolParameter, optional
         If ``True``, use the intrinsic parameters from ``extrinsic_calibration_scan_id``.
         Else, estimate the intrinsic parameters automatically.
     qc_check : float, optional
-        Whether to perform the verification of the estimated camera extrinsic
+        Whether to perform the verification of the estimated camera extrinsic.
     mad_factor : float, optional
-        Median absolute deviation factor to detect outlier camera pose
+        Median absolute deviation factor to detect outlier camera pose.
     metrics : Metrics, optional
         The list of metrics to use to detect the outliers using the Median Absolute Deviation method.
         Valid values are in ``Metrics``, that is ``["xy", "z", "pan", "tilt", "roll"]``.
         If ``None``, the default set ``["xy", "z", "pan", "roll"]`` is used.
     distance_threshold : float, optional
-        Maximum distance to CNC pose to validate COLMAP pose estimation
+        Maximum distance to CNC pose to validate COLMAP pose estimation.
     fixed_distance_threshold : float, optional
-        Maximum distance to fixed CNC pose to validate COLMAP pose estimation
+        Maximum distance to fixed CNC pose to validate COLMAP pose estimation.
     angle_threshold : float, optional
-        Maximum angular distance to CNC pose to validate COLMAP pose estimation
+        Maximum angular distance to CNC pose to validate COLMAP pose estimation.
     fixed_angle_threshold : float, optional
-        Maximum angular distance to fixed CNC pose to validate COLMAP pose estimation
+        Maximum angular distance to fixed CNC pose to validate COLMAP pose estimation.
     max_blind_angle : float, optional
-        Maximum allowed blind angle for camera poses, defaults to 20.0
+        Maximum allowed blind angle for camera poses, defaults to 20.0.
     retry_count : int, optional
-        Maximum number of retries allowed, defaults to 10
+        Maximum number of retries allowed, defaults to 10.
 
     Attributes
     ----------
@@ -809,17 +810,6 @@ class Colmap(RomiTask):
             - points3d.json: Reconstructed 3D points
             - sparse.ply: Sparse point cloud
             - dense.ply (optional): Dense point cloud if compute_dense is True
-
-    Notes
-    -----
-    This task requires COLMAP to be installed or available as a container.
-
-    For exhaustive matching, all image pairs are compared, which is suitable for datasets
-    with up to several hundred images.
-
-    For sequential matching, only consecutive frames are matched, which is suitable for
-    video or ordered image sequences. Sequential matching requires images to be named
-    in sequential order (e.g., image0001.jpg, image0002.jpg).
 
     See Also
     --------

@@ -1004,7 +1004,6 @@ class ColmapRunner(object):
         The list of image ``File`` to use for reconstruction.
     matcher_method : MatcherMethods
         Method to use to perform feature matching operation.
-        Valid methods are ``['exhaustive', 'sequential', 'spatial']``.
     compute_dense : bool
         If ``True``, it will compute the dense point cloud.
     all_cli_args : dict
@@ -1022,7 +1021,7 @@ class ColmapRunner(object):
     colmap_workdir : str
         COLMAP working directory.
         Can be defined with an environment variable named `COLMAP_WS`.
-        Else will be automatically created in temporary directory.
+        Else will be automatically created in the temporary directory.
     imgs_dir : str
         Path to COLMAP 'images' directory.
     sparse_dir : str
@@ -1031,6 +1030,8 @@ class ColmapRunner(object):
         Path to COLMAP 'dense' directory.
     log_file : str
         Path to the file used to log some of COLMAP stdout.
+    circular_match_window : int
+        Number of neighbors to match on each side when manually defining image pairs for circular matching.
 
     Notes
     -----
@@ -1044,18 +1045,21 @@ class ColmapRunner(object):
     Instead, consecutively captured images are matched against each other.
     This matching mode has built-in loop detection based on a vocabulary tree, where every N-th image (loop_detection_period) is matched against its visually most similar images (loop_detection_num_images).
     Note that image file names must be ordered sequentially (e.g., image0001.jpg, image0002.jpg, etc.).
-    The order in the database is not relevant, since the images are explicitly ordered according to their file names.
+    The order in the database is not relevant since the images are explicitly ordered according to their file names.
     Note that loop detection requires a pre-trained vocabulary tree, that can be downloaded from https://demuc.de/colmap/.
+
+    **Custom Matching**: This mode is useful to save time when the image sequence has been acquired on a circular path
+    and you want to limit the number of images to pair. Use ``circular_match_window`` to define how many left and right
+    image you want to pair with.
 
     References
     ----------
     .. [#] `COLMAP official tutorial. <https://colmap.github.io/tutorial.html>`_
-
     """
 
     def __init__(self,
                  img_files: list[File],
-                 matcher_method: MatcherMethods = "exhaustive",
+                 matcher_method: MatcherMethods = DEF_MATCHER_METHOD,
                  compute_dense: bool = False,
                  all_cli_args: dict[str, dict[str, str]] = {},
                  align_pcd: bool = False,
@@ -1090,9 +1094,8 @@ class ColmapRunner(object):
             'colmap' requires that you compile and install it from sources, see [colmap]_.
             The others use pre-built docker images, available from docker hub.
         circular_match_window : int
-            Number of neighbours to match on each side when manually defining image pairs for circular
-            sequential matching. Used when `matcher_method='custom'`.
-            Defaults to ``2``.
+            Number of neighbors to match on each side when manually defining image pairs for circular matching.
+            Used when `matcher_method='custom'`. Defaults to ``2``.
 
         References
         ----------
