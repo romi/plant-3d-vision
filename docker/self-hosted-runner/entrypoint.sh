@@ -29,16 +29,23 @@ else
     echo "WARNING: GPU access check failed. Ensure nvidia-container-toolkit is configured."
 fi
 
-# Configure the GitHub Actions runner
-echo "Configuring GitHub Actions runner..."
-./config.sh \
-    --unattended \
-    --url "${GITHUB_RUNNER_URL}" \
-    --token "${GITHUB_RUNNER_TOKEN}" \
-    --name "${GITHUB_RUNNER_NAME:-romi-github-runner}" \
-    --labels "${GITHUB_RUNNER_LABELS:-self-hosted,linux,docker,x64,gpu}" \
-    --work "${RUNNER_WORK_DIR}" \
-    --replace
+
+# Run the configuration only if the `.runner` configuration file is missing -> avoid failure on container restart
+if [ ! -f .runner ]; then
+    # Configure the GitHub Actions runner
+    echo "Configuring GitHub Actions runner..."
+    ./config.sh \
+        --unattended \
+        --url "${GITHUB_RUNNER_URL}" \
+        --token "${GITHUB_RUNNER_TOKEN}" \
+        --name "${GITHUB_RUNNER_NAME:-romi-github-runner}" \
+        --labels "${GITHUB_RUNNER_LABELS:-self-hosted,linux,docker,x64,gpu}" \
+        --work "${RUNNER_WORK_DIR}" \
+        --replace
+else
+    echo "Skipping runner configuration: '.runner' file detected."
+fi
+
 
 # Ensure Buildx can write its certs
 echo "BUILDX_HOME=${BUILDX_HOME}"
