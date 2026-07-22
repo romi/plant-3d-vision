@@ -10,6 +10,8 @@ dependencies = [
     "trimesh",
     "appdirs",
     "colorlog",
+    "click",
+    "click-option-group",
     "docker",
     "imageio>= 2.16.2",
     "imagecodecs",
