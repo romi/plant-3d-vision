@@ -1606,12 +1606,30 @@ class ColmapRunner(object):
             '--database_path', f'{self.colmap_workdir}/database.db',
             '--image_path', f'{self.colmap_workdir}/images'
         ]
+        cli_args = self.all_cli_args.get('feature_extractor', {})
+
         # - Check if GPU is available:
         if _has_nvidia_gpu():
             use_gpu_opt = {"--SiftExtraction.use_gpu": '1'}
         else:
             use_gpu_opt = {"--SiftExtraction.use_gpu": '0'}
-        cli_args = self.all_cli_args.get('feature_extractor', use_gpu_opt)
+
+        sift_args = {
+            # Maximum size of the image maximum dimension
+            "--SiftExtraction.max_image_size": "3200",  # default to 3200
+            # Minimum contrast threshold for feature detection
+            # Impact: Lower values = more features detected; higher values = more reliable features
+            "--SiftExtraction.peak_threshold": "0.007",  # default to 0.0066666666666666671
+            # Edge response threshold for feature filtering
+            # Impact: Higher values = fewer but more stable features; lower values = more features with potential instability
+            "--SiftExtraction.edge_threshold": "10",  # default to 10
+            # Estimates affine shape for oriented ellipses instead of disks
+            # Impact: More robust to image distortions and viewpoint changes
+            "--SiftExtraction.estimate_affine_shape": "1",  # default to 0
+        }
+
+        cli_args = {**sift_args, **use_gpu_opt, **cli_args}
+
         logger.info("Running colmap 'feature_extractor'...")
         logger.debug(f"args: {args}")
         logger.debug(f"cli_args: {cli_args}")
@@ -1623,15 +1641,51 @@ class ColmapRunner(object):
         # If a matcher method is not manually defined, use attribute method and cli arguments:
         if matcher_method is None:
             matcher_method = self.matcher_method
-            cli_args.update(**self.all_cli_args.get(f"{matcher_method}_matcher", {}))
+
+        cli_args.update(**self.all_cli_args.get(f"{matcher_method}_matcher", {}))
 
         args = ['--database_path', f'{self.colmap_workdir}/database.db']
+
+        sift_args = {
+            # Maximum distance ratio between first and second best match. Controls the ratio test for rejecting ambiguous matches.
+            # Impact: Lower values (0.6-0.7) produce more reliable matches but fewer matches; higher values (0.9) allow more matches but may include more noise.
+            "--SiftMatching.max_ratio": "0.8",  # default to 0.8
+            # Maximum distance to best match. Filters out matches that are too dissimilar.
+            # Impact: Higher values (0.8-0.9) allow more matches but may include more false positives.
+            "--SiftMatching.max_distance": "0.7",  # default to 0.7
+            # Enables bidirectional matching. A match is only accepted if it's mutual between both images.
+            # Impact: Increases matching reliability significantly but reduces the number of matches by about 50%.
+            "--SiftMatching.cross_check": "1",  # default to 1
+            # Minimum number of inliers required for geometric verification to succeed. Controls the minimum quality of matches that are accepted.
+            # Impact: Lower values (10-12) allow more matches but with lower reliability; higher values (20-25) produce more robust matches but fewer.
+            "--SiftMatching.min_num_inliers": "15",  # default to 15
+            # Maximum epipolar error in pixels for geometric verification. Determines how much geometric inconsistency is tolerated in RANSAC.
+            # Impact: Lower values (2-3) produce more robust matches but fewer inliers; higher values (6-8) allow more matches but may include more outliers.
+            "--SiftMatching.max_error": "8",  # default to 4
+            # A priori minimum inlier ratio, affecting RANSAC convergence. Influences how many iterations RANSAC performs.
+            # Impact: Lower ratios (0.1-0.2) allow faster convergence but may miss good solutions; higher ratios (0.3-0.4) ensure better solutions.
+            "--SiftMatching.min_inlier_ratio": "0.2",  # default to 0.25
+            # RANSAC iteration limits. Controls how many times RANSAC runs to find the best geometric model.
+            # Higher max_num_trials allow more thorough search but slower processing.
+            "--SiftMatching.max_num_trials": "10000",  # default to 10000
+            # Whether to attempt to estimate multiple geometric models. Allows for scenes with multiple moving objects or distortions.
+            # Impact: Enabling this can increase processing time but may help with complex scenes.
+            "--SiftMatching.multiple_models": "0",  # default to 0
+            # Whether to perform guided matching using existing geometric estimates.
+            # Impact: Uses previous geometric solutions to guide subsequent matching, improving efficiency and accuracy in certain scenarios.
+            "--SiftMatching.guided_matching": "0",  # default to 0
+            # Forces homography estimation for planar scenes. Useful for flat surfaces where the camera motion is planar.
+            # Impact: Can improve matching accuracy for such scenes.
+            "--SiftMatching.planar_scene": "0",  # default to 0
+        }
+
         # - Check if GPU is available:
         if _has_nvidia_gpu():
             use_gpu_opt = {"--SiftMatching.use_gpu": '1'}
         else:
             use_gpu_opt = {"--SiftMatching.use_gpu": '0'}
-        cli_args.update(**use_gpu_opt)
+
+        cli_args = {**sift_args, **use_gpu_opt, **cli_args}
 
         logger.info(f"Running colmap '{matcher_method}_matcher'...")
         logger.debug(f"args: {args}")
@@ -1644,7 +1698,7 @@ class ColmapRunner(object):
         elif matcher_method == 'spatial':
             spatial_opt = {
                 # Forcefully deactivate "is_gps" as we have cartesian coordinates in our case
-                "--SpatialMatching.is_gps" : "0"
+                "--SpatialMatching.is_gps": "0"
             }
             cli_args.update(**spatial_opt)
             _ = self._colmap_cmd('spatial_matcher', args, cli_args)
@@ -1674,7 +1728,10 @@ class ColmapRunner(object):
         args = [
             '--database_path', f'{self.colmap_workdir}/database.db',
             '--image_path', f'{self.colmap_workdir}/images',
-            '--output_path', f'{self.colmap_workdir}/sparse'
+            '--output_path', f'{self.colmap_workdir}/sparse',
+            '--Mapper.init_image_id1', "10",
+            '--Mapper.init_image_id2', "11",
+            "--Mapper.multiple_models", "0",
         ]
         cli_args = self.all_cli_args.get('mapper', {})
         logger.info("Running colmap 'mapper'...")
