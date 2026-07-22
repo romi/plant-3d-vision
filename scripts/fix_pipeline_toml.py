@@ -9,7 +9,7 @@ It updates deprecated fields, adds sensible defaults, and creates backups, helpi
 
 ## Key Features
 - **Automatic section fixes**: Updates `Colmap`, `Mask`, `Voxels`, and renames `Undistorted` keys to the current `Undistort` naming.
-- **Backup creation**: Optionally saves a timestamped copy of the original TOML before modification.
+- **Backup creation**: By default, saves a timestamped copy of the original TOML before modification (--no-backup to disable).
 - **Flexible input handling**: Can process a single TOML file, all TOML files in a directory, or an entire FSDB database with scan selection patterns.
 - **Selective scan processing**: Uses glob patterns to choose which scans in a database are updated.
 - **Configurable authentication**: Supports DB login credentials or a no‑auth mode for testing.
@@ -267,7 +267,7 @@ def config_directory(toml_path: Path, no_backup) -> None:
 @optgroup.group("Log in", cls=OptionGroup)
 @optgroup.option('-u', '--user', default='guest',
               help='FSDB username.')
-@optgroup.option('-', '--password', default='guest',
+@optgroup.option('-p', '--password', default='guest',
               help='FSDB password.')
 @optgroup.option('--no-auth', is_flag=True, default=False,
               help="Use a database with automatic 'admin' user log in, for testing purposes only.")
