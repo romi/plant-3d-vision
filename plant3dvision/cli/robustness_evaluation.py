@@ -12,7 +12,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-import toml
+import tomlkit
 from tqdm import tqdm
 
 from plant3dvision.compare import *
@@ -317,7 +317,7 @@ def _run_clean_if_requested(tmp_scan_dir, clean):
         # Create a quiet Clean task configuration:
         with open(bak_cfg_file, 'w') as cfg_f:
             cfg = {"Clean": {"no_confirm": True}}
-            toml.dump(cfg, cfg_f)
+            tomlkit.dump(cfg, cfg_f)
         romi_run_task(tmp_scan_dir, "Clean", str(bak_cfg_file))
     else:
         logger.info("No cleaning of the reference scan dataset!")
@@ -535,7 +535,7 @@ def check_extra_dataset(db_location, config_file):
     list
         The list of extra dataset required to run the robustness evaluation with this pipeline configuration.
     """
-    pipeline_cfg = toml.load(open(config_file, 'r'))
+    pipeline_cfg = tomlkit.load(open(config_file, 'r'))
     extra_ds = []
     for section, cfg_dict in pipeline_cfg.items():
         for k, v in cfg_dict.items():

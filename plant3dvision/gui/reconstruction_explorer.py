@@ -1,6 +1,6 @@
 import os
 
-import toml
+import tomlkit
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QDoubleSpinBox
 from PySide6.QtWidgets import QSpinBox
@@ -555,7 +555,7 @@ class ReconstructionExplorer(QMainWindow):
         self._spacing = None
 
         # Load the reconstruction pipeline configuration
-        self._pipeline_cfg = toml.load(scan.path() / "pipeline.toml")
+        self._pipeline_cfg = tomlkit.load(scan.path() / "pipeline.toml")
 
         # Setup slider
         n = len(self._image_files)
