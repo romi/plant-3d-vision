@@ -236,4 +236,4 @@ def main(db_path, filter, check_only, output, out_path_opt, to_degrees):
 
 
 if __name__ == "__main__":
-    main(,
+    main()
