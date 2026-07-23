@@ -34,6 +34,7 @@ from pathlib import Path
 
 import click
 import numpy as np
+import tomlkit
 from PIL import Image
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
@@ -313,6 +314,15 @@ class RGBFilterApp(QMainWindow):
         threshold_dilation_layout.addWidget(self.dilation_spinbox)
         sliders_layout.addLayout(threshold_dilation_layout)
 
+        # Export Parameters button
+        self.export_button = QPushButton("Export Parameters")
+        self.export_button.setMinimumWidth(250)
+        self.export_button.clicked.connect(self._export_parameters)
+        # Show a helpful tooltip when the user hovers over the export button
+        self.export_button.setToolTip(
+            "Export the current parameters to a local configuration for the selected scan."
+        )
+        sliders_layout.addWidget(self.export_button, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         # Add sliders to controls
         controls_layout.addLayout(sliders_layout)
@@ -360,7 +370,6 @@ class RGBFilterApp(QMainWindow):
         self.color_space_combo.currentTextChanged.connect(self.process_image)
         self.min_threshold_spinbox.valueChanged.connect(self.process_image)
         self.max_threshold_spinbox.valueChanged.connect(self.process_image)
-        self.load_button.clicked.connect(self.load_image)
         self.dilation_spinbox.valueChanged.connect(self.process_image)
 
         # Load first scan if available
@@ -444,6 +453,39 @@ class RGBFilterApp(QMainWindow):
         new_index = max(0, min(new_index, len(self.images_list) - 1))
         self.image_slider.setValue(new_index)
 
+    def _export_parameters(self):
+        """Export current parameters to local_config.toml file."""
+        config_path = self.current_scan.path() / "local_config.toml"
+        try:
+            with open(config_path, "rb") as f:
+                existing_config = tomlkit.load(f)
+        except Exception as e:
+            print(f"Warning: Could not read existing config: {e}")
+            existing_config = {}
+
+        try:
+            # Update with new mask parameters
+            existing_config["Masks"] = {
+                "method": "linear",
+                "colorspace": self.color_space_combo.currentText(),
+                "parameters": [
+                    self.ch1_slider.value() / 100.0,
+                    self.ch2_slider.value() / 100.0,
+                    self.ch3_slider.value() / 100.0
+                ],
+                "min_threshold": self.min_threshold_spinbox.value(),
+                "max_threshold": self.max_threshold_spinbox.value(),
+                "dilation": self.dilation_spinbox.value(),
+            }
+
+            # Write to file
+            with open(config_path, "w") as f:
+                tomlkit.dump(existing_config, f)
+
+            print(f"Parameters exported to {config_path}")
+
+        except Exception as e:
+            print(f"Error exporting parameters: {e}")
 
     def _on_scroll(self, event):
         """Zoom all three axes with the mouse wheel."""
