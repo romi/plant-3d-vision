@@ -1619,13 +1619,13 @@ class ColmapRunner(object):
             "--SiftExtraction.max_image_size": "3200",  # default to 3200
             # Minimum contrast threshold for feature detection
             # Impact: Lower values = more features detected; higher values = more reliable features
-            "--SiftExtraction.peak_threshold": "0.007",  # default to 0.0066666666666666671
+            "--SiftExtraction.peak_threshold": "0.0066666666666666671",  # default to 0.0066666666666666671
             # Edge response threshold for feature filtering
             # Impact: Higher values = fewer but more stable features; lower values = more features with potential instability
             "--SiftExtraction.edge_threshold": "10",  # default to 10
             # Estimates affine shape for oriented ellipses instead of disks
             # Impact: More robust to image distortions and viewpoint changes
-            "--SiftExtraction.estimate_affine_shape": "1",  # default to 0
+            "--SiftExtraction.estimate_affine_shape": "0",  # default to 0
         }
 
         cli_args = {**sift_args, **use_gpu_opt, **cli_args}
@@ -1661,10 +1661,10 @@ class ColmapRunner(object):
             "--SiftMatching.min_num_inliers": "15",  # default to 15
             # Maximum epipolar error in pixels for geometric verification. Determines how much geometric inconsistency is tolerated in RANSAC.
             # Impact: Lower values (2-3) produce more robust matches but fewer inliers; higher values (6-8) allow more matches but may include more outliers.
-            "--SiftMatching.max_error": "8",  # default to 4
+            "--SiftMatching.max_error": "4",  # default to 4
             # A priori minimum inlier ratio, affecting RANSAC convergence. Influences how many iterations RANSAC performs.
             # Impact: Lower ratios (0.1-0.2) allow faster convergence but may miss good solutions; higher ratios (0.3-0.4) ensure better solutions.
-            "--SiftMatching.min_inlier_ratio": "0.2",  # default to 0.25
+            "--SiftMatching.min_inlier_ratio": "0.25",  # default to 0.25
             # RANSAC iteration limits. Controls how many times RANSAC runs to find the best geometric model.
             # Higher max_num_trials allow more thorough search but slower processing.
             "--SiftMatching.max_num_trials": "10000",  # default to 10000
