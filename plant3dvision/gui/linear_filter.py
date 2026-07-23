@@ -28,8 +28,9 @@ linear_filter path/to/your/photo.jpg
 When the application launches, use the sliders to set the weighting of each channel, choose a color space from the dropdown, and adjust the threshold spin boxes.
 Press **Process** to see the filtered image and the corresponding mask.
 """
-
+import os
 import sys
+from pathlib import Path
 
 import click
 import numpy as np
@@ -38,9 +39,9 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 from PySide6.QtWidgets import QComboBox
 from PySide6.QtWidgets import QDoubleSpinBox
-from PySide6.QtWidgets import QFileDialog
 from PySide6.QtWidgets import QHBoxLayout
 from PySide6.QtWidgets import QLabel
+from PySide6.QtWidgets import QLineEdit
 from PySide6.QtWidgets import QMainWindow
 from PySide6.QtWidgets import QMessageBox
 from PySide6.QtWidgets import QPushButton
@@ -48,10 +49,11 @@ from PySide6.QtWidgets import QSizePolicy
 from PySide6.QtWidgets import QSlider
 from PySide6.QtWidgets import QVBoxLayout
 from PySide6.QtWidgets import QWidget
-# Switched to backend_qtagg for Qt6 compatibility (PySide6)
+
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
+from plantdb.commons.fsdb.core import FSDB
 
 from plant3dvision.proc2d import dilation
 from plant3dvision.proc2d import linear
@@ -79,7 +81,7 @@ class RGBFilterApp(QMainWindow):
         Labels that display the current scaling factors for the three channels.
     """
 
-    def __init__(self):
+    def __init__(self, fsdb_path: str | Path):
         """Initialize the main window and UI elements.
 
         Set the window title, geometry and creates placeholders for image data and channel coefficients.
@@ -87,7 +89,14 @@ class RGBFilterApp(QMainWindow):
         """
         super().__init__()
         self.setWindowTitle("Linear Filter and Threshold")
-        self.setGeometry(100, 100, 800, 600)
+        self.setGeometry(100, 100, 1200, 800)
+
+        # Database connection
+        self.fsdb_path = fsdb_path
+        self.db = None
+        self.scan_ids_list = []
+        self.images_list = []
+        self.current_scan = None
 
         # Image placeholders
         self.source_image: Image = None  # PIL source image
@@ -99,8 +108,23 @@ class RGBFilterApp(QMainWindow):
         self.ch2_value = None
         self.ch3_value = None
 
+        # Initialize database
+        self._init_database()
+
         # Initialize UI
         self.initUI()
+
+    def _init_database(self):
+        """Initialize the database connection and load scan list."""
+        try:
+            self.db = FSDB(self.fsdb_path, no_auth=True)
+            self.db.connect()
+            self.scan_ids_list = self.db.list_scans(owner_only=False)
+            print(self.scan_ids_list)
+            print(f"Loaded {len(self.scan_ids_list)} scans from the FSDB")
+        except Exception as e:
+            print(f"Error connecting to database: {e}")
+            self.scan_ids_list = []
 
     def initUI(self):
         """Create and arrange all widgets of the GUI.
@@ -114,7 +138,59 @@ class RGBFilterApp(QMainWindow):
         main_widget.setLayout(main_layout)
         self.setCentralWidget(main_widget)
 
-        # Controls panel
+        # ===== TOP PANEL =====
+        top_panel_layout = QHBoxLayout()
+
+        # Search box
+        search_label = QLabel("Search:")
+        self.search_box = QLineEdit()
+        self.search_box.setPlaceholderText("Filter scans...")
+        self.search_box.textChanged.connect(self._filter_scans)
+        self.search_box.setMinimumWidth(150)
+        self.search_box.setMaximumWidth(200)
+        self.search_box.setToolTip(
+            "Type to filter the list of scans. Only scans containing the entered text will be shown."
+        )
+        top_panel_layout.addWidget(search_label)
+        top_panel_layout.addWidget(self.search_box)
+
+        # Scan dropdown
+        scan_label = QLabel("Scan:")
+        self.scan_dropdown = QComboBox()
+        self.scan_dropdown.addItems(self.scan_ids_list)
+        self.scan_dropdown.currentTextChanged.connect(self._load_scan)
+        top_panel_layout.addWidget(scan_label)
+        top_panel_layout.addWidget(self.scan_dropdown)
+
+        # Image slider
+        image_slider_label = QLabel("Image:")
+        self.image_slider = QSlider(Qt.Orientation.Horizontal)
+        self.image_slider.setMinimum(0)
+        self.image_slider.setMaximum(0)
+        self.image_slider.setValue(0)
+        # Show tick marks on the image index slider
+        self.image_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.image_slider.setTickInterval(1)
+        self.image_slider.valueChanged.connect(self._load_image_from_slider)
+        # Replace label with a QDoubleSpinBox for precise image index control
+        self.image_index_spinbox = QDoubleSpinBox()
+        self.image_index_spinbox.setDecimals(0)
+        self.image_index_spinbox.setSingleStep(1.0)
+        self.image_index_spinbox.setMinimum(0)
+        self.image_index_spinbox.setMaximum(0)
+        self.image_index_spinbox.setValue(0)
+        # When the spinbox value changes, update the slider accordingly
+        self.image_index_spinbox.valueChanged.connect(self._on_image_index_spinbox_changed)
+        top_panel_layout.addWidget(image_slider_label)
+        top_panel_layout.addWidget(self.image_slider)
+        top_panel_layout.addWidget(self.image_index_spinbox)
+
+        top_panel_container = QWidget()
+        top_panel_container.setLayout(top_panel_layout)
+        top_panel_container.setMaximumHeight(50)
+        main_layout.addWidget(top_panel_container)
+
+        # ===== CONTROLS PANEL =====
         controls_layout = QHBoxLayout()
 
         # Sliders
@@ -229,11 +305,6 @@ class RGBFilterApp(QMainWindow):
             "Binary dilation applied to the mask image."
         )
 
-        # Load and process buttons
-        buttons_layout = QHBoxLayout()
-        self.load_button = QPushButton("Load Image")
-        buttons_layout.addWidget(self.load_button)
-        sliders_layout.addLayout(buttons_layout)
         threshold_dilation_layout.addWidget(min_thresh_label)
         threshold_dilation_layout.addWidget(self.min_threshold_spinbox)
         threshold_dilation_layout.addWidget(max_thresh_label)
@@ -249,7 +320,7 @@ class RGBFilterApp(QMainWindow):
         # Ensure the controls panel stays compact
         controls_container = QWidget()
         controls_container.setLayout(controls_layout)
-        controls_container.setMaximumHeight(180)  # limit height
+        controls_container.setMaximumHeight(250)  # limit height
         controls_container.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)  # fixed vertical size
 
         # Add controls to main layout
@@ -274,9 +345,10 @@ class RGBFilterApp(QMainWindow):
         main_layout.addWidget(self.canvas)
 
         # Make the layout responsive: give canvas the remaining stretch
-        main_layout.setStretch(0, 0)  # controls with controls (index 0) – no stretch
-        main_layout.setStretch(1, 0)  # toolbar
-        main_layout.setStretch(2, 1)  # canvas (index 2) – occupies extra space
+        main_layout.setStretch(0, 0)  # top panel (index 0) – no stretch
+        main_layout.setStretch(1, 0)  # controls (index 1) – no stretch
+        main_layout.setStretch(2, 0)  # toolbar
+        main_layout.setStretch(3, 1)  # canvas (index 3) – occupies extra space
 
         # Connect signals
         self.ch1_slider.valueChanged.connect(self.update_ch1_value)
@@ -289,6 +361,89 @@ class RGBFilterApp(QMainWindow):
         self.min_threshold_spinbox.valueChanged.connect(self.process_image)
         self.max_threshold_spinbox.valueChanged.connect(self.process_image)
         self.load_button.clicked.connect(self.load_image)
+        self.dilation_spinbox.valueChanged.connect(self.process_image)
+
+        # Load first scan if available
+        if self.scan_ids_list:
+            self.scan_dropdown.setCurrentIndex(0)
+            self._load_scan(self.scan_ids_list[0])
+
+    def _filter_scans(self, text):
+        """Filter the scan dropdown based on search box text."""
+        self.scan_dropdown.clear()
+        filtered_scans = [scan_id for scan_id in self.scan_ids_list if text.lower() in scan_id.lower()]
+        self.scan_dropdown.addItems(filtered_scans)
+
+    def _load_scan(self, scan_id):
+        """Load the selected scan and populate the image slider."""
+        if not scan_id or not self.db:
+            return
+
+        try:
+            self.current_scan = self.db.get_scan(scan_id)
+            images_fs = self.current_scan.get_fileset('images')
+            self.images_list = images_fs.get_files()
+
+            # Update image slider
+            self.image_slider.setMaximum(max(0, len(self.images_list) - 1))
+            self.image_slider.setValue(0)
+            self._update_image_label()
+
+            # Load first image
+            if self.images_list:
+                self._load_image_from_slider(0)
+
+        except Exception as e:
+            print(f"Error loading scan '{scan_id}': {e}")
+            self.images_list = []
+            self.image_slider.setMaximum(0)
+            self._update_image_label()
+
+    def _load_image_from_slider(self, index):
+        """Load the image at the given slider index."""
+        if not self.images_list or index >= len(self.images_list):
+            return
+
+        try:
+            image = self.images_list[index]
+            image_path = image.path()
+            self.load_image_from_path(image_path)
+            self._update_image_label()
+        except Exception as e:
+            print(f"Error loading image at index {index}: {e}")
+
+    def _update_image_label(self):
+        """Update the image index label."""
+        if self.images_list:
+            # Use 1‑based indexing for the spinbox display
+            current = self.image_slider.value() + 1
+            total = len(self.images_list)
+            # Update spinbox range and suffix (e.g., "5/20")
+            self.image_index_spinbox.blockSignals(True)
+            self.image_index_spinbox.setMinimum(1)
+            self.image_index_spinbox.setMaximum(total)
+            self.image_index_spinbox.setValue(current)
+            self.image_index_spinbox.setSuffix(f"/{total}")
+            self.image_index_spinbox.blockSignals(False)
+        else:
+            self.image_index_spinbox.blockSignals(True)
+            self.image_index_spinbox.setMinimum(0)
+            self.image_index_spinbox.setMaximum(0)
+            self.image_index_spinbox.setValue(0)
+            self.image_index_spinbox.setSuffix("")
+            self.image_index_spinbox.blockSignals(False)
+
+    def _on_image_index_spinbox_changed(self, value):
+        """Synchronize slider when the image index spinbox changes."""
+        if not self.images_list:
+            return
+        # Convert 1‑based spinbox value to 0‑based slider index
+
+        new_index = int(value) - 1
+        # Clamp to valid range just in case
+        new_index = max(0, min(new_index, len(self.images_list) - 1))
+        self.image_slider.setValue(new_index)
+
 
     def _on_scroll(self, event):
         """Zoom all three axes with the mouse wheel."""
@@ -399,41 +554,6 @@ class RGBFilterApp(QMainWindow):
 
         """
         self.ch3_value.setText(f"{value / 100:.2f}")
-
-    def load_image(self):
-        """Open a file‑dialog, load an image, and display it.
-
-        The image is converted to ``RGB`` and normalized to ``[0, 1]``.
-        If loading succeeds, the *Process* button becomes enabled.
-
-        Raises
-        ------
-        Exception
-            Any exception raised by `PIL.Image.Image.open` is caught and printed to stdout.
-        """
-        file_path, _ = QFileDialog.getOpenFileName(
-            self, "Open Image", "", "Image Files (*.png *.jpg *.jpeg *.bmp *.tif *.tiff)"
-        )
-
-        if file_path:
-            # Load the image
-            try:
-                self.source_image = Image.open(file_path).convert("RGB")
-                img = np.array(self.source_image) / 255.0
-                self.original_img = img
-
-                # Display the original image
-                self.figure.clear()
-                ax = self.figure.add_subplot(111)
-                ax.imshow(self.original_img)
-                ax.set_title("Original Image")
-                ax.axis('off')
-                self.canvas.draw()
-
-                # Process image immediately after loading
-                self.process_image()
-            except Exception as e:
-                print(f"Error loading image: {e}")
 
     def load_image_from_path(self, file_path: str) -> None:
         """Load an image from an absolute path (used for CLI start‑up).
@@ -593,16 +713,21 @@ class RGBFilterApp(QMainWindow):
 
 
 @click.command()
-@click.argument('image_path', required=False, type=click.Path(exists=True, dir_okay=False))
-def main(image_path: str | None = None):
+@click.argument('fsdb_path', required=False, type=click.Path(exists=True, dir_okay=True))
+def main(fsdb_path: str | None = None):
     """Start the RGB linear filter GUI.
 
     Optionally, provide an image file path to load at launch.
     """
+    # Try to use the 'ROMI_DB' environment variable as path to the FSDB if not set as argument.
+    if not fsdb_path:
+        fsdb_path = os.environ.get('ROMI_DB', None)
+    if not fsdb_path:
+        raise ValueError(f"Provide a valid path to an FSDB folder or set 'ROMI_DB' environment variable.")
+
     app = QApplication(sys.argv)
-    window = RGBFilterApp()
-    if image_path:
-        window.load_image_from_path(image_path)
+    window = RGBFilterApp(fsdb_path)
+
     window.show()
     sys.exit(app.exec())
 
