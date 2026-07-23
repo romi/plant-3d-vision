@@ -18,7 +18,6 @@ from tqdm import tqdm
 from plant3dvision.compare import *
 from plant3dvision.compare import _get_task_fileset
 from plantdb.commons.fsdb.core import FSDB
-from plantdb.commons.fsdb.core import LOCK_FILE_NAME
 from plantdb.commons.fsdb.core import MARKER_FILE_NAME
 from romitask.log import get_logger
 
@@ -516,13 +515,6 @@ def _check_markers(path):
     marker_file = path / MARKER_FILE_NAME
     try:
         marker_file.touch()
-    except:
-        pass
-    # - Make sure the `lock` file do NOT exist:
-    lock_file = path / LOCK_FILE_NAME
-    try:
-        lock_file.unlink()
-        # lock_file.unlink(missing_ok=True)  # missing_ok only available since Python3.8
     except:
         pass
     return

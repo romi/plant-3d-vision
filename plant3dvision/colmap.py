@@ -458,6 +458,87 @@ def export_camera_parameters(image_files, intrinsics, extrinsics):
     return image_files
 
 
+def circular_match_pairs(image_names: list[str], window: int = 2) -> list[tuple[str, str]]:
+    """Return all unique image pairs for circular sequential matching.
+
+    Each image at index i is paired with the `window` images before it
+    and the `window` images after it, wrapping around (circular path).
+    Pairs are deduplicated so that (A, B) and (B, A) appear only once.
+
+    Parameters
+    ----------
+    image_names : list[str]
+        Ordered list of image filenames (relative paths inside the COLMAP
+        image folder), e.g. ["img_0000.jpg", "img_0001.jpg", ...].
+    window : int
+        Number of neighbours to match on each side (default = 2).
+
+    Returns
+    -------
+    list[tuple[str, str]]
+        Sorted list of unique (imageA, imageB) pairs.
+
+    Example
+    -------
+    >>> from plant3dvision.colmap import circular_match_pairs
+    >>> names = [f"img_{i:04d}.jpg" for i in range(5)]
+    >>> pairs = circular_match_pairs(names, window=1)
+    >>> for p in pairs: print(' '.join(p))
+    img_0000.jpg img_0001.jpg
+    img_0000.jpg img_0004.jpg
+    img_0001.jpg img_0002.jpg
+    img_0002.jpg img_0003.jpg
+    img_0003.jpg img_0004.jpg
+    """
+    n = len(image_names)
+    if n < 2:
+        raise ValueError("Need at least 2 images to form pairs.")
+    if window < 1:
+        raise ValueError("window must be >= 1.")
+
+    seen: set[tuple[int, int]] = set()
+    pairs: list[tuple[str, str]] = []
+
+    for i in range(n):
+        for delta in range(1, window + 1):
+            j = (i + delta) % n  # forward neighbour (circular)
+            key = (min(i, j), max(i, j))
+            if key not in seen:
+                seen.add(key)
+                pairs.append((image_names[key[0]], image_names[key[1]]))
+
+    pairs.sort()
+    return pairs
+
+
+def write_match_list(image_names: list[str], output_path: str | Path, window: int = 2) -> Path:
+    """Generate circular match pairs and write them to a text file suitable for COLMAP's ``matches_importer``.
+
+    Each line of the file contains two image names separated by a space: `image1.jpg image2.jpg`
+
+    Parameters
+    ----------
+    image_names : list[str]
+        Ordered list of image filenames relative to the COLMAP image folder.
+    output_path : str or Path
+        Destination file path (e.g. ``"match_list.txt"``).
+    window : int
+        Number of neighbours to match on each side (default = 2).
+
+    Returns
+    -------
+    Path
+        Resolved path to the written file.
+    """
+    pairs = circular_match_pairs(image_names, window=window)
+    output_path = Path(output_path).resolve()
+    with output_path.open("w") as f:
+        for a, b in pairs:
+            f.write(f"{a} {b}\n")
+    logger.info(f"Exported {len(pairs)} image pairs to {output_path}")
+    return output_path
+
+
 def colmap_keypoints_per_image(db_path: str | bytes | Path) -> dict[str, int]:
     """Retrieve the number of COLMAP keypoints for each image stored in a COLMAP database.
 
@@ -610,7 +691,7 @@ def colmap_matches_per_pair(db_path: str | bytes | Path) -> dict[tuple[str, str]
     >>> stats = colmap_matches_per_pair(db_file)
     >>> for (img1, img2), (n_matches, avg_dist, _) in stats.items(): print(f"{img1} - {img2}: {n_matches} matches, avg L2 distance = {avg_dist:.2f}")
     00000_rgb.jpg - 00001_rgb.jpg: 330 matches, avg L2 distance = 117.95
-    >>> # --- Build a pairwise distance matrix from the stats ---
+    >>> # Build a pairwise distance matrix from the stats ---
     >>> import pandas as pd
     >>> import numpy as np
     >>> import matplotlib.pyplot as plt
@@ -737,8 +818,118 @@ def colmap_matches_per_pair(db_path: str | bytes | Path) -> dict[tuple[str, str]
     return pair_stats
 
 
+def colmap_matches_fig(kp_match, scan_id, filepath=None, cmap='viridis', vmin=None, vmax=None):
+    """Plot a circular‑ordered heat‑map of pairwise image matches.
+
+    The function builds an ``N×N`` matrix of the number of feature matches
+    between every pair of images contained in a COLMAP matches dataframe.
+    For each reference image (row) the columns are reordered so that the
+    reference image appears in the centre and its neighbours are displayed
+    with increasing offset to the left and right, yielding a “circular”
+    ordering that is convenient for visual inspection of match consistency
+    across a scan.
+
+    Parameters
+    ----------
+    kp_match : pandas.DataFrame
+        DataFrame produced by COLMAP containing at least the columns ``'Image_ID'``, ``'Image_ID.1'``
+        and ``'Nb_Matches'``. Each row represents a match between two images and the number of feature
+        matches between them.
+    scan_id : str or int
+        Identifier of the scan (or scene) that is shown in the plot title.
+    filepath : str, optional
+        Path where the generated figure should be saved.
+        If ``None`` (default) the figure is only displayed and not written to disk.
+    cmap : str, optional
+        Matplotlib colormap name used for the heat‑map. Defaults to ``'viridis'``.
+    vmin : float, optional
+        Minimum data value that maps to the colormap start.
+        If ``None`` the minimum of the data is used.
+    vmax : float, optional
+        Maximum data value that maps to the colormap end.
+        If ``None`` the maximum of the data is used.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        The created Matplotlib figure object, allowing further customization or saving by the caller.
+
+    Examples
+    --------
+    >>> import pandas as pd
+    >>> import numpy as np
+    >>> import matplotlib.pyplot as plt
+    >>> from plant3dvision.colmap import colmap_matches_fig
+    >>> # Construct a minimal example dataframe
+    >>> data = {
+    ...     'Image_ID':   ['00001_rgb.png', '00002_rgb.png', '00001_rgb.png'],
+    ...     'Image_ID.1': ['00002_rgb.png', '00003_rgb.png', '00003_rgb.png'],
+    ...     'Nb_Matches': [120, 85, 30]
+    ... }
+    >>> df = pd.DataFrame(data)
+    >>> fig = colmap_matches_fig(df, scan_id='scan_001')
+    >>> # The figure can be shown inline in a notebook
+    >>> fig.show()
+    """
+    import matplotlib.pyplot as plt
+    # Build the full NxN matches matrix
+
+    # Extract the numeric part of the filename so we can sort them correctly
+    def img_key(fname: str) -> int:
+        # “00044_rgb.png” -> 44
+        return int(fname.split("_")[0])
+
+    # Sorted list of unique images (circular order)
+    imgs = sorted(
+        set(kp_match["Image_ID"]).union(kp_match["Image_ID.1"]),
+        key=img_key,
+    )
+    N = len(imgs)
+
+    # Mapping image name / index
+    idx = {img: i for i, img in enumerate(imgs)}
+
+    # Empty matrix – we’ll fill only the upper-triangle and mirror it
+    matches = np.full((N, N), np.nan, dtype=float)
+
+    # Fill with Nb_Matches (symmetrical)
+    for _, row in kp_match.iterrows():
+        i, j = idx[row["Image_ID"]], idx[row["Image_ID.1"]]
+        matches[i, j] = row["Nb_Matches"]
+        matches[j, i] = row["Nb_Matches"]  # make it symmetric
+
+    # Re-order columns *per row* so the “image of interest” is centred
+
+    half = N // 2  # number of neighbours on each side
+    circular = np.empty_like(matches)  # will hold the reordered rows
+
+    for i in range(N):
+        # column order for row i :   (i-half) ... (i-1) , i , (i+1) ... (i+half-1)
+        col_order = [(i - half + k) % N for k in range(N)]
+        circular[i, :] = matches[i, col_order]
+
+    fig = plt.figure(figsize=(10, 8), dpi=150)
+    # Plot the heat-map
+    im = plt.imshow(circular, aspect='auto', cmap=cmap, vmin=vmin, vmax=vmax)
+    # Hide x-tick labels
+    plt.xticks([])
+    # Show y-tick labels (image names)
+    plt.yticks(ticks=np.arange(N), labels=[imgs[i] for i in range(N)])
+    # Add a colour bar with the same label as Seaborn
+    cbar = plt.colorbar(im, label="Nb. Matches")
+
+    plt.title(f"Circular-ordered match heat-map - {scan_id}")
+    plt.ylabel("Reference image (row-wise)")
+    plt.xlabel("Neighbour offset (left ← → right)")
+    plt.tight_layout()
+    if filepath is not None:
+        plt.savefig(filepath)
+
+    return fig
+
+
 #: List of valid COLMAP matcher methods:
-MatcherMethods = Literal['exhaustive', 'sequential', 'spatial']
+MatcherMethods = Literal['exhaustive', 'sequential', 'spatial', 'custom']
 MATCHER_METHODS = get_args(MatcherMethods)
 #: Default COLMAP matcher method:
 DEF_MATCHER_METHOD = 'exhaustive'
@@ -813,7 +1004,6 @@ class ColmapRunner(object):
         The list of image ``File`` to use for reconstruction.
     matcher_method : MatcherMethods
         Method to use to perform feature matching operation.
-        Valid methods are ``['exhaustive', 'sequential', 'spatial']``.
     compute_dense : bool
         If ``True``, it will compute the dense point cloud.
     all_cli_args : dict
@@ -831,7 +1021,7 @@ class ColmapRunner(object):
     colmap_workdir : str
         COLMAP working directory.
         Can be defined with an environment variable named `COLMAP_WS`.
-        Else will be automatically created in temporary directory.
+        Else will be automatically created in the temporary directory.
     imgs_dir : str
         Path to COLMAP 'images' directory.
     sparse_dir : str
@@ -840,6 +1030,8 @@ class ColmapRunner(object):
         Path to COLMAP 'dense' directory.
     log_file : str
         Path to the file used to log some of COLMAP stdout.
+    circular_match_window : int
+        Number of neighbors to match on each side when manually defining image pairs for circular matching.
 
     Notes
     -----
@@ -853,18 +1045,21 @@ class ColmapRunner(object):
     Instead, consecutively captured images are matched against each other.
     This matching mode has built-in loop detection based on a vocabulary tree, where every N-th image (loop_detection_period) is matched against its visually most similar images (loop_detection_num_images).
     Note that image file names must be ordered sequentially (e.g., image0001.jpg, image0002.jpg, etc.).
-    The order in the database is not relevant, since the images are explicitly ordered according to their file names.
+    The order in the database is not relevant since the images are explicitly ordered according to their file names.
     Note that loop detection requires a pre-trained vocabulary tree, that can be downloaded from https://demuc.de/colmap/.
+
+    **Custom Matching**: This mode is useful to save time when the image sequence has been acquired on a circular path
+    and you want to limit the number of images to pair. Use ``circular_match_window`` to define how many left and right
+    image you want to pair with.
 
     References
     ----------
     .. [#] `COLMAP official tutorial. <https://colmap.github.io/tutorial.html>`_
-
     """
 
     def __init__(self,
                  img_files: list[File],
-                 matcher_method: MatcherMethods = "exhaustive",
+                 matcher_method: MatcherMethods = DEF_MATCHER_METHOD,
                  compute_dense: bool = False,
                  all_cli_args: dict[str, dict[str, str]] = {},
                  align_pcd: bool = False,
@@ -898,6 +1093,9 @@ class ColmapRunner(object):
             The executable to use to run the colmap reconstruction steps.
             'colmap' requires that you compile and install it from sources, see [colmap]_.
             The others use pre-built docker images, available from docker hub.
+        circular_match_window : int
+            Number of neighbors to match on each side when manually defining image pairs for circular matching.
+            Used when `matcher_method='custom'`. Defaults to ``2``.
 
         References
         ----------
@@ -907,6 +1105,7 @@ class ColmapRunner(object):
 
         Examples
         --------
+        >>> import numpy as np
         >>> from plant3dvision.colmap import ColmapRunner
         >>> from plantdb.commons.test_database import test_database
         >>> db = test_database('real_plant', no_auth=True)
@@ -917,20 +1116,25 @@ class ColmapRunner(object):
         >>> images_fileset = dataset.get_fileset('images')
         >>> image_files = images_fileset.get_files()
 
+        >>> # -- Example of Colmap reconstruction with the custom circular image pair matcher
         >>> args = {"feature_extractor": {"--ImageReader.single_camera": "1"}}
-        >>> colmap = ColmapRunner(image_files, matcher_method="exhaustive", align_pcd=True, all_cli_args=args, colmap_exe="roboticsmicrofarms/colmap:3.8")
-        >>> print(colmap.colmap_workdir)
+        >>> colmap = ColmapRunner(image_files, matcher_method="custom", align_pcd=True, all_cli_args=args, colmap_exe="roboticsmicrofarms/colmap:3.8")
+        >>> print(colmap.colmap_workdir)  # print Colmap temporary working directory
+        >>> # Perform the steps necessary to the estimation of the camera poses (extrinsics)
         >>> colmap.feature_extractor()  #1 - Extract features from images
         >>> colmap.matcher()  #2 - Match extracted features from images, requires `feature_extractor()`
         >>> colmap.mapper()  #3 - Sparse point cloud reconstruction, requires `matcher()`
         >>> colmap.model_aligner()  #4 - OPTIONAL, align sparse point cloud to coordinate system of given camera centers
+        >>> colmap.export_camera_parameters()  # Export estimated camera parameters to the images' metadata
+        >>> # Retrieve the estimated camera parameters from the images' metadata
+        >>> colmap_poses = {im.id: list(map(float, im.get_metadata("estimated_pose"))) for im in images_fileset.get_files()}
+        >>> print(np.round(colmap_poses['00000_rgb'], 2))  # x, y, z, pan, tilt, roll
+        [ 74.92 379.    77.84   2.77  20.    -2.28]
+        >>> # Create and Visualize the Sparse Point cloud:
         >>> from plant3dvision.colmap import colmap_points_to_pcd
         >>> sparse_pcd = colmap_points_to_pcd(f'{colmap.sparse_dir}/0/points3D.bin')
         >>> import open3d as o3d
         >>> o3d.visualization.draw(sparse_pcd)
-
-        >>> colmap_poses = {im.id: im.get_metadata("approximate_pose") for im in images_fileset.get_files()}
-
 
         >>> import time
         >>> # -- Example comparing the CPU vs. GPU performances (requires a CUDA capable NVIDIA GPU):
@@ -1005,6 +1209,7 @@ class ColmapRunner(object):
         self.align_pcd = align_pcd
         self.use_calibration = use_calibration
         self.bounding_box = bounding_box
+        self.circular_match_window = kwargs.get('circular_match_window', 2)
         # -- Initialize COLMAP directories, poses file & log file:
         # - Get / create a temporary COLMAP working directory
         self.colmap_workdir = Path(os.environ.get("COLMAP_WD", tempfile.mkdtemp(prefix='colmap_')))
@@ -1401,12 +1606,30 @@ class ColmapRunner(object):
             '--database_path', f'{self.colmap_workdir}/database.db',
             '--image_path', f'{self.colmap_workdir}/images'
         ]
+        cli_args = self.all_cli_args.get('feature_extractor', {})
+
         # - Check if GPU is available:
         if _has_nvidia_gpu():
             use_gpu_opt = {"--SiftExtraction.use_gpu": '1'}
         else:
             use_gpu_opt = {"--SiftExtraction.use_gpu": '0'}
-        cli_args = self.all_cli_args.get('feature_extractor', use_gpu_opt)
+
+        sift_args = {
+            # Maximum size of the image maximum dimension
+            "--SiftExtraction.max_image_size": "3200",  # default to 3200
+            # Minimum contrast threshold for feature detection
+            # Impact: Lower values = more features detected; higher values = more reliable features
+            "--SiftExtraction.peak_threshold": "0.0066666666666666671",  # default to 0.0066666666666666671
+            # Edge response threshold for feature filtering
+            # Impact: Higher values = fewer but more stable features; lower values = more features with potential instability
+            "--SiftExtraction.edge_threshold": "10",  # default to 10
+            # Estimates affine shape for oriented ellipses instead of disks
+            # Impact: More robust to image distortions and viewpoint changes
+            "--SiftExtraction.estimate_affine_shape": "0",  # default to 0
+        }
+
+        cli_args = {**sift_args, **use_gpu_opt, **cli_args}
+
         logger.info("Running colmap 'feature_extractor'...")
         logger.debug(f"args: {args}")
         logger.debug(f"cli_args: {cli_args}")
@@ -1418,15 +1641,51 @@ class ColmapRunner(object):
         # If a matcher method is not manually defined, use attribute method and cli arguments:
         if matcher_method is None:
             matcher_method = self.matcher_method
-            cli_args.update(**self.all_cli_args.get(f"{matcher_method}_matcher", {}))
+
+        cli_args.update(**self.all_cli_args.get(f"{matcher_method}_matcher", {}))
 
         args = ['--database_path', f'{self.colmap_workdir}/database.db']
+
+        sift_args = {
+            # Maximum distance ratio between first and second best match. Controls the ratio test for rejecting ambiguous matches.
+            # Impact: Lower values (0.6-0.7) produce more reliable matches but fewer matches; higher values (0.9) allow more matches but may include more noise.
+            "--SiftMatching.max_ratio": "0.8",  # default to 0.8
+            # Maximum distance to best match. Filters out matches that are too dissimilar.
+            # Impact: Higher values (0.8-0.9) allow more matches but may include more false positives.
+            "--SiftMatching.max_distance": "0.7",  # default to 0.7
+            # Enables bidirectional matching. A match is only accepted if it's mutual between both images.
+            # Impact: Increases matching reliability significantly but reduces the number of matches by about 50%.
+            "--SiftMatching.cross_check": "1",  # default to 1
+            # Minimum number of inliers required for geometric verification to succeed. Controls the minimum quality of matches that are accepted.
+            # Impact: Lower values (10-12) allow more matches but with lower reliability; higher values (20-25) produce more robust matches but fewer.
+            "--SiftMatching.min_num_inliers": "15",  # default to 15
+            # Maximum epipolar error in pixels for geometric verification. Determines how much geometric inconsistency is tolerated in RANSAC.
+            # Impact: Lower values (2-3) produce more robust matches but fewer inliers; higher values (6-8) allow more matches but may include more outliers.
+            "--SiftMatching.max_error": "4",  # default to 4
+            # A priori minimum inlier ratio, affecting RANSAC convergence. Influences how many iterations RANSAC performs.
+            # Impact: Lower ratios (0.1-0.2) allow faster convergence but may miss good solutions; higher ratios (0.3-0.4) ensure better solutions.
+            "--SiftMatching.min_inlier_ratio": "0.25",  # default to 0.25
+            # RANSAC iteration limits. Controls how many times RANSAC runs to find the best geometric model.
+            # Higher max_num_trials allow more thorough search but slower processing.
+            "--SiftMatching.max_num_trials": "10000",  # default to 10000
+            # Whether to attempt to estimate multiple geometric models. Allows for scenes with multiple moving objects or distortions.
+            # Impact: Enabling this can increase processing time but may help with complex scenes.
+            "--SiftMatching.multiple_models": "0",  # default to 0
+            # Whether to perform guided matching using existing geometric estimates.
+            # Impact: Uses previous geometric solutions to guide subsequent matching, improving efficiency and accuracy in certain scenarios.
+            "--SiftMatching.guided_matching": "0",  # default to 0
+            # Forces homography estimation for planar scenes. Useful for flat surfaces where the camera motion is planar.
+            # Impact: Can improve matching accuracy for such scenes.
+            "--SiftMatching.planar_scene": "0",  # default to 0
+        }
+
         # - Check if GPU is available:
         if _has_nvidia_gpu():
             use_gpu_opt = {"--SiftMatching.use_gpu": '1'}
         else:
             use_gpu_opt = {"--SiftMatching.use_gpu": '0'}
-        cli_args.update(**use_gpu_opt)
+
+        cli_args = {**sift_args, **use_gpu_opt, **cli_args}
 
         logger.info(f"Running colmap '{matcher_method}_matcher'...")
         logger.debug(f"args: {args}")
@@ -1437,10 +1696,29 @@ class ColmapRunner(object):
         elif matcher_method == 'sequential':
             _ = self._colmap_cmd('sequential_matcher', args, cli_args)
         elif matcher_method == 'spatial':
-            cli_args["--SpatialMatching.is_gps"] = "0"
+            spatial_opt = {
+                # Forcefully deactivate "is_gps" as we have cartesian coordinates in our case
+                "--SpatialMatching.is_gps": "0"
+            }
+            cli_args.update(**spatial_opt)
             _ = self._colmap_cmd('spatial_matcher', args, cli_args)
         elif matcher_method == 'transitive':
             _ = self._colmap_cmd('transitive_matcher', args, cli_args)
+        elif matcher_method == 'custom':
+            match_list_path = f'{self.colmap_workdir}/match_list.txt'
+            write_match_list(
+                sorted([im_f.path().name for im_f in self.image_files]),
+                match_list_path,
+                window=self.circular_match_window
+            )
+            args.extend(["--match_list_path", match_list_path])
+            args.extend(["--match_type", "pairs"])
+            custom_opt = {
+                # Forcefully deactivate "guided_matching" as it breaks the matching in our case
+                "--SiftMatching.guided_matching": 0,
+            }
+            cli_args.update(**custom_opt)
+            _ = self._colmap_cmd('matches_importer', args, cli_args)
         else:
             raise ValueError(f"Unknown matcher '{matcher_method}'!")
         return
@@ -1450,7 +1728,10 @@ class ColmapRunner(object):
         args = [
             '--database_path', f'{self.colmap_workdir}/database.db',
             '--image_path', f'{self.colmap_workdir}/images',
-            '--output_path', f'{self.colmap_workdir}/sparse'
+            '--output_path', f'{self.colmap_workdir}/sparse',
+            '--Mapper.init_image_id1', "10",
+            '--Mapper.init_image_id2', "11",
+            "--Mapper.multiple_models", "0",
         ]
         cli_args = self.all_cli_args.get('mapper', {})
         logger.info("Running colmap 'mapper'...")

@@ -16,6 +16,7 @@ from typing import get_args
 
 import luigi
 import numpy as np
+import pandas as pd
 import toml
 from matplotlib.lines import Line2D
 from scipy.spatial.distance import euclidean
@@ -27,6 +28,7 @@ from plant3dvision.camera import get_colmap_cameras_from_calib_scan
 from plant3dvision.colmap import COLMAP_EXE
 from plant3dvision.colmap import ColmapRunner
 from plant3dvision.colmap import colmap_keypoints_per_image
+from plant3dvision.colmap import colmap_matches_fig
 from plant3dvision.colmap import colmap_matches_per_pair
 from plant3dvision.colmap import estimate_camera_pose
 from plant3dvision.filenames import COLMAP_CAMERAS_ID
@@ -38,6 +40,7 @@ from plant3dvision.filenames import COLMAP_POINTS_ID
 from plant3dvision.filenames import COLMAP_SPARSE_ID
 from plant3dvision.utils import angular_distance
 from plant3dvision.utils import mad_outlier
+from plant3dvision.utils import mad_threshold
 from plantdb.commons import io
 from plantdb.commons.fsdb.core import File
 from plantdb.commons.fsdb.core import Scan
@@ -721,9 +724,10 @@ class Colmap(RomiTask):
         Default to ``plant3dvision.colmap.COLMAP_EXE``, that is the `'COLMAP_EXE'` environment variable
         or ``'plant3dvision.colmap.DEFAULT_COLMAP'``
     matcher : luigi.Parameter, optional
-        Type of matcher to use, either "exhaustive" or "sequential".
+        Type of matcher to use, either "custom", "exhaustive", "sequential" or "spatial".
         *Exhaustive matcher* tries to match every other image.
         *Sequential matcher* tries to match successive image, this requires a sequential file name ordering.
+        *Custom matcher* tries to match N images on a sliding window, usefull for the circular path.
         Defaults to "exhaustive".
     use_gpu : luigi.BoolParameter
         Whether to use GPU for feature extraction (feature_extractor) and matching (*_matcher).
@@ -739,9 +743,9 @@ class Colmap(RomiTask):
         Whether to "world-align" (scale and geo-reference) the reconstructed model using 'calibrated' or 'estimated' poses.
         Default to ``True``.
     camera_model : luigi.Parameter, optional
-        If no intrinsic or extrinsic calibration scan is defined, this select the camera model to estimate by COLMAP.
+        If no intrinsic or extrinsic calibration scan is defined, this selects the camera model to estimate by COLMAP.
         Valid models are in {'SIMPLE_RADIAL', 'RADIAL', 'OPENCV'}.
-        If an ``intrinsic_calibration_scan_id`` is specified, this select the intrinsic parameters to set in COLMAP.
+        If an ``intrinsic_calibration_scan_id`` is specified, this selects the intrinsic parameters to set in COLMAP.
         If an ``extrinsic_calibration_scan_id`` is specified and `use_calibration_camera` is ``True``, this does nothing!
         Defaults to "SIMPLE_RADIAL" camera model.
     bounding_box : luigi.DictParameter, optional
@@ -751,43 +755,46 @@ class Colmap(RomiTask):
         Defaults to NO bounding-box.
     cli_args : luigi.DictParameter, optional
         Dictionary of arguments to pass to colmap command lines, empty by default.
+    circular_match_window : luigi.IntParameter
+        Number of neighbors to match on each side when manually defining image pairs for circular
+        sequential matching. Used when `matcher='custom'`. Defaults to ``2``.
     intrinsic_calibration_scan_id : luigi.Parameter, optional
         If set, get the intrinsic camera parameters from this scan dataset.
         These intrinsic parameters will be set in COLMAP ``feature_extractor`` and will not be refined by ``mapper``.
-        Using this requires to set the ``camera_model`` attribute, in order to select one model from those estimated.
-        Obviously, it requires to run the ``IntrinsicCalibration`` task on this dataset prior to using it here.
+        Using this requires setting the ``camera_model`` attribute, to select one model from those estimated.
+        It requires to run the ``IntrinsicCalibration`` task on this dataset prior to using it here.
         If ``extrinsic_calibration_scan_id`` is specified this does nothing!
         Defaults to NO intrinsic calibration scan.
     extrinsic_calibration_scan_id : luigi.Parameter, optional
         If set, get the extrinsic camera parameters from this scan dataset.
         These extrinsic parameter will be set in COLMAP ``poses.txt`` file using the estimated "calibrated_poses" metadata.
-        Obviously, it requires to run the ``ExtrinsicCalibration`` task on this dataset prior to using it here.
+        It requires to run the ``ExtrinsicCalibration`` task on this dataset prior to using it here.
         If set and ``use_calibration_camera`` is ``True``, also get the intrinsic camera parameters from this scan dataset.
-        That case does NOT require to set the ``camera_model`` attribute, as they will be in "OPENCV" format.
+        That case does NOT require setting the ``camera_model`` attribute, as they will be in "OPENCV" format.
         Defaults to NO extrinsic calibration scan.
     use_calibration_camera : luigi.BoolParameter, optional
         If ``True``, use the intrinsic parameters from ``extrinsic_calibration_scan_id``.
         Else, estimate the intrinsic parameters automatically.
     qc_check : float, optional
-        Whether to perform the verification of the estimated camera extrinsic
+        Whether to perform the verification of the estimated camera extrinsic.
     mad_factor : float, optional
-        Median absolute deviation factor to detect outlier camera pose
+        Median absolute deviation factor to detect outlier camera pose.
     metrics : Metrics, optional
         The list of metrics to use to detect the outliers using the Median Absolute Deviation method.
         Valid values are in ``Metrics``, that is ``["xy", "z", "pan", "tilt", "roll"]``.
         If ``None``, the default set ``["xy", "z", "pan", "roll"]`` is used.
     distance_threshold : float, optional
-        Maximum distance to CNC pose to validate COLMAP pose estimation
+        Maximum distance to CNC pose to validate COLMAP pose estimation.
     fixed_distance_threshold : float, optional
-        Maximum distance to fixed CNC pose to validate COLMAP pose estimation
+        Maximum distance to fixed CNC pose to validate COLMAP pose estimation.
     angle_threshold : float, optional
-        Maximum angular distance to CNC pose to validate COLMAP pose estimation
+        Maximum angular distance to CNC pose to validate COLMAP pose estimation.
     fixed_angle_threshold : float, optional
-        Maximum angular distance to fixed CNC pose to validate COLMAP pose estimation
+        Maximum angular distance to fixed CNC pose to validate COLMAP pose estimation.
     max_blind_angle : float, optional
-        Maximum allowed blind angle for camera poses, defaults to 20.0
+        Maximum allowed blind angle for camera poses, defaults to 20.0.
     retry_count : int, optional
-        Maximum number of retries allowed, defaults to 10
+        Maximum number of retries allowed, defaults to 10.
 
     Attributes
     ----------
@@ -803,17 +810,6 @@ class Colmap(RomiTask):
             - points3d.json: Reconstructed 3D points
             - sparse.ply: Sparse point cloud
             - dense.ply (optional): Dense point cloud if compute_dense is True
-
-    Notes
-    -----
-    This task requires COLMAP to be installed or available as a container.
-
-    For exhaustive matching, all image pairs are compared, which is suitable for datasets
-    with up to several hundred images.
-
-    For sequential matching, only consecutive frames are matched, which is suitable for
-    video or ordered image sequences. Sequential matching requires images to be named
-    in sequential order (e.g., image0001.jpg, image0002.jpg).
 
     See Also
     --------
@@ -847,6 +843,7 @@ class Colmap(RomiTask):
     camera_model = luigi.Parameter(default="SIMPLE_RADIAL")
     bounding_box = luigi.DictParameter(default=None)
     cli_args = luigi.DictParameter(default={})
+    circular_match_window = luigi.IntParameter(default=2)
 
     intrinsic_calibration_scan_id = luigi.Parameter(default="")
     extrinsic_calibration_scan_id = luigi.Parameter(default="")
@@ -1074,7 +1071,8 @@ class Colmap(RomiTask):
             align_pcd=bool(self.align_pcd),
             use_calibration=extrinsic_calibration,  # impact the ``poses.txt`` file: use calibrated instead of cnc poses
             bounding_box=bounding_box,
-            colmap_exe=str(self.colmap_exe)
+            colmap_exe=str(self.colmap_exe),
+            circular_match_window=self.circular_match_window
         )
 
         # Perform reconstruction and get results
@@ -1109,6 +1107,12 @@ class Colmap(RomiTask):
             outfile = self.output_file(log_path.stem)
             outfile.import_file(log_path)
 
+        # Export the image pair match list file if it exists
+        match_list = workdir / "match_list.txt"
+        if match_list.is_file():
+            outfile = self.output_file("match_list")
+            outfile.import_file(match_list)
+
         db_path = Path(colmap_runner.colmap_workdir) / "database.db"
         # - Export the number of keypoints found per image
         kp_counts = colmap_keypoints_per_image(db_path)
@@ -1136,6 +1140,18 @@ class Colmap(RomiTask):
             file.flush()
             outfile.import_file(file.name)
 
+        scan_cfg = get_scan_config(self.output().get().path() / '..')
+        # Verify the scan path type when using max blind angle parameter
+        try:
+            path_type = scan_cfg['ScanPath']['class_name']
+        except KeyError:
+            path_type = ""
+
+        if path_type == "Circle":
+            kp_counts = pd.read_csv(outfile.path())
+            match_fig_fpath = f"{self.output().get().path()}/circular_match_heatmap.png"
+            colmap_matches_fig(kp_counts, self.scan_id, filepath=match_fig_fpath)
+
         # Initialize an instance to perform camera pose estimations quality check:
         camera_pose_qc = CameraPoseQC(image_files, self.mad_factor,
                                       metrics=self.metrics,
@@ -1144,6 +1160,12 @@ class Colmap(RomiTask):
                                       angle_threshold=self.angle_threshold,
                                       fixed_angle_threshold=self.fixed_angle_threshold,
                                       max_blind_angle=self.max_blind_angle)
+
+        correctly_estimated = True
+        if self.qc_check:
+            logger.info(f"Checking pose coherence between CNC (theoretical) and Colmap (estimated)...")
+            # - Add a "pose_estimation" metadata and performs estimation accuracy checks if requested:
+            correctly_estimated = camera_pose_qc.validate_camera_poses()
 
         pose_fig_fpath = f"{self.output().get().path()}/cnc_vs_colmap_poses_estimated.png"
         camera_pose_qc.plot_pose_estimation_figure(figname=pose_fig_fpath)
@@ -1175,8 +1197,6 @@ class Colmap(RomiTask):
             fpath.rename(str(fpath).replace(ext, suffix))
 
         if self.qc_check:
-            # - Add a "pose_estimation" metadata and performs estimation accuracy checks if requested:
-            correctly_estimated = camera_pose_qc.validate_camera_poses()
             if not correctly_estimated:
                 _rename_retry_file(dist_outfile.path())
                 _rename_retry_file(pose_fig_fpath)
@@ -1523,7 +1543,7 @@ class CameraPoseQC(object):
             mad_factor = self.mad_factor
         else:
             self.mad_factor = mad_factor
-
+        logger.info(f"Detecting image ids whose pose estimations deviate by a MAD factor of '{mad_factor}'...")
         image_ids = [im.id for im in self.image_files]
 
         # Determine outliers for each metric using the shared helper
@@ -1585,6 +1605,7 @@ class CameraPoseQC(object):
             ax.set_yticklabels(tick_labels)
             ax.set_xlabel("Distance from CNC [mm or degrees]")
 
+        scatter_handles = []
         # - Add the outlier labels
         outlier_idx = [self.image_ids.index(i) for i in outlier_ids]
         # Overlay outlier points and annotate with image IDs
@@ -1600,12 +1621,32 @@ class CameraPoseQC(object):
 
             # Plot outlier points
             xy = (y_positions, vals) if vert else (vals, y_positions)
-            ax.plot(*xy, "+", color="#d73027", markersize=4, alpha=0.7, label="outlier" if idx == 0 else "")
+            outliers_sc = ax.scatter(*xy, marker="+", c="#d73027", s=40, alpha=0.7)
 
             # Annotate each outlier with its image index
             for x, y, out_idx in zip(vals, y_positions, outlier_idx):
-                xy = (y + 0.15, x) if vert else (x + 0.1, y)
+                xy = (y + 0.1, x) if vert else (x + 0.1, y)
                 ax.text(*xy, out_idx, fontsize=8, ha="center", va="center", color="#d73027")
+        outliers_sc.set_label("Outliers")
+        scatter_handles.append(outliers_sc)
+
+        # - Add the MAD thresholds
+        for idx, metric_vals in enumerate(dist_data):
+            thresholds = [2, 3, 4]
+            mad_thresholds = mad_threshold(metric_vals, thresholds)
+            hw = 0.2
+            line_style = {"linestyle": "--", "colors": "green"}
+            txt_style = {"fontfamily": 'monospace', "fontsize": 8, "color": "green"}
+            if vert:
+                lines_sc = ax.hlines(mad_thresholds, idx + 1 - hw, idx + 1 + hw, **line_style)
+                [ax.text(idx + 1 - hw, mad_th, str(th), ha= "right", va= "center", **txt_style) for th, mad_th in
+                 zip(thresholds, mad_thresholds)]
+            else:
+                lines_sc = ax.vlines(mad_thresholds, idx + 1 - hw, idx + 1 + hw, **line_style)
+                [ax.text(mad_th, idx + 1 - hw, str(th), ha= "center", va= "top", **txt_style) for th, mad_th in
+                 zip(thresholds, mad_thresholds)]
+        lines_sc.set_label("MAD thresholds")
+        scatter_handles.append(lines_sc)
 
         # Add a title
         title = kwargs.get('title', None)
@@ -1615,7 +1656,7 @@ class CameraPoseQC(object):
         # Add a grid
         ax.grid(True, which='major', axis='both', linestyle='dotted')
         # Agg a legend
-        ax.legend()
+        ax.legend(handles=scatter_handles)
 
     def _xy_plane_scatter_plot(self, ax, outlier_ids: list[str], use_image_id=False,
                                ref_label='CNC', pred_label='Colmap', **kwargs) -> None:
@@ -1898,17 +1939,8 @@ class CameraPoseQC(object):
         else:
             plt.show()
 
-    def validate_camera_poses(self):
+    def validate_camera_poses(self) -> bool:
         """Check if estimated poses are within acceptable thresholds.
-
-        Parameters
-        ----------
-        distance_threshold : float
-            Maximum allowed distance (in mm) between estimated and ground truth poses.
-            If 0 or negative, no verification is performed.
-        max_blind_angle : float
-            Maximum allowed angle (in degrees) between consecutive failed pose estimations.
-            Only valid for circular path scans (`ScanPath.class_name` is 'Circle' in `scan.toml`).
 
         Returns
         -------
@@ -1927,6 +1959,9 @@ class CameraPoseQC(object):
             return False
         else:
             logger.info("All poses distance medians are within acceptable thresholds.")
+
+        # Flag the outliers using the selected metrics and defined MAD factor (defines `self.outlier_ids`)
+        self.flag_outlier_poses()
 
         # Verify the scan path type when using max blind angle parameter
         try:

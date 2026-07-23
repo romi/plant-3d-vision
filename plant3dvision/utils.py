@@ -462,7 +462,36 @@ def median_deviation(values, angular=False, abs=False):
         return np.abs(arr - median_val) if abs else arr - median_val
 
 
-def mad_outlier(distances: dict, factor: float = 3.0) -> set:
+def mad_threshold(values: list, factor: float | list[float] = 3.0) -> float | list[float]:
+    """Compute a MAD-based threshold and return it.
+
+    Parameters
+    ----------
+    values : list or numpy.ndarray
+        A list or array of numeric values.
+    factor : float or list of float, optional
+        Multiplicative factor applied to the MAD to set the outlier threshold.
+        Default is ``3.0``.
+
+    Returns
+    -------
+    float or list of float
+        The estimated MAD-based threshold, a list if a list of `factor` is supplied.
+    """
+    # Convert the values to a NumPy array for efficient computation
+    values = np.asarray(values, dtype=float)
+    # Median of the data
+    median = np.median(values)
+    # Median Absolute Deviation (MAD)
+    mad = np.median(np.abs(values - median))
+    # Threshold = median + factor * MAD
+    if isinstance(factor, list):
+        return [median + f * mad for f in factor]
+    else:
+        return median + factor * mad
+
+
+def mad_outlier(distances: dict, factor: float = 3.0) -> set[str]:
     """Compute a MAD-based threshold and return the IDs of items that exceed it.
 
     Parameters
@@ -475,18 +504,9 @@ def mad_outlier(distances: dict, factor: float = 3.0) -> set:
 
     Returns
     -------
-    set
+    set of str
         A set of ``image_id`` values flagged as outliers for this metric.
     """
-    # Convert the values to a NumPy array for efficient computation
-    values = np.asarray(list(distances.values()), dtype=float)
-
-    # Median of the data
-    median = np.median(values)
-    # Median Absolute Deviation (MAD)
-    mad = np.median(np.abs(values - median))
-    # Threshold = median + factor * MAD
-    threshold = median + factor * mad
-
+    threshold = mad_threshold(list(distances.values()), factor)
     # Return IDs whose value is larger than the threshold
     return {img_id for img_id, val in distances.items() if val > threshold}
