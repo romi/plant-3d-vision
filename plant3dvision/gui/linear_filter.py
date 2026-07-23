@@ -145,6 +145,12 @@ class RGBFilterApp(QMainWindow):
         self.ch1_slider.setRange(0, 100)
         self.ch1_slider.setValue(50)
         self.ch1_slider.setMinimumWidth(200)
+        # Show tick marks on the channel slider
+        self.ch1_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.ch1_slider.setTickInterval(10)
+        self.ch1_slider.setToolTip(
+            "Adjust the weighting of the first channel."
+        )
         self.ch1_value = QLabel("0.5")
         ch1_layout.addWidget(self.ch1_label)
         ch1_layout.addWidget(self.ch1_slider)
@@ -159,6 +165,12 @@ class RGBFilterApp(QMainWindow):
         self.ch2_slider.setRange(0, 100)
         self.ch2_slider.setValue(100)
         self.ch2_slider.setMinimumWidth(200)
+        # Show tick marks on the channel slider
+        self.ch2_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.ch2_slider.setTickInterval(10)
+        self.ch2_slider.setToolTip(
+            "Adjust the weighting of the second channel."
+        )
         self.ch2_value = QLabel("1.0")
         ch2_layout.addWidget(self.ch2_label)
         ch2_layout.addWidget(self.ch2_slider)
@@ -173,6 +185,12 @@ class RGBFilterApp(QMainWindow):
         self.ch3_slider.setRange(0, 100)
         self.ch3_slider.setValue(50)
         self.ch3_slider.setMinimumWidth(200)
+        # Show tick marks on the channel slider
+        self.ch3_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.ch3_slider.setTickInterval(10)
+        self.ch3_slider.setToolTip(
+            "Adjust the weighting of the third channel."
+        )
         self.ch3_value = QLabel("0.5")
         ch3_layout.addWidget(self.ch3_label)
         ch3_layout.addWidget(self.ch3_slider)
@@ -187,12 +205,18 @@ class RGBFilterApp(QMainWindow):
         self.min_threshold_spinbox.setRange(0.0, 1.0)
         self.min_threshold_spinbox.setSingleStep(0.01)
         self.min_threshold_spinbox.setValue(0.3)
+        self.min_threshold_spinbox.setToolTip(
+            "Minimum intensity value for the mask. Pixels with values below this are excluded from the binary mask."
+        )
 
         max_thresh_label = QLabel("Max Threshold:")
         self.max_threshold_spinbox = QDoubleSpinBox()
         self.max_threshold_spinbox.setRange(0.0, 1.0)
         self.max_threshold_spinbox.setSingleStep(0.01)
         self.max_threshold_spinbox.setValue(1.0)
+        self.max_threshold_spinbox.setToolTip(
+            "Maximum intensity value for the mask. Pixels with values above this are excluded from the binary mask."
+        )
 
         threshold_layout.addWidget(min_thresh_label)
         threshold_layout.addWidget(self.min_threshold_spinbox)
