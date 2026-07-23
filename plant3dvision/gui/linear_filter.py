@@ -82,7 +82,7 @@ class RGBFilterApp(QMainWindow):
         Labels that display the current scaling factors for the three channels.
     """
 
-    def __init__(self, fsdb_path: str | Path):
+    def __init__(self, fsdb_path: str | Path, scan_id: str | None):
         """Initialize the main window and UI elements.
 
         Set the window title, geometry and creates placeholders for image data and channel coefficients.
@@ -114,6 +114,10 @@ class RGBFilterApp(QMainWindow):
 
         # Initialize UI
         self.initUI()
+
+        if scan_id and scan_id in self.scan_ids_list:
+            self.scan_dropdown.setCurrentIndex(self.scan_ids_list.index(scan_id))
+            self._load_scan(scan_id)
 
     def _init_database(self):
         """Initialize the database connection and load scan list."""
@@ -372,11 +376,6 @@ class RGBFilterApp(QMainWindow):
         self.max_threshold_spinbox.valueChanged.connect(self.process_image)
         self.dilation_spinbox.valueChanged.connect(self.process_image)
 
-        # Load first scan if available
-        if self.scan_ids_list:
-            self.scan_dropdown.setCurrentIndex(0)
-            self._load_scan(self.scan_ids_list[0])
-
     def _filter_scans(self, text):
         """Filter the scan dropdown based on search box text."""
         self.scan_dropdown.clear()
@@ -615,15 +614,6 @@ class RGBFilterApp(QMainWindow):
                 self.source_image = Image.open(file_path).convert("RGB")
                 img = np.array(self.source_image) / 255.0
                 self.original_img = img
-
-                # Display the original image
-                self.figure.clear()
-                ax = self.figure.add_subplot(111)
-                ax.imshow(self.original_img)
-                ax.set_title("Original Image")
-                ax.axis('off')
-                self.canvas.draw()
-
                 # Process image immediately after loading
                 self.process_image()
             except Exception as e:
@@ -704,6 +694,7 @@ class RGBFilterApp(QMainWindow):
         ax3.set_title(title)
         ax3.axis('off')
 
+        self.figure.suptitle(f"{self.current_scan.id} - {self.images_list[self.image_slider.value()].id}")
         self.figure.tight_layout()
 
         # Restore saved axis limits (pan/zoom state)
@@ -756,7 +747,8 @@ class RGBFilterApp(QMainWindow):
 
 @click.command()
 @click.argument('fsdb_path', required=False, type=click.Path(exists=True, dir_okay=True))
-def main(fsdb_path: str | None = None):
+@click.option('-s', '--scan', 'scan_id', type=str)
+def main(fsdb_path: str | None = None, scan_id: str = None):
     """Start the RGB linear filter GUI.
 
     Optionally, provide an image file path to load at launch.
@@ -768,7 +760,7 @@ def main(fsdb_path: str | None = None):
         raise ValueError(f"Provide a valid path to an FSDB folder or set 'ROMI_DB' environment variable.")
 
     app = QApplication(sys.argv)
-    window = RGBFilterApp(fsdb_path)
+    window = RGBFilterApp(fsdb_path, scan_id)
 
     window.show()
     sys.exit(app.exec())
