@@ -2,32 +2,35 @@
 # -*- coding: utf-8 -*-
 
 """
-# Linear Filter GUI
+**RGB Linear Filter GUI**
 
-A small graphical application that lets you load an image, apply a customizable linear combination of its color channels, and visualize the filtered result together with a binary threshold mask.
-It is useful for quickly exploring channel‑mixing effects and extracting regions of interest based on intensity thresholds.
+A Python module that launches an interactive Qt‑based application for loading plant scan images, applying a customizable linear combination of color‑space channels, and visualizing the filtered result together with a threshold‑derived binary mask.
+It streamlines the exploration of channel weighting and threshold parameters, making it easy to fine‑tune image preprocessing for downstream analysis.
 
 ## Key Features
 
-- **Interactive UI** built with PySide6 offering sliders for three channel coefficients (range 0‑1).
-- **Multiple color‑space support**: RGB, HSV, and YCbCr can be selected on‑the‑fly.
-- **Real‑time preview** of the original image, the filtered grayscale image, and the binary mask using Matplotlib.
-- **Adjustable thresholding** with minimum and maximum spin boxes to create precise binary masks.
-- **Command‑line entry point** via Click, allowing the app to start with a pre‑loaded image.
+- Load images from a PlantDB (FSDB) scan.
+- Select among three color spaces (RGB, HSV, YCbCr) and adjust each channel’s contribution with sliders.
+- Real‑time preview of the original image, the filtered grayscale image, and the binary mask.
+- Interactive threshold controls (min / max) and optional binary dilation.
+- Synchronized pan/zoom across all three sub‑plots, with mouse‑wheel zoom support.
+- Export the current filter parameters to a `local_config.toml` file attached to the chosen scan.
+- Search and filter scans via a searchable dropdown.
 
 ## Usage Examples
 
 ```shell
-# Run the GUI without an image (you can load one later via the “Load Image” button)
+# Launch the GUI, automatically discovering the FSDB path from the 'ROMI_DB' environment variable
 linear_filter
 
-# Start the GUI and preload an image
-linear_filter path/to/your/photo.jpg
+# Or provide an explicit FSDB directory and optionally open a specific scan
+linear_filter /path/to/FSDB --scan SCAN_ID
 ```
 
-When the application launches, use the sliders to set the weighting of each channel, choose a color space from the dropdown, and adjust the threshold spin boxes.
-Press **Process** to see the filtered image and the corresponding mask.
+Running the script opens the window where you can browse scans, adjust color‑space sliders, set threshold limits, and instantly see how the linear filter affects the image and its mask.
+When satisfied, click **Export Parameters** to save the configuration back to the scan’s `local_config.toml`.
 """
+
 import os
 import sys
 from pathlib import Path
