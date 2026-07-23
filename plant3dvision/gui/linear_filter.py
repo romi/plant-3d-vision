@@ -53,6 +53,7 @@ from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 
+from plant3dvision.proc2d import dilation
 from plant3dvision.proc2d import linear
 
 
@@ -197,8 +198,8 @@ class RGBFilterApp(QMainWindow):
         ch3_layout.addWidget(self.ch3_value)
         sliders_layout.addLayout(ch3_layout)
 
-        # Threshold control
-        threshold_layout = QHBoxLayout()
+        # Threshold & Dilation controls
+        threshold_dilation_layout = QHBoxLayout()
 
         min_thresh_label = QLabel("Min Threshold:")
         self.min_threshold_spinbox = QDoubleSpinBox()
@@ -218,17 +219,29 @@ class RGBFilterApp(QMainWindow):
             "Maximum intensity value for the mask. Pixels with values above this are excluded from the binary mask."
         )
 
-        threshold_layout.addWidget(min_thresh_label)
-        threshold_layout.addWidget(self.min_threshold_spinbox)
-        threshold_layout.addWidget(max_thresh_label)
-        threshold_layout.addWidget(self.max_threshold_spinbox)
-        sliders_layout.addLayout(threshold_layout)
+        # Dilation control
+        dilation_label = QLabel("Dilation:")
+        self.dilation_spinbox = QDoubleSpinBox()
+        self.dilation_spinbox.setRange(0, 5)
+        self.dilation_spinbox.setValue(0)
+        # Show a helpful tooltip when the user hovers over the export button
+        self.dilation_spinbox.setToolTip(
+            "Binary dilation applied to the mask image."
+        )
 
         # Load and process buttons
         buttons_layout = QHBoxLayout()
         self.load_button = QPushButton("Load Image")
         buttons_layout.addWidget(self.load_button)
         sliders_layout.addLayout(buttons_layout)
+        threshold_dilation_layout.addWidget(min_thresh_label)
+        threshold_dilation_layout.addWidget(self.min_threshold_spinbox)
+        threshold_dilation_layout.addWidget(max_thresh_label)
+        threshold_dilation_layout.addWidget(self.max_threshold_spinbox)
+        threshold_dilation_layout.addWidget(dilation_label)
+        threshold_dilation_layout.addWidget(self.dilation_spinbox)
+        sliders_layout.addLayout(threshold_dilation_layout)
+
 
         # Add sliders to controls
         controls_layout.addLayout(sliders_layout)
@@ -483,6 +496,7 @@ class RGBFilterApp(QMainWindow):
         c3_coef = self.ch3_slider.value() / 100.0
         min_threshold = self.min_threshold_spinbox.value()
         max_threshold = self.max_threshold_spinbox.value()
+        dilation_iterations = self.dilation_spinbox.value()
         mode = self.color_space_combo.currentText()
 
         # Prepare image in selected color space
@@ -499,6 +513,10 @@ class RGBFilterApp(QMainWindow):
 
         # Apply threshold
         self.mask = (self.filtered_img >= min_threshold) & (self.filtered_img <= max_threshold)
+
+        # Apply dilation if needed
+        if dilation_iterations > 0:
+            self.mask = dilation(self.mask, int(dilation_iterations))
 
         # Display results
         self.figure.clear()
@@ -518,7 +536,10 @@ class RGBFilterApp(QMainWindow):
         # Mask
         ax3 = self.figure.add_subplot(133)
         ax3.imshow(self.mask, cmap='binary')
-        ax3.set_title(f"Mask ({min_threshold:.2f} <= v <= {max_threshold:.2f})")
+        title = f"Mask ({min_threshold:.2f} <= v <= {max_threshold:.2f})"
+        if dilation_iterations > 0:
+            title += f"\nDilation: {dilation_iterations}"
+        ax3.set_title(title)
         ax3.axis('off')
 
         self.figure.tight_layout()
