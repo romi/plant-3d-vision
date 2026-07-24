@@ -48,7 +48,6 @@ fi
 
 
 # Ensure Buildx can write its certs
-echo "BUILDX_HOME=${BUILDX_HOME}"
 mkdir -p "${BUILDX_HOME}/certs"
 chown -R ubuntu:ubuntu "${BUILDX_HOME}"
 chmod 700 "${BUILDX_HOME}/certs"
