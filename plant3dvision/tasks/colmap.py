@@ -17,7 +17,7 @@ from typing import get_args
 import luigi
 import numpy as np
 import pandas as pd
-import toml
+import tomlkit
 from matplotlib.lines import Line2D
 from scipy.spatial.distance import euclidean
 
@@ -564,7 +564,7 @@ def get_scan_config(scan_path: str | Path) -> dict:
     if os.path.isfile(path):
         try:
             with open(path, "r") as f:
-                scan_config = toml.load(f)
+                scan_config = tomlkit.load(f)
         except toml.TomlDecodeError:
             logger.error(f"Could not load scan config from '{path}'!")
             raise
@@ -608,7 +608,7 @@ def check_scan_parameters(scan_to_calibrate: Scan, calibration_scan: Scan) -> bo
     >>> db.disconnect()
 
     """
-    import toml
+    import tomlkit
     # Load acquisition config file for calibration scan:
     calib_scan_cfg = get_scan_config(calibration_scan.path())
     # Load acquisition config file for scan to calibrate:
@@ -663,10 +663,10 @@ def check_colmap_cfg(current_cfg: dict[str, Any], current_scan: Scan, calibratio
     calibration_scan : plantdb.commons.db.Scan
         Calibration scan dataset to use (for camera poses).
     """
-    import toml
+    import tomlkit
     calib_backup_cfg = join(calibration_scan.path(), 'pipeline.toml')
     with open(calib_backup_cfg, 'r') as f:
-        calib_scan_cfg = toml.load(f)
+        calib_scan_cfg = tomlkit.load(f)
     # Inform whether the backup config was found or not
     if calib_scan_cfg == {}:
         logger.critical(f"Could not obtain valid backup config from {calibration_scan.id}!")

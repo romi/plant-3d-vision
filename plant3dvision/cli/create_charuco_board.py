@@ -46,7 +46,7 @@ from typing import Any
 
 import click
 import cv2
-import toml
+import tomlkit
 
 from plant3dvision.calibration import get_charuco_board
 
@@ -83,7 +83,7 @@ def load_charuco_board_config_from_toml(config: str | Path) -> CharucoBoardConfi
     toml.TomlDecodeError
         If the file contents cannot be parsed as valid TOML.
     """
-    cfg: dict[str, Any] = toml.load(config)
+    cfg: dict[str, Any] = tomlkit.load(config)
 
     n_squares_x = int(cfg["CreateCharucoBoard"]["n_squares_x"])
     n_squares_y = int(cfg["CreateCharucoBoard"]["n_squares_y"])
