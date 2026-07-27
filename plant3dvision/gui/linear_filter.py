@@ -39,7 +39,8 @@ import click
 import numpy as np
 import tomlkit
 from PIL import Image
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Slot
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 from PySide6.QtWidgets import QComboBox
 from PySide6.QtWidgets import QDoubleSpinBox
@@ -114,6 +115,12 @@ class RGBFilterApp(QMainWindow):
 
         # Initialize database
         self._init_database()
+
+        # Timers (wait after modifications stop for 200 ms before processing)
+        self._load_image_timer = QTimer(self, singleShot=True, interval=300)
+        self._load_image_timer.timeout.connect(self._load_image)
+        self._process_image_timer = QTimer(self, singleShot=True, interval=300)
+        self._process_image_timer.timeout.connect(self.process_image)
 
         # Initialize UI
         self.initUI()
@@ -369,15 +376,15 @@ class RGBFilterApp(QMainWindow):
 
         # Connect signals
         self.ch1_slider.valueChanged.connect(self.update_ch1_value)
-        self.ch1_slider.valueChanged.connect(self.process_image)
+        self.ch1_slider.valueChanged.connect(self._process_image_timer.start)
         self.ch2_slider.valueChanged.connect(self.update_ch2_value)
-        self.ch2_slider.valueChanged.connect(self.process_image)
+        self.ch2_slider.valueChanged.connect(self._process_image_timer.start)
         self.ch3_slider.valueChanged.connect(self.update_ch3_value)
-        self.ch3_slider.valueChanged.connect(self.process_image)
-        self.color_space_combo.currentTextChanged.connect(self.process_image)
-        self.min_threshold_spinbox.valueChanged.connect(self.process_image)
-        self.max_threshold_spinbox.valueChanged.connect(self.process_image)
-        self.dilation_spinbox.valueChanged.connect(self.process_image)
+        self.ch3_slider.valueChanged.connect(self._process_image_timer.start)
+        self.color_space_combo.currentTextChanged.connect(self._process_image_timer.start)
+        self.min_threshold_spinbox.valueChanged.connect(self._process_image_timer.start)
+        self.max_threshold_spinbox.valueChanged.connect(self._process_image_timer.start)
+        self.dilation_spinbox.valueChanged.connect(self._process_image_timer.start)
 
     def _filter_scans(self, text):
         """Filter the scan dropdown based on search box text."""
@@ -410,18 +417,27 @@ class RGBFilterApp(QMainWindow):
             self.image_slider.setMaximum(0)
             self._update_image_label()
 
+    @Slot()
     def _load_image_from_slider(self, index):
-        """Load the image at the given slider index."""
+        """Select the image at the given slider index and start load timer."""
         if not self.images_list or index >= len(self.images_list):
             return
 
         try:
             image = self.images_list[index]
-            image_path = image.path()
-            self.load_image_from_path(image_path)
-            self._update_image_label()
+            self._image_path = image.path()
+            self._load_image_timer.start()
         except Exception as e:
             print(f"Error loading image at index {index}: {e}")
+
+    @Slot()
+    def _load_image(self):
+        """Load the image."""
+        try:
+            self.load_image_from_path(self._image_path)
+            self._update_image_label()
+        except Exception as e:
+            print(f"Error loading image at index {int(self.image_index_spinbox.value())}: {e}")
 
     def _update_image_label(self):
         """Update the image index label."""
