@@ -495,7 +495,8 @@ class RGBFilterApp(QMainWindow):
                 "max_threshold": self.max_threshold_spinbox.value(),
                 "dilation": self.dilation_spinbox.value(),
             }
-
+            # Convert the list of coefficients to a string
+            existing_config["Masks"]["parameters"] = str(existing_config["Masks"]["parameters"])
             # Write to file
             with open(config_path, "w") as f:
                 tomlkit.dump(existing_config, f)
