@@ -39,8 +39,12 @@ import click
 import numpy as np
 import tomlkit
 from PIL import Image
-from PySide6.QtCore import Qt, Slot
 from PySide6.QtCore import QTimer
+from PySide6.QtCore import Qt
+from PySide6.QtCore import Slot
+from PySide6.QtGui import QColor
+from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import QApplication
 from PySide6.QtWidgets import QComboBox
 from PySide6.QtWidgets import QDoubleSpinBox
@@ -52,9 +56,11 @@ from PySide6.QtWidgets import QMessageBox
 from PySide6.QtWidgets import QPushButton
 from PySide6.QtWidgets import QSizePolicy
 from PySide6.QtWidgets import QSlider
+from PySide6.QtWidgets import QStyle
+from PySide6.QtWidgets import QStyleOptionSlider
+from PySide6.QtWidgets import QStylePainter
 from PySide6.QtWidgets import QVBoxLayout
 from PySide6.QtWidgets import QWidget
-
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
@@ -62,6 +68,54 @@ from plantdb.commons.fsdb.core import FSDB
 
 from plant3dvision.proc2d import dilation
 from plant3dvision.proc2d import linear
+
+
+class TickSlider(QSlider):
+    """A QSlider that draws tick marks in a bright color for dark-mode visibility."""
+
+    _tick_color = QColor("#CCCCCC")
+    _tick_length = 5
+
+    def paintEvent(self, event):
+        painter = QStylePainter(self)
+        opt = QStyleOptionSlider()
+        self.initStyleOption(opt)
+
+        # Draw groove
+        opt.subControls = QStyle.SC_SliderGroove
+        painter.drawComplexControl(QStyle.CC_Slider, opt)
+
+        # Draw handle
+        opt.subControls = QStyle.SC_SliderHandle
+        painter.drawComplexControl(QStyle.CC_Slider, opt)
+
+        # Draw ticks manually (style sheets suppress them)
+        interval = self.tickInterval()
+        if interval == 0:
+            interval = self.pageStep()
+
+        if self.tickPosition() != QSlider.NoTicks:
+            handle = self.style().subControlRect(
+                QStyle.CC_Slider, opt, QStyle.SC_SliderHandle, self
+            )
+            handle_half = handle.width() / 2.0
+            value_range = self.maximum() - self.minimum()
+            drawing_range = self.width() - handle.width()
+            factor = drawing_range / value_range if value_range else 1
+
+            painter.setPen(self._tick_color)
+            for i in range(self.minimum(), self.maximum() + 1, interval):
+                x = round(factor * (i - self.minimum()) + handle_half)
+                if self.tickPosition() in (
+                        QSlider.TicksBothSides, QSlider.TicksAbove
+                ):
+                    y = self.rect().top()
+                    painter.drawLine(x, y, x, y + self._tick_length)
+                if self.tickPosition() in (
+                        QSlider.TicksBothSides, QSlider.TicksBelow
+                ):
+                    y = self.rect().bottom()
+                    painter.drawLine(x, y, x, y - self._tick_length)
 
 
 class RGBFilterApp(QMainWindow):
@@ -113,6 +167,9 @@ class RGBFilterApp(QMainWindow):
         self.ch2_value = None
         self.ch3_value = None
 
+        # Detect dark mode at startup
+        self._dark_mode = self._detect_dark_mode()
+
         # Initialize database
         self._init_database()
 
@@ -128,6 +185,22 @@ class RGBFilterApp(QMainWindow):
         if scan_id and scan_id in self.scan_ids_list:
             self.scan_dropdown.setCurrentIndex(self.scan_ids_list.index(scan_id))
             self._load_scan(scan_id)
+
+    @staticmethod
+    def _detect_dark_mode() -> bool:
+        """Detect if the OS/GUI is in dark mode."""
+        try:
+            hints = QGuiApplication.styleHints()
+            scheme = hints.colorScheme()
+            if scheme != Qt.ColorScheme.Unknown:
+                return scheme == Qt.ColorScheme.Dark
+        except AttributeError:
+            pass
+        # Fallback for older Qt: compare palette text vs window lightness
+        palette = QApplication.palette()
+        text = palette.color(QPalette.ColorRole.WindowText)
+        window = palette.color(QPalette.ColorRole.Window)
+        return text.lightness() > window.lightness()
 
     def _init_database(self):
         """Initialize the database connection and load scan list."""
@@ -179,7 +252,7 @@ class RGBFilterApp(QMainWindow):
 
         # Image slider
         image_slider_label = QLabel("Image:")
-        self.image_slider = QSlider(Qt.Orientation.Horizontal)
+        self.image_slider = TickSlider(Qt.Orientation.Horizontal)
         self.image_slider.setMinimum(0)
         self.image_slider.setMaximum(0)
         self.image_slider.setValue(0)
@@ -213,6 +286,7 @@ class RGBFilterApp(QMainWindow):
 
         # Color Space Selector
         cs_layout = QHBoxLayout()
+        cs_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
         cs_label = QLabel("Color Space:")
         self.color_space_combo = QComboBox()
         self.color_space_combo.addItems(["RGB", "HSV", "YCbCr"])
@@ -232,11 +306,12 @@ class RGBFilterApp(QMainWindow):
         # Channel 1 slider
         ch1_layout = QHBoxLayout()
         self.ch1_label = QLabel("Red:")
-        self.ch1_slider = QSlider()
+        self.ch1_label.setMinimumWidth(100)  # Fixed width for consistent alignment
+        self.ch1_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.ch1_slider = TickSlider()
         self.ch1_slider.setOrientation(Qt.Orientation.Horizontal)
         self.ch1_slider.setRange(0, 100)
         self.ch1_slider.setValue(50)
-        self.ch1_slider.setMinimumWidth(200)
         # Show tick marks on the channel slider
         self.ch1_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.ch1_slider.setTickInterval(10)
@@ -252,11 +327,12 @@ class RGBFilterApp(QMainWindow):
         # Channel 2 slider
         ch2_layout = QHBoxLayout()
         self.ch2_label = QLabel("Green:")
-        self.ch2_slider = QSlider()
+        self.ch2_label.setMinimumWidth(100)  # Fixed width for consistent alignment
+        self.ch2_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.ch2_slider = TickSlider()
         self.ch2_slider.setOrientation(Qt.Orientation.Horizontal)
         self.ch2_slider.setRange(0, 100)
         self.ch2_slider.setValue(100)
-        self.ch2_slider.setMinimumWidth(200)
         # Show tick marks on the channel slider
         self.ch2_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.ch2_slider.setTickInterval(10)
@@ -272,11 +348,12 @@ class RGBFilterApp(QMainWindow):
         # Channel 3 slider
         ch3_layout = QHBoxLayout()
         self.ch3_label = QLabel("Blue:")
-        self.ch3_slider = QSlider()
+        self.ch3_label.setMinimumWidth(100)  # Fixed width for consistent alignment
+        self.ch3_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.ch3_slider = TickSlider()
         self.ch3_slider.setOrientation(Qt.Orientation.Horizontal)
         self.ch3_slider.setRange(0, 100)
         self.ch3_slider.setValue(50)
-        self.ch3_slider.setMinimumWidth(200)
         # Show tick marks on the channel slider
         self.ch3_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.ch3_slider.setTickInterval(10)
@@ -291,41 +368,57 @@ class RGBFilterApp(QMainWindow):
 
         # Threshold & Dilation controls
         threshold_dilation_layout = QHBoxLayout()
+        threshold_dilation_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
+        # Min Threshold
+        min_thresh_layout = QHBoxLayout()
+        min_thresh_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
         min_thresh_label = QLabel("Min Threshold:")
         self.min_threshold_spinbox = QDoubleSpinBox()
+        self.min_threshold_spinbox.setMinimumWidth(90)
         self.min_threshold_spinbox.setRange(0.0, 1.0)
         self.min_threshold_spinbox.setSingleStep(0.01)
         self.min_threshold_spinbox.setValue(0.3)
         self.min_threshold_spinbox.setToolTip(
             "Minimum intensity value for the mask. Pixels with values below this are excluded from the binary mask."
         )
-
+        min_thresh_layout.addWidget(min_thresh_label)
+        min_thresh_layout.addWidget(self.min_threshold_spinbox)
+        
+        # Max Threshold
+        max_thresh_layout = QHBoxLayout()
+        max_thresh_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
         max_thresh_label = QLabel("Max Threshold:")
         self.max_threshold_spinbox = QDoubleSpinBox()
+        self.max_threshold_spinbox.setMinimumWidth(90)
         self.max_threshold_spinbox.setRange(0.0, 1.0)
         self.max_threshold_spinbox.setSingleStep(0.01)
         self.max_threshold_spinbox.setValue(1.0)
         self.max_threshold_spinbox.setToolTip(
             "Maximum intensity value for the mask. Pixels with values above this are excluded from the binary mask."
         )
-
-        # Dilation control
+        max_thresh_layout.addWidget(max_thresh_label)
+        max_thresh_layout.addWidget(self.max_threshold_spinbox)
+        
+        # Dilation
+        dilation_layout = QHBoxLayout()
+        dilation_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
         dilation_label = QLabel("Dilation:")
         self.dilation_spinbox = QDoubleSpinBox()
+        self.dilation_spinbox.setMinimumWidth(90)
         self.dilation_spinbox.setRange(0, 5)
         self.dilation_spinbox.setValue(0)
         # Show a helpful tooltip when the user hovers over the export button
         self.dilation_spinbox.setToolTip(
             "Binary dilation applied to the mask image."
         )
-
-        threshold_dilation_layout.addWidget(min_thresh_label)
-        threshold_dilation_layout.addWidget(self.min_threshold_spinbox)
-        threshold_dilation_layout.addWidget(max_thresh_label)
-        threshold_dilation_layout.addWidget(self.max_threshold_spinbox)
-        threshold_dilation_layout.addWidget(dilation_label)
-        threshold_dilation_layout.addWidget(self.dilation_spinbox)
+        dilation_layout.addWidget(dilation_label)
+        dilation_layout.addWidget(self.dilation_spinbox)
+        
+        # Add all layouts to the main threshold layout
+        threshold_dilation_layout.addLayout(min_thresh_layout)
+        threshold_dilation_layout.addLayout(max_thresh_layout)
+        threshold_dilation_layout.addLayout(dilation_layout)
         sliders_layout.addLayout(threshold_dilation_layout)
 
         # Export Parameters button
@@ -349,6 +442,13 @@ class RGBFilterApp(QMainWindow):
 
         # Add controls to main layout
         main_layout.addWidget(controls_container)
+
+        # Add horizontal divider between controls and image display
+        from PySide6.QtWidgets import QFrame
+        divider = QFrame()
+        divider.setFrameShape(QFrame.HLine)
+        divider.setFrameShadow(QFrame.Sunken)
+        main_layout.addWidget(divider)
 
         # --------------------------------------------------------------
         # Image display area with a navigation toolbar above the canvas
@@ -692,20 +792,30 @@ class RGBFilterApp(QMainWindow):
         # Display results
         self.figure.clear()
 
+        DARK_BG = '#2a2a2a'
+        if self._dark_mode:
+            self.figure.patch.set_facecolor(DARK_BG)
+
         # Original image
         ax1 = self.figure.add_subplot(131)
+        if self._dark_mode:
+            self._style_ax_dark(ax1)
         ax1.imshow(self.original_img)
         ax1.set_title("Original")
         ax1.axis('off')
 
         # Filtered image
         ax2 = self.figure.add_subplot(132)
+        if self._dark_mode:
+            self._style_ax_dark(ax2)
         ax2.imshow(self.filtered_img, cmap='gray')
         ax2.set_title(f"Filtered [{mode}]\nC1:{c1_coef:.2f}, C2:{c2_coef:.2f}, C3:{c3_coef:.2f}")
         ax2.axis('off')
 
         # Mask
         ax3 = self.figure.add_subplot(133)
+        if self._dark_mode:
+            self._style_ax_dark(ax3)
         ax3.imshow(self.mask, cmap='binary')
         title = f"Mask ({min_threshold:.2f} <= v <= {max_threshold:.2f})"
         if dilation_iterations > 0:
@@ -714,6 +824,8 @@ class RGBFilterApp(QMainWindow):
         ax3.axis('off')
 
         self.figure.suptitle(f"{self.current_scan.id} - {self.images_list[self.image_slider.value()].id}")
+        if self._dark_mode:
+            self.figure._suptitle.set_color('white')
         self.figure.tight_layout()
 
         # Restore saved axis limits (pan/zoom state)
@@ -726,6 +838,16 @@ class RGBFilterApp(QMainWindow):
 
         # Synchronize axes limits for pan/zoom (only sets up callbacks)
         self._sync_axes_limits()
+
+    @staticmethod
+    def _style_ax_dark(ax):
+        """Apply dark-mode styling to a single axes."""
+        DARK_BG = '#2a2a2a'
+        ax.set_facecolor(DARK_BG)
+        ax.tick_params(colors='white')
+        ax.xaxis.label.set_color('white')
+        ax.yaxis.label.set_color('white')
+        ax.title.set_color('white')
 
     def _sync_axes_limits(self):
         """Synchronize the pan and zoom limits across all three axes."""
