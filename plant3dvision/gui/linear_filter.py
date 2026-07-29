@@ -243,7 +243,11 @@ class RGBFilterApp(QMainWindow):
         self.ch1_slider.setToolTip(
             "Adjust the weighting of the first channel."
         )
-        self.ch1_value = QLabel("0.5")
+        self.ch1_value = QDoubleSpinBox()
+        self.ch1_value.setDecimals(2)
+        self.ch1_value.setRange(0.0, 1.0)
+        self.ch1_value.setSingleStep(0.01)
+        self.ch1_value.setValue(0.5)
         ch1_layout.addWidget(self.ch1_label)
         ch1_layout.addWidget(self.ch1_slider)
         ch1_layout.addWidget(self.ch1_value)
@@ -263,7 +267,11 @@ class RGBFilterApp(QMainWindow):
         self.ch2_slider.setToolTip(
             "Adjust the weighting of the second channel."
         )
-        self.ch2_value = QLabel("1.0")
+        self.ch2_value = QDoubleSpinBox()
+        self.ch2_value.setDecimals(2)
+        self.ch2_value.setRange(0.0, 1.0)
+        self.ch2_value.setSingleStep(0.01)
+        self.ch2_value.setValue(1.0)
         ch2_layout.addWidget(self.ch2_label)
         ch2_layout.addWidget(self.ch2_slider)
         ch2_layout.addWidget(self.ch2_value)
@@ -283,7 +291,11 @@ class RGBFilterApp(QMainWindow):
         self.ch3_slider.setToolTip(
             "Adjust the weighting of the third channel."
         )
-        self.ch3_value = QLabel("0.5")
+        self.ch3_value = QDoubleSpinBox()
+        self.ch3_value.setDecimals(2)
+        self.ch3_value.setRange(0.0, 1.0)
+        self.ch3_value.setSingleStep(0.01)
+        self.ch3_value.setValue(0.5)
         ch3_layout.addWidget(self.ch3_label)
         ch3_layout.addWidget(self.ch3_slider)
         ch3_layout.addWidget(self.ch3_value)
@@ -377,10 +389,13 @@ class RGBFilterApp(QMainWindow):
         # Connect signals
         self.ch1_slider.valueChanged.connect(self.update_ch1_value)
         self.ch1_slider.valueChanged.connect(self._process_image_timer.start)
+        self.ch1_value.valueChanged.connect(self._on_ch1_spinbox_changed)
         self.ch2_slider.valueChanged.connect(self.update_ch2_value)
         self.ch2_slider.valueChanged.connect(self._process_image_timer.start)
+        self.ch2_value.valueChanged.connect(self._on_ch2_spinbox_changed)
         self.ch3_slider.valueChanged.connect(self.update_ch3_value)
         self.ch3_slider.valueChanged.connect(self._process_image_timer.start)
+        self.ch3_value.valueChanged.connect(self._on_ch3_spinbox_changed)
         self.color_space_combo.currentTextChanged.connect(self._process_image_timer.start)
         self.min_threshold_spinbox.valueChanged.connect(self._process_image_timer.start)
         self.max_threshold_spinbox.valueChanged.connect(self._process_image_timer.start)
@@ -592,7 +607,9 @@ class RGBFilterApp(QMainWindow):
             Slider position in the range ``0``–``100``.
             The displayed coefficient is ``value / 100``.
         """
-        self.ch1_value.setText(f"{value / 100:.2f}")
+        self.ch1_value.blockSignals(True)
+        self.ch1_value.setValue(value / 100.0)
+        self.ch1_value.blockSignals(False)
 
     def update_ch2_value(self, value):
         """Refresh the displayed value for channel 2.
@@ -602,7 +619,9 @@ class RGBFilterApp(QMainWindow):
         value : int
             Slider position in the range ``0``–``100``.
         """
-        self.ch2_value.setText(f"{value / 100:.2f}")
+        self.ch2_value.blockSignals(True)
+        self.ch2_value.setValue(value / 100.0)
+        self.ch2_value.blockSignals(False)
 
     def update_ch3_value(self, value):
         """Refresh the displayed value for channel 3.
@@ -613,7 +632,33 @@ class RGBFilterApp(QMainWindow):
             Slider position in the range ``0``–``100``.
 
         """
-        self.ch3_value.setText(f"{value / 100:.2f}")
+        self.ch3_value.blockSignals(True)
+        self.ch3_value.setValue(value / 100.0)
+        self.ch3_value.blockSignals(False)
+
+    @Slot()
+    def _on_ch1_spinbox_changed(self, value):
+        """Update the channel 1 slider when the spinbox value changes."""
+        self.ch1_slider.blockSignals(True)
+        self.ch1_slider.setValue(int(value * 100))
+        self.ch1_slider.blockSignals(False)
+        self._process_image_timer.start()
+
+    @Slot()
+    def _on_ch2_spinbox_changed(self, value):
+        """Update the channel 2 slider when the spinbox value changes."""
+        self.ch2_slider.blockSignals(True)
+        self.ch2_slider.setValue(int(value * 100))
+        self.ch2_slider.blockSignals(False)
+        self._process_image_timer.start()
+
+    @Slot()
+    def _on_ch3_spinbox_changed(self, value):
+        """Update the channel 3 slider when the spinbox value changes."""
+        self.ch3_slider.blockSignals(True)
+        self.ch3_slider.setValue(int(value * 100))
+        self.ch3_slider.blockSignals(False)
+        self._process_image_timer.start()
 
     def load_image_from_path(self, file_path: str) -> None:
         """Load an image from an absolute path (used for CLI start‑up).
