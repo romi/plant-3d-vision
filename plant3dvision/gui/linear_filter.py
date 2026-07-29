@@ -423,6 +423,13 @@ class RGBFilterApp(QMainWindow):
         # Add controls to main layout
         main_layout.addWidget(controls_container)
 
+        # Add horizontal divider between controls and image display
+        from PySide6.QtWidgets import QFrame
+        divider = QFrame()
+        divider.setFrameShape(QFrame.HLine)
+        divider.setFrameShadow(QFrame.Sunken)
+        main_layout.addWidget(divider)
+
         # --------------------------------------------------------------
         # Image display area with a navigation toolbar above the canvas
         # --------------------------------------------------------------
