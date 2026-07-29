@@ -39,8 +39,12 @@ import click
 import numpy as np
 import tomlkit
 from PIL import Image
-from PySide6.QtCore import Qt, Slot
 from PySide6.QtCore import QTimer
+from PySide6.QtCore import Qt
+from PySide6.QtCore import Slot
+from PySide6.QtGui import QColor
+from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import QApplication
 from PySide6.QtWidgets import QComboBox
 from PySide6.QtWidgets import QDoubleSpinBox
@@ -52,9 +56,11 @@ from PySide6.QtWidgets import QMessageBox
 from PySide6.QtWidgets import QPushButton
 from PySide6.QtWidgets import QSizePolicy
 from PySide6.QtWidgets import QSlider
+from PySide6.QtWidgets import QStyle
+from PySide6.QtWidgets import QStyleOptionSlider
+from PySide6.QtWidgets import QStylePainter
 from PySide6.QtWidgets import QVBoxLayout
 from PySide6.QtWidgets import QWidget
-
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
@@ -62,6 +68,54 @@ from plantdb.commons.fsdb.core import FSDB
 
 from plant3dvision.proc2d import dilation
 from plant3dvision.proc2d import linear
+
+
+class TickSlider(QSlider):
+    """A QSlider that draws tick marks in a bright color for dark-mode visibility."""
+
+    _tick_color = QColor("#CCCCCC")
+    _tick_length = 5
+
+    def paintEvent(self, event):
+        painter = QStylePainter(self)
+        opt = QStyleOptionSlider()
+        self.initStyleOption(opt)
+
+        # Draw groove
+        opt.subControls = QStyle.SC_SliderGroove
+        painter.drawComplexControl(QStyle.CC_Slider, opt)
+
+        # Draw handle
+        opt.subControls = QStyle.SC_SliderHandle
+        painter.drawComplexControl(QStyle.CC_Slider, opt)
+
+        # Draw ticks manually (style sheets suppress them)
+        interval = self.tickInterval()
+        if interval == 0:
+            interval = self.pageStep()
+
+        if self.tickPosition() != QSlider.NoTicks:
+            handle = self.style().subControlRect(
+                QStyle.CC_Slider, opt, QStyle.SC_SliderHandle, self
+            )
+            handle_half = handle.width() / 2.0
+            value_range = self.maximum() - self.minimum()
+            drawing_range = self.width() - handle.width()
+            factor = drawing_range / value_range if value_range else 1
+
+            painter.setPen(self._tick_color)
+            for i in range(self.minimum(), self.maximum() + 1, interval):
+                x = round(factor * (i - self.minimum()) + handle_half)
+                if self.tickPosition() in (
+                        QSlider.TicksBothSides, QSlider.TicksAbove
+                ):
+                    y = self.rect().top()
+                    painter.drawLine(x, y, x, y + self._tick_length)
+                if self.tickPosition() in (
+                        QSlider.TicksBothSides, QSlider.TicksBelow
+                ):
+                    y = self.rect().bottom()
+                    painter.drawLine(x, y, x, y - self._tick_length)
 
 
 class RGBFilterApp(QMainWindow):
@@ -179,7 +233,7 @@ class RGBFilterApp(QMainWindow):
 
         # Image slider
         image_slider_label = QLabel("Image:")
-        self.image_slider = QSlider(Qt.Orientation.Horizontal)
+        self.image_slider = TickSlider(Qt.Orientation.Horizontal)
         self.image_slider.setMinimum(0)
         self.image_slider.setMaximum(0)
         self.image_slider.setValue(0)
@@ -232,7 +286,7 @@ class RGBFilterApp(QMainWindow):
         # Channel 1 slider
         ch1_layout = QHBoxLayout()
         self.ch1_label = QLabel("Red:")
-        self.ch1_slider = QSlider()
+        self.ch1_slider = TickSlider()
         self.ch1_slider.setOrientation(Qt.Orientation.Horizontal)
         self.ch1_slider.setRange(0, 100)
         self.ch1_slider.setValue(50)
@@ -252,7 +306,7 @@ class RGBFilterApp(QMainWindow):
         # Channel 2 slider
         ch2_layout = QHBoxLayout()
         self.ch2_label = QLabel("Green:")
-        self.ch2_slider = QSlider()
+        self.ch2_slider = TickSlider()
         self.ch2_slider.setOrientation(Qt.Orientation.Horizontal)
         self.ch2_slider.setRange(0, 100)
         self.ch2_slider.setValue(100)
@@ -272,7 +326,7 @@ class RGBFilterApp(QMainWindow):
         # Channel 3 slider
         ch3_layout = QHBoxLayout()
         self.ch3_label = QLabel("Blue:")
-        self.ch3_slider = QSlider()
+        self.ch3_slider = TickSlider()
         self.ch3_slider.setOrientation(Qt.Orientation.Horizontal)
         self.ch3_slider.setRange(0, 100)
         self.ch3_slider.setValue(50)
