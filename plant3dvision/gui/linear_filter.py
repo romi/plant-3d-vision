@@ -82,8 +82,55 @@ class RGBFilterApp(QMainWindow):
     mask : numpy.ndarray
         Boolean mask where ``True`` indicates pixel values within the chosen
         threshold range.
-    ch1_value, ch2_value, ch3_value : PySide6.QtWidgets.QLabel
-        Labels that display the current scaling factors for the three channels.
+    fsdb_path : str | Path
+        Path to the FSDB database.
+    db : FSDB or None
+        Database connection instance.
+    scan_ids_list : list of str
+        List of scan identifiers loaded from the database.
+    images_list : list
+        List of image files in the current scan.
+    current_scan : Scan or None
+        Currently selected scan object.
+    ch1_value, ch2_value, ch3_value : QDoubleSpinBox
+        Spin boxes that display and allow precise entry of the scaling factors
+        for the three channels.
+    ch1_slider, ch2_slider, ch3_slider : QSlider
+        Sliders controlling the weighting of each channel (0–100).
+    ch1_label, ch2_label, ch3_label : QLabel
+        Labels identifying each channel (change with color space).
+    color_space_combo : QComboBox
+        Dropdown to select the active color space (RGB, HSV, YCbCr).
+    cs_help_button : QPushButton
+        Button that opens the color space help dialog.
+    min_threshold_spinbox : QDoubleSpinBox
+        Spin box for the minimum threshold value.
+    max_threshold_spinbox : QDoubleSpinBox
+        Spin box for the maximum threshold value.
+    dilation_spinbox : QDoubleSpinBox
+        Spin box for the number of binary dilation iterations.
+    export_button : QPushButton
+        Button to export current parameters to ``local_config.toml``.
+    search_box : QLineEdit
+        Text field to filter the scan dropdown.
+    scan_dropdown : QComboBox
+        Dropdown listing all available scans.
+    image_slider : QSlider
+        Slider to pick an image from the current scan.
+    image_index_spinbox : QDoubleSpinBox
+        Spin box showing the current image index (1‑based) out of the total.
+    figure : matplotlib.figure.Figure
+        Matplotlib figure holding the three sub‑plots.
+    canvas : FigureCanvas
+        Matplotlib canvas embedded in the Qt window.
+    toolbar : NavigationToolbar
+        Matplotlib navigation toolbar (pan, zoom, home, save).
+    _load_image_timer : QTimer
+        Single‑shot timer (300 ms) that triggers image loading after the
+        slider stops changing.
+    _process_image_timer : QTimer
+        Single‑shot timer (300 ms) that triggers filter processing after
+        any parameter change.
     """
 
     def __init__(self, fsdb_path: str | Path, scan_id: str | None):
