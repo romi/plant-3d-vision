@@ -2,20 +2,22 @@
 # -*- coding: utf-8 -*-
 
 """
-**RGB Linear Filter GUI**
+**Linear Filter GUI**
 
 A Python module that launches an interactive Qt‑based application for loading plant scan images, applying a customizable linear combination of color‑space channels, and visualizing the filtered result together with a threshold‑derived binary mask.
 It streamlines the exploration of channel weighting and threshold parameters, making it easy to fine‑tune image preprocessing for downstream analysis.
 
 ## Key Features
 
+- List scans from a PlantDB (FSDB).
+- Search and filter scans via a searchable dropdown.
 - Load images from a PlantDB (FSDB) scan.
 - Select among three color spaces (RGB, HSV, YCbCr) and adjust each channel’s contribution with sliders.
 - Real‑time preview of the original image, the filtered grayscale image, and the binary mask.
 - Interactive threshold controls (min / max) and optional binary dilation.
 - Synchronized pan/zoom across all three sub‑plots, with mouse‑wheel zoom support.
 - Export the current filter parameters to a `local_config.toml` file attached to the chosen scan.
-- Search and filter scans via a searchable dropdown.
+- Load existing filter parameters from a `local_config.toml` attached to the chosen scan, if any.
 
 ## Usage Examples
 
