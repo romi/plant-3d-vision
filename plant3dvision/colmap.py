@@ -1729,9 +1729,9 @@ class ColmapRunner(object):
             '--database_path', f'{self.colmap_workdir}/database.db',
             '--image_path', f'{self.colmap_workdir}/images',
             '--output_path', f'{self.colmap_workdir}/sparse',
-            '--Mapper.init_image_id1', "10",
-            '--Mapper.init_image_id2', "11",
-            "--Mapper.multiple_models", "0",
+            # '--Mapper.init_image_id1', "10",
+            # '--Mapper.init_image_id2', "11",
+            # "--Mapper.multiple_models", "0",
         ]
         cli_args = self.all_cli_args.get('mapper', {})
         logger.info("Running colmap 'mapper'...")
