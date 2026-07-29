@@ -286,6 +286,7 @@ class RGBFilterApp(QMainWindow):
 
         # Color Space Selector
         cs_layout = QHBoxLayout()
+        cs_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
         cs_label = QLabel("Color Space:")
         self.color_space_combo = QComboBox()
         self.color_space_combo.addItems(["RGB", "HSV", "YCbCr"])
@@ -367,41 +368,57 @@ class RGBFilterApp(QMainWindow):
 
         # Threshold & Dilation controls
         threshold_dilation_layout = QHBoxLayout()
+        threshold_dilation_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
+        # Min Threshold
+        min_thresh_layout = QHBoxLayout()
+        min_thresh_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
         min_thresh_label = QLabel("Min Threshold:")
         self.min_threshold_spinbox = QDoubleSpinBox()
+        self.min_threshold_spinbox.setMinimumWidth(90)
         self.min_threshold_spinbox.setRange(0.0, 1.0)
         self.min_threshold_spinbox.setSingleStep(0.01)
         self.min_threshold_spinbox.setValue(0.3)
         self.min_threshold_spinbox.setToolTip(
             "Minimum intensity value for the mask. Pixels with values below this are excluded from the binary mask."
         )
-
+        min_thresh_layout.addWidget(min_thresh_label)
+        min_thresh_layout.addWidget(self.min_threshold_spinbox)
+        
+        # Max Threshold
+        max_thresh_layout = QHBoxLayout()
+        max_thresh_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
         max_thresh_label = QLabel("Max Threshold:")
         self.max_threshold_spinbox = QDoubleSpinBox()
+        self.max_threshold_spinbox.setMinimumWidth(90)
         self.max_threshold_spinbox.setRange(0.0, 1.0)
         self.max_threshold_spinbox.setSingleStep(0.01)
         self.max_threshold_spinbox.setValue(1.0)
         self.max_threshold_spinbox.setToolTip(
             "Maximum intensity value for the mask. Pixels with values above this are excluded from the binary mask."
         )
-
-        # Dilation control
+        max_thresh_layout.addWidget(max_thresh_label)
+        max_thresh_layout.addWidget(self.max_threshold_spinbox)
+        
+        # Dilation
+        dilation_layout = QHBoxLayout()
+        dilation_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
         dilation_label = QLabel("Dilation:")
         self.dilation_spinbox = QDoubleSpinBox()
+        self.dilation_spinbox.setMinimumWidth(90)
         self.dilation_spinbox.setRange(0, 5)
         self.dilation_spinbox.setValue(0)
         # Show a helpful tooltip when the user hovers over the export button
         self.dilation_spinbox.setToolTip(
             "Binary dilation applied to the mask image."
         )
-
-        threshold_dilation_layout.addWidget(min_thresh_label)
-        threshold_dilation_layout.addWidget(self.min_threshold_spinbox)
-        threshold_dilation_layout.addWidget(max_thresh_label)
-        threshold_dilation_layout.addWidget(self.max_threshold_spinbox)
-        threshold_dilation_layout.addWidget(dilation_label)
-        threshold_dilation_layout.addWidget(self.dilation_spinbox)
+        dilation_layout.addWidget(dilation_label)
+        dilation_layout.addWidget(self.dilation_spinbox)
+        
+        # Add all layouts to the main threshold layout
+        threshold_dilation_layout.addLayout(min_thresh_layout)
+        threshold_dilation_layout.addLayout(max_thresh_layout)
+        threshold_dilation_layout.addLayout(dilation_layout)
         sliders_layout.addLayout(threshold_dilation_layout)
 
         # Export Parameters button
