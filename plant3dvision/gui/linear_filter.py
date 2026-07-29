@@ -64,8 +64,9 @@ from plant3dvision.proc2d import dilation
 from plant3dvision.proc2d import linear
 
 
-class RGBFilterApp(QMainWindow):
-    """RGB linear filter GUI application.
+
+class LinearFilterApp(QMainWindow):
+    """Linear filter GUI application.
 
     Provides an interactive interface to load an image, apply a linear
     combination of its color channels, and visualize the resulting filtered
@@ -780,7 +781,7 @@ def main(fsdb_path: str | None = None, scan_id: str = None):
         raise ValueError(f"Provide a valid path to an FSDB folder or set 'ROMI_DB' environment variable.")
 
     app = QApplication(sys.argv)
-    window = RGBFilterApp(fsdb_path, scan_id)
+    window = LinearFilterApp(fsdb_path, scan_id)
 
     window.show()
     sys.exit(app.exec())
