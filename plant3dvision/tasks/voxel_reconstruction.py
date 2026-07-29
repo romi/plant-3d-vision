@@ -66,9 +66,9 @@ def shape_from_bounding_box(bounding_box: dict[str, tuple[int, int]], voxel_size
     >>> print(shape_from_bounding_box(bounding_box, voxel_size))
     (271, 271, 721)
     """
-    (x_min, x_max) = bounding_box["x"]
-    (y_min, y_max) = bounding_box["y"]
-    (z_min, z_max) = bounding_box["z"]
+    x_min, x_max = sorted(bounding_box["x"])
+    y_min, y_max = sorted(bounding_box["y"])
+    z_min, z_max = sorted(bounding_box["z"])
     nx = int((x_max - x_min) / voxel_size) + 1
     ny = int((y_max - y_min) / voxel_size) + 1
     nz = int((z_max - z_min) / voxel_size) + 1
@@ -109,9 +109,9 @@ def origin_from_bounding_box(bounding_box: dict[str, tuple[int, int]], voxel_siz
     >>> print(origin_from_bounding_box(bounding_box, voxel_size)) # to get it in voxel units
     (600.0, 600.0, -600.0)
     """
-    (x_min, x_max) = bounding_box["x"]
-    (y_min, y_max) = bounding_box["y"]
-    (z_min, z_max) = bounding_box["z"]
+    x_min, x_max = sorted(bounding_box["x"])
+    y_min, y_max = sorted(bounding_box["y"])
+    z_min, z_max = sorted(bounding_box["z"])
     return tuple(map(float, np.array([x_min, y_min, z_min]) / float(voxel_size)))
 
 
