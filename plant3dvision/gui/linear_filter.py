@@ -39,8 +39,9 @@ import click
 import numpy as np
 import tomlkit
 from PIL import Image
-from PySide6.QtCore import Qt, Slot
 from PySide6.QtCore import QTimer
+from PySide6.QtCore import Qt
+from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QApplication
 from PySide6.QtWidgets import QComboBox
 from PySide6.QtWidgets import QDoubleSpinBox
@@ -54,15 +55,19 @@ from PySide6.QtWidgets import QSizePolicy
 from PySide6.QtWidgets import QSlider
 from PySide6.QtWidgets import QVBoxLayout
 from PySide6.QtWidgets import QWidget
-
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 from plantdb.commons.fsdb.core import FSDB
+from plantdb.commons.log import DEFAULT_LOG_LEVEL
+from plantdb.commons.log import LOG_LEVELS
+from plantdb.commons.log import get_logger
 
 from plant3dvision.proc2d import dilation
 from plant3dvision.proc2d import linear
 
+# Create a logger and set the environment variable
+logger = get_logger("LinearFilterApp", log_level=DEFAULT_LOG_LEVEL)
 
 
 class LinearFilterApp(QMainWindow):
@@ -136,10 +141,9 @@ class LinearFilterApp(QMainWindow):
             self.db = FSDB(self.fsdb_path, no_auth=True)
             self.db.connect()
             self.scan_ids_list = self.db.list_scans(owner_only=False)
-            print(self.scan_ids_list)
-            print(f"Loaded {len(self.scan_ids_list)} scans from the FSDB")
+            logger.info(f"Loaded {len(self.scan_ids_list)} scans from the FSDB")
         except Exception as e:
-            print(f"Error connecting to database: {e}")
+            logger.error(f"Error connecting to database: {e}")
             self.scan_ids_list = []
 
     def initUI(self):
@@ -413,7 +417,7 @@ class LinearFilterApp(QMainWindow):
                 self._load_image_from_slider(0)
 
         except Exception as e:
-            print(f"Error loading scan '{scan_id}': {e}")
+            logger.error(f"Error loading scan '{scan_id}': {e}")
             self.images_list = []
             self.image_slider.setMaximum(0)
             self._update_image_label()
@@ -429,7 +433,7 @@ class LinearFilterApp(QMainWindow):
             self._image_path = image.path()
             self._load_image_timer.start()
         except Exception as e:
-            print(f"Error loading image at index {index}: {e}")
+            logger.error(f"Error loading image at index {index}: {e}")
 
     @Slot()
     def _load_image(self):
@@ -438,7 +442,7 @@ class LinearFilterApp(QMainWindow):
             self.load_image_from_path(self._image_path)
             self._update_image_label()
         except Exception as e:
-            print(f"Error loading image at index {int(self.image_index_spinbox.value())}: {e}")
+            logger.error(f"Error loading image at index {int(self.image_index_spinbox.value())}: {e}")
 
     def _update_image_label(self):
         """Update the image index label."""
@@ -479,7 +483,6 @@ class LinearFilterApp(QMainWindow):
             with open(config_path, "rb") as f:
                 existing_config = tomlkit.load(f)
         except Exception as e:
-            print(f"Warning: Could not read existing config: {e}")
             existing_config = {}
 
         try:
@@ -502,10 +505,10 @@ class LinearFilterApp(QMainWindow):
             with open(config_path, "w") as f:
                 tomlkit.dump(existing_config, f)
 
-            print(f"Parameters exported to {config_path}")
+            logger.info(f"Parameters exported to {config_path}")
 
         except Exception as e:
-            print(f"Error exporting parameters: {e}")
+            logger.error(f"Error exporting parameters: {e}")
 
     def _on_scroll(self, event):
         """Zoom all three axes with the mouse wheel."""
@@ -638,7 +641,7 @@ class LinearFilterApp(QMainWindow):
                 # Process image immediately after loading
                 self.process_image()
             except Exception as e:
-                print(f"Error loading image from path '{file_path}': {e}")
+                logger.error(f"Error loading image from path '{file_path}': {e}")
 
     def process_image(self):
         """Apply the linear filter and threshold, then display results.
