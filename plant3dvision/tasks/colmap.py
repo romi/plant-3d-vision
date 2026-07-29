@@ -841,7 +841,7 @@ class Colmap(RomiTask):
     alignment_max_error = luigi.IntParameter(default=10)
     align_pcd = luigi.BoolParameter(default=True)
     camera_model = luigi.Parameter(default="SIMPLE_RADIAL")
-    bounding_box = luigi.DictParameter(default=None)
+    bounding_box = luigi.DictParameter(default={})
     cli_args = luigi.DictParameter(default={})
     circular_match_window = luigi.IntParameter(default=2)
 
@@ -1032,7 +1032,7 @@ class Colmap(RomiTask):
             self.set_camera_params(self.intrinsic_calibration_scan_id, 'intrinsic')
 
         # Determine the bounding box - either from workspace metadata or manual definition
-        if self.bounding_box is None:
+        if self.bounding_box == {}:
             logger.info("Did not get a manually defined cropping bounding-box...")
             bounding_box = self._workspace_as_bounding_box()
             if bounding_box is None:
