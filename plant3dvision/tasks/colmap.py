@@ -1147,7 +1147,7 @@ class Colmap(RomiTask):
         except KeyError:
             path_type = ""
 
-        if path_type == "Circle":
+        if path_type == "Circle" and self.single_camera:
             kp_counts = pd.read_csv(outfile.path())
             match_fig_fpath = f"{self.output().get().path()}/circular_match_heatmap.png"
             colmap_matches_fig(kp_counts, self.scan_id, filepath=match_fig_fpath)
