@@ -167,6 +167,9 @@ class RGBFilterApp(QMainWindow):
         self.ch2_value = None
         self.ch3_value = None
 
+        # Detect dark mode at startup
+        self._dark_mode = self._detect_dark_mode()
+
         # Initialize database
         self._init_database()
 
@@ -182,6 +185,22 @@ class RGBFilterApp(QMainWindow):
         if scan_id and scan_id in self.scan_ids_list:
             self.scan_dropdown.setCurrentIndex(self.scan_ids_list.index(scan_id))
             self._load_scan(scan_id)
+
+    @staticmethod
+    def _detect_dark_mode() -> bool:
+        """Detect if the OS/GUI is in dark mode."""
+        try:
+            hints = QGuiApplication.styleHints()
+            scheme = hints.colorScheme()
+            if scheme != Qt.ColorScheme.Unknown:
+                return scheme == Qt.ColorScheme.Dark
+        except AttributeError:
+            pass
+        # Fallback for older Qt: compare palette text vs window lightness
+        palette = QApplication.palette()
+        text = palette.color(QPalette.ColorRole.WindowText)
+        window = palette.color(QPalette.ColorRole.Window)
+        return text.lightness() > window.lightness()
 
     def _init_database(self):
         """Initialize the database connection and load scan list."""
@@ -746,20 +765,30 @@ class RGBFilterApp(QMainWindow):
         # Display results
         self.figure.clear()
 
+        DARK_BG = '#2a2a2a'
+        if self._dark_mode:
+            self.figure.patch.set_facecolor(DARK_BG)
+
         # Original image
         ax1 = self.figure.add_subplot(131)
+        if self._dark_mode:
+            self._style_ax_dark(ax1)
         ax1.imshow(self.original_img)
         ax1.set_title("Original")
         ax1.axis('off')
 
         # Filtered image
         ax2 = self.figure.add_subplot(132)
+        if self._dark_mode:
+            self._style_ax_dark(ax2)
         ax2.imshow(self.filtered_img, cmap='gray')
         ax2.set_title(f"Filtered [{mode}]\nC1:{c1_coef:.2f}, C2:{c2_coef:.2f}, C3:{c3_coef:.2f}")
         ax2.axis('off')
 
         # Mask
         ax3 = self.figure.add_subplot(133)
+        if self._dark_mode:
+            self._style_ax_dark(ax3)
         ax3.imshow(self.mask, cmap='binary')
         title = f"Mask ({min_threshold:.2f} <= v <= {max_threshold:.2f})"
         if dilation_iterations > 0:
@@ -768,6 +797,8 @@ class RGBFilterApp(QMainWindow):
         ax3.axis('off')
 
         self.figure.suptitle(f"{self.current_scan.id} - {self.images_list[self.image_slider.value()].id}")
+        if self._dark_mode:
+            self.figure._suptitle.set_color('white')
         self.figure.tight_layout()
 
         # Restore saved axis limits (pan/zoom state)
@@ -780,6 +811,16 @@ class RGBFilterApp(QMainWindow):
 
         # Synchronize axes limits for pan/zoom (only sets up callbacks)
         self._sync_axes_limits()
+
+    @staticmethod
+    def _style_ax_dark(ax):
+        """Apply dark-mode styling to a single axes."""
+        DARK_BG = '#2a2a2a'
+        ax.set_facecolor(DARK_BG)
+        ax.tick_params(colors='white')
+        ax.xaxis.label.set_color('white')
+        ax.yaxis.label.set_color('white')
+        ax.title.set_color('white')
 
     def _sync_axes_limits(self):
         """Synchronize the pan and zoom limits across all three axes."""
