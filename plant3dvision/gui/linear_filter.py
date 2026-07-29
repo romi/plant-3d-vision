@@ -305,11 +305,12 @@ class RGBFilterApp(QMainWindow):
         # Channel 1 slider
         ch1_layout = QHBoxLayout()
         self.ch1_label = QLabel("Red:")
+        self.ch1_label.setMinimumWidth(100)  # Fixed width for consistent alignment
+        self.ch1_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.ch1_slider = TickSlider()
         self.ch1_slider.setOrientation(Qt.Orientation.Horizontal)
         self.ch1_slider.setRange(0, 100)
         self.ch1_slider.setValue(50)
-        self.ch1_slider.setMinimumWidth(200)
         # Show tick marks on the channel slider
         self.ch1_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.ch1_slider.setTickInterval(10)
@@ -325,11 +326,12 @@ class RGBFilterApp(QMainWindow):
         # Channel 2 slider
         ch2_layout = QHBoxLayout()
         self.ch2_label = QLabel("Green:")
+        self.ch2_label.setMinimumWidth(100)  # Fixed width for consistent alignment
+        self.ch2_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.ch2_slider = TickSlider()
         self.ch2_slider.setOrientation(Qt.Orientation.Horizontal)
         self.ch2_slider.setRange(0, 100)
         self.ch2_slider.setValue(100)
-        self.ch2_slider.setMinimumWidth(200)
         # Show tick marks on the channel slider
         self.ch2_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.ch2_slider.setTickInterval(10)
@@ -345,11 +347,12 @@ class RGBFilterApp(QMainWindow):
         # Channel 3 slider
         ch3_layout = QHBoxLayout()
         self.ch3_label = QLabel("Blue:")
+        self.ch3_label.setMinimumWidth(100)  # Fixed width for consistent alignment
+        self.ch3_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.ch3_slider = TickSlider()
         self.ch3_slider.setOrientation(Qt.Orientation.Horizontal)
         self.ch3_slider.setRange(0, 100)
         self.ch3_slider.setValue(50)
-        self.ch3_slider.setMinimumWidth(200)
         # Show tick marks on the channel slider
         self.ch3_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.ch3_slider.setTickInterval(10)
