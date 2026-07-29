@@ -415,6 +415,7 @@ class LinearFilterApp(QMainWindow):
             # Load first image
             if self.images_list:
                 self._load_image_from_slider(0)
+            self._import_parameters()
 
         except Exception as e:
             logger.error(f"Error loading scan '{scan_id}': {e}")
@@ -475,6 +476,43 @@ class LinearFilterApp(QMainWindow):
         # Clamp to valid range just in case
         new_index = max(0, min(new_index, len(self.images_list) - 1))
         self.image_slider.setValue(new_index)
+
+    def _import_parameters(self):
+        """import current parameters from local_config.toml file, if any."""
+        config_path = self.current_scan.path() / "local_config.toml"
+        try:
+            with open(config_path, "rb") as f:
+                existing_config = tomlkit.load(f)
+        except Exception as e:
+            existing_config = {}
+
+        mask_cfg = existing_config.get("Masks")
+        if not mask_cfg:
+            return  # nothing to load
+
+        logger.info("Found a local_config.toml file, loading previous parameters...")
+        # - Make sure we have a list of three float coefficients
+        params = mask_cfg.get("parameters", [])
+        if isinstance(params, str):
+            # Stored as a string like "[0.5, 1.0, 0.5]"
+            params = [float(v) for v in params.strip("[]").split(",")]
+        elif isinstance(params, list):
+            # Ensure every element is a float (it may be an int)
+            params = [float(v) for v in params]
+
+        # - Populate the UI widgets
+        # colour‑space selector
+        self.color_space_combo.setCurrentText(mask_cfg.get("colorspace", "RGB"))
+
+        # sliders expect values in the range 0–100
+        self.ch1_slider.setValue(int(params[0] * 100))
+        self.ch2_slider.setValue(int(params[1] * 100))
+        self.ch3_slider.setValue(int(params[2] * 100))
+
+        # thresholds and dilation
+        self.min_threshold_spinbox.setValue(mask_cfg.get("min_threshold", 0.0))
+        self.max_threshold_spinbox.setValue(mask_cfg.get("max_threshold", 1.0))
+        self.dilation_spinbox.setValue(mask_cfg.get("dilation", 0))
 
     def _export_parameters(self):
         """Export current parameters to local_config.toml file."""
