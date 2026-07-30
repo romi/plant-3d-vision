@@ -37,11 +37,13 @@ x-runner-base: &runner-base
     - /tmp:noexec,nosuid,nodev
     - /run:noexec,nosuid,nodev
 
+
 x-runner-common-env: &runner-common-env
   GITHUB_RUNNER_EPHEMERAL: "true"
   GITHUB_RUNNER_URL: "${GITHUB_RUNNER_URL}"
   GITHUB_RUNNER_LABELS: "${GITHUB_RUNNER_LABELS:-self-hosted,linux,docker,x64,gpu}"
   BUILDX_HOME: "/home/ubuntu/.docker/buildx"
+
 
 services:
   runner1:
@@ -53,7 +55,8 @@ services:
       GITHUB_RUNNER_NAME: romi-github-runner-1
       RUNNER_WORK_DIR: /var/lib/github-runners/runner1/_work
     volumes:
-      - /var/lib/github-runners/runner1/_work:/var/lib/github-runners/runner1/_work
+      - runner1_state:/actions-runner
+      - runner1_work:/var/lib/github-runners/runner1/_work
       - "${DOCKER_SOCK:-$XDG_RUNTIME_DIR/docker.sock}:/var/run/docker.sock"
 
   runner2:
@@ -65,7 +68,8 @@ services:
       GITHUB_RUNNER_NAME: romi-github-runner-2
       RUNNER_WORK_DIR: /var/lib/github-runners/runner2/_work
     volumes:
-      - /var/lib/github-runners/runner2/_work:/var/lib/github-runners/runner2/_work
+      - runner2_state:/actions-runner
+      - runner2_work:/var/lib/github-runners/runner2/_work
       - "${DOCKER_SOCK:-$XDG_RUNTIME_DIR/docker.sock}:/var/run/docker.sock"
 
   runner3:
@@ -77,7 +81,8 @@ services:
       GITHUB_RUNNER_NAME: romi-github-runner-3
       RUNNER_WORK_DIR: /var/lib/github-runners/runner3/_work
     volumes:
-      - /var/lib/github-runners/runner3/_work:/var/lib/github-runners/runner3/_work
+      - runner3_state:/actions-runner
+      - runner3_work:/var/lib/github-runners/runner3/_work
       - "${DOCKER_SOCK:-$XDG_RUNTIME_DIR/docker.sock}:/var/run/docker.sock"
 
   runner4:
@@ -89,5 +94,16 @@ services:
       GITHUB_RUNNER_NAME: romi-github-runner-4
       RUNNER_WORK_DIR: /var/lib/github-runners/runner4/_work
     volumes:
-      - /var/lib/github-runners/runner4/_work:/var/lib/github-runners/runner4/_work
+      - runner4_state:/actions-runner
+      - runner4_work:/var/lib/github-runners/runner4/_work
       - "${DOCKER_SOCK:-$XDG_RUNTIME_DIR/docker.sock}:/var/run/docker.sock"
+
+volumes:
+  runner1_state:
+  runner2_state:
+  runner3_state:
+  runner4_state:
+  runner1_work:
+  runner2_work:
+  runner3_work:
+  runner4_work:
