@@ -1758,28 +1758,38 @@ def prune_to_percentile(
     points: np.ndarray,
     keep_ratio: float = 0.90,
     method: str = "mahalanobis",
-) -> np.ndarray:
+    output_mask: bool = False,
+) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
     """
-    Prunes a set of points to retain only a specified percentile of the data
-    based on their distance from the centroid. Supports both Mahalanobis and
-    Euclidean distance metrics.
+    Prunes a set of points to retain only a fraction of the closest points based on a specified
+    distance measure. The function can return either the pruned set of points or both the pruned
+    points and a mask indicating which points were retained.
 
     Parameters
     ----------
     points : np.ndarray
-        An array of points where each row represents a single point in space.
-    keep_ratio : float, optional
-        The fraction of points to retain, where the value must be between
-        0 and 1. Defaults to 0.90.
-    method : str, optional
-        The distance metric to use for pruning. Supported options are
-        "mahalanobis" and "euclidean". Defaults to "mahalanobis".
+        A 2D array of shape (N, D) where N is the number of points and D is the dimension of each
+        point.
+    keep_ratio : float, default=0.90
+        A float value between 0 and 1 specifying the fraction of points to retain after pruning.
+    method : str, default="mahalanobis"
+        The distance metric to use for pruning. Possible values are:
+        - "mahalanobis": Use Mahalanobis distance.
+        - "euclidean": Use Euclidean distance.
+        An error is raised if an unsupported method is specified.
+    output_mask : bool, default=False
+        If True, the function returns a tuple containing both the pruned points and a boolean mask
+        indicating which points were retained. If False, only the pruned points are returned.
 
     Returns
     -------
-    np.ndarray
-        A subset of the input points where only the points within the smallest
-        `keep_ratio`-fraction of distances from the centroid are retained.
+    np.ndarray or tuple
+        If `output_mask` is False, returns a 2D array of shape (M, D), where M is the number of points
+        retained and D is the dimension of each point.
+        If `output_mask` is True, returns a tuple containing:
+        - A 2D array of shape (M, D) with the pruned points.
+        - A 1D boolean array of length N, where `True` indicates a retained point and `False` indicates
+          a pruned one.
     """
     assert 0 < keep_ratio < 1, "keep_ratio must be between 0 and 1"
 
@@ -1801,6 +1811,8 @@ def prune_to_percentile(
     # Keep the smallest keep_ratio‑fraction of distances
     threshold = np.quantile(distances, keep_ratio)
     mask = distances <= threshold
+    if output_mask:
+        return points[mask], mask
     return points[mask]
 
 def augment_bounds(bounds: np.ndarray, margin: float, percent=False) -> np.ndarray:
@@ -1842,9 +1854,150 @@ def augment_bounds(bounds: np.ndarray, margin: float, percent=False) -> np.ndarr
         new_bounds[:, 1] += margin
     return new_bounds
 
+def plot_point_cloud_with_clusters(
+    points: np.ndarray,
+    labels: np.ndarray,
+    centroids: np.ndarray,
+    centre: np.ndarray,
+    point_size: float = 1.0,
+    centroid_size: float = 80.0,
+    centre_size: float = 150.0,
+) -> None:
+    """
+    Visualise a 3‑D point‑cloud coloured by clustering labels.
+
+    Parameters
+    ----------
+    points : np.ndarray (N, 3)
+        XYZ coordinates of the point cloud.
+    labels : np.ndarray (N,)
+        Integer cluster labels for each point (``-1`` denotes noise).
+    centroids : np.ndarray (K, 3)
+        XYZ coordinates of the computed cluster centroids.
+    centre : np.ndarray (3,)
+        Global centre point (e.g. the mean of the whole cloud).
+    point_size : float, optional
+        Marker size for the cloud points (default ``1.0``).
+    centroid_size : float, optional
+        Marker size for the centroids (default ``80.0``).
+    centre_size : float, optional
+        Marker size for the global centre (default ``150.0``).
+    """
+    import matplotlib.pyplot as plt
+    from mpl_toolkits.mplot3d import Axes3D
+    import numpy as np
+    # Prepare figure
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    ax.set_title('Point‑cloud coloured by cluster labels')
+
+    # Colormap – tab20 provides 20 distinct colours
+    cmap = plt.get_cmap('tab20')
+
+    # Determine the set of valid (non‑noise) labels
+    unique_labels = np.unique(labels[labels != -1])
+    # Map each label to a colour index in the colormap
+    label_to_color = {lbl: cmap(i % 20) for i, lbl in enumerate(sorted(unique_labels))}
+
+    # Plot noise points (if any) in light gray
+    noise_mask = labels == -1
+    if np.any(noise_mask):
+        ax.scatter(
+            points[noise_mask, 0],
+            points[noise_mask, 1],
+            points[noise_mask, 2],
+            c='lightgray',
+            s=point_size,
+            depthshade=False,
+            label='Noise',
+        )
+
+    # Plot each cluster
+    for lbl in unique_labels:
+        mask = labels == lbl
+        ax.scatter(
+            points[mask, 0],
+            points[mask, 1],
+            points[mask, 2],
+            c=[label_to_color[lbl]],
+            s=point_size,
+            depthshade=False,
+            label=f'Cluster {lbl}',
+        )
+
+    # Plot centroids – same colour as the cluster but with a distinct marker
+    for i, lbl in enumerate(sorted(unique_labels)):
+        centroid = centroids[i]
+        ax.scatter(
+            centroid[0],
+            centroid[1],
+            centroid[2],
+            c=[label_to_color[lbl]],
+            s=centroid_size,
+            edgecolor='k',
+            linewidth=1.0,
+            marker='^',
+            label=f'Centroid {lbl}',
+        )
+
+    # Plot the global centre point
+    ax.scatter(
+        centre[0],
+        centre[1],
+        centre[2],
+        c='k',
+        s=centre_size,
+        edgecolor='w',
+        linewidth=1.0,
+        marker='o',
+        label='Global centre',
+    )
+
+    # Add a vertical dashed line through the centre spanning the Z‑range
+    z_min, z_max = points[:, 2].min(), points[:, 2].max()
+    ax.plot(
+        [centre[0], centre[0]],
+        [centre[1], centre[1]],
+        [z_min, z_max],
+        color='k',
+        linestyle='--',
+        linewidth=1,
+        label='Central axis',
+    )
+
+    # Create a legend (optional – can be omitted for very large clouds)
+    ax.legend(loc='upper right', fontsize='small', markerscale=1.0)
+
+    max_range = np.array(
+        [
+            points[:, 0].max() - points[:, 0].min(),
+            points[:, 1].max() - points[:, 1].min(),
+            points[:, 2].max() - points[:, 2].min(),
+        ]
+    ).max()
+    Xb = 0.6 * max_range * np.array([-1, 1])
+    Yb = 0.6 * max_range * np.array([-1, 1])
+    Zb = 0.6 * max_range * np.array([-1, 1])
+    ax.set_xlim(Xb)
+    ax.set_ylim(Yb)
+    ax.set_zlim(Zb)
+
+    ax.view_init(elev=30, azim=45)
+
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.set_zlabel("Z")
+
+    plt.tight_layout()
+    fig.savefig("auto_bb_clusters.png", dpi=300, bbox_inches="tight")
+    fig.show()
+
 def find_plant_bounding_box(
         points: np.ndarray[tuple[int, int], np.dtype[np.float32]],
-        colors: np.ndarray[tuple[int, int], np.dtype[np.float32]],
+        colors: np.ndarray[tuple[int, int], np.dtype[np.uint8]],
         pruning_quantile: float=0.98,
         margins: float=30.,
         percent: bool=False
@@ -1879,41 +2032,51 @@ def find_plant_bounding_box(
     lab = rgb2lab(colors[np.newaxis, :, :])[0]  # (N, 3)
 
     # Preparing features for clustering (positions and color)
-    scaler_xyz = StandardScaler().fit(points)
-    scaler_lab = StandardScaler().fit(lab)
-    xyz_norm = scaler_xyz.transform(points)  # (N, 3)
-    lab_norm = scaler_lab.transform(lab)  # (N, 3)
 
-    w_geo = 0.9  # increase -> more spatial influence
+    w_geo = 1.5  # increase -> more spatial influence
     w_col = 1.0  # increase -> more color influence
 
-    features = np.hstack((w_geo * xyz_norm, w_col * lab_norm))  # (N, 6)
+    # ---- isotropic geometry scaling ------------------------------------------------
+    # Compute a single scale factor from the three spatial variances
+    geo_scale = np.sqrt(np.mean(np.var(points, axis=0)))  # scalar
+    xyz_norm = w_geo * (points - points.mean(axis=0)) / geo_scale
+
+    # ---- isotropic colour scaling (optional) --------------------------------------
+    col_scale = np.sqrt(np.mean(np.var(lab, axis=0)))  # scalar
+    lab_norm = w_col * (lab - lab.mean(axis=0)) / col_scale
+
+    # ---- final feature matrix -------------------------------------------------------
+    features = np.hstack((xyz_norm, lab_norm))
 
     # Clustering
-    dbscan = HDBSCAN(min_cluster_size=20)
+    dbscan = HDBSCAN(min_cluster_size=50, cluster_selection_epsilon=50*w_geo/geo_scale)
 
     labels = dbscan.fit_predict(features)
 
     # Compute centroïds
     u_labels = sorted(np.unique(labels))
     label_to_index = {int(label): i for i, label in enumerate(u_labels)}
-    centroids = np.zeros((u_labels.size, 3))
-    n_element_per_label = np.zeros((u_labels.size,))
-    for label, pos in zip(labels.ravel(), points.ravel()):
-        i = label_to_index[label]
-        centroids[i, :] += pos
-        n_element_per_label[i] += 1
-    centroids = centroids / n_element_per_label
+    centroids = np.zeros((len(u_labels), 3))
+    n_element_per_label = np.zeros((len(u_labels),))
+    for i in range(len(labels)):
+        label = labels[i]
+        pos = points[i]
+        j = label_to_index[label]  # index of the label among u_labels
+        centroids[j, :] += pos
+        n_element_per_label[j] += 1
+    centroids = centroids[:, :] / n_element_per_label[:, np.newaxis]
 
     # Select the center most cluster
-    center = np.mean(points, axis=0)  # barycenter of all the points, assumed to be cloe to the center
-    central_group_label = int(np.argmin(np.linalg.norm(centroids[1:] - center.T, axis=1)))
+    center = np.mean(prune_to_percentile(points, 0.98), axis=0)  # barycenter of all the points, assumed to be close to the center
+    central_group_label = int(np.argmin(np.linalg.norm(centroids[1:, :2] - center[:2].T, axis=1)))
+    #plot_point_cloud_with_clusters(points, labels, centroids, center)
 
     # Prune outliers
     clusters_pruned = prune_to_percentile(points[labels == central_group_label, :], keep_ratio=pruning_quantile)
 
     # Compute the bounds of the cluster and add margins
-    bounds = np.hstack((np.min(clusters_pruned, axis=0), np.max(clusters_pruned, axis=0)))
+    bounds = np.hstack((np.min(clusters_pruned, axis=0)[:, np.newaxis], np.max(clusters_pruned, axis=0)[:, np.newaxis]))
+
 
     return augment_bounds(bounds, margins, percent)
 
