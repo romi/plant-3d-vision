@@ -129,13 +129,14 @@ class RGBFilterApp(QMainWindow):
         self._update_scan_dropdown()
         
         # Auto-select and load first scan if available
-        if self.scan_ids_list:
+
+        if scan_id and scan_id in self.scan_ids_list:
+            # If a scan_id was provided but no scans exist,
+            self.scan_dropdown.setCurrentIndex(self.scan_ids_list.index(scan_id))  # No selection
+            self._load_scan(scan_id)
+        elif self.scan_ids_list:
             self.scan_dropdown.setCurrentIndex(0)
             self._load_scan(self.scan_ids_list[0])
-        elif scan_id and scan_id in self.scan_ids_list:
-            # If a scan_id was provided but no scans exist, still try to load it
-            self.scan_dropdown.setCurrentIndex(-1)  # No selection
-            self._load_scan(scan_id)
         else:
             # No scans available, show message
             self._clear_display()
