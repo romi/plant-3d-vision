@@ -448,6 +448,12 @@ class Voxels(RomiTask):
     bounding_box_margins : luigi.FloatParameter, optional
         Used when bounding_box is set to ``auto``. Safety margins in mm that are added (and substracted) around
         the estimated bounding box.
+    bounding_box_w_geo : luigi.FloatParameter, optional
+        Used when bounding_box is set to ``auto``. Weight for the spatial (geometric) features in the clustering.
+        Increase for more spatial influence. Defaults to ``2.0``.
+    bounding_box_w_col : luigi.FloatParameter, optional
+        Used when bounding_box is set to ``auto``. Weight for the color features in the clustering.
+        Increase for more color influence. Defaults to ``1.0``.
     bounding_box_edit : luigi.DictParameter, optional
         Edit the bounding box dictionary.
         Useful with VirtualPlants where the `bounding_box` is known, but we would like to edit it.
@@ -499,6 +505,8 @@ class Voxels(RomiTask):
     bounding_box_mode = luigi.ChoiceParameter(default="manual", choices=["manual", "auto"])
     bounding_box_prune_ratio = luigi.FloatParameter(default=0.98)
     bounding_box_margins = luigi.FloatParameter(default=10)
+    bounding_box_w_geo = luigi.FloatParameter(default=2.0)
+    bounding_box_w_col = luigi.FloatParameter(default=1.0)
     bounding_box_edit = luigi.DictParameter(default=None)
 
     def requires(self):
@@ -551,7 +559,8 @@ class Voxels(RomiTask):
 
         if self.bounding_box_mode == "auto":
             bounding_box = find_plant_bounding_box(
-                points3d, colors, self.bounding_box_prune_ratio, self.bounding_box_margins
+                points3d, colors, self.bounding_box_prune_ratio, self.bounding_box_margins,
+                w_geo=self.bounding_box_w_geo, w_col=self.bounding_box_w_col
             )
             self.bounding_box = {
                 "x": (bounding_box[0, 0], bounding_box[0, 1]),

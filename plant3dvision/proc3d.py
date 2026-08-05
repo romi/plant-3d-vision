@@ -2000,7 +2000,9 @@ def find_plant_bounding_box(
         colors: np.ndarray[tuple[int, int], np.dtype[np.uint8]],
         pruning_quantile: float=0.98,
         margins: float=30.,
-        percent: bool=False
+        percent: bool=False,
+        w_geo: float=2.0,
+        w_col: float=1.0
 ) -> np.ndarray[tuple[int, int], np.dtype[np.float32]]:
     """
     Finds the bounding box of a plant represented by 3D points and corresponding colors using clustering
@@ -2020,6 +2022,12 @@ def find_plant_bounding_box(
         Optional margin value (default is 30.0) to add to the bounding box edges. In real-world units.
     percent : bool, optional
         If True, the margins will be applied as a percentage of the bounding box size. Defaults to False.
+    w_geo : float, optional
+        Weight for the spatial (geometric) features in the clustering. Increase for more spatial influence.
+        Defaults to ``2.0``.
+    w_col : float, optional
+        Weight for the color features in the clustering. Increase for more color influence.
+        Defaults to ``1.0``.
 
     Returns
     -------
@@ -2032,9 +2040,6 @@ def find_plant_bounding_box(
     lab = rgb2lab(colors[np.newaxis, :, :])[0]  # (N, 3)
 
     # Preparing features for clustering (positions and color)
-
-    w_geo = 1.5  # increase -> more spatial influence
-    w_col = 1.0  # increase -> more color influence
 
     # ---- isotropic geometry scaling ------------------------------------------------
     # Compute a single scale factor from the three spatial variances
@@ -2049,7 +2054,7 @@ def find_plant_bounding_box(
     features = np.hstack((xyz_norm, lab_norm))
 
     # Clustering
-    dbscan = HDBSCAN(min_cluster_size=50, cluster_selection_epsilon=50*w_geo/geo_scale)
+    dbscan = HDBSCAN(min_cluster_size=50, cluster_selection_epsilon=20*w_geo/geo_scale)
 
     labels = dbscan.fit_predict(features)
 
@@ -2069,7 +2074,7 @@ def find_plant_bounding_box(
     # Select the center most cluster
     center = np.mean(prune_to_percentile(points, 0.98), axis=0)  # barycenter of all the points, assumed to be close to the center
     central_group_label = int(np.argmin(np.linalg.norm(centroids[1:, :2] - center[:2].T, axis=1)))
-    #plot_point_cloud_with_clusters(points, labels, centroids, center)
+    plot_point_cloud_with_clusters(points, labels, centroids, center)
 
     # Prune outliers
     clusters_pruned = prune_to_percentile(points[labels == central_group_label, :], keep_ratio=pruning_quantile)

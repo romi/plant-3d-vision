@@ -153,6 +153,10 @@ bounding_box_mode = "auto"  # Default: "manual"
 bounding_box_prune_ratio = 0.98  # Default: 0.98
 # Additional magins for the "auto" bounding box.
 bounding_box_margins = 30  # Default: 30mm
+# For "auto". Weight of the spatial (geometric) features in the clustering. Increase for more spatial influence.
+bounding_box_w_geo = 2.0  # Default: 2.0
+# For "auto". Weight of the colour features in the clustering. Increase for more colour influence.
+bounding_box_w_col = 1.0  # Default: 1.0
 
 [Voxels.bounding_box]
 # 3D bounding box defining the region of interest for reconstruction. Unused when bounding_box_mode = "auto".
