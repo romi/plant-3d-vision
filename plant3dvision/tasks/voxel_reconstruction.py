@@ -386,7 +386,165 @@ def plot_pointcloud_with_bbox(
     plt.tight_layout()
 
     if save_path:
-        plt.savefig(save_path, dpi=500, bbox_inches="tight")
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+    else:
+        plt.show()
+
+    return fig
+
+
+def plot_pointcloud_with_clusters(
+    points: np.ndarray,
+    labels: np.ndarray,
+    centroids: np.ndarray,
+    centre: np.ndarray,
+    *,
+    figsize: tuple[int, int] = (10, 8),
+    elev: float = 30,      # elevation angle for isometric view
+    azim: float = 45,      # azimuth angle for isometric view
+    point_size: float = 1.0,
+    centroid_size: float = 80.0,
+    centre_size: float = 150.0,
+    save_path: str | None = None,
+) -> plt.Figure:
+    """
+    Visualise a 3‑D point‑cloud coloured by clustering labels.
+
+    Parameters
+    ----------
+    points : ndarray (N, 3)
+        XYZ coordinates of the point cloud.
+    labels : ndarray (N,)
+        Integer cluster labels for each point (``-1`` denotes noise).
+    centroids : ndarray (K, 3)
+        XYZ coordinates of the computed cluster centroids.
+    centre : ndarray (3,)
+        Global centre point (e.g. the mean of the whole cloud).
+    figsize : tuple, optional
+        Size of the generated figure (width, height) in inches.
+    elev, azim : float, optional
+        Elevation and azimuth angles that define the **isometric** view.
+    point_size : float, optional
+        Marker size for the cloud points.
+    centroid_size : float, optional
+        Marker size for the centroids.
+    centre_size : float, optional
+        Marker size for the global centre.
+    save_path : str | None, optional
+        If provided, the figure is saved to this path (e.g. ``"scene.png"``).
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        The created figure
+    """
+    fig = plt.figure(figsize=figsize)
+    ax = fig.add_subplot(111, projection="3d")
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.set_zlabel("Z")
+    ax.set_title("Point‑cloud coloured by cluster labels")
+
+    # Colormap – tab20 provides 20 distinct colours
+    cmap = plt.get_cmap("tab20")
+
+    # Determine the set of valid (non‑noise) labels
+    unique_labels = np.unique(labels[labels != -1])
+    # Map each label to a colour index in the colormap
+    label_to_color = {lbl: cmap(i % 20) for i, lbl in enumerate(sorted(unique_labels))}
+
+    # Plot noise points (if any) in light gray
+    noise_mask = labels == -1
+    if np.any(noise_mask):
+        ax.scatter(
+            points[noise_mask, 0],
+            points[noise_mask, 1],
+            points[noise_mask, 2],
+            c="lightgray",
+            s=point_size,
+            depthshade=False,
+            label="Noise",
+        )
+
+    # Plot each cluster
+    for lbl in unique_labels:
+        mask = labels == lbl
+        ax.scatter(
+            points[mask, 0],
+            points[mask, 1],
+            points[mask, 2],
+            c=[label_to_color[lbl]],
+            s=point_size,
+            depthshade=False,
+            label=f"Cluster {lbl}",
+        )
+
+    # Plot centroids – same colour as the cluster but with a distinct marker
+    for i, lbl in enumerate(sorted(unique_labels)):
+        centroid = centroids[i]
+        ax.scatter(
+            centroid[0],
+            centroid[1],
+            centroid[2],
+            c=[label_to_color[lbl]],
+            s=centroid_size,
+            edgecolor="k",
+            linewidth=1.0,
+            marker="^",
+            label=f"Centroid {lbl}",
+        )
+
+    # Plot the global centre point
+    ax.scatter(
+        centre[0],
+        centre[1],
+        centre[2],
+        c="k",
+        s=centre_size,
+        edgecolor="w",
+        linewidth=1.0,
+        marker="o",
+        label="Global centre",
+    )
+
+    # Add a vertical dashed line through the centre spanning the Z‑range
+    z_min, z_max = points[:, 2].min(), points[:, 2].max()
+    ax.plot(
+        [centre[0], centre[0]],
+        [centre[1], centre[1]],
+        [z_min, z_max],
+        color="k",
+        linestyle="--",
+        linewidth=1,
+        label="Central axis",
+    )
+
+    # Create a legend (optional – can be omitted for very large clouds)
+    ax.legend(loc="upper right", fontsize="small", markerscale=1.0)
+
+    max_range = np.array(
+        [
+            points[:, 0].max() - points[:, 0].min(),
+            points[:, 1].max() - points[:, 1].min(),
+            points[:, 2].max() - points[:, 2].min(),
+        ]
+    ).max()
+    Xb = 0.6 * max_range * np.array([-1, 1])
+    Yb = 0.6 * max_range * np.array([-1, 1])
+    Zb = 0.6 * max_range * np.array([-1, 1])
+    ax.set_xlim(Xb)
+    ax.set_ylim(Yb)
+    ax.set_zlim(Zb)
+
+    ax.view_init(elev=elev, azim=azim)
+
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.set_zlabel("Z")
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
     else:
         plt.show()
 
@@ -557,8 +715,11 @@ class Voxels(RomiTask):
 
         points3d, colors = points_and_colors_from_points_dict(points_dict)
 
+        labels = None
+        centroids = None
+        center = None
         if self.bounding_box_mode == "auto":
-            bounding_box = find_plant_bounding_box(
+            bounding_box, labels, centroids, center = find_plant_bounding_box(
                 points3d, colors, self.bounding_box_prune_ratio, self.bounding_box_margins,
                 w_geo=self.bounding_box_w_geo, w_col=self.bounding_box_w_col
             )
@@ -601,6 +762,15 @@ class Voxels(RomiTask):
             plot_pointcloud_with_bbox(points3d, colors, self.bounding_box,
                                       save_path=path)
             file.import_file(path)
+
+        # Print the clustering figure, if computed (auto bounding box mode):
+        if labels is not None:
+            clusters_file: File = self.output_file(file_id="auto_bb_clusters_fig", create=True)
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                path = os.path.join(tmp_dir, "auto_bb_clusters_fig.png")
+                plot_pointcloud_with_clusters(points3d, labels, centroids, center,
+                                              save_path=path)
+                clusters_file.import_file(path)
 
         # - Check if any displacement exists and use it to modify the shape of the voxel array (to create):
         x_min, x_max = sorted(self.bounding_box["x"])

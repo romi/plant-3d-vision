@@ -1854,147 +1854,6 @@ def augment_bounds(bounds: np.ndarray, margin: float, percent=False) -> np.ndarr
         new_bounds[:, 1] += margin
     return new_bounds
 
-def plot_point_cloud_with_clusters(
-    points: np.ndarray,
-    labels: np.ndarray,
-    centroids: np.ndarray,
-    centre: np.ndarray,
-    point_size: float = 1.0,
-    centroid_size: float = 80.0,
-    centre_size: float = 150.0,
-) -> None:
-    """
-    Visualise a 3‑D point‑cloud coloured by clustering labels.
-
-    Parameters
-    ----------
-    points : np.ndarray (N, 3)
-        XYZ coordinates of the point cloud.
-    labels : np.ndarray (N,)
-        Integer cluster labels for each point (``-1`` denotes noise).
-    centroids : np.ndarray (K, 3)
-        XYZ coordinates of the computed cluster centroids.
-    centre : np.ndarray (3,)
-        Global centre point (e.g. the mean of the whole cloud).
-    point_size : float, optional
-        Marker size for the cloud points (default ``1.0``).
-    centroid_size : float, optional
-        Marker size for the centroids (default ``80.0``).
-    centre_size : float, optional
-        Marker size for the global centre (default ``150.0``).
-    """
-    import matplotlib.pyplot as plt
-    from mpl_toolkits.mplot3d import Axes3D
-    import numpy as np
-    # Prepare figure
-    fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(111, projection='3d')
-    ax.set_xlabel('X')
-    ax.set_ylabel('Y')
-    ax.set_zlabel('Z')
-    ax.set_title('Point‑cloud coloured by cluster labels')
-
-    # Colormap – tab20 provides 20 distinct colours
-    cmap = plt.get_cmap('tab20')
-
-    # Determine the set of valid (non‑noise) labels
-    unique_labels = np.unique(labels[labels != -1])
-    # Map each label to a colour index in the colormap
-    label_to_color = {lbl: cmap(i % 20) for i, lbl in enumerate(sorted(unique_labels))}
-
-    # Plot noise points (if any) in light gray
-    noise_mask = labels == -1
-    if np.any(noise_mask):
-        ax.scatter(
-            points[noise_mask, 0],
-            points[noise_mask, 1],
-            points[noise_mask, 2],
-            c='lightgray',
-            s=point_size,
-            depthshade=False,
-            label='Noise',
-        )
-
-    # Plot each cluster
-    for lbl in unique_labels:
-        mask = labels == lbl
-        ax.scatter(
-            points[mask, 0],
-            points[mask, 1],
-            points[mask, 2],
-            c=[label_to_color[lbl]],
-            s=point_size,
-            depthshade=False,
-            label=f'Cluster {lbl}',
-        )
-
-    # Plot centroids – same colour as the cluster but with a distinct marker
-    for i, lbl in enumerate(sorted(unique_labels)):
-        centroid = centroids[i]
-        ax.scatter(
-            centroid[0],
-            centroid[1],
-            centroid[2],
-            c=[label_to_color[lbl]],
-            s=centroid_size,
-            edgecolor='k',
-            linewidth=1.0,
-            marker='^',
-            label=f'Centroid {lbl}',
-        )
-
-    # Plot the global centre point
-    ax.scatter(
-        centre[0],
-        centre[1],
-        centre[2],
-        c='k',
-        s=centre_size,
-        edgecolor='w',
-        linewidth=1.0,
-        marker='o',
-        label='Global centre',
-    )
-
-    # Add a vertical dashed line through the centre spanning the Z‑range
-    z_min, z_max = points[:, 2].min(), points[:, 2].max()
-    ax.plot(
-        [centre[0], centre[0]],
-        [centre[1], centre[1]],
-        [z_min, z_max],
-        color='k',
-        linestyle='--',
-        linewidth=1,
-        label='Central axis',
-    )
-
-    # Create a legend (optional – can be omitted for very large clouds)
-    ax.legend(loc='upper right', fontsize='small', markerscale=1.0)
-
-    max_range = np.array(
-        [
-            points[:, 0].max() - points[:, 0].min(),
-            points[:, 1].max() - points[:, 1].min(),
-            points[:, 2].max() - points[:, 2].min(),
-        ]
-    ).max()
-    Xb = 0.6 * max_range * np.array([-1, 1])
-    Yb = 0.6 * max_range * np.array([-1, 1])
-    Zb = 0.6 * max_range * np.array([-1, 1])
-    ax.set_xlim(Xb)
-    ax.set_ylim(Yb)
-    ax.set_zlim(Zb)
-
-    ax.view_init(elev=30, azim=45)
-
-    ax.set_xlabel("X")
-    ax.set_ylabel("Y")
-    ax.set_zlabel("Z")
-
-    plt.tight_layout()
-    fig.savefig("auto_bb_clusters.png", dpi=300, bbox_inches="tight")
-    fig.show()
-
 def find_plant_bounding_box(
         points: np.ndarray[tuple[int, int], np.dtype[np.float32]],
         colors: np.ndarray[tuple[int, int], np.dtype[np.uint8]],
@@ -2031,9 +1890,15 @@ def find_plant_bounding_box(
 
     Returns
     -------
-    np.ndarray[tuple[int, int], np.dtype[np.float32]]
+    bounding_box : np.ndarray[tuple[int, int], np.dtype[np.float32]]
         A 2D array containing the bounding box dimensions in the format
         [[x_min, x_max], [y_min, y_max], [z_min, z_max]]
+    labels : np.ndarray
+        Cluster label of each point (``-1`` denotes noise).
+    centroids : np.ndarray
+        XYZ coordinates of the computed cluster centroids.
+    center : np.ndarray
+        Barycenter of all the points, assumed to be close to the center.
     """
 
     # Convert to lab for perceptually continuous color (we want to select colors close together in perception)
@@ -2074,7 +1939,6 @@ def find_plant_bounding_box(
     # Select the center most cluster
     center = np.mean(prune_to_percentile(points, 0.98), axis=0)  # barycenter of all the points, assumed to be close to the center
     central_group_label = int(np.argmin(np.linalg.norm(centroids[1:, :2] - center[:2].T, axis=1)))
-    plot_point_cloud_with_clusters(points, labels, centroids, center)
 
     # Prune outliers
     clusters_pruned = prune_to_percentile(points[labels == central_group_label, :], keep_ratio=pruning_quantile)
@@ -2083,5 +1947,5 @@ def find_plant_bounding_box(
     bounds = np.hstack((np.min(clusters_pruned, axis=0)[:, np.newaxis], np.max(clusters_pruned, axis=0)[:, np.newaxis]))
 
 
-    return augment_bounds(bounds, margins, percent)
+    return augment_bounds(bounds, margins, percent), labels, centroids, center
 
