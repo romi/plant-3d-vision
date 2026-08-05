@@ -134,6 +134,9 @@ class LinearFilterApp(QMainWindow):
         if scan_id and scan_id in self.scan_ids_list:
             self.scan_dropdown.setCurrentIndex(self.scan_ids_list.index(scan_id))
             self._load_scan(scan_id)
+        else:
+            scan_id = self.scan_ids_list[self.scan_dropdown.currentIndex()]
+            self._load_scan(scan_id)
 
     def _init_database(self):
         """Initialize the database connection and load scan list."""
