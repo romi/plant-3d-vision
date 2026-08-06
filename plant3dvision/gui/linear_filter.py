@@ -2,20 +2,22 @@
 # -*- coding: utf-8 -*-
 
 """
-**RGB Linear Filter GUI**
+**Linear Filter GUI**
 
 A Python module that launches an interactive Qt‑based application for loading plant scan images, applying a customizable linear combination of color‑space channels, and visualizing the filtered result together with a threshold‑derived binary mask.
 It streamlines the exploration of channel weighting and threshold parameters, making it easy to fine‑tune image preprocessing for downstream analysis.
 
 ## Key Features
 
+- List scans from a PlantDB (FSDB).
+- Search and filter scans via a searchable dropdown.
 - Load images from a PlantDB (FSDB) scan.
 - Select among three color spaces (RGB, HSV, YCbCr) and adjust each channel’s contribution with sliders.
 - Real‑time preview of the original image, the filtered grayscale image, and the binary mask.
 - Interactive threshold controls (min / max) and optional binary dilation.
 - Synchronized pan/zoom across all three sub‑plots, with mouse‑wheel zoom support.
 - Export the current filter parameters to a `local_config.toml` file attached to the chosen scan.
-- Search and filter scans via a searchable dropdown.
+- Load existing filter parameters from a `local_config.toml` attached to the chosen scan, if any.
 
 ## Usage Examples
 
@@ -39,8 +41,9 @@ import click
 import numpy as np
 import tomlkit
 from PIL import Image
-from PySide6.QtCore import Qt, Slot
 from PySide6.QtCore import QTimer
+from PySide6.QtCore import Qt
+from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QApplication
 from PySide6.QtWidgets import QComboBox
 from PySide6.QtWidgets import QDoubleSpinBox
@@ -54,18 +57,23 @@ from PySide6.QtWidgets import QSizePolicy
 from PySide6.QtWidgets import QSlider
 from PySide6.QtWidgets import QVBoxLayout
 from PySide6.QtWidgets import QWidget
-
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 from plantdb.commons.fsdb.core import FSDB
+from plantdb.commons.log import DEFAULT_LOG_LEVEL
+from plantdb.commons.log import LOG_LEVELS
+from plantdb.commons.log import get_logger
 
 from plant3dvision.proc2d import dilation
 from plant3dvision.proc2d import linear
 
+# Create a logger and set the environment variable
+logger = get_logger("LinearFilterApp", log_level=DEFAULT_LOG_LEVEL)
 
-class RGBFilterApp(QMainWindow):
-    """RGB linear filter GUI application.
+
+class LinearFilterApp(QMainWindow):
+    """Linear filter GUI application.
 
     Provides an interactive interface to load an image, apply a linear
     combination of its color channels, and visualize the resulting filtered
@@ -82,8 +90,55 @@ class RGBFilterApp(QMainWindow):
     mask : numpy.ndarray
         Boolean mask where ``True`` indicates pixel values within the chosen
         threshold range.
-    ch1_value, ch2_value, ch3_value : PySide6.QtWidgets.QLabel
-        Labels that display the current scaling factors for the three channels.
+    fsdb_path : str | Path
+        Path to the FSDB database.
+    db : FSDB or None
+        Database connection instance.
+    scan_ids_list : list of str
+        List of scan identifiers loaded from the database.
+    images_list : list
+        List of image files in the current scan.
+    current_scan : Scan or None
+        Currently selected scan object.
+    ch1_value, ch2_value, ch3_value : QDoubleSpinBox
+        Spin boxes that display and allow precise entry of the scaling factors
+        for the three channels.
+    ch1_slider, ch2_slider, ch3_slider : QSlider
+        Sliders controlling the weighting of each channel (0–100).
+    ch1_label, ch2_label, ch3_label : QLabel
+        Labels identifying each channel (change with color space).
+    color_space_combo : QComboBox
+        Dropdown to select the active color space (RGB, HSV, YCbCr).
+    cs_help_button : QPushButton
+        Button that opens the color space help dialog.
+    min_threshold_spinbox : QDoubleSpinBox
+        Spin box for the minimum threshold value.
+    max_threshold_spinbox : QDoubleSpinBox
+        Spin box for the maximum threshold value.
+    dilation_spinbox : QDoubleSpinBox
+        Spin box for the number of binary dilation iterations.
+    export_button : QPushButton
+        Button to export current parameters to ``local_config.toml``.
+    search_box : QLineEdit
+        Text field to filter the scan dropdown.
+    scan_dropdown : QComboBox
+        Dropdown listing all available scans.
+    image_slider : QSlider
+        Slider to pick an image from the current scan.
+    image_index_spinbox : QDoubleSpinBox
+        Spin box showing the current image index (1‑based) out of the total.
+    figure : matplotlib.figure.Figure
+        Matplotlib figure holding the three sub‑plots.
+    canvas : FigureCanvas
+        Matplotlib canvas embedded in the Qt window.
+    toolbar : NavigationToolbar
+        Matplotlib navigation toolbar (pan, zoom, home, save).
+    _load_image_timer : QTimer
+        Single‑shot timer (300 ms) that triggers image loading after the
+        slider stops changing.
+    _process_image_timer : QTimer
+        Single‑shot timer (300 ms) that triggers filter processing after
+        any parameter change.
     """
 
     def __init__(self, fsdb_path: str | Path, scan_id: str | None):
@@ -148,10 +203,9 @@ class RGBFilterApp(QMainWindow):
             self.db = FSDB(self.fsdb_path, no_auth=True)
             self.db.connect()
             self.scan_ids_list = self.db.list_scans(owner_only=False)
-            print(self.scan_ids_list)
-            print(f"Loaded {len(self.scan_ids_list)} scans from the FSDB")
+            logger.info(f"Loaded {len(self.scan_ids_list)} scans from the FSDB")
         except Exception as e:
-            print(f"Error connecting to database: {e}")
+            logger.error(f"Error connecting to database: {e}")
             self.scan_ids_list = []
 
     def _update_scan_dropdown(self):
@@ -269,7 +323,11 @@ class RGBFilterApp(QMainWindow):
         self.ch1_slider.setToolTip(
             "Adjust the weighting of the first channel."
         )
-        self.ch1_value = QLabel("0.5")
+        self.ch1_value = QDoubleSpinBox()
+        self.ch1_value.setDecimals(2)
+        self.ch1_value.setRange(0.0, 1.0)
+        self.ch1_value.setSingleStep(0.01)
+        self.ch1_value.setValue(0.5)
         ch1_layout.addWidget(self.ch1_label)
         ch1_layout.addWidget(self.ch1_slider)
         ch1_layout.addWidget(self.ch1_value)
@@ -289,7 +347,11 @@ class RGBFilterApp(QMainWindow):
         self.ch2_slider.setToolTip(
             "Adjust the weighting of the second channel."
         )
-        self.ch2_value = QLabel("1.0")
+        self.ch2_value = QDoubleSpinBox()
+        self.ch2_value.setDecimals(2)
+        self.ch2_value.setRange(0.0, 1.0)
+        self.ch2_value.setSingleStep(0.01)
+        self.ch2_value.setValue(1.0)
         ch2_layout.addWidget(self.ch2_label)
         ch2_layout.addWidget(self.ch2_slider)
         ch2_layout.addWidget(self.ch2_value)
@@ -309,7 +371,11 @@ class RGBFilterApp(QMainWindow):
         self.ch3_slider.setToolTip(
             "Adjust the weighting of the third channel."
         )
-        self.ch3_value = QLabel("0.5")
+        self.ch3_value = QDoubleSpinBox()
+        self.ch3_value.setDecimals(2)
+        self.ch3_value.setRange(0.0, 1.0)
+        self.ch3_value.setSingleStep(0.01)
+        self.ch3_value.setValue(0.5)
         ch3_layout.addWidget(self.ch3_label)
         ch3_layout.addWidget(self.ch3_slider)
         ch3_layout.addWidget(self.ch3_value)
@@ -403,10 +469,13 @@ class RGBFilterApp(QMainWindow):
         # Connect signals
         self.ch1_slider.valueChanged.connect(self.update_ch1_value)
         self.ch1_slider.valueChanged.connect(self._process_image_timer.start)
+        self.ch1_value.valueChanged.connect(self._on_ch1_spinbox_changed)
         self.ch2_slider.valueChanged.connect(self.update_ch2_value)
         self.ch2_slider.valueChanged.connect(self._process_image_timer.start)
+        self.ch2_value.valueChanged.connect(self._on_ch2_spinbox_changed)
         self.ch3_slider.valueChanged.connect(self.update_ch3_value)
         self.ch3_slider.valueChanged.connect(self._process_image_timer.start)
+        self.ch3_value.valueChanged.connect(self._on_ch3_spinbox_changed)
         self.color_space_combo.currentTextChanged.connect(self._process_image_timer.start)
         self.min_threshold_spinbox.valueChanged.connect(self._process_image_timer.start)
         self.max_threshold_spinbox.valueChanged.connect(self._process_image_timer.start)
@@ -441,7 +510,7 @@ class RGBFilterApp(QMainWindow):
                 self._clear_display()
 
         except Exception as e:
-            print(f"Error loading scan '{scan_id}': {e}")
+            logger.error(f"Error loading scan '{scan_id}': {e}")
             self.images_list = []
             self.image_slider.setMaximum(0)
             self._update_image_label()
@@ -471,7 +540,7 @@ class RGBFilterApp(QMainWindow):
             self._image_path = image.path()
             self._load_image_timer.start()
         except Exception as e:
-            print(f"Error loading image at index {index}: {e}")
+            logger.error(f"Error loading image at index {index}: {e}")
 
     @Slot()
     def _load_image(self):
@@ -480,7 +549,7 @@ class RGBFilterApp(QMainWindow):
             self.load_image_from_path(self._image_path)
             self._update_image_label()
         except Exception as e:
-            print(f"Error loading image at index {int(self.image_index_spinbox.value())}: {e}")
+            logger.error(f"Error loading image at index {int(self.image_index_spinbox.value())}: {e}")
 
     def _update_image_label(self):
         """Update the image index label."""
@@ -514,6 +583,43 @@ class RGBFilterApp(QMainWindow):
         new_index = max(0, min(new_index, len(self.images_list) - 1))
         self.image_slider.setValue(new_index)
 
+    def _import_parameters(self):
+        """import current parameters from local_config.toml file, if any."""
+        config_path = self.current_scan.path() / "local_config.toml"
+        try:
+            with open(config_path, "rb") as f:
+                existing_config = tomlkit.load(f)
+        except Exception as e:
+            existing_config = {}
+
+        mask_cfg = existing_config.get("Masks")
+        if not mask_cfg:
+            return  # nothing to load
+
+        logger.info("Found a local_config.toml file, loading previous parameters...")
+        # - Make sure we have a list of three float coefficients
+        params = mask_cfg.get("parameters", [])
+        if isinstance(params, str):
+            # Stored as a string like "[0.5, 1.0, 0.5]"
+            params = [float(v) for v in params.strip("[]").split(",")]
+        elif isinstance(params, list):
+            # Ensure every element is a float (it may be an int)
+            params = [float(v) for v in params]
+
+        # - Populate the UI widgets
+        # colour‑space selector
+        self.color_space_combo.setCurrentText(mask_cfg.get("colorspace", "RGB"))
+
+        # sliders expect values in the range 0–100
+        self.ch1_slider.setValue(int(params[0] * 100))
+        self.ch2_slider.setValue(int(params[1] * 100))
+        self.ch3_slider.setValue(int(params[2] * 100))
+
+        # thresholds and dilation
+        self.min_threshold_spinbox.setValue(mask_cfg.get("min_threshold", 0.0))
+        self.max_threshold_spinbox.setValue(mask_cfg.get("max_threshold", 1.0))
+        self.dilation_spinbox.setValue(mask_cfg.get("dilation", 0))
+
     def _export_parameters(self):
         """Export current parameters to local_config.toml file."""
         config_path = self.current_scan.path() / "local_config.toml"
@@ -521,7 +627,6 @@ class RGBFilterApp(QMainWindow):
             with open(config_path, "rb") as f:
                 existing_config = tomlkit.load(f)
         except Exception as e:
-            print(f"Warning: Could not read existing config: {e}")
             existing_config = {}
 
         try:
@@ -538,15 +643,16 @@ class RGBFilterApp(QMainWindow):
                 "max_threshold": self.max_threshold_spinbox.value(),
                 "dilation": self.dilation_spinbox.value(),
             }
-
+            # Convert the list of coefficients to a string
+            existing_config["Masks"]["parameters"] = str(existing_config["Masks"]["parameters"])
             # Write to file
             with open(config_path, "w") as f:
                 tomlkit.dump(existing_config, f)
 
-            print(f"Parameters exported to {config_path}")
+            logger.info(f"Parameters exported to {config_path}")
 
         except Exception as e:
-            print(f"Error exporting parameters: {e}")
+            logger.error(f"Error exporting parameters: {e}")
 
     def _on_scroll(self, event):
         """Zoom all three axes with the mouse wheel."""
@@ -635,7 +741,9 @@ class RGBFilterApp(QMainWindow):
             Slider position in the range ``0``–``100``.
             The displayed coefficient is ``value / 100``.
         """
-        self.ch1_value.setText(f"{value / 100:.2f}")
+        self.ch1_value.blockSignals(True)
+        self.ch1_value.setValue(value / 100.0)
+        self.ch1_value.blockSignals(False)
 
     def update_ch2_value(self, value):
         """Refresh the displayed value for channel 2.
@@ -645,7 +753,9 @@ class RGBFilterApp(QMainWindow):
         value : int
             Slider position in the range ``0``–``100``.
         """
-        self.ch2_value.setText(f"{value / 100:.2f}")
+        self.ch2_value.blockSignals(True)
+        self.ch2_value.setValue(value / 100.0)
+        self.ch2_value.blockSignals(False)
 
     def update_ch3_value(self, value):
         """Refresh the displayed value for channel 3.
@@ -656,7 +766,33 @@ class RGBFilterApp(QMainWindow):
             Slider position in the range ``0``–``100``.
 
         """
-        self.ch3_value.setText(f"{value / 100:.2f}")
+        self.ch3_value.blockSignals(True)
+        self.ch3_value.setValue(value / 100.0)
+        self.ch3_value.blockSignals(False)
+
+    @Slot()
+    def _on_ch1_spinbox_changed(self, value):
+        """Update the channel 1 slider when the spinbox value changes."""
+        self.ch1_slider.blockSignals(True)
+        self.ch1_slider.setValue(int(value * 100))
+        self.ch1_slider.blockSignals(False)
+        self._process_image_timer.start()
+
+    @Slot()
+    def _on_ch2_spinbox_changed(self, value):
+        """Update the channel 2 slider when the spinbox value changes."""
+        self.ch2_slider.blockSignals(True)
+        self.ch2_slider.setValue(int(value * 100))
+        self.ch2_slider.blockSignals(False)
+        self._process_image_timer.start()
+
+    @Slot()
+    def _on_ch3_spinbox_changed(self, value):
+        """Update the channel 3 slider when the spinbox value changes."""
+        self.ch3_slider.blockSignals(True)
+        self.ch3_slider.setValue(int(value * 100))
+        self.ch3_slider.blockSignals(False)
+        self._process_image_timer.start()
 
     def load_image_from_path(self, file_path: str) -> None:
         """Load an image from an absolute path (used for CLI start‑up).
@@ -679,7 +815,7 @@ class RGBFilterApp(QMainWindow):
                 # Process image immediately after loading
                 self.process_image()
             except Exception as e:
-                print(f"Error loading image from path '{file_path}': {e}")
+                logger.error(f"Error loading image from path '{file_path}': {e}")
 
     def process_image(self):
         """Apply the linear filter and threshold, then display results.
@@ -822,7 +958,7 @@ def main(fsdb_path: str | None = None, scan_id: str = None):
         raise ValueError(f"Provide a valid path to an FSDB folder or set 'ROMI_DB' environment variable.")
 
     app = QApplication(sys.argv)
-    window = RGBFilterApp(fsdb_path, scan_id)
+    window = LinearFilterApp(fsdb_path, scan_id)
 
     window.show()
     sys.exit(app.exec())
