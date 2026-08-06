@@ -39,8 +39,9 @@ import click
 import numpy as np
 import tomlkit
 from PIL import Image
-from PySide6.QtCore import Qt, Slot
 from PySide6.QtCore import QTimer
+from PySide6.QtCore import Qt
+from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QApplication
 from PySide6.QtWidgets import QComboBox
 from PySide6.QtWidgets import QDoubleSpinBox
@@ -54,18 +55,23 @@ from PySide6.QtWidgets import QSizePolicy
 from PySide6.QtWidgets import QSlider
 from PySide6.QtWidgets import QVBoxLayout
 from PySide6.QtWidgets import QWidget
-
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 from plantdb.commons.fsdb.core import FSDB
+from plantdb.commons.log import DEFAULT_LOG_LEVEL
+from plantdb.commons.log import LOG_LEVELS
+from plantdb.commons.log import get_logger
 
 from plant3dvision.proc2d import dilation
 from plant3dvision.proc2d import linear
 
+# Create a logger and set the environment variable
+logger = get_logger("LinearFilterApp", log_level=DEFAULT_LOG_LEVEL)
 
-class RGBFilterApp(QMainWindow):
-    """RGB linear filter GUI application.
+
+class LinearFilterApp(QMainWindow):
+    """Linear filter GUI application.
 
     Provides an interactive interface to load an image, apply a linear
     combination of its color channels, and visualize the resulting filtered
@@ -128,6 +134,9 @@ class RGBFilterApp(QMainWindow):
         if scan_id and scan_id in self.scan_ids_list:
             self.scan_dropdown.setCurrentIndex(self.scan_ids_list.index(scan_id))
             self._load_scan(scan_id)
+        else:
+            scan_id = self.scan_ids_list[self.scan_dropdown.currentIndex()]
+            self._load_scan(scan_id)
 
     def _init_database(self):
         """Initialize the database connection and load scan list."""
@@ -135,10 +144,9 @@ class RGBFilterApp(QMainWindow):
             self.db = FSDB(self.fsdb_path, no_auth=True)
             self.db.connect()
             self.scan_ids_list = self.db.list_scans(owner_only=False)
-            print(self.scan_ids_list)
-            print(f"Loaded {len(self.scan_ids_list)} scans from the FSDB")
+            logger.info(f"Loaded {len(self.scan_ids_list)} scans from the FSDB")
         except Exception as e:
-            print(f"Error connecting to database: {e}")
+            logger.error(f"Error connecting to database: {e}")
             self.scan_ids_list = []
 
     def initUI(self):
@@ -410,9 +418,10 @@ class RGBFilterApp(QMainWindow):
             # Load first image
             if self.images_list:
                 self._load_image_from_slider(0)
+            self._import_parameters()
 
         except Exception as e:
-            print(f"Error loading scan '{scan_id}': {e}")
+            logger.error(f"Error loading scan '{scan_id}': {e}")
             self.images_list = []
             self.image_slider.setMaximum(0)
             self._update_image_label()
@@ -428,7 +437,7 @@ class RGBFilterApp(QMainWindow):
             self._image_path = image.path()
             self._load_image_timer.start()
         except Exception as e:
-            print(f"Error loading image at index {index}: {e}")
+            logger.error(f"Error loading image at index {index}: {e}")
 
     @Slot()
     def _load_image(self):
@@ -437,7 +446,7 @@ class RGBFilterApp(QMainWindow):
             self.load_image_from_path(self._image_path)
             self._update_image_label()
         except Exception as e:
-            print(f"Error loading image at index {int(self.image_index_spinbox.value())}: {e}")
+            logger.error(f"Error loading image at index {int(self.image_index_spinbox.value())}: {e}")
 
     def _update_image_label(self):
         """Update the image index label."""
@@ -471,6 +480,43 @@ class RGBFilterApp(QMainWindow):
         new_index = max(0, min(new_index, len(self.images_list) - 1))
         self.image_slider.setValue(new_index)
 
+    def _import_parameters(self):
+        """import current parameters from local_config.toml file, if any."""
+        config_path = self.current_scan.path() / "local_config.toml"
+        try:
+            with open(config_path, "rb") as f:
+                existing_config = tomlkit.load(f)
+        except Exception as e:
+            existing_config = {}
+
+        mask_cfg = existing_config.get("Masks")
+        if not mask_cfg:
+            return  # nothing to load
+
+        logger.info("Found a local_config.toml file, loading previous parameters...")
+        # - Make sure we have a list of three float coefficients
+        params = mask_cfg.get("parameters", [])
+        if isinstance(params, str):
+            # Stored as a string like "[0.5, 1.0, 0.5]"
+            params = [float(v) for v in params.strip("[]").split(",")]
+        elif isinstance(params, list):
+            # Ensure every element is a float (it may be an int)
+            params = [float(v) for v in params]
+
+        # - Populate the UI widgets
+        # colour‑space selector
+        self.color_space_combo.setCurrentText(mask_cfg.get("colorspace", "RGB"))
+
+        # sliders expect values in the range 0–100
+        self.ch1_slider.setValue(int(params[0] * 100))
+        self.ch2_slider.setValue(int(params[1] * 100))
+        self.ch3_slider.setValue(int(params[2] * 100))
+
+        # thresholds and dilation
+        self.min_threshold_spinbox.setValue(mask_cfg.get("min_threshold", 0.0))
+        self.max_threshold_spinbox.setValue(mask_cfg.get("max_threshold", 1.0))
+        self.dilation_spinbox.setValue(mask_cfg.get("dilation", 0))
+
     def _export_parameters(self):
         """Export current parameters to local_config.toml file."""
         config_path = self.current_scan.path() / "local_config.toml"
@@ -478,7 +524,6 @@ class RGBFilterApp(QMainWindow):
             with open(config_path, "rb") as f:
                 existing_config = tomlkit.load(f)
         except Exception as e:
-            print(f"Warning: Could not read existing config: {e}")
             existing_config = {}
 
         try:
@@ -495,15 +540,16 @@ class RGBFilterApp(QMainWindow):
                 "max_threshold": self.max_threshold_spinbox.value(),
                 "dilation": self.dilation_spinbox.value(),
             }
-
+            # Convert the list of coefficients to a string
+            existing_config["Masks"]["parameters"] = str(existing_config["Masks"]["parameters"])
             # Write to file
             with open(config_path, "w") as f:
                 tomlkit.dump(existing_config, f)
 
-            print(f"Parameters exported to {config_path}")
+            logger.info(f"Parameters exported to {config_path}")
 
         except Exception as e:
-            print(f"Error exporting parameters: {e}")
+            logger.error(f"Error exporting parameters: {e}")
 
     def _on_scroll(self, event):
         """Zoom all three axes with the mouse wheel."""
@@ -636,7 +682,7 @@ class RGBFilterApp(QMainWindow):
                 # Process image immediately after loading
                 self.process_image()
             except Exception as e:
-                print(f"Error loading image from path '{file_path}': {e}")
+                logger.error(f"Error loading image from path '{file_path}': {e}")
 
     def process_image(self):
         """Apply the linear filter and threshold, then display results.
@@ -779,7 +825,7 @@ def main(fsdb_path: str | None = None, scan_id: str = None):
         raise ValueError(f"Provide a valid path to an FSDB folder or set 'ROMI_DB' environment variable.")
 
     app = QApplication(sys.argv)
-    window = RGBFilterApp(fsdb_path, scan_id)
+    window = LinearFilterApp(fsdb_path, scan_id)
 
     window.show()
     sys.exit(app.exec())
