@@ -841,7 +841,7 @@ class Colmap(RomiTask):
     alignment_max_error = luigi.IntParameter(default=10)
     align_pcd = luigi.BoolParameter(default=True)
     camera_model = luigi.Parameter(default="SIMPLE_RADIAL")
-    bounding_box = luigi.DictParameter(default=None)
+    bounding_box = luigi.DictParameter(default={})
     cli_args = luigi.DictParameter(default={})
     circular_match_window = luigi.IntParameter(default=2)
 
@@ -1032,7 +1032,7 @@ class Colmap(RomiTask):
             self.set_camera_params(self.intrinsic_calibration_scan_id, 'intrinsic')
 
         # Determine the bounding box - either from workspace metadata or manual definition
-        if self.bounding_box is None:
+        if self.bounding_box == {}:
             logger.info("Did not get a manually defined cropping bounding-box...")
             bounding_box = self._workspace_as_bounding_box()
             if bounding_box is None:
@@ -1147,7 +1147,7 @@ class Colmap(RomiTask):
         except KeyError:
             path_type = ""
 
-        if path_type == "Circle":
+        if path_type == "Circle" and self.single_camera:
             kp_counts = pd.read_csv(outfile.path())
             match_fig_fpath = f"{self.output().get().path()}/circular_match_heatmap.png"
             colmap_matches_fig(kp_counts, self.scan_id, filepath=match_fig_fpath)
