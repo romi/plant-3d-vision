@@ -1593,7 +1593,11 @@ class ColmapRunner(object):
             out = ''
             # Append the output of the COLMAP process to the log file:
             with open(self.log_file, mode="a") as f:
-                subprocess.run(process, check=True, stdout=f)
+                result = subprocess.run(process, stdout=f, stderr=subprocess.PIPE)
+                if result.returncode != 0:
+                    raise subprocess.CalledProcessError(
+                        result.returncode, process, stderr=result.stderr
+                    )
         else:
             # Run the subprocess and catch its output to return it decoded
             out = subprocess.run(process, capture_output=True)

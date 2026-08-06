@@ -30,9 +30,15 @@ else
 fi
 
 
-# Run the configuration only if the `.runner` configuration file is missing -> avoid failure on container restart
-if [ ! -f .runner ]; then
-    # Configure the GitHub Actions runner
+# Run the configuration only if the `.runner` configuration file is missing or binaries are missing -> avoid failure on container restart
+if [ -f .runner ] && [ -f ./bin/Runner.Listener ]; then
+    echo "Skipping runner configuration: '.runner' file detected and binaries present."
+else
+    # Remove stale .runner if it exists but binaries are missing
+    if [ -f .runner ]; then
+        echo "Runner binaries missing but .runner exists. Re-configuring..."
+        rm -f .runner
+    fi
     echo "Configuring GitHub Actions runner..."
     ./config.sh \
         --unattended \
@@ -42,8 +48,6 @@ if [ ! -f .runner ]; then
         --labels "${GITHUB_RUNNER_LABELS:-self-hosted,linux,docker,x64,gpu}" \
         --work "${RUNNER_WORK_DIR}" \
         --replace
-else
-    echo "Skipping runner configuration: '.runner' file detected."
 fi
 
 
