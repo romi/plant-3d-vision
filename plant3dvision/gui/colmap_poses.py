@@ -11,7 +11,7 @@ import sys
 from os.path import join
 from pathlib import Path
 
-import toml
+import tomlkit
 
 from plant3dvision.camera import format_camera_params
 from plant3dvision.tasks.colmap import compute_colmap_poses_from_images_json
@@ -68,7 +68,7 @@ def main(dataset_path):
         cameras = json.load(camera_json)
 
     # - Get some hardware metadata:
-    scan_cfg = toml.load(join(current_scan.path(), SCAN_TOML))
+    scan_cfg = tomlkit.load(join(current_scan.path(), SCAN_TOML))
     hardware = scan_cfg['Scan']['metadata']['hardware']
     hardware_str = f"sensor: {hardware.get('sensor', None)}\n"
 

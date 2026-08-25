@@ -29,18 +29,29 @@ else
     echo "WARNING: GPU access check failed. Ensure nvidia-container-toolkit is configured."
 fi
 
-# Configure the GitHub Actions runner
-echo "Configuring GitHub Actions runner..."
-./config.sh \
-    --unattended \
-    --url "${GITHUB_RUNNER_URL}" \
-    --token "${GITHUB_RUNNER_TOKEN}" \
-    --name "${GITHUB_RUNNER_NAME:-romi-github-runner}" \
-    --labels "${GITHUB_RUNNER_LABELS:-self-hosted,linux,docker,x64,gpu}" \
-    --replace
+
+# Run the configuration only if the `.runner` configuration file is missing or binaries are missing -> avoid failure on container restart
+if [ -f .runner ] && [ -f ./bin/Runner.Listener ]; then
+    echo "Skipping runner configuration: '.runner' file detected and binaries present."
+else
+    # Remove stale .runner if it exists but binaries are missing
+    if [ -f .runner ]; then
+        echo "Runner binaries missing but .runner exists. Re-configuring..."
+        rm -f .runner
+    fi
+    echo "Configuring GitHub Actions runner..."
+    ./config.sh \
+        --unattended \
+        --url "${GITHUB_RUNNER_URL}" \
+        --token "${GITHUB_RUNNER_TOKEN}" \
+        --name "${GITHUB_RUNNER_NAME:-romi-github-runner}" \
+        --labels "${GITHUB_RUNNER_LABELS:-self-hosted,linux,docker,x64,gpu}" \
+        --work "${RUNNER_WORK_DIR}" \
+        --replace
+fi
+
 
 # Ensure Buildx can write its certs
-echo "BUILDX_HOME=${BUILDX_HOME}"
 mkdir -p "${BUILDX_HOME}/certs"
 chown -R ubuntu:ubuntu "${BUILDX_HOME}"
 chmod 700 "${BUILDX_HOME}/certs"

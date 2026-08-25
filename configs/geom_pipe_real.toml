@@ -11,40 +11,29 @@ single_camera = true  # Default: true
 qc_check = true
 # Median absolute deviation factor to detect outlier camera pose
 mad_factor = 3.0
-# The list of metrics to use to detect the outliers using the MAD method.
-metrics = '["xy", "z", "pan", "roll"]'
-# Maximum distance to CNC pose to validate COLMAP pose estimation
-distance_threshold = 3.0  # Default: 3.0mm
-# Maximum distance to fixed CNC pose to validate COLMAP pose estimation
-fixed_distance_threshold = 1.0  # Default: 1.0mm
-# Maximum angular distance to CNC pose to validate COLMAP pose estimation
-angle_threshold = 5.0  # Default: 5.0°
-# Maximum angular distance to fixed CNC pose to validate COLMAP pose estimation
-fixed_angle_threshold = 3.5  # Default: 3.5°
+# List of metrics to use to detect the outliers using the MAD method.
+metrics = '["xy", "z", "pan"]'
 # Maximum blind angle tolerated for camera pose quality control
 max_blind_angle = 20.0  # Default: 20.0 (degrees)
 # Number of retries if the task fails
 retry_count = 10  # Default: 10
 
 [Undistort]
-# The upstream task that provides the input files
+# Upstream task that provides the input files
 upstream_task = "ImagesFilesetExists"  # Default: "ImagesFilesetExists"
 # Query to filter files from upstream task by metadata
-query = "{}"  # Default: "{}"  (empty dictionary, no filtering)
-# Source of the camera model
-# Options: 'Colmap', 'IntrinsicCalibration', 'ExtrinsicCalibration'
-camera_model_src = "Colmap"  # Default: "Colmap"
+query = "{\"channel\":\"rgb\", \"pose_estimation\":\"correct\"}"  # RGB images with a valid COLMAP pose
 
 [Masks]
-# The upstream task that provides input images
+# Upstream task that provides input images
 # Options: "Undistort", "ImagesFilesetExists"
 upstream_task = "Undistort"  # Default: "Undistort"
 # Query to filter files from upstream task by metadata
-query = "{\"channel\":\"rgb\"}"  # Default: "{\"channel\":\"rgb\"}"  (only RGB images)
-# The type of image transformation algorithm to use prior to masking
+query = "{\"channel\":\"rgb\"}"  # Default: "{\"channel\":\"rgb\"}" (only RGB images)
+# Type of image transformation algorithm to use prior to masking
 # Options: "linear" (linear combination of RGB channels), "excess_green" (excess green index)
 method = "linear"  # Default: "linear"
-# The colorspace to use for the filtering
+# Colorspace to use for the filtering
 # Options: "RGB", "HSV", "YCbCr"
 colorspace = "RGB"  # Default: "RGB"
 # Linear coefficients to apply to each channel of the original image in the selected colorspace
@@ -58,7 +47,7 @@ max_threshold = 1.0 # Default: 0.4
 # Task that provides the masked images as input
 upstream_task = "Masks"  # Default: "Masks"
 # Query to filter files from upstream task by metadata
-# Default: "{}"  (empty dictionary, no filtering)
+# Default: "{}" (empty dictionary, no filtering)
 # query = "{\"pose_estimation\":\"correct\"}"  # mask with a valid COLMAP pose if `type="carving"`
 query = "{}" # all masks may be used with `type="averaging"`, even those with incorect pose estimates by Colmap
 # Size of the voxel to reconstruct, defines the resolution of the 3D array
@@ -70,7 +59,7 @@ method = "averaging"  # Default: "averaging"
 [Voxels.bounding_box]
 # 3D bounding box defining the region of interest for reconstruction
 # Default: None (uses the entire volume)
-# The values works with the 'real_plant' test data
+# These values work with the 'real_plant' test data
 x = [330, 450]
 y = [300, 430]
 z = [-125, 100]
@@ -78,7 +67,7 @@ z = [-125, 100]
 [PointCloud]
 # Task that provides the voxel array as input
 upstream_task = "Voxels"  # Default: "Voxels"
-# The algorithm to use to compute the pointcloud
+# Algorithm to use to compute the pointcloud
 algorithm = "marching-cubes"  # Default: "marching-cubes"
 # Threshold for the number of missing images allowed in the reconstruction
 missing_images_threshold = 2  # Default: 2
@@ -90,7 +79,7 @@ mc_level = 0.5
 [TriangleMesh]
 # Task that provides the point cloud as input
 upstream_task = "PointCloud"  # Default: "PointCloud"
-# The library to use for meshing the point cloud
+# Library to use for meshing the point cloud
 # Options: 'open3d', 'cgal'
 library = "open3d"  # Default: "open3d"
 # Filtering method to apply to the obtained triangle mesh
@@ -126,18 +115,11 @@ node_sampling_dist = 10.0  # Default: 10.0
 organ_type = "fruit"  # Default: "fruit"
 
 [PlantMetrics]
-# The upstream task that provides the input files
+# Upstream task that provides the input files
 upstream_task = "ImagesFilesetExists"  # Default: "ImagesFilesetExists"
-# The list of matrics to compute
+# List of metrics to compute
 metrics = ["stem_length", "q_hull_volume"]
 
-# --------------- Evaluation --------------- #
-[AnglesAndInternodesEvaluation]
-upstream_task = "AnglesAndInternodes"
-ground_truth = "ImagesFilesetExists"  # "ImagesFilesetExists" with manual measures / "VirtualPlantObj" with computer generated plants
-free_ends = 0.4
-free_ends_eps = 1e-2
-
 [Clean]
-# Whether NOT to ask for confirmation prior to cleaning a dataset
+# Whether NOT to ask for confirmation before cleaning a dataset
 no_confirm = true  # Default: false

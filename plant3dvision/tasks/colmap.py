@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import csv
 import json
 import os
 import re
 import sys
+import tempfile
 from os.path import join
 from os.path import splitext
 from pathlib import Path
@@ -14,7 +16,8 @@ from typing import get_args
 
 import luigi
 import numpy as np
-import toml
+import pandas as pd
+import tomlkit
 from matplotlib.lines import Line2D
 from scipy.spatial.distance import euclidean
 
@@ -24,14 +27,20 @@ from plant3dvision.camera import get_camera_kwargs_from_images_metadata
 from plant3dvision.camera import get_colmap_cameras_from_calib_scan
 from plant3dvision.colmap import COLMAP_EXE
 from plant3dvision.colmap import ColmapRunner
+from plant3dvision.colmap import colmap_keypoints_per_image
+from plant3dvision.colmap import colmap_matches_fig
+from plant3dvision.colmap import colmap_matches_per_pair
 from plant3dvision.colmap import estimate_camera_pose
 from plant3dvision.filenames import COLMAP_CAMERAS_ID
 from plant3dvision.filenames import COLMAP_DENSE_ID
 from plant3dvision.filenames import COLMAP_IMAGES_ID
+from plant3dvision.filenames import COLMAP_KEYPOINTS_ID
+from plant3dvision.filenames import COLMAP_MATCHES_ID
 from plant3dvision.filenames import COLMAP_POINTS_ID
 from plant3dvision.filenames import COLMAP_SPARSE_ID
 from plant3dvision.utils import angular_distance
 from plant3dvision.utils import mad_outlier
+from plant3dvision.utils import mad_threshold
 from plantdb.commons import io
 from plantdb.commons.fsdb.core import File
 from plantdb.commons.fsdb.core import Scan
@@ -49,7 +58,7 @@ Axes = Annotated[str, re.compile(r'^[xyzptr]*$', re.IGNORECASE)]
 DEF_AXES = 'xyzptr'
 #: Valid metrics values for image pose quality control
 Metrics = Literal["xy", "z", "pan", "tilt", "roll"]
-ALLOWED_METRICS: set[str] = set(get_args(Metrics))   # {'xy', 'z', 'pan', 'tilt', 'roll'}
+ALLOWED_METRICS: set[str] = set(get_args(Metrics))  # {'xy', 'z', 'pan', 'tilt', 'roll'}
 #: Default metrics for image pose quality control
 DEF_METRICS = ["xy", "z", "pan", "roll"]
 
@@ -555,7 +564,7 @@ def get_scan_config(scan_path: str | Path) -> dict:
     if os.path.isfile(path):
         try:
             with open(path, "r") as f:
-                scan_config = toml.load(f)
+                scan_config = tomlkit.load(f)
         except toml.TomlDecodeError:
             logger.error(f"Could not load scan config from '{path}'!")
             raise
@@ -599,7 +608,7 @@ def check_scan_parameters(scan_to_calibrate: Scan, calibration_scan: Scan) -> bo
     >>> db.disconnect()
 
     """
-    import toml
+    import tomlkit
     # Load acquisition config file for calibration scan:
     calib_scan_cfg = get_scan_config(calibration_scan.path())
     # Load acquisition config file for scan to calibrate:
@@ -654,10 +663,10 @@ def check_colmap_cfg(current_cfg: dict[str, Any], current_scan: Scan, calibratio
     calibration_scan : plantdb.commons.db.Scan
         Calibration scan dataset to use (for camera poses).
     """
-    import toml
+    import tomlkit
     calib_backup_cfg = join(calibration_scan.path(), 'pipeline.toml')
     with open(calib_backup_cfg, 'r') as f:
-        calib_scan_cfg = toml.load(f)
+        calib_scan_cfg = tomlkit.load(f)
     # Inform whether the backup config was found or not
     if calib_scan_cfg == {}:
         logger.critical(f"Could not obtain valid backup config from {calibration_scan.id}!")
@@ -701,7 +710,7 @@ class Colmap(RomiTask):
     Parameters
     ----------
     upstream_task : luigi.TaskParameter, optional
-        Task upstream of this task. Defaults to ``ImagesFilesetExists``.
+        The upstream task. Defaults to ``ImagesFilesetExists``.
     scan_id : luigi.Parameter, optional
         The dataset ID (scan name) to use to create the ``FilesetTarget``.
         If unspecified (default), the current active scan will be used.
@@ -715,9 +724,10 @@ class Colmap(RomiTask):
         Default to ``plant3dvision.colmap.COLMAP_EXE``, that is the `'COLMAP_EXE'` environment variable
         or ``'plant3dvision.colmap.DEFAULT_COLMAP'``
     matcher : luigi.Parameter, optional
-        Type of matcher to use, either "exhaustive" or "sequential".
+        Type of matcher to use, either "custom", "exhaustive", "sequential" or "spatial".
         *Exhaustive matcher* tries to match every other image.
         *Sequential matcher* tries to match successive image, this requires a sequential file name ordering.
+        *Custom matcher* tries to match N images on a sliding window, usefull for the circular path.
         Defaults to "exhaustive".
     use_gpu : luigi.BoolParameter
         Whether to use GPU for feature extraction (feature_extractor) and matching (*_matcher).
@@ -733,9 +743,9 @@ class Colmap(RomiTask):
         Whether to "world-align" (scale and geo-reference) the reconstructed model using 'calibrated' or 'estimated' poses.
         Default to ``True``.
     camera_model : luigi.Parameter, optional
-        If no intrinsic or extrinsic calibration scan is defined, this select the camera model to estimate by COLMAP.
+        If no intrinsic or extrinsic calibration scan is defined, this selects the camera model to estimate by COLMAP.
         Valid models are in {'SIMPLE_RADIAL', 'RADIAL', 'OPENCV'}.
-        If an ``intrinsic_calibration_scan_id`` is specified, this select the intrinsic parameters to set in COLMAP.
+        If an ``intrinsic_calibration_scan_id`` is specified, this selects the intrinsic parameters to set in COLMAP.
         If an ``extrinsic_calibration_scan_id`` is specified and `use_calibration_camera` is ``True``, this does nothing!
         Defaults to "SIMPLE_RADIAL" camera model.
     bounding_box : luigi.DictParameter, optional
@@ -745,43 +755,46 @@ class Colmap(RomiTask):
         Defaults to NO bounding-box.
     cli_args : luigi.DictParameter, optional
         Dictionary of arguments to pass to colmap command lines, empty by default.
+    circular_match_window : luigi.IntParameter
+        Number of neighbors to match on each side when manually defining image pairs for circular
+        sequential matching. Used when `matcher='custom'`. Defaults to ``2``.
     intrinsic_calibration_scan_id : luigi.Parameter, optional
         If set, get the intrinsic camera parameters from this scan dataset.
         These intrinsic parameters will be set in COLMAP ``feature_extractor`` and will not be refined by ``mapper``.
-        Using this requires to set the ``camera_model`` attribute, in order to select one model from those estimated.
-        Obviously, it requires to run the ``IntrinsicCalibration`` task on this dataset prior to using it here.
+        Using this requires setting the ``camera_model`` attribute, to select one model from those estimated.
+        It requires to run the ``IntrinsicCalibration`` task on this dataset prior to using it here.
         If ``extrinsic_calibration_scan_id`` is specified this does nothing!
         Defaults to NO intrinsic calibration scan.
     extrinsic_calibration_scan_id : luigi.Parameter, optional
         If set, get the extrinsic camera parameters from this scan dataset.
         These extrinsic parameter will be set in COLMAP ``poses.txt`` file using the estimated "calibrated_poses" metadata.
-        Obviously, it requires to run the ``ExtrinsicCalibration`` task on this dataset prior to using it here.
+        It requires to run the ``ExtrinsicCalibration`` task on this dataset prior to using it here.
         If set and ``use_calibration_camera`` is ``True``, also get the intrinsic camera parameters from this scan dataset.
-        That case does NOT require to set the ``camera_model`` attribute, as they will be in "OPENCV" format.
+        That case does NOT require setting the ``camera_model`` attribute, as they will be in "OPENCV" format.
         Defaults to NO extrinsic calibration scan.
     use_calibration_camera : luigi.BoolParameter, optional
         If ``True``, use the intrinsic parameters from ``extrinsic_calibration_scan_id``.
         Else, estimate the intrinsic parameters automatically.
     qc_check : float, optional
-        Whether to perform the verification of the estimated camera extrinsic
+        Whether to perform the verification of the estimated camera extrinsic.
     mad_factor : float, optional
-        Median absolute deviation factor to detect outlier camera pose
+        Median absolute deviation factor to detect outlier camera pose.
     metrics : Metrics, optional
         The list of metrics to use to detect the outliers using the Median Absolute Deviation method.
         Valid values are in ``Metrics``, that is ``["xy", "z", "pan", "tilt", "roll"]``.
         If ``None``, the default set ``["xy", "z", "pan", "roll"]`` is used.
     distance_threshold : float, optional
-        Maximum distance to CNC pose to validate COLMAP pose estimation
+        Maximum distance to CNC pose to validate COLMAP pose estimation.
     fixed_distance_threshold : float, optional
-        Maximum distance to fixed CNC pose to validate COLMAP pose estimation
+        Maximum distance to fixed CNC pose to validate COLMAP pose estimation.
     angle_threshold : float, optional
-        Maximum angular distance to CNC pose to validate COLMAP pose estimation
+        Maximum angular distance to CNC pose to validate COLMAP pose estimation.
     fixed_angle_threshold : float, optional
-        Maximum angular distance to fixed CNC pose to validate COLMAP pose estimation
+        Maximum angular distance to fixed CNC pose to validate COLMAP pose estimation.
     max_blind_angle : float, optional
-        Maximum allowed blind angle for camera poses, defaults to 20.0
+        Maximum allowed blind angle for camera poses, defaults to 20.0.
     retry_count : int, optional
-        Maximum number of retries allowed, defaults to 10
+        Maximum number of retries allowed, defaults to 10.
 
     Attributes
     ----------
@@ -797,17 +810,6 @@ class Colmap(RomiTask):
             - points3d.json: Reconstructed 3D points
             - sparse.ply: Sparse point cloud
             - dense.ply (optional): Dense point cloud if compute_dense is True
-
-    Notes
-    -----
-    This task requires COLMAP to be installed or available as a container.
-
-    For exhaustive matching, all image pairs are compared, which is suitable for datasets
-    with up to several hundred images.
-
-    For sequential matching, only consecutive frames are matched, which is suitable for
-    video or ordered image sequences. Sequential matching requires images to be named
-    in sequential order (e.g., image0001.jpg, image0002.jpg).
 
     See Also
     --------
@@ -839,8 +841,9 @@ class Colmap(RomiTask):
     alignment_max_error = luigi.IntParameter(default=10)
     align_pcd = luigi.BoolParameter(default=True)
     camera_model = luigi.Parameter(default="SIMPLE_RADIAL")
-    bounding_box = luigi.DictParameter(default=None)
+    bounding_box = luigi.DictParameter(default={})
     cli_args = luigi.DictParameter(default={})
+    circular_match_window = luigi.IntParameter(default=2)
 
     intrinsic_calibration_scan_id = luigi.Parameter(default="")
     extrinsic_calibration_scan_id = luigi.Parameter(default="")
@@ -1035,7 +1038,7 @@ class Colmap(RomiTask):
             self.set_camera_params(self.intrinsic_calibration_scan_id, 'intrinsic')
 
         # Determine the bounding box - either from workspace metadata or manual definition
-        if self.bounding_box is None:
+        if self.bounding_box == {}:
             logger.info("Did not get a manually defined cropping bounding-box...")
             bounding_box = self._workspace_as_bounding_box()
             if bounding_box is None:
@@ -1076,7 +1079,8 @@ class Colmap(RomiTask):
             bounding_box=bounding_box,
             multiple_cameras=not self.single_camera,
             colmap_exe=str(self.colmap_exe),
-            no_final_clean_up=bool(self.no_final_clean_up)
+            no_final_clean_up=bool(self.no_final_clean_up),
+            circular_match_window=self.circular_match_window
         )
 
         # Perform reconstruction and get results
@@ -1111,6 +1115,51 @@ class Colmap(RomiTask):
             outfile = self.output_file(log_path.stem)
             outfile.import_file(log_path)
 
+        # Export the image pair match list file if it exists
+        match_list = workdir / "match_list.txt"
+        if match_list.is_file():
+            outfile = self.output_file("match_list")
+            outfile.import_file(match_list)
+
+        db_path = Path(colmap_runner.colmap_workdir) / "database.db"
+        # - Export the number of keypoints found per image
+        kp_counts = colmap_keypoints_per_image(db_path)
+        outfile = self.output_file(COLMAP_KEYPOINTS_ID, create=True)
+        with tempfile.NamedTemporaryFile("w", suffix=".csv", newline="", encoding="utf-8") as file:
+            writer = csv.writer(file)
+            # Write header
+            writer.writerow(["Image_ID", "Nb_KeyPoints"])
+            # Write each key-value pair as a row
+            for key, value in kp_counts.items():
+                writer.writerow([key, value])
+            file.flush()
+            outfile.import_file(file.name)
+
+        # - Export the number of matches, the average & median descriptor distance for each image pair
+        stats = colmap_matches_per_pair(db_path)
+        outfile = self.output_file(COLMAP_MATCHES_ID, create=True)
+        with tempfile.NamedTemporaryFile("w", suffix=".csv", newline="", encoding="utf-8") as file:
+            writer = csv.writer(file)
+            # Write header
+            writer.writerow(["Image_ID", "Image_ID", "Nb_Matches", "Avg_Distance", "Median_Distance"])
+            # Write each key-value pair as a row
+            for key, value in stats.items():
+                writer.writerow([key[0], key[1], value[0], value[1], value[2]])
+            file.flush()
+            outfile.import_file(file.name)
+
+        scan_cfg = get_scan_config(self.output().get().path() / '..')
+        # Verify the scan path type when using max blind angle parameter
+        try:
+            path_type = scan_cfg['ScanPath']['class_name']
+        except KeyError:
+            path_type = ""
+
+        if path_type == "Circle" and self.single_camera:
+            kp_counts = pd.read_csv(outfile.path())
+            match_fig_fpath = f"{self.output().get().path()}/circular_match_heatmap.png"
+            colmap_matches_fig(kp_counts, self.scan_id, filepath=match_fig_fpath)
+
         # Initialize an instance to perform camera pose estimations quality check:
         camera_pose_qc = CameraPoseQC(image_files, self.mad_factor,
                                       metrics=self.metrics,
@@ -1119,6 +1168,12 @@ class Colmap(RomiTask):
                                       angle_threshold=self.angle_threshold,
                                       fixed_angle_threshold=self.fixed_angle_threshold,
                                       max_blind_angle=self.max_blind_angle)
+
+        correctly_estimated = True
+        if self.qc_check:
+            logger.info(f"Checking pose coherence between CNC (theoretical) and Colmap (estimated)...")
+            # - Add a "pose_estimation" metadata and performs estimation accuracy checks if requested:
+            correctly_estimated = camera_pose_qc.validate_camera_poses()
 
         pose_fig_fpath = f"{self.output().get().path()}/cnc_vs_colmap_poses_estimated.png"
         camera_pose_qc.plot_pose_estimation_figure(figname=pose_fig_fpath)
@@ -1151,8 +1206,6 @@ class Colmap(RomiTask):
 
         self.no_final_clean_up = False
         if self.qc_check:
-            # - Add a "pose_estimation" metadata and performs estimation accuracy checks if requested:
-            correctly_estimated = camera_pose_qc.validate_camera_poses()
             if not correctly_estimated:
                 _rename_retry_file(dist_outfile.path())
                 _rename_retry_file(pose_fig_fpath)
@@ -1283,7 +1336,7 @@ class CameraPoseQC(object):
         fixed_params : plant3dvision.tasks.colmap.Metrics or None
             The list of metrics (camera parameters) that are "fixed", meaning they do not move during a scan.
             Defaults to ``["z", "tilt", "roll"]``.
-        
+
         Other Parameters
         ----------------
         distance_threshold : float, default ``3.0``
@@ -1319,7 +1372,7 @@ class CameraPoseQC(object):
         self._cnc_poses = None
         self.outlier_ids = []
 
-        self.image_ids: list[str] = [im.id for im in self.image_files]
+        self.image_ids: list[str] = sorted([im.id for im in self.image_files])
         # Build the distance dictionary: {"dist_name": {"img_id": distance}}
         self.dist_dict: dict[str, dict[str, float]] = {}
         self.dist_dict["xy"] = self._euclidean_dist(self.image_ids,
@@ -1376,6 +1429,8 @@ class CameraPoseQC(object):
         """Get the scan path metadata from the image fileset scan."""
         # Get scan configuration
         scan_cfg = self._get_scan_config()
+        if scan_cfg.get('ScanPath') is None:
+            return {}
         path = scan_cfg['ScanPath']['class_name']
         radius = scan_cfg['ScanPath']['kwargs']['radius']
         center = [scan_cfg['ScanPath']['kwargs']['center_x'], scan_cfg['ScanPath']['kwargs']['center_y']]
@@ -1497,7 +1552,7 @@ class CameraPoseQC(object):
             mad_factor = self.mad_factor
         else:
             self.mad_factor = mad_factor
-
+        logger.info(f"Detecting image ids whose pose estimations deviate by a MAD factor of '{mad_factor}'...")
         image_ids = [im.id for im in self.image_files]
 
         # Determine outliers for each metric using the shared helper
@@ -1559,6 +1614,7 @@ class CameraPoseQC(object):
             ax.set_yticklabels(tick_labels)
             ax.set_xlabel("Distance from CNC [mm or degrees]")
 
+        scatter_handles = []
         # - Add the outlier labels
         outlier_idx = [self.image_ids.index(i) for i in outlier_ids]
         # Overlay outlier points and annotate with image IDs
@@ -1574,12 +1630,32 @@ class CameraPoseQC(object):
 
             # Plot outlier points
             xy = (y_positions, vals) if vert else (vals, y_positions)
-            ax.plot(*xy, "+", color="#d73027", markersize=4, alpha=0.7, label="outlier" if idx == 0 else "")
+            outliers_sc = ax.scatter(*xy, marker="+", c="#d73027", s=40, alpha=0.7)
 
             # Annotate each outlier with its image index
             for x, y, out_idx in zip(vals, y_positions, outlier_idx):
-                xy = (y + 0.15, x) if vert else (x + 0.1, y)
+                xy = (y + 0.1, x) if vert else (x + 0.1, y)
                 ax.text(*xy, out_idx, fontsize=8, ha="center", va="center", color="#d73027")
+        outliers_sc.set_label("Outliers")
+        scatter_handles.append(outliers_sc)
+
+        # - Add the MAD thresholds
+        for idx, metric_vals in enumerate(dist_data):
+            thresholds = [2, 3, 4]
+            mad_thresholds = mad_threshold(metric_vals, thresholds)
+            hw = 0.2
+            line_style = {"linestyle": "--", "colors": "green"}
+            txt_style = {"fontfamily": 'monospace', "fontsize": 8, "color": "green"}
+            if vert:
+                lines_sc = ax.hlines(mad_thresholds, idx + 1 - hw, idx + 1 + hw, **line_style)
+                [ax.text(idx + 1 - hw, mad_th, str(th), ha= "right", va= "center", **txt_style) for th, mad_th in
+                 zip(thresholds, mad_thresholds)]
+            else:
+                lines_sc = ax.vlines(mad_thresholds, idx + 1 - hw, idx + 1 + hw, **line_style)
+                [ax.text(mad_th, idx + 1 - hw, str(th), ha= "center", va= "top", **txt_style) for th, mad_th in
+                 zip(thresholds, mad_thresholds)]
+        lines_sc.set_label("MAD thresholds")
+        scatter_handles.append(lines_sc)
 
         # Add a title
         title = kwargs.get('title', None)
@@ -1589,7 +1665,7 @@ class CameraPoseQC(object):
         # Add a grid
         ax.grid(True, which='major', axis='both', linestyle='dotted')
         # Agg a legend
-        ax.legend()
+        ax.legend(handles=scatter_handles)
 
     def _xy_plane_scatter_plot(self, ax, outlier_ids: list[str], use_image_id=False,
                                ref_label='CNC', pred_label='Colmap', **kwargs) -> None:
@@ -1620,8 +1696,9 @@ class CameraPoseQC(object):
         ref_poses = self.cnc_poses
         pred_poses = self.colmap_poses
         scan_path_md = self._get_scan_path_metadata()
-        radius = scan_path_md['radius']
-        center = scan_path_md['center']
+        radius = scan_path_md.get('radius', 300)
+        center = scan_path_md.get('center')
+        scatter_handles = []
 
         # Get the REFERENCE XY coordinates
         x, y, _, p, _, _ = np.array([ref_poses.get(im_id, [np.nan] * 6) for im_id in self.image_ids]).T
@@ -1630,18 +1707,22 @@ class CameraPoseQC(object):
         Xg, Yg, _, Pg, _, _ = np.array(
             [pred_poses.get(im_id, [np.nan] * 6) for im_id in self.image_ids if im_id not in outlier_ids]).T
 
-        # - Plot the REFERENCE center point
-        x_c, y_c = center  # 2D center point
-        center_scatter = ax.scatter(x_c, y_c, marker="x", c="black", s=50)
-        center_scatter.set_label("Path center")
+        if center:
+            # - Plot the REFERENCE center point
+            x_c, y_c = center  # 2D center point
+            center_scatter = ax.scatter(x_c, y_c, marker="x", c="black", s=50)
+            center_scatter.set_label("Path center")
+            scatter_handles.append(center_scatter)
 
         # - Plot REFERENCE XY poses coordinates as a black '+' marker:
         cnc_scatter = ax.scatter(x, y, marker="+", c="black")
         cnc_scatter.set_label(ref_label + " (theoritical)")
+        scatter_handles.append(cnc_scatter)
 
         # - Plot PREDICTED XY poses coordinates as a blue 'x' marker:
         colmap_scatter_g = ax.scatter(Xg, Yg, marker="x", c='blue')
         colmap_scatter_g.set_label(pred_label + " (good)")
+        scatter_handles.append(colmap_scatter_g)
 
         # - Plot the REFERENCE pan orientation as blue arrows:
         for xi, yi, angle in zip(x, y, p):
@@ -1672,6 +1753,7 @@ class CameraPoseQC(object):
             # - Plot the PREDICTED XY poses coordinates as a red 'x' marker:
             colmap_scatter_w = ax.scatter(Xw, Yw, marker="x", c="red")
             colmap_scatter_w.set_label(pred_label + " (bad)")
+            scatter_handles.append(colmap_scatter_w)
 
             # - Plot the PREDICTED pan orientation as dashed gray lines:
             for xi, yi, angle in zip(Xw, Yw, Pw):
@@ -1692,19 +1774,24 @@ class CameraPoseQC(object):
             # Get the image index
             im_ids = list(range(len(self.image_ids)))
 
-        # Add image or point ids as text:
+        # Add image or point ids as text (positioned opposite the reference pan angle):
         for i, im_id in enumerate(im_ids):
-            x_off = 0.05 * np.diff(sorted([x[i], x_c]))
-            y_off = 0.05 * np.diff(sorted([y[i], y_c]))
-            xt = x[i] - x_off if x[i] < x_c else x[i] + x_off
-            yt = y[i] - y_off if y[i] < y_c else y[i] + y_off
-            ax.text(xt, yt, f"{im_id}", ha='center', va='center', fontfamily='monospace')
+            # Original reference pan angle (degrees) for this point
+            ref_angle = p[i]  # pan angle from the reference data
+            # Compute the opposite direction (+180°) and convert to radians
+            opp_angle_rad = np.deg2rad(ref_angle + 180.0)
+            # Choose a modest offset length (5% of the visualised radius)
+            offset_len = 0.05 * radius
+            # Offset components in the opposite direction
+            dx = np.cos(opp_angle_rad) * offset_len
+            dy = np.sin(opp_angle_rad) * offset_len
+            # Position the label using the offset from the reference point
+            xt = x[i] + dx
+            yt = y[i] + dy
+            ax.text(xt, yt, f"{im_id}", ha='center', va='center',
+                    fontfamily='monospace')
 
         # - Build a custom legend that includes the arrows
-        # Original scatter handles (they already have labels)
-        scatter_handles = [center_scatter, cnc_scatter, colmap_scatter_g]
-        if outlier_ids:
-            scatter_handles.append(colmap_scatter_w)
         # Proxy handles for the three arrow styles: a simple line/marker combo that mimics the visual style
         ref_arrow_proxy = Line2D([0], [0], color='blue', lw=1.2,
                                  marker='>', markersize=8, label='CNC Pan')
@@ -1861,17 +1948,8 @@ class CameraPoseQC(object):
         else:
             plt.show()
 
-    def validate_camera_poses(self):
+    def validate_camera_poses(self) -> bool:
         """Check if estimated poses are within acceptable thresholds.
-
-        Parameters
-        ----------
-        distance_threshold : float
-            Maximum allowed distance (in mm) between estimated and ground truth poses.
-            If 0 or negative, no verification is performed.
-        max_blind_angle : float
-            Maximum allowed angle (in degrees) between consecutive failed pose estimations.
-            Only valid for circular path scans (`ScanPath.class_name` is 'Circle' in `scan.toml`).
 
         Returns
         -------
@@ -1891,8 +1969,14 @@ class CameraPoseQC(object):
         else:
             logger.info("All poses distance medians are within acceptable thresholds.")
 
+        # Flag the outliers using the selected metrics and defined MAD factor (defines `self.outlier_ids`)
+        self.flag_outlier_poses()
+
         # Verify the scan path type when using max blind angle parameter
-        path_type = scan_cfg['ScanPath']['class_name']
+        try:
+            path_type = scan_cfg['ScanPath']['class_name']
+        except KeyError:
+            path_type = ""
         if self.max_blind_angle != 0. and path_type != "Circle":
             logger.info("Max blind angle is only valid for circular scans.")
             self.max_blind_angle = None
