@@ -14,10 +14,14 @@ import os
 import pathlib
 import re
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any
+from typing import Literal
+from typing import get_args
 from weakref import finalize
 
 import numpy as np
@@ -521,6 +525,474 @@ def search_closest_tag(available_images, requested_tag):
         return 'latest'
 
     return available_tags[0] if available_tags else requested_tag
+
+
+def colmap_keypoints_per_image(db_path: str | bytes | Path) -> dict[str, int]:
+    """Retrieve the number of COLMAP keypoints for each image stored in a COLMAP database.
+
+    Parameters
+    ----------
+    db_path : str | bytes | pathlib.Path
+        The path to the SQLite COLMAP database file.
+
+    Returns
+    -------
+    dict[str, int]
+        Mapping from image name to the number of keypoints detected for that image.
+
+    Raises
+    ------
+    sqlite3.Error
+        If an error occurs while connecting to or querying the database.
+
+    Notes
+    -----
+    The function opens a read‑only connection to the SQLite database, extracts the
+    image identifiers and their corresponding filenames from the ``images`` table,
+    and then retrieves the keypoint row counts from the ``keypoints`` table. The
+    connection is closed before the result is returned.
+
+    References
+    ----------
+    https://colmap.github.io/database.html#keypoints-and-descriptors
+
+    Examples
+    --------
+    >>> from plant3dvision.colmap import colmap_keypoints_per_image
+    >>> from pathlib import Path
+    >>> from plant3dvision.colmap import ColmapRunner
+    >>> from plantdb.commons.test_database import test_database
+    >>> db = test_database('real_plant', no_auth=True)
+    >>> db.connect()
+    >>> # - Select the dataset to reconstruct:
+    >>> dataset = db.get_scan("real_plant")
+    >>> # - Get the corresponding 'images' fileset:
+    >>> images_fileset = dataset.get_fileset('images')
+    >>> image_files = images_fileset.get_files()
+    >>> args = {"feature_extractor": {"--ImageReader.single_camera": "1"}}
+    >>> colmap = ColmapRunner(image_files, matcher_method="exhaustive", align_pcd=True, all_cli_args=args, colmap_exe="roboticsmicrofarms/colmap:3.8")
+    >>> colmap.feature_extractor()  #1 - Extract features from images
+    >>> db_file = Path(colmap.colmap_workdir) / "database.db"
+    >>> kp_counts = colmap_keypoints_per_image(db_file)
+    >>> print(kp_counts['00000_rgb.jpg'])
+    1277
+    >>> import matplotlib.pyplot as plt
+    >>> counts = list(kp_counts.values())
+    >>> fig, ax = plt.subplots(figsize=(9, 3))
+    >>> ax.boxplot(counts, vert=False, patch_artist=True, boxprops=dict(facecolor="#8da0cb"), medianprops=dict(color="red"))
+    >>> ax.set_xlabel("Number of keypoints")
+    >>> ax.set_title("Distribution of COLMAP keypoints per image")
+    >>> ax.grid(True, linestyle="--", alpha=0.5)
+    >>> plt.tight_layout()
+    >>> plt.show()
+    """
+    con = sqlite3.connect(db_path)
+    cur = con.cursor()
+
+    cur.execute("SELECT name, rows FROM images INNER JOIN keypoints ON images.image_id==keypoints.image_id")
+    kp_counts = {row[0]: row[1] for row in cur.fetchall()}
+
+    con.close()
+    return kp_counts
+
+
+def _pair_id_to_image_ids(pair_id: int) -> tuple[int, int]:
+    """Decode COLMAP's linear `pair_id` back to the two image IDs.
+
+    The constant 2147483647 (``=2^31‑1``) is the maximum signed 32‑bit int.
+
+    Returns
+    -------
+    tuple[int, int]
+        The decoded image ID pair.
+
+    References
+    ----------
+    https://colmap.github.io/database.html#matches-and-two-view-geometries
+    """
+    max_id = 2147483647
+    img_id2 = pair_id % max_id
+    img_id1 = (pair_id - img_id2) // max_id
+    return int(img_id1), int(img_id2)
+
+
+def colmap_matches_per_pair(db_path: str | bytes | Path) -> dict[tuple[str, str], tuple[int, float, float]]:
+    """Compute the number of matches and the average descriptor distance for each image pair in a COLMAP SQLite database.
+
+    Returns {(img_a, img_b): (num_matches, avg_descriptor_distance)}.
+
+    Parameters
+    ----------
+    db_path : str | bytes | pathlib.Path
+        The path to the SQLite COLMAP database file.
+
+    Returns
+    -------
+    pair_stats : dict of tuple(str, str) to tuple(int, float, float)
+        Mapping from image name pairs ``(img_a, img_b)`` to a tuple containing
+
+        * ``num_matches``: the number of raw matches (`rows` column of the ``matches`` table).
+        * ``avg_descriptor_distance``: mean L2 distance between the paired descriptors.
+          If descriptors cannot be read (e.g., missing table) the value is `nan`.
+        * ``median_descriptor_distance``: median L2 distance between the paired descriptors.
+          If descriptors cannot be read (e.g., missing table) the value is `nan`.
+
+    Raises
+    ------
+    RuntimeError
+        If the required columns ``pair_id``, ``rows``, ``cols`` and ``data`` are missing from the ``matches`` table.
+
+    Notes
+    -----
+    * The function expects the standard COLMAP schema (tables ``images``, ``matches`` and ``descriptors``).
+    * Descriptor blobs are interpreted as ``uint8`` (e.g., SIFT) or ``float32`` (e.g., ALIKED) based on their size.
+    * Out‑of‑range match indices are ignored; such a case usually indicates a corrupted database.
+
+    See Also
+    --------
+    plant3dvision.colmap._pair_id_to_image_ids
+
+    References
+    ----------
+    https://colmap.github.io/database.html#keypoints-and-descriptors
+    https://github.com/colmap/colmap/blob/main/src/colmap/estimators/two_view_geometry.h
+    https://github.com/colmap/colmap/blob/main/src/colmap/feature/types.h
+
+    Examples
+    --------
+    >>> from plant3dvision.colmap import colmap_matches_per_pair
+    >>> from pathlib import Path
+    >>> from plant3dvision.colmap import ColmapRunner
+    >>> from plantdb.commons.test_database import test_database
+    >>> db = test_database('real_plant', no_auth=True)
+    >>> db.connect()
+    >>> # - Select the dataset to reconstruct:
+    >>> dataset = db.get_scan("real_plant")
+    >>> # - Get the corresponding 'images' fileset:
+    >>> images_fileset = dataset.get_fileset('images')
+    >>> image_files = images_fileset.get_files()
+    >>> args = {"feature_extractor": {"--ImageReader.single_camera": "1"}}
+    >>> colmap = ColmapRunner(image_files, matcher_method="exhaustive", align_pcd=True, all_cli_args=args, colmap_exe="roboticsmicrofarms/colmap:3.8")
+    >>> colmap.feature_extractor()  #1 - Extract features from images
+    >>> colmap.matcher()  #2 - Match extracted features from images, requires `feature_extractor()`
+    >>> db_file = Path(colmap.colmap_workdir) / "database.db"
+    >>> stats = colmap_matches_per_pair(db_file)
+    >>> for (img1, img2), (n_matches, avg_dist, _) in stats.items(): print(f"{img1} - {img2}: {n_matches} matches, avg L2 distance = {avg_dist:.2f}")
+    00000_rgb.jpg - 00001_rgb.jpg: 330 matches, avg L2 distance = 117.95
+    >>> # Build a pairwise distance matrix from the stats ---
+    >>> import pandas as pd
+    >>> import numpy as np
+    >>> import matplotlib.pyplot as plt
+    >>> # Gather the unique image names
+    >>> imgs = sorted({img for pair in stats.keys() for img in pair})
+    >>> # Initialise a matrix filled with NaN
+    >>> n_match_matrix = pd.DataFrame(np.nan, index=imgs, columns=imgs, dtype=float)
+    >>> dist_matrix = pd.DataFrame(np.nan, index=imgs, columns=imgs, dtype=float)
+    >>> mdist_matrix = pd.DataFrame(np.nan, index=imgs, columns=imgs, dtype=float)
+    >>> # Populate the matrix with average descriptor distances
+    >>> for (img_a, img_b), (n_match, avg_dist, m_dist) in stats.items():
+    ...     n_match_matrix.loc[img_a, img_b] = n_match
+    ...     n_match_matrix.loc[img_b, img_a] = n_match  # symmetric
+    ...     dist_matrix.loc[img_a, img_b] = avg_dist
+    ...     dist_matrix.loc[img_b, img_a] = avg_dist  # symmetric
+    ...     mdist_matrix.loc[img_a, img_b] = m_dist
+    ...     mdist_matrix.loc[img_b, img_a] = m_dist  # symmetric
+    >>> # Plot the Number of Matches matrix as a heat‑map
+    >>> fig, ax = plt.subplots(figsize=(9, 8))
+    >>> im = ax.imshow(n_match_matrix, cmap="viridis")
+    >>> fig.colorbar(im, ax=ax)
+    >>> plt.title("Pairwise Number of Matches")
+    >>> plt.tight_layout()
+    >>> plt.show()
+    >>> # Plot the Average Descriptor Distance matrix as a heat‑map
+    >>> fig, ax = plt.subplots(figsize=(9, 8))
+    >>> im = ax.imshow(dist_matrix, cmap="viridis")
+    >>> fig.colorbar(im, ax=ax)
+    >>> plt.title("Pairwise Average Descriptor Distance")
+    >>> plt.tight_layout()
+    >>> plt.show()
+    >>> # Plot the Median Descriptor Distance matrix as a heat‑map
+    >>> fig, ax = plt.subplots(figsize=(9, 8))
+    >>> im = ax.imshow(mdist_matrix, cmap="viridis")
+    >>> fig.colorbar(im, ax=ax)
+    >>> plt.title("Pairwise Median Descriptor Distance")
+    >>> plt.tight_layout()
+    >>> plt.show()
+    """
+    import sqlite3, numpy as np
+
+    con = sqlite3.connect(db_path)
+    cur = con.cursor()
+
+    # 1. Map image_id → name (used for the final dict keys)
+    cur.execute("SELECT image_id, name FROM images")
+    id2name = {row[0]: row[1] for row in cur.fetchall()}
+
+    # 2. Gather raw match statistics from the ``matches`` table
+    cur.execute("PRAGMA table_info(matches)")
+    match_cols = {info[1] for info in cur.fetchall()}
+
+    required_match_cols = {"pair_id", "rows", "cols", "data"}
+    if not required_match_cols.issubset(match_cols):
+        raise RuntimeError("Missing required columns in 'matches' table.")
+
+    cur.execute("SELECT pair_id, rows, cols, data FROM matches")
+    match_rows = cur.fetchall()
+
+    # 3. Helper to decode a BLOB of uint32 pairs
+    def decode_match_blob(blob: bytes, cols: int) -> np.ndarray:
+        """Return a (N, cols) uint32 array."""
+        if not blob:
+            return np.empty((0, cols), dtype=np.uint32)
+        return np.frombuffer(blob, dtype=np.uint32).reshape(-1, cols)
+
+    # 4. Helper to load descriptors for a given image_id
+    def load_descriptors(img_id: int) -> np.ndarray | None:
+        cur.execute("SELECT rows, cols, data FROM descriptors WHERE image_id=?", (img_id,))
+        row = cur.fetchone()
+        if row is None:
+            return None
+        rows, cols, blob = row
+        if rows == 0 or cols == 0 or not blob:
+            return None
+        # Descriptors are stored as uint8 (SIFT) or float32 (ALIKED, etc.), we can infer the dtype from the size:
+        if blob.__len__() == rows * cols:  # uint8
+            dtype = np.uint8
+        elif blob.__len__() == rows * cols * 4:  # float32
+            dtype = np.float32
+        else:
+            # Fallback: assume uint8 (most common)
+            dtype = np.uint8
+        return np.frombuffer(blob, dtype=dtype).reshape(rows, cols)
+
+    # 5. Process each pair
+    pair_stats: dict[tuple[str, str], tuple[int, float]] = {}
+    for pair_id, num_matches, cols, match_blob in match_rows:
+        img_id1, img_id2 = _pair_id_to_image_ids(pair_id)
+        name1 = id2name.get(img_id1, f"<unknown-{img_id1}>")
+        name2 = id2name.get(img_id2, f"<unknown-{img_id2}>")
+
+        # Decode the match index list (uint32, 2 columns)
+        matches_idx = decode_match_blob(match_blob, cols)
+        if matches_idx.shape[0] == 0:
+            continue
+
+        # Load descriptors for both images
+        desc1 = load_descriptors(img_id1)
+        desc2 = load_descriptors(img_id2)
+        if desc1 is None or desc2 is None:
+            pair_stats[(name1, name2)] = (int(num_matches), float("nan"))
+            continue
+
+        # Compute L2 distance for each matched pair
+        idx1 = matches_idx[:, 0]
+        idx2 = matches_idx[:, 1]
+        # Guard against out‑of‑range indices (should not happen in a valid DB)
+        valid = (idx1 < desc1.shape[0]) & (idx2 < desc2.shape[0])
+        if not np.all(valid):
+            idx1, idx2 = idx1[valid], idx2[valid]
+
+        # Cast to float for distance computation (necessary if uint8)
+        d1 = desc1[idx1].astype(np.float32)
+        d2 = desc2[idx2].astype(np.float32)
+
+        # Euclidean distance (L2)
+        dists = np.linalg.norm(d1 - d2, axis=1)
+        avg_dist = float(dists.mean()) if dists.size > 0 else float("nan")
+        med_dist = float(np.nanmedian(dists)) if dists.size > 0 else float("nan")
+        pair_stats[(name1, name2)] = (int(num_matches), avg_dist, med_dist)
+
+    con.close()
+    return pair_stats
+
+
+def colmap_matches_fig(kp_match, scan_id, filepath=None, cmap='viridis', vmin=None, vmax=None):
+    """Plot a circular‑ordered heat‑map of pairwise image matches.
+
+    The function builds an ``N×N`` matrix of the number of feature matches
+    between every pair of images contained in a COLMAP matches dataframe.
+    For each reference image (row) the columns are reordered so that the
+    reference image appears in the centre and its neighbours are displayed
+    with increasing offset to the left and right, yielding a “circular”
+    ordering that is convenient for visual inspection of match consistency
+    across a scan.
+
+    Parameters
+    ----------
+    kp_match : pandas.DataFrame
+        DataFrame produced by COLMAP containing at least the columns ``'Image_ID'``, ``'Image_ID.1'``
+        and ``'Nb_Matches'``. Each row represents a match between two images and the number of feature
+        matches between them.
+    scan_id : str or int
+        Identifier of the scan (or scene) that is shown in the plot title.
+    filepath : str, optional
+        Path where the generated figure should be saved.
+        If ``None`` (default) the figure is only displayed and not written to disk.
+    cmap : str, optional
+        Matplotlib colormap name used for the heat‑map. Defaults to ``'viridis'``.
+    vmin : float, optional
+        Minimum data value that maps to the colormap start.
+        If ``None`` the minimum of the data is used.
+    vmax : float, optional
+        Maximum data value that maps to the colormap end.
+        If ``None`` the maximum of the data is used.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        The created Matplotlib figure object, allowing further customization or saving by the caller.
+
+    Examples
+    --------
+    >>> import pandas as pd
+    >>> import numpy as np
+    >>> import matplotlib.pyplot as plt
+    >>> from plant3dvision.colmap import colmap_matches_fig
+    >>> # Construct a minimal example dataframe
+    >>> data = {
+    ...     'Image_ID':   ['00001_rgb.png', '00002_rgb.png', '00001_rgb.png'],
+    ...     'Image_ID.1': ['00002_rgb.png', '00003_rgb.png', '00003_rgb.png'],
+    ...     'Nb_Matches': [120, 85, 30]
+    ... }
+    >>> df = pd.DataFrame(data)
+    >>> fig = colmap_matches_fig(df, scan_id='scan_001')
+    >>> # The figure can be shown inline in a notebook
+    >>> fig.show()
+    """
+    import matplotlib.pyplot as plt
+    # Build the full NxN matches matrix
+
+    # Extract the numeric part of the filename so we can sort them correctly
+    def img_key(fname: str) -> int:
+        # Legacy “00044_rgb.png” -> 44, v3 “picamera-00000.jpeg”, “picamera2/image00021.jpeg” -> 21 etc.
+        import os
+        import re
+
+        base = os.path.basename(fname)
+        nums = re.findall(r"\d+", base)
+        if nums:
+            # last numeric group is the frame index (handles picamera2-00000 -> 00000)
+            return int(nums[-1])
+        nums = re.findall(r"\d+", fname)
+        if nums:
+            return int(nums[-1])
+        return 0
+
+    # Sorted list of unique images (circular order)
+    imgs = sorted(
+        set(kp_match["Image_ID"]).union(kp_match["Image_ID.1"]),
+        key=img_key,
+    )
+    N = len(imgs)
+
+    # Mapping image name / index
+    idx = {img: i for i, img in enumerate(imgs)}
+
+    # Empty matrix – we’ll fill only the upper-triangle and mirror it
+    matches = np.full((N, N), np.nan, dtype=float)
+
+    # Fill with Nb_Matches (symmetrical)
+    for _, row in kp_match.iterrows():
+        i, j = idx[row["Image_ID"]], idx[row["Image_ID.1"]]
+        matches[i, j] = row["Nb_Matches"]
+        matches[j, i] = row["Nb_Matches"]  # make it symmetric
+
+    # Re-order columns *per row* so the “image of interest” is centred
+
+    half = N // 2  # number of neighbours on each side
+    circular = np.empty_like(matches)  # will hold the reordered rows
+
+    for i in range(N):
+        # column order for row i :   (i-half) ... (i-1) , i , (i+1) ... (i+half-1)
+        col_order = [(i - half + k) % N for k in range(N)]
+        circular[i, :] = matches[i, col_order]
+
+    fig = plt.figure(figsize=(10, 8), dpi=150)
+    # Plot the heat-map
+    im = plt.imshow(circular, aspect='auto', cmap=cmap, vmin=vmin, vmax=vmax)
+    # Hide x-tick labels
+    plt.xticks([])
+    # Show y-tick labels (image names)
+    plt.yticks(ticks=np.arange(N), labels=[imgs[i] for i in range(N)])
+    # Add a colour bar with the same label as Seaborn
+    cbar = plt.colorbar(im, label="Nb. Matches")
+
+    plt.title(f"Circular-ordered match heat-map - {scan_id}")
+    plt.ylabel("Reference image (row-wise)")
+    plt.xlabel("Neighbour offset (left ← → right)")
+    plt.tight_layout()
+    if filepath is not None:
+        plt.savefig(filepath)
+
+    return fig
+
+
+#: List of valid COLMAP matcher methods:
+MatcherMethods = Literal['exhaustive', 'sequential', 'spatial', 'custom']
+MATCHER_METHODS = get_args(MatcherMethods)
+#: Default COLMAP matcher method:
+DEF_MATCHER_METHOD = 'exhaustive'
+
+
+def search_closest_tag(available_images, requested_tag):
+    """Find the closest matching tag from available Docker images.
+
+    Parameters
+    ----------
+    available_images : list
+        List of Docker image objects from `docker.images.list()`.
+    requested_tag : str
+        String of the requested tag (e.g. 'latest' or '3.8')
+
+    Returns
+    -------
+    str
+        The closest matching tag from available images.
+
+    Examples
+    --------
+    >>> import docker
+    >>> from plant3dvision.colmap import search_closest_tag
+    >>> client = docker.from_env()
+    >>> colmap_exe='roboticsmicrofarms/colmap'
+    >>> available_images = client.images.list(colmap_exe)
+    >>> closest_tag = search_closest_tag(available_images, '3.8-cuda_cc')
+    >>> print(closest_tag)
+
+    """
+    # Collect all available tags
+    available_tags = []
+    for image in available_images:
+        if image.tags:  # Ensure image has tags
+            available_tags.append(image.tags[0].split(':')[-1])
+
+    # If exact match exists, return it
+    if requested_tag in available_tags:
+        return requested_tag
+
+    # Split the requested tag into components
+    requested_parts = requested_tag.split('-')
+    base_version = requested_parts[0]  # e.g., '3.8'
+
+    # First, try to find tags with matching base version and similar pattern
+    matching_base = [tag for tag in available_tags if tag.startswith(base_version)]
+    if matching_base:
+        # If we have tags with same base version, prefer ones with similar pattern
+        if len(requested_parts) > 1:
+            # Look for tags containing similar components (e.g., 'cuda')
+            pattern_matches = [tag for tag in matching_base
+                               if any(part.split('_')[0] in tag
+                                      for part in requested_parts[1:])]
+            if pattern_matches:
+                return pattern_matches[0]
+        return matching_base[0]
+
+    # If no matching base version, return 'latest' if available, otherwise first tag
+    if 'latest' in available_tags:
+        return 'latest'
+
+    return available_tags[0] if available_tags else requested_tag
+
 
 
 class ColmapRunner(object):

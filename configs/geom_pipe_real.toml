@@ -16,7 +16,7 @@ metrics = '["xy", "z", "pan"]'
 # Maximum blind angle tolerated for camera pose quality control
 max_blind_angle = 20.0  # Default: 20.0 (degrees)
 # Number of retries if the task fails
-retry_count = 10  # Default: 10
+retry_count = 1  # Default: 10, trial: 1 to save time (partial success = one full reconstruction)
 
 [Undistort]
 # Upstream task that provides the input files

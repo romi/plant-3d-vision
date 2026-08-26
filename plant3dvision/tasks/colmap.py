@@ -1409,8 +1409,24 @@ class CameraPoseQC(object):
             if all(sum(np.array(pose) == 0.) >= 3 for pose in self._colmap_poses.values()):
                 # If only XYZ data, compute estimated pose from colmap_camera metadata
                 self._colmap_poses = compute_camera_poses_from_files_metadata(self.image_files)
-            # Rotate the roll by 180° to match the different world conventions
-            self._colmap_poses = {im_id: pose[:5] + [180 - pose[5]] for im_id, pose in self._colmap_poses.items()}
+            # Rotation-aware roll correction:
+            # - v3 multi-camera: cameras turned 90° right have `rotation=90` in image metadata
+            # - v2: no rotation key (or 0) → keep raw roll
+            corrected = {}
+            for im_id, pose in self._colmap_poses.items():
+                f = next((x for x in self.image_files if x.id == im_id), None)
+                rotation = 0
+                if f is not None:
+                    try:
+                        rotation = int(f.get_metadata("rotation", 0) or 0)
+                    except Exception:
+                        rotation = 0
+                if rotation:
+                    # v3: subtract camera rotation (90° right)
+                    pose = pose[:5] + [(pose[5] - rotation) % 360]
+                # else v2: keep raw pose (remove legacy 180 - roll)
+                corrected[im_id] = pose
+            self._colmap_poses = corrected
 
         return self._colmap_poses
 
