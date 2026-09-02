@@ -19,18 +19,22 @@ import sys
 import tempfile
 
 import luigi
-import numpy as np
-from numpy import dtype, floating, ndarray, unsignedinteger
-from numpy._typing import _32Bit, _8Bit
 import matplotlib.pyplot as plt
+import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
+from numpy import dtype
+from numpy import floating
+from numpy import ndarray
+from numpy import unsignedinteger
+from numpy._typing import _32Bit
+from numpy._typing import _8Bit
+from plantdb.commons import io
 from plantdb.commons.fsdb.core import File
 
+from plant3dvision.proc3d import find_plant_bounding_box
 from plant3dvision.tasks.colmap import Colmap
 from plant3dvision.tasks.proc2d import Masks
 from plant3dvision.voxel_cuda import Backprojection
-from plant3dvision.proc3d import find_plant_bounding_box
-from plantdb.commons import io
 from romitask import RomiTask
 from romitask.log import get_logger
 from romitask.task import ImagesFilesetExists
@@ -239,6 +243,7 @@ def remap_averaging(vol: np.ndarray, n_imgs: int) -> np.ndarray:
     # Remap the whole volume, shifting to non‑negative indices
     return int_labels[int_idx] + n_imgs
 
+
 def points_and_colors_from_points_dict(points_dict: dict) -> tuple[
     ndarray[tuple[int, int], dtype[floating[_32Bit]]], ndarray[tuple[int, int], dtype[unsignedinteger[_8Bit]]]]:
     """
@@ -278,36 +283,38 @@ def points_and_colors_from_points_dict(points_dict: dict) -> tuple[
         colors[i, :] = rgb[:]
     return points3d, colors
 
+
 def plot_pointcloud_with_bbox(
-    points: np.ndarray,
-    colors: np.ndarray,
-    bbox: dict,
-    *,
-    figsize: tuple[int, int] = (10, 8),
-    elev: float = 30,      # elevation angle for isometric view
-    azim: float = 45,      # azimuth angle for isometric view
-    point_size: float = 0.1,
-    save_path: str | None = None,
+        points: np.ndarray,
+        colors: np.ndarray,
+        bbox: dict,
+        *,
+        figsize: tuple[int, int] = (10, 8),
+        elev: float = 30,  # elevation angle for isometric view
+        azim: float = 45,  # azimuth angle for isometric view
+        point_size: float = 0.1,
+        save_path: str | None = None,
 ) -> plt.Figure:
     """
     Plot a coloured 3‑D point cloud together with a semi‑transparent bounding box.
 
     Parameters
     ----------
-    points : ndarray (n, 3)
-        3‑D coordinates of the points.
-    colors : ndarray (n, 3), dtype uint8
-        Corresponding RGB colours (0–255).  They will be normalised to [0, 1] for Matplotlib.
+    points : numpy.ndarray
+        3‑D coordinates of the points, array of shape ``(n, 3)``.
+    colors : numpy.ndarray
+        Corresponding RGB colours (0–255), array of shape ``(n, 3)`` and dtype uint8.
+        They will be normalised to ``[0, 1]`` for Matplotlib.
     bbox : dict
         Dictionary with keys ``'x'``, ``'y'``, ``'z'``.  Each value is a two‑element tuple
         ``(min, max)`` that defines the extents of the box along that axis.
     figsize : tuple, optional
-        Size of the generated figure (width, height) in inches.
+        Size of the generated figure ``(width, height)`` in inches.
     elev, azim : float, optional
         Elevation and azimuth angles that define the **isometric** view.
     point_size : float, optional
         Marker size for the scatter plot.
-    save_path : str | None, optional
+    save_path : str or None, optional
         If provided, the figure is saved to this path (e.g. ``"scene.png"``).
 
     Returns
@@ -394,32 +401,33 @@ def plot_pointcloud_with_bbox(
 
 
 def plot_pointcloud_with_clusters(
-    points: np.ndarray,
-    labels: np.ndarray,
-    centroids: np.ndarray,
-    centre: np.ndarray,
-    *,
-    figsize: tuple[int, int] = (10, 8),
-    elev: float = 30,      # elevation angle for isometric view
-    azim: float = 45,      # azimuth angle for isometric view
-    point_size: float = 1.0,
-    centroid_size: float = 80.0,
-    centre_size: float = 150.0,
-    save_path: str | None = None,
+        points: np.ndarray,
+        labels: np.ndarray,
+        centroids: np.ndarray,
+        centre: np.ndarray,
+        *,
+        figsize: tuple[int, int] = (10, 8),
+        elev: float = 30,  # elevation angle for isometric view
+        azim: float = 45,  # azimuth angle for isometric view
+        point_size: float = 1.0,
+        centroid_size: float = 80.0,
+        centre_size: float = 150.0,
+        save_path: str | None = None,
 ) -> plt.Figure:
     """
     Visualise a 3‑D point‑cloud coloured by clustering labels.
 
     Parameters
     ----------
-    points : ndarray (N, 3)
-        XYZ coordinates of the point cloud.
-    labels : ndarray (N,)
-        Integer cluster labels for each point (``-1`` denotes noise).
-    centroids : ndarray (K, 3)
-        XYZ coordinates of the computed cluster centroids.
-    centre : ndarray (3,)
-        Global centre point (e.g. the mean of the whole cloud).
+    points : numpy.ndarray
+        XYZ coordinates of the point cloud, array of shape ``(N, 3)``.
+    labels : numpy.ndarray
+        Integer cluster labels for each point (``-1`` denotes noise), array of shape ``(N,)``.
+    centroids : numpy.ndarray
+        XYZ coordinates of the computed cluster centroids, array of shape ``(K, 3)``, where
+        ``K`` is the number of clusters.
+    centre : numpy.ndarray
+        Global centre point (e.g. the mean of the whole cloud), array of shape ``(3,)``.
     figsize : tuple, optional
         Size of the generated figure (width, height) in inches.
     elev, azim : float, optional
@@ -430,7 +438,7 @@ def plot_pointcloud_with_clusters(
         Marker size for the centroids.
     centre_size : float, optional
         Marker size for the global centre.
-    save_path : str | None, optional
+    save_path : str or None, optional
         If provided, the figure is saved to this path (e.g. ``"scene.png"``).
 
     Returns

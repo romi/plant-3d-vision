@@ -21,10 +21,10 @@ from scipy.ndimage.morphology import binary_dilation
 from scipy.ndimage.morphology import distance_transform_edt
 from scipy.spatial import cKDTree
 from skimage import measure
-from skimage.exposure import rescale_intensity
 from skimage.color import rgb2lab
-from sklearn.preprocessing import StandardScaler
+from skimage.exposure import rescale_intensity
 from sklearn.cluster import HDBSCAN
+from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
 
 from romitask.log import get_logger
@@ -1754,11 +1754,12 @@ def filter_segmented_pcd(pcd: o3d.geometry.PointCloud,
     out_pcd.colors = o3d.utility.Vector3dVector(color_array)
     return out_pcd
 
+
 def prune_to_percentile(
-    points: np.ndarray,
-    keep_ratio: float = 0.90,
-    method: str = "mahalanobis",
-    output_mask: bool = False,
+        points: np.ndarray,
+        keep_ratio: float = 0.90,
+        method: str = "mahalanobis",
+        output_mask: bool = False,
 ) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
     """
     Prunes a set of points to retain only a fraction of the closest points based on a specified
@@ -1767,9 +1768,9 @@ def prune_to_percentile(
 
     Parameters
     ----------
-    points : np.ndarray
-        A 2D array of shape (N, D) where N is the number of points and D is the dimension of each
-        point.
+    points : numpy.ndarray
+        A 2D array of shape ``(N, D)`` where ``N`` is the number of points and ``D`` is the dimension
+        of each point.
     keep_ratio : float, default=0.90
         A float value between 0 and 1 specifying the fraction of points to retain after pruning.
     method : str, default="mahalanobis"
@@ -1778,20 +1779,20 @@ def prune_to_percentile(
         - "euclidean": Use Euclidean distance.
         An error is raised if an unsupported method is specified.
     output_mask : bool, default=False
-        If True, the function returns a tuple containing both the pruned points and a boolean mask
-        indicating which points were retained. If False, only the pruned points are returned.
+        If ``True``, the function returns a tuple containing both the pruned points and a boolean mask
+        indicating which points were retained. If ``False``, only the pruned points are returned.
 
     Returns
     -------
-    np.ndarray or tuple
-        If `output_mask` is False, returns a 2D array of shape (M, D), where M is the number of points
-        retained and D is the dimension of each point.
-        If `output_mask` is True, returns a tuple containing:
-        - A 2D array of shape (M, D) with the pruned points.
-        - A 1D boolean array of length N, where `True` indicates a retained point and `False` indicates
+    numpy.ndarray or tuple
+        If `output_mask` is ``False``, returns a 2D array of shape ``(M, D)``, where ``M`` is the number of points
+        retained and ``D`` is the dimension of each point.
+        If `output_mask` is ``True``, returns a tuple containing:
+        - A 2D array of shape ``(M, D)`` with the pruned points.
+        - A 1D boolean array of length ``N``, where ``True`` indicates a retained point and ``False`` indicates
           a pruned one.
     """
-    assert 0 < keep_ratio < 1, "keep_ratio must be between 0 and 1"
+    assert 0 < keep_ratio < 1, f"Input `keep_ratio` must be between 0 and 1, got {keep_ratio}"
 
     centroid = points.mean(axis=0)
 
@@ -1801,12 +1802,12 @@ def prune_to_percentile(
         inv_cov = np.linalg.inv(cov)
         # Mahalanobis distance of each point from the centroid
         diff = points - centroid
-        d2 = np.einsum("ij,jk,ik->i", diff, inv_cov, diff)   # = (x-μ)^T Σ⁻¹ (x-μ)
+        d2 = np.einsum("ij,jk,ik->i", diff, inv_cov, diff)  # = (x-μ)^T Σ⁻¹ (x-μ)
         distances = np.sqrt(d2)
     elif method == "euclidean":
         distances = np.linalg.norm(points - centroid, axis=1)
     else:
-        raise ValueError(f"Unsupported pruning method: {method}")
+        raise ValueError(f"Unsupported pruning `method`: {method}")
 
     # Keep the smallest keep_ratio‑fraction of distances
     threshold = np.quantile(distances, keep_ratio)
@@ -1815,7 +1816,8 @@ def prune_to_percentile(
         return points[mask], mask
     return points[mask]
 
-def augment_bounds(bounds: np.ndarray, margin: float, percent=False) -> np.ndarray:
+
+def augment_bounds(bounds: np.ndarray, margin: float, percent: bool = False) -> np.ndarray:
     """
     Modifies input bounding intervals to augment the range either by a fixed margin
     or a percentage of the span of the bounds. The function supports handling bounds
@@ -1823,45 +1825,46 @@ def augment_bounds(bounds: np.ndarray, margin: float, percent=False) -> np.ndarr
 
     Parameters
     ----------
-    bounds : np.ndarray
-        A numpy array of shape (n, 2) where each row represents a single interval
+    bounds : numpy.ndarray
+        A numpy array of shape ``(n, 2)`` where each row represents a single interval
         with lower and upper bounds.
     margin : float
-        The value by which bounds should be augmented. If `percent` is True, this
+        The value by which bounds should be augmented. If `percent` is ``True``, this
         value is treated as a percentage.
     percent : bool, optional
-        If True, the provided `margin` is treated as a percentage of the
-        interval range for each bound. If False, `margin` is treated as a fixed
+        If ``True``, the provided `margin` is treated as a percentage of the
+        interval range for each bound. If ``False``, `margin` is treated as a fixed
         value.
 
     Returns
     -------
-    np.ndarray
-        A numpy array of shape (n, 2) where each interval's bounds are augmented
+    numpy.ndarray
+        A numpy array of shape ``(n, 2)`` where each interval's bounds are augmented
         according to the specified `margin`. Each lower bound is decreased,
         and each upper bound is increased.
     """
     assert isinstance(bounds, np.ndarray), f"Expected bounds to be a numpy array, got {type(bounds)}"
-    assert bounds.shape[1] == 2, "Expected bounds to be of shape (n, 2)"
+    assert bounds.shape[1] == 2, f"Expected bounds to be of shape (n, 2), got (n, {bounds.shape[1]})"
     new_bounds = bounds.copy()
     if percent:
         spans = bounds[:, 1] - bounds[:, 0]
-        margins = spans*margin/100
-        new_bounds[:, 0] -= margins/2
-        new_bounds[:, 1] += margins/2
+        margins = spans * margin / 100
+        new_bounds[:, 0] -= margins / 2
+        new_bounds[:, 1] += margins / 2
     else:
         new_bounds[:, 0] -= margin
         new_bounds[:, 1] += margin
     return new_bounds
 
+
 def find_plant_bounding_box(
         points: np.ndarray[tuple[int, int], np.dtype[np.float32]],
         colors: np.ndarray[tuple[int, int], np.dtype[np.uint8]],
-        pruning_quantile: float=0.98,
-        margins: float=30.,
-        percent: bool=False,
-        w_geo: float=2.0,
-        w_col: float=1.0
+        pruning_quantile: float = 0.98,
+        margins: float = 30.,
+        percent: bool = False,
+        w_geo: float = 2.0,
+        w_col: float = 1.0
 ) -> np.ndarray[tuple[int, int], np.dtype[np.float32]]:
     """
     Finds the bounding box of a plant represented by 3D points and corresponding colors using clustering
@@ -1870,17 +1873,17 @@ def find_plant_bounding_box(
 
     Parameters
     ----------
-    points : np.ndarray[tuple[int, int], np.dtype[np.float32]]
-        An array of 3D spatial coordinates of shape (N, 3), where N is the number of points.
-    colors : np.ndarray[tuple[int, int], np.dtype[np.float32]]
-        An array of color values corresponding to the points, of shape (N, 3).
+    points : numpy.ndarray
+        An array of 3D spatial coordinates of shape ``(N, 3)``, where ``N`` is the number of points.
+    colors : numpy.ndarray
+        An array of color values corresponding to the points, of shape ``(N, 3)``.
     pruning_quantile : float, optional
-        The quantile value (default is 0.98) used to prune outliers from the cluster. Values closer to 1
+        The quantile value (default is ``0.98``) used to prune outliers from the cluster. Values closer to 1
         prune fewer points.
     margins : float, optional
-        Optional margin value (default is 30.0) to add to the bounding box edges. In real-world units.
+        Optional margin value (default is ``30.0``) to add to the bounding box edges. In real-world units.
     percent : bool, optional
-        If True, the margins will be applied as a percentage of the bounding box size. Defaults to False.
+        If ``True``, the margins will be applied as a percentage of the bounding box size. Defaults to ``False``.
     w_geo : float, optional
         Weight for the spatial (geometric) features in the clustering. Increase for more spatial influence.
         Defaults to ``2.0``.
@@ -1890,14 +1893,14 @@ def find_plant_bounding_box(
 
     Returns
     -------
-    bounding_box : np.ndarray[tuple[int, int], np.dtype[np.float32]]
+    bounding_box : numpy.ndarray
         A 2D array containing the bounding box dimensions in the format
-        [[x_min, x_max], [y_min, y_max], [z_min, z_max]]
-    labels : np.ndarray
+       `` [[x_min, x_max], [y_min, y_max], [z_min, z_max]]``
+    labels : numpy.ndarray
         Cluster label of each point (``-1`` denotes noise).
-    centroids : np.ndarray
+    centroids : numpy.ndarray
         XYZ coordinates of the computed cluster centroids.
-    center : np.ndarray
+    center : numpy.ndarray
         Barycenter of all the points, assumed to be close to the center.
     """
 
@@ -1919,7 +1922,7 @@ def find_plant_bounding_box(
     features = np.hstack((xyz_norm, lab_norm))
 
     # Clustering
-    dbscan = HDBSCAN(min_cluster_size=50, cluster_selection_epsilon=20*w_geo/geo_scale)
+    dbscan = HDBSCAN(min_cluster_size=50, cluster_selection_epsilon=20 * w_geo / geo_scale)
 
     labels = dbscan.fit_predict(features)
 
@@ -1937,7 +1940,8 @@ def find_plant_bounding_box(
     centroids = centroids[:, :] / n_element_per_label[:, np.newaxis]
 
     # Select the center most cluster
-    center = np.mean(prune_to_percentile(points, 0.98), axis=0)  # barycenter of all the points, assumed to be close to the center
+    center = np.mean(prune_to_percentile(points, 0.98),
+                     axis=0)  # barycenter of all the points, assumed to be close to the center
     central_group_label = int(np.argmin(np.linalg.norm(centroids[1:, :2] - center[:2].T, axis=1)))
 
     # Prune outliers
@@ -1946,6 +1950,4 @@ def find_plant_bounding_box(
     # Compute the bounds of the cluster and add margins
     bounds = np.hstack((np.min(clusters_pruned, axis=0)[:, np.newaxis], np.max(clusters_pruned, axis=0)[:, np.newaxis]))
 
-
     return augment_bounds(bounds, margins, percent), labels, centroids, center
-
