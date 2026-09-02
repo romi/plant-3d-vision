@@ -168,24 +168,34 @@ class LinearFilterApp(QMainWindow):
         self.ch2_value = None
         self.ch3_value = None
 
-        # Initialize database
-        self._init_database()
-
         # Timers (wait after modifications stop for 200 ms before processing)
         self._load_image_timer = QTimer(self, singleShot=True, interval=300)
         self._load_image_timer.timeout.connect(self._load_image)
         self._process_image_timer = QTimer(self, singleShot=True, interval=300)
         self._process_image_timer.timeout.connect(self.process_image)
 
-        # Initialize UI
+        # Initialize UI first (without scan list)
         self.initUI()
 
+        # Initialize database after UI is created
+        self._init_database()
+
+        # After database is initialized, update UI with scan list
+        self._update_scan_dropdown()
+        
+        # Auto-select and load first scan if available
+
         if scan_id and scan_id in self.scan_ids_list:
-            self.scan_dropdown.setCurrentIndex(self.scan_ids_list.index(scan_id))
+            # If a scan_id was provided but no scans exist,
+            self.scan_dropdown.setCurrentIndex(self.scan_ids_list.index(scan_id))  # No selection
             self._load_scan(scan_id)
+        elif self.scan_ids_list:
+            self.scan_dropdown.setCurrentIndex(0)
+            self._load_scan(self.scan_ids_list[0])
         else:
-            scan_id = self.scan_ids_list[self.scan_dropdown.currentIndex()]
-            self._load_scan(scan_id)
+            # No scans available, show message
+            self._clear_display()
+            print("No scans available in the database. Please check your FSDB path.")
 
     def _init_database(self):
         """Initialize the database connection and load scan list."""
@@ -197,6 +207,19 @@ class LinearFilterApp(QMainWindow):
         except Exception as e:
             logger.error(f"Error connecting to database: {e}")
             self.scan_ids_list = []
+
+    def _update_scan_dropdown(self):
+        """Update the scan dropdown with the current scan list."""
+        # Clear existing items
+        self.scan_dropdown.clear()
+        # Add new items
+        self.scan_dropdown.addItems(self.scan_ids_list)
+        
+        # If there are scans, set the first one as selected
+        if self.scan_ids_list:
+            self.scan_dropdown.setCurrentIndex(0)
+        else:
+            self.scan_dropdown.setCurrentIndex(-1)
 
     def initUI(self):
         """Create and arrange all widgets of the GUI.
@@ -482,13 +505,29 @@ class LinearFilterApp(QMainWindow):
             # Load first image
             if self.images_list:
                 self._load_image_from_slider(0)
-            self._import_parameters()
+            else:
+                # No images available, clear display
+                self._clear_display()
 
         except Exception as e:
             logger.error(f"Error loading scan '{scan_id}': {e}")
             self.images_list = []
             self.image_slider.setMaximum(0)
             self._update_image_label()
+            self._clear_display()
+
+    def _clear_display(self):
+        """Clear the image display when no images are available."""
+        # Clear any existing plots
+        self.figure.clear()
+        
+        # Create a placeholder message
+        ax = self.figure.add_subplot(111)
+        ax.text(0.5, 0.5, 'No images available\nSelect a scan with images', 
+                horizontalalignment='center', verticalalignment='center',
+                transform=ax.transAxes, fontsize=16, color='gray')
+        ax.axis('off')
+        self.canvas.draw()
 
     @Slot()
     def _load_image_from_slider(self, index):
