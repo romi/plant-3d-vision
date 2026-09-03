@@ -41,6 +41,10 @@ from romitask.task import ImagesFilesetExists
 
 logger = get_logger(__name__)
 
+# Type aliases
+Points3D = np.ndarray[tuple[int, int], np.dtype[np.float32]]  # (n_points, 3)
+Colors = np.ndarray[tuple[int, int], np.dtype[np.uint8]]  # (n_points, 3)
+
 
 def shape_from_bounding_box(bounding_box: dict[str, tuple[int, int]], voxel_size: float = 1.) -> tuple[int, int, int]:
     """Calculate the shape of the array required to cover a 3‑D bounding box at a specified voxel resolution.
@@ -245,7 +249,7 @@ def remap_averaging(vol: np.ndarray, n_imgs: int) -> np.ndarray:
 
 
 def points_and_colors_from_points_dict(points_dict: dict) -> tuple[
-    ndarray[tuple[int, int], dtype[floating[_32Bit]]], ndarray[tuple[int, int], dtype[unsignedinteger[_8Bit]]]]:
+    Points3D, Colors]:
     """
     Extracts 3D points and their corresponding RGB colors from a dictionary and returns them as separate arrays.
 
@@ -285,8 +289,8 @@ def points_and_colors_from_points_dict(points_dict: dict) -> tuple[
 
 
 def plot_pointcloud_with_bbox(
-        points: np.ndarray,
-        colors: np.ndarray,
+        points: Points3D,
+        colors: Colors,
         bbox: dict,
         *,
         figsize: tuple[int, int] = (10, 8),
@@ -401,7 +405,7 @@ def plot_pointcloud_with_bbox(
 
 
 def plot_pointcloud_with_clusters(
-        points: np.ndarray,
+        points: Points3D,
         labels: np.ndarray,
         centroids: np.ndarray,
         centre: np.ndarray,
