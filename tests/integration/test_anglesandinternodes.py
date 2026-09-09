@@ -51,6 +51,7 @@ class TestGeomAnglesAndInternodes(unittest.TestCase):
         with open(geom_pipe_real_conf, 'r') as f:
             custom_config = toml.load(f)
         custom_config["Colmap"]["matcher"] = "custom"
+        custom_config["Colmap"]["circular_match_window"] = 6
 
         # Perform a Clean before running the pipeline
         process = run_task(plant_dataset, "Clean", geom_pipe_real_conf, no_auth=True)
