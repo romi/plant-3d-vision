@@ -13,21 +13,37 @@ Key Features:
 - Handles bounding box determination from various sources (scan metadata, COLMAP)
 - Can process labeled mask datasets for semantic segmentation
 """
-
+import json
+import os.path
 import sys
+import tempfile
 
 import luigi
+import matplotlib.pyplot as plt
 import numpy as np
+from mpl_toolkits.mplot3d import Axes3D
+from numpy import dtype
+from numpy import floating
+from numpy import ndarray
+from numpy import unsignedinteger
+from numpy._typing import _32Bit
+from numpy._typing import _8Bit
+from plantdb.commons import io
+from plantdb.commons.fsdb.core import File
 
+from plant3dvision.proc3d import find_plant_bounding_box
 from plant3dvision.tasks.colmap import Colmap
 from plant3dvision.tasks.proc2d import Masks
 from plant3dvision.voxel_cuda import Backprojection
-from plantdb.commons import io
 from romitask import RomiTask
 from romitask.log import get_logger
 from romitask.task import ImagesFilesetExists
 
 logger = get_logger(__name__)
+
+# Type aliases
+Points3D = np.ndarray[tuple[int, int], np.dtype[np.float32]]  # (n_points, 3)
+Colors = np.ndarray[tuple[int, int], np.dtype[np.uint8]]  # (n_points, 3)
 
 
 def shape_from_bounding_box(bounding_box: dict[str, tuple[int, int]], voxel_size: float = 1.) -> tuple[int, int, int]:
@@ -232,6 +248,321 @@ def remap_averaging(vol: np.ndarray, n_imgs: int) -> np.ndarray:
     return int_labels[int_idx] + n_imgs
 
 
+def points_and_colors_from_points_dict(points_dict: dict) -> tuple[
+    Points3D, Colors]:
+    """
+    Extracts 3D points and their corresponding RGB colors from a dictionary and returns them as separate arrays.
+
+    This function processes a dictionary where each key-value pair represents a 3D point. The value contains coordinates
+    and color information in specified fields. It parses the inputs, converts them to appropriate numpy arrays, and splits
+    the data into two outputs: 3D coordinates and RGB color values.
+
+    Parameters
+    ----------
+    points_dict : dict
+        A dictionary containing 3D points information. Each key-value pair represents a point where the value is a
+        dictionary with the following keys:
+        - "xyz" : list of 3 floats
+            The (x, y, z) coordinates of the point in 3D space.
+        - "rgb" : list of 3 integers
+            The corresponding RGB color of the point, where each value is in the range [0, 255].
+
+    Returns
+    -------
+    tuple of (ndarray, ndarray)
+        A tuple containing the following two numpy arrays:
+        - ndarray of shape (n_points, 3) and dtype np.float32
+            Array of 3D points where each row corresponds to the (x, y, z) coordinates of a point.
+        - ndarray of shape (n_points, 3) and dtype np.uint8
+            Array of RGB values where each row corresponds to the (r, g, b) color of a point.
+    """
+    n_points = len(points_dict)
+    points3d = np.zeros((n_points, 3), dtype=np.float32)
+    colors = np.zeros((n_points, 3), dtype=np.uint8)
+
+    for i, point_info in enumerate(points_dict.values()):
+        xyz = np.array(point_info["xyz"], dtype=np.float32)
+        rgb = np.array(point_info["rgb"], dtype=np.uint8)
+        points3d[i, :] = xyz[:]
+        colors[i, :] = rgb[:]
+    return points3d, colors
+
+
+def plot_pointcloud_with_bbox(
+        points: Points3D,
+        colors: Colors,
+        bbox: dict,
+        *,
+        figsize: tuple[int, int] = (10, 8),
+        elev: float = 30,  # elevation angle for isometric view
+        azim: float = 45,  # azimuth angle for isometric view
+        point_size: float = 0.1,
+        save_path: str | None = None,
+) -> plt.Figure:
+    """
+    Plot a coloured 3‑D point cloud together with a semi‑transparent bounding box.
+
+    Parameters
+    ----------
+    points : numpy.ndarray
+        3‑D coordinates of the points, array of shape ``(n, 3)``.
+    colors : numpy.ndarray
+        Corresponding RGB colours (0–255), array of shape ``(n, 3)`` and dtype uint8.
+        They will be normalised to ``[0, 1]`` for Matplotlib.
+    bbox : dict
+        Dictionary with keys ``'x'``, ``'y'``, ``'z'``.  Each value is a two‑element tuple
+        ``(min, max)`` that defines the extents of the box along that axis.
+    figsize : tuple, optional
+        Size of the generated figure ``(width, height)`` in inches.
+    elev, azim : float, optional
+        Elevation and azimuth angles that define the **isometric** view.
+    point_size : float, optional
+        Marker size for the scatter plot.
+    save_path : str or None, optional
+        If provided, the figure is saved to this path (e.g. ``"scene.png"``).
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        The created figure
+    """
+    fig = plt.figure(figsize=figsize)
+    ax = fig.add_subplot(111, projection="3d")
+
+    # ------------------------------------------------------------
+    # Plot the coloured points
+    # ------------------------------------------------------------
+    # Matplotlib expects colours in [0, 1]; convert once for all points
+    norm_colors = colors.astype(np.float32) / 255.0
+    ax.scatter(
+        points[:, 0],
+        points[:, 1],
+        points[:, 2],
+        c=norm_colors,
+        s=point_size,
+        marker="s",
+        depthshade=False,
+    )
+
+    # ------------------------------------------------------------
+    # Build the 8 corners of the bounding box
+    # ------------------------------------------------------------
+    x0, x1 = bbox["x"]
+    y0, y1 = bbox["y"]
+    z0, z1 = bbox["z"]
+    corners = np.array(
+        [
+            [x0, y0, z0],
+            [x1, y0, z0],
+            [x1, y1, z0],
+            [x0, y1, z0],
+            [x0, y0, z1],
+            [x1, y0, z1],
+            [x1, y1, z1],
+            [x0, y1, z1],
+        ]
+    )
+
+    # ------------------------------------------------------------
+    # Plot the 12 edges of the box (wire‑frame) with alpha=0.5
+    # ------------------------------------------------------------
+    edges = [
+        (0, 1), (1, 2), (2, 3), (3, 0),  # bottom rectangle
+        (4, 5), (5, 6), (6, 7), (7, 4),  # top rectangle
+        (0, 4), (1, 5), (2, 6), (3, 7),  # vertical edges
+    ]
+    for i, j in edges:
+        xs, ys, zs = zip(corners[i], corners[j])
+        ax.plot(xs, ys, zs, color="k", linewidth=1.5, alpha=0.5)
+
+    max_range = np.array(
+        [
+            points[:, 0].max() - points[:, 0].min(),
+            points[:, 1].max() - points[:, 1].min(),
+            points[:, 2].max() - points[:, 2].min(),
+        ]
+    ).max()
+    Xb = 0.5 * max_range * np.array([-1, 1]) + (x0 + x1) / 2
+    Yb = 0.5 * max_range * np.array([-1, 1]) + (y0 + y1) / 2
+    Zb = 0.5 * max_range * np.array([-1, 1]) + (z0 + z1) / 2
+    ax.set_xlim(Xb)
+    ax.set_ylim(Yb)
+    ax.set_zlim(Zb)
+
+    ax.view_init(elev=elev, azim=azim)
+
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.set_zlabel("Z")
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+    else:
+        plt.show()
+
+    return fig
+
+
+def plot_pointcloud_with_clusters(
+        points: Points3D,
+        labels: np.ndarray,
+        centroids: np.ndarray,
+        centre: np.ndarray,
+        *,
+        figsize: tuple[int, int] = (10, 8),
+        elev: float = 30,  # elevation angle for isometric view
+        azim: float = 45,  # azimuth angle for isometric view
+        point_size: float = 1.0,
+        centroid_size: float = 80.0,
+        centre_size: float = 150.0,
+        save_path: str | None = None,
+) -> plt.Figure:
+    """
+    Visualise a 3‑D point‑cloud coloured by clustering labels.
+
+    Parameters
+    ----------
+    points : numpy.ndarray
+        XYZ coordinates of the point cloud, array of shape ``(N, 3)``.
+    labels : numpy.ndarray
+        Integer cluster labels for each point (``-1`` denotes noise), array of shape ``(N,)``.
+    centroids : numpy.ndarray
+        XYZ coordinates of the computed cluster centroids, array of shape ``(K, 3)``, where
+        ``K`` is the number of clusters.
+    centre : numpy.ndarray
+        Global centre point (e.g. the mean of the whole cloud), array of shape ``(3,)``.
+    figsize : tuple, optional
+        Size of the generated figure (width, height) in inches.
+    elev, azim : float, optional
+        Elevation and azimuth angles that define the **isometric** view.
+    point_size : float, optional
+        Marker size for the cloud points.
+    centroid_size : float, optional
+        Marker size for the centroids.
+    centre_size : float, optional
+        Marker size for the global centre.
+    save_path : str or None, optional
+        If provided, the figure is saved to this path (e.g. ``"scene.png"``).
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        The created figure
+    """
+    fig = plt.figure(figsize=figsize)
+    ax = fig.add_subplot(111, projection="3d")
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.set_zlabel("Z")
+    ax.set_title("Point‑cloud coloured by cluster labels")
+
+    # Colormap – tab20 provides 20 distinct colours
+    cmap = plt.get_cmap("tab20")
+
+    # Determine the set of valid (non‑noise) labels
+    unique_labels = np.unique(labels[labels != -1])
+    # Map each label to a colour index in the colormap
+    label_to_color = {lbl: cmap(i % 20) for i, lbl in enumerate(sorted(unique_labels))}
+
+    # Plot noise points (if any) in light gray
+    noise_mask = labels == -1
+    if np.any(noise_mask):
+        ax.scatter(
+            points[noise_mask, 0],
+            points[noise_mask, 1],
+            points[noise_mask, 2],
+            c="lightgray",
+            s=point_size,
+            depthshade=False,
+            label="Noise",
+        )
+
+    # Plot each cluster
+    for lbl in unique_labels:
+        mask = labels == lbl
+        ax.scatter(
+            points[mask, 0],
+            points[mask, 1],
+            points[mask, 2],
+            c=[label_to_color[lbl]],
+            s=point_size,
+            depthshade=False,
+            label=f"Cluster {lbl}",
+        )
+
+    # Plot centroids – same colour as the cluster but with a distinct marker
+    for i, lbl in enumerate(sorted(unique_labels)):
+        centroid = centroids[i]
+        ax.scatter(
+            centroid[0],
+            centroid[1],
+            centroid[2],
+            c=[label_to_color[lbl]],
+            s=centroid_size,
+            edgecolor="k",
+            linewidth=1.0,
+            marker="^",
+            label=f"Centroid {lbl}",
+        )
+
+    # Plot the global centre point
+    ax.scatter(
+        centre[0],
+        centre[1],
+        centre[2],
+        c="k",
+        s=centre_size,
+        edgecolor="w",
+        linewidth=1.0,
+        marker="o",
+        label="Global centre",
+    )
+
+    # Add a vertical dashed line through the centre spanning the Z‑range
+    z_min, z_max = points[:, 2].min(), points[:, 2].max()
+    ax.plot(
+        [centre[0], centre[0]],
+        [centre[1], centre[1]],
+        [z_min, z_max],
+        color="k",
+        linestyle="--",
+        linewidth=1,
+        label="Central axis",
+    )
+
+    # Create a legend (optional – can be omitted for very large clouds)
+    ax.legend(loc="upper right", fontsize="small", markerscale=1.0)
+
+    max_range = np.array(
+        [
+            points[:, 0].max() - points[:, 0].min(),
+            points[:, 1].max() - points[:, 1].min(),
+            points[:, 2].max() - points[:, 2].min(),
+        ]
+    ).max()
+    Xb = 0.6 * max_range * np.array([-1, 1])
+    Yb = 0.6 * max_range * np.array([-1, 1])
+    Zb = 0.6 * max_range * np.array([-1, 1])
+    ax.set_xlim(Xb)
+    ax.set_ylim(Yb)
+    ax.set_zlim(Zb)
+
+    ax.view_init(elev=elev, azim=azim)
+
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.set_zlabel("Z")
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+    else:
+        plt.show()
+
+    return fig
+
+
 class Voxels(RomiTask):
     """Computes a volume from backprojection of 2D segmented images using voxel carving or averaging.
 
@@ -279,7 +610,20 @@ class Voxels(RomiTask):
         Volume dictionary used to define the space to reconstruct.
         By default, it uses the scanner workspace defined in the 'images' fileset.
         Defined as `{'x': [int, int], 'y': [int, int], 'z': [int, int]}`.
+        ``"auto"`` is also accepted. When used, the bounding box will be automatically estimated.
         Defaults to ``None`` (NO bounding-box).
+    bounding_box_prune_ratio : luigi.FloatParameter, optional
+        Used when bounding_box is set to ``auto``. Quantile of points to keep from the central cluster.
+        Points most far away are discarded first.
+    bounding_box_margins : luigi.FloatParameter, optional
+        Used when bounding_box is set to ``auto``. Safety margins in mm that are added (and substracted) around
+        the estimated bounding box.
+    bounding_box_w_geo : luigi.FloatParameter, optional
+        Used when bounding_box is set to ``auto``. Weight for the spatial (geometric) features in the clustering.
+        Increase for more spatial influence. Defaults to ``2.0``.
+    bounding_box_w_col : luigi.FloatParameter, optional
+        Used when bounding_box is set to ``auto``. Weight for the color features in the clustering.
+        Increase for more color influence. Defaults to ``1.0``.
     bounding_box_edit : luigi.DictParameter, optional
         Edit the bounding box dictionary.
         Useful with VirtualPlants where the `bounding_box` is known, but we would like to edit it.
@@ -328,6 +672,11 @@ class Voxels(RomiTask):
     invert = luigi.BoolParameter(default=False)
     labels = luigi.ListParameter(default=[])
     bounding_box = luigi.DictParameter(default=None)
+    bounding_box_mode = luigi.ChoiceParameter(default="manual", choices=["manual", "auto"])
+    bounding_box_prune_ratio = luigi.FloatParameter(default=0.98)
+    bounding_box_margins = luigi.FloatParameter(default=10)
+    bounding_box_w_geo = luigi.FloatParameter(default=2.0)
+    bounding_box_w_col = luigi.FloatParameter(default=1.0)
     bounding_box_edit = luigi.DictParameter(default=None)
 
     def requires(self):
@@ -373,6 +722,25 @@ class Voxels(RomiTask):
         md_str = str(self.camera_metadata).lower()
 
         # - Define bounding-box to use to define the shape of the voxel array:
+        colmap_fileset = self.input()['colmap'].get()
+        points_dict = json.loads(colmap_fileset.get_file("points3d").read())
+
+        points3d, colors = points_and_colors_from_points_dict(points_dict)
+
+        labels = None
+        centroids = None
+        center = None
+        if self.bounding_box_mode == "auto":
+            bounding_box, labels, centroids, center = find_plant_bounding_box(
+                points3d, colors, self.bounding_box_prune_ratio, self.bounding_box_margins,
+                w_geo=self.bounding_box_w_geo, w_col=self.bounding_box_w_col
+            )
+            self.bounding_box = {
+                "x": (bounding_box[0, 0], bounding_box[0, 1]),
+                "y": (bounding_box[1, 0], bounding_box[1, 1]),
+                "z": (bounding_box[2, 0], bounding_box[2, 1]),
+            }
+
         # Get it from the `Scan` metadata:
         if self.bounding_box is None:
             self.bounding_box = self.output().get().scan.get_metadata("bounding_box", default=None)
@@ -400,6 +768,21 @@ class Voxels(RomiTask):
 
         # Print the bounding-box values:
         logger.info(f"Bounding-box to use: {self.bounding_box}")
+        file: File = self.output_file(file_id="bounding_box_fig", create=True)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = os.path.join(tmp_dir, "bounding_box_fig.png")
+            plot_pointcloud_with_bbox(points3d, colors, self.bounding_box,
+                                      save_path=path)
+            file.import_file(path)
+
+        # Print the clustering figure, if computed (auto bounding box mode):
+        if labels is not None:
+            clusters_file: File = self.output_file(file_id="auto_bb_clusters_fig", create=True)
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                path = os.path.join(tmp_dir, "auto_bb_clusters_fig.png")
+                plot_pointcloud_with_clusters(points3d, labels, centroids, center,
+                                              save_path=path)
+                clusters_file.import_file(path)
 
         # - Check if any displacement exists and use it to modify the shape of the voxel array (to create):
         x_min, x_max = sorted(self.bounding_box["x"])

@@ -22,6 +22,7 @@ dependencies = [
     # "pybind11",
     "pyopencl",
     "scikit-image",
+    "scikit-learn",
     "tomlkit",
     "joblib",
     "matplotlib",

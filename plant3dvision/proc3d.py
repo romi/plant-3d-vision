@@ -2,11 +2,42 @@
 # -*- coding: utf-8 -*-
 
 """
-plant3dvision.proc3d
----------------
+# 3D Data Processing
 
-This module contains all functions for processing of 3D data.
+Functions for processing and analyzing 3D data (point clouds, voxel volumes and
+triangular meshes) of plants, built on Open3D, SciPy, scikit-image and scikit-learn.
 
+## Key Features
+
+- Convert between voxel volumes, point clouds and triangular meshes, with
+  optional Poisson surface reconstruction and marching-cubes meshing.
+- Voxelize point clouds and reconstruct surfaces via signed distance fields.
+- Build k-nearest-neighbour and radius neighbour graphs and derive plant
+  skeletons (including the "XU method" distance-to-root clustering).
+- Crop, filter and prune point clouds, fit planes with RANSAC and compute
+  geometric measures such as convex-hull volume and Chamfer distance.
+- Back-project 3D points to image planes and project camera planes onto a fitted plane.
+- Filter segmented point clouds and find plant bounding boxes using HDBSCAN
+  clustering with geometric and color features.
+
+## Usage Examples
+
+Convert voxel indices to world coordinates:
+```python
+>>> from plant3dvision.proc3d import index2point
+>>> import numpy as np
+>>> index2point(np.array([[0, 0, 0], [1, 2, 3]]), [0., 0., 0.], 0.5)
+array([[0. , 0. , 0. ],
+       [0.5, 1. , 1.5]])
+```
+
+Compute the symmetric Chamfer distance between two point clouds:
+```python
+>>> from plant3dvision.proc3d import chamfer_distance
+>>> import numpy as np
+>>> chamfer_distance(np.array([[0., 0., 0.], [1., 1., 1.]]), np.array([[0., 0., 0.], [1., 1., 1.]]))
+0.0
+```
 """
 import time
 
@@ -14,17 +45,18 @@ import networkx as nx
 import numpy as np
 import open3d as o3d
 import skimage
-from scipy.ndimage import binary_erosion
-from scipy.ndimage import generate_binary_structure
-from scipy.ndimage import gaussian_filter
+from romitask.log import get_logger
 from scipy.ndimage import binary_dilation
+from scipy.ndimage import binary_erosion
 from scipy.ndimage import distance_transform_edt
+from scipy.ndimage import gaussian_filter
+from scipy.ndimage import generate_binary_structure
 from scipy.spatial import cKDTree
 from skimage import measure
+from skimage.color import rgb2lab
 from skimage.exposure import rescale_intensity
+from sklearn.cluster import HDBSCAN
 from tqdm import tqdm
-
-from romitask.log import get_logger
 
 logger = get_logger(__name__)
 
@@ -92,7 +124,7 @@ def point2index(points: np.ndarray, origin: np.ndarray | list, voxel_size: float
 
 
 def pcd2mesh(pcd: o3d.geometry.PointCloud) -> o3d.geometry.TriangleMesh:
-    """Use CGAL to create a Delaunay triangulation of a point cloud with normals.
+    """Use CGAL to create Delaunay triangulation of a point cloud with normals.
 
     Parameters
     ----------
@@ -155,7 +187,7 @@ def pcd2vol(pcd, voxel_size, zero_padding=0):
     voxel_size : float
         Target voxel size.
     zero_padding : int, optional
-        Number of zero padded values on every side of the volume.
+        Number of zero-padded values on every side of the volume.
         Defaults to ``0``.
 
     Returns
@@ -469,9 +501,9 @@ def distance_to_root_clusters(g, root_index, pcd, bin_size):
     Returns
     -------
     networkx.Grah
-        cluster graph
+        The cluster graph.
     dict
-        corresponding cluster for each node in the original graph
+        The corresponding cluster for each node in the original graph.
     """
     import bisect
 
@@ -568,7 +600,7 @@ def skeleton_from_distance_to_root_clusters(pcd, root_index, binsize, k, connect
     # Create initial k-nearest neighbors graph from point cloud
     g = knn_graph(pcd, k)
 
-    # Optionally ensure graph is fully connected by adding edges from root
+    # Optionally, ensure graph is fully connected by adding edges from root
     if connect_all_points:
         connect_graph(g, pcd, root_index)
 
@@ -1750,3 +1782,201 @@ def filter_segmented_pcd(pcd: o3d.geometry.PointCloud,
     out_pcd.points = o3d.utility.Vector3dVector(pts)
     out_pcd.colors = o3d.utility.Vector3dVector(color_array)
     return out_pcd
+
+
+def prune_to_percentile(
+        points: np.ndarray,
+        keep_ratio: float = 0.90,
+        method: str = "mahalanobis",
+        output_mask: bool = False,
+) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
+    """
+    Prunes a set of points to retain only a fraction of the closest points based on a specified
+    distance measure. The function can return either the pruned set of points or both the pruned
+    points and a mask indicating which points were retained.
+
+    Parameters
+    ----------
+    points : numpy.ndarray
+        A 2D array of shape ``(N, D)`` where ``N`` is the number of points and ``D`` is the dimension
+        of each point.
+    keep_ratio : float, default=0.90
+        A float value between 0 and 1 specifying the fraction of points to retain after pruning.
+    method : str, default="mahalanobis"
+        The distance metric to use for pruning. Possible values are:
+        - "mahalanobis": Use Mahalanobis distance.
+        - "euclidean": Use Euclidean distance.
+        An error is raised if an unsupported method is specified.
+    output_mask : bool, default=False
+        If ``True``, the function returns a tuple containing both the pruned points and a boolean mask
+        indicating which points were retained. If ``False``, only the pruned points are returned.
+
+    Returns
+    -------
+    numpy.ndarray or tuple
+        If `output_mask` is ``False``, returns a 2D array of shape ``(M, D)``, where ``M`` is the number of points
+        retained and ``D`` is the dimension of each point.
+        If `output_mask` is ``True``, returns a tuple containing:
+        - A 2D array of shape ``(M, D)`` with the pruned points.
+        - A 1D boolean array of length ``N``, where ``True`` indicates a retained point and ``False`` indicates
+          a pruned one.
+    """
+    assert 0 < keep_ratio < 1, f"Input `keep_ratio` must be between 0 and 1, got {keep_ratio}"
+
+    centroid = points.mean(axis=0)
+
+    if method == "mahalanobis":
+        # Covariance of the inlier cloud (add tiny regularisation for numerical stability)
+        cov = np.cov(points - centroid, rowvar=False) + np.eye(3) * 1e-12
+        inv_cov = np.linalg.inv(cov)
+        # Mahalanobis distance of each point from the centroid
+        diff = points - centroid
+        d2 = np.einsum("ij,jk,ik->i", diff, inv_cov, diff)  # = (x-μ)^T Σ⁻¹ (x-μ)
+        distances = np.sqrt(d2)
+    elif method == "euclidean":
+        distances = np.linalg.norm(points - centroid, axis=1)
+    else:
+        raise ValueError(f"Unsupported pruning `method`: {method}")
+
+    # Keep the smallest keep_ratio‑fraction of distances
+    threshold = np.quantile(distances, keep_ratio)
+    mask = distances <= threshold
+    if output_mask:
+        return points[mask], mask
+    return points[mask]
+
+
+def augment_bounds(bounds: np.ndarray, margin: float, percent: bool = False) -> np.ndarray:
+    """
+    Modifies input bounding intervals to augment the range either by a fixed margin
+    or a percentage of the span of the bounds. The function supports handling bounds
+    as arrays and applies the augmentation adjustments element-wise.
+
+    Parameters
+    ----------
+    bounds : numpy.ndarray
+        A numpy array of shape ``(n, 2)`` where each row represents a single interval
+        with lower and upper bounds.
+    margin : float
+        The value by which bounds should be augmented. If `percent` is ``True``, this
+        value is treated as a percentage.
+    percent : bool, optional
+        If ``True``, the provided `margin` is treated as a percentage of the
+        interval range for each bound. If ``False``, `margin` is treated as a fixed
+        value.
+
+    Returns
+    -------
+    numpy.ndarray
+        A numpy array of shape ``(n, 2)`` where each interval's bounds are augmented
+        according to the specified `margin`. Each lower bound is decreased,
+        and each upper bound is increased.
+    """
+    assert isinstance(bounds, np.ndarray), f"Expected bounds to be a numpy array, got {type(bounds)}"
+    assert bounds.shape[1] == 2, f"Expected bounds to be of shape (n, 2), got (n, {bounds.shape[1]})"
+    new_bounds = bounds.copy()
+    if percent:
+        spans = bounds[:, 1] - bounds[:, 0]
+        margins = spans * margin / 100
+        new_bounds[:, 0] -= margins / 2
+        new_bounds[:, 1] += margins / 2
+    else:
+        new_bounds[:, 0] -= margin
+        new_bounds[:, 1] += margin
+    return new_bounds
+
+
+def find_plant_bounding_box(
+        points: np.ndarray[tuple[int, int], np.dtype[np.float32]],
+        colors: np.ndarray[tuple[int, int], np.dtype[np.uint8]],
+        pruning_quantile: float = 0.98,
+        margins: float = 30.,
+        percent: bool = False,
+        w_geo: float = 2.0,
+        w_col: float = 1.0
+) -> np.ndarray[tuple[int, int], np.dtype[np.float32]]:
+    """
+    Finds the bounding box of a plant represented by 3D points and corresponding colors using clustering
+    and pruning techniques. This method calculates the central cluster of points and removes outliers
+    based on specified quantiles before computing the bounding box with optional margins.
+
+    Parameters
+    ----------
+    points : numpy.ndarray
+        An array of 3D spatial coordinates of shape ``(N, 3)``, where ``N`` is the number of points.
+    colors : numpy.ndarray
+        An array of color values corresponding to the points, of shape ``(N, 3)``.
+    pruning_quantile : float, optional
+        The quantile value (default is ``0.98``) used to prune outliers from the cluster. Values closer to 1
+        prune fewer points.
+    margins : float, optional
+        Optional margin value (default is ``30.0``) to add to the bounding box edges. In real-world units.
+    percent : bool, optional
+        If ``True``, the margins will be applied as a percentage of the bounding box size. Defaults to ``False``.
+    w_geo : float, optional
+        Weight for the spatial (geometric) features in the clustering. Increase for more spatial influence.
+        Defaults to ``2.0``.
+    w_col : float, optional
+        Weight for the color features in the clustering. Increase for more color influence.
+        Defaults to ``1.0``.
+
+    Returns
+    -------
+    bounding_box : numpy.ndarray
+        A 2D array containing the bounding box dimensions in the format
+       `` [[x_min, x_max], [y_min, y_max], [z_min, z_max]]``
+    labels : numpy.ndarray
+        Cluster label of each point (``-1`` denotes noise).
+    centroids : numpy.ndarray
+        XYZ coordinates of the computed cluster centroids.
+    center : numpy.ndarray
+        Barycenter of all the points, assumed to be close to the center.
+    """
+
+    # Convert to lab for perceptually continuous color (we want to select colors close together in perception)
+    lab = rgb2lab(colors[np.newaxis, :, :])[0]  # (N, 3)
+
+    # Preparing features for clustering (positions and color)
+
+    # ---- isotropic geometry scaling ------------------------------------------------
+    # Compute a single scale factor from the three spatial variances
+    geo_scale = np.sqrt(np.mean(np.var(points, axis=0)))  # scalar
+    xyz_norm = w_geo * (points - points.mean(axis=0)) / geo_scale
+
+    # ---- isotropic colour scaling (optional) --------------------------------------
+    col_scale = np.sqrt(np.mean(np.var(lab, axis=0)))  # scalar
+    lab_norm = w_col * (lab - lab.mean(axis=0)) / col_scale
+
+    # ---- final feature matrix -------------------------------------------------------
+    features = np.hstack((xyz_norm, lab_norm))
+
+    # Clustering
+    dbscan = HDBSCAN(min_cluster_size=50, cluster_selection_epsilon=20 * w_geo / geo_scale)
+
+    labels = dbscan.fit_predict(features)
+
+    # Compute centroïds
+    u_labels = sorted(np.unique(labels))
+    label_to_index = {int(label): i for i, label in enumerate(u_labels)}
+    centroids = np.zeros((len(u_labels), 3))
+    n_element_per_label = np.zeros((len(u_labels),))
+    for i in range(len(labels)):
+        label = labels[i]
+        pos = points[i]
+        j = label_to_index[label]  # index of the label among u_labels
+        centroids[j, :] += pos
+        n_element_per_label[j] += 1
+    centroids = centroids[:, :] / n_element_per_label[:, np.newaxis]
+
+    # Select the center most cluster
+    center = np.mean(prune_to_percentile(points, 0.98),
+                     axis=0)  # barycenter of all the points, assumed to be close to the center
+    central_group_label = int(np.argmin(np.linalg.norm(centroids[1:, :2] - center[:2].T, axis=1)))
+
+    # Prune outliers
+    clusters_pruned = prune_to_percentile(points[labels == central_group_label, :], keep_ratio=pruning_quantile)
+
+    # Compute the bounds of the cluster and add margins
+    bounds = np.hstack((np.min(clusters_pruned, axis=0)[:, np.newaxis], np.max(clusters_pruned, axis=0)[:, np.newaxis]))
+
+    return augment_bounds(bounds, margins, percent), labels, centroids, center
