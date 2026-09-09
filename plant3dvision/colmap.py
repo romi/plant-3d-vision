@@ -1593,7 +1593,11 @@ class ColmapRunner(object):
             out = ''
             # Append the output of the COLMAP process to the log file:
             with open(self.log_file, mode="a") as f:
-                subprocess.run(process, check=True, stdout=f)
+                result = subprocess.run(process, stdout=f, stderr=subprocess.PIPE)
+                if result.returncode != 0:
+                    raise subprocess.CalledProcessError(
+                        result.returncode, process, stderr=result.stderr
+                    )
         else:
             # Run the subprocess and catch its output to return it decoded
             out = subprocess.run(process, capture_output=True)
@@ -1729,9 +1733,9 @@ class ColmapRunner(object):
             '--database_path', f'{self.colmap_workdir}/database.db',
             '--image_path', f'{self.colmap_workdir}/images',
             '--output_path', f'{self.colmap_workdir}/sparse',
-            '--Mapper.init_image_id1', "10",
-            '--Mapper.init_image_id2', "11",
-            "--Mapper.multiple_models", "0",
+            # '--Mapper.init_image_id1', "10",
+            # '--Mapper.init_image_id2', "11",
+            # "--Mapper.multiple_models", "0",
         ]
         cli_args = self.all_cli_args.get('mapper', {})
         logger.info("Running colmap 'mapper'...")

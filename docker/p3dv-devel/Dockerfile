@@ -83,11 +83,19 @@ WORKDIR /home/${USER_NAME}
 # Copy .bashrc file
 COPY --chown=${USER_NAME} docker/.bashrc .bashrc
 
-# Create the virtual environment at build time (empty, ready for packages)
-RUN python3 -m venv /home/${USER_NAME}/venv
-
-# Note: Source code will be mounted at runtime, not copied during build
-# The installation will happen in entrypoint.sh at container startup
+# Copy the source files starting from the root folder (relative to context build):
+COPY --chown=${USER_NAME} ./ plant-3d-vision/
+# Pip install step (mount cache with uid/gid so romi owns it)
+RUN --mount=type=cache,target=/home/${USER_NAME}/.cache/pip,uid=${USER_ID},gid=${USER_ID} \
+    cd plant-3d-vision/ && \
+    # Create a virtual environment
+    python3 -m venv /home/${USER_NAME}/venv && \
+    # Activate the virtual environment and install packages
+    . /home/${USER_NAME}/venv/bin/activate && \
+    # Install `plant-3d-vision` dependencies and sources:
+    bash install.sh --no-env --webterm --update-tools && \
+    # Download the trained CNN model file:
+    ./get_model.sh /home/${USER_NAME}/
 
 COPY --chown=${USER_NAME} docker/p3dv-devel/entrypoint.sh .
 # Make entrypoint executable

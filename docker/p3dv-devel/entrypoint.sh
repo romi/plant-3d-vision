@@ -9,42 +9,32 @@ umask 0002
 source "/home/${USER_NAME}/venv/bin/activate"
 
 # Define the source code mount point
-SOURCE_DIR="${SOURCE_DIR:-/workspace}"
+SOURCE_DIR="/mnt_src"
 INSTALL_DIR="/home/${USER_NAME}/plant-3d-vision"
 
-NO_COPY="false"
-# Disable source code copy if the same directory is used
-if [ "${SOURCE_DIR}" == "${INSTALL_DIR}" ]; then
-  NO_COPY="true"
-fi
-
-# Check if source code is mounted
-if [ -d "$SOURCE_DIR" ]; then
-    echo "Source code detected at $SOURCE_DIR"
-
-    if [ "${NO_COPY}" = "true" ]; then
-        echo "Variable NO_COPY is 'true', skipping copy of source code..."
-    else
-        echo "Copying source code from ${SOURCE_DIR} to ${INSTALL_DIR} ..."
-        mkdir -p "${INSTALL_DIR}"
-        cp -R "${SOURCE_DIR}/." "${INSTALL_DIR}/."
+# Check if source code is mounted and not empty
+if [ -d "$SOURCE_DIR" ] && [ "$(ls -A "$SOURCE_DIR")" ]; then
+    echo "Copying source code from ${SOURCE_DIR} to ${INSTALL_DIR} ..."
+    # Remove previous installation if it exists
+    if [ -d "${INSTALL_DIR}" ]; then
+        rm -rf "${INSTALL_DIR}"
     fi
+    mkdir -p "${INSTALL_DIR}"
+    cp -R "${SOURCE_DIR}/." "${INSTALL_DIR}/."
 
-    echo "Installing/updating plant-3d-vision from ${INSTALL_DIR}..."
+    echo "Installing plant-3d-vision sources and dependencies..."
     cd ${INSTALL_DIR}
     # Run installation script
     # The --no-env flag prevents creating a new venv since we're already in one
     bash install.sh --no-env --update-tools
 
-    # Download the trained CNN model if needed
-    if [ -f "./get_model.sh" ]; then
-        ./get_model.sh
-    fi
+    # Copy the Resnet model to the testdata directory
+    cp "/home/${USER_NAME}/Resnet_896_896_epoch50.pt" "/home/${USER_NAME}/plant-3d-vision/tests/testdata/models/models/"
 
     echo "Installation complete!"
 else
-    echo "Warning: Source code not found at $SOURCE_DIR"
-    echo "Please mount your repository with: -v \$(pwd):/workspace"
+    echo "Warning: Source code not found or empty at $SOURCE_DIR"
+    echo "Please mount your repository with: -v \$(pwd):/mnt_src"
 fi
 
 # Move to working directory

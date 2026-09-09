@@ -37,11 +37,13 @@ x-runner-base: &runner-base
     - /tmp:noexec,nosuid,nodev
     - /run:noexec,nosuid,nodev
 
+
 x-runner-common-env: &runner-common-env
   GITHUB_RUNNER_EPHEMERAL: "true"
   GITHUB_RUNNER_URL: "${GITHUB_RUNNER_URL}"
   GITHUB_RUNNER_LABELS: "${GITHUB_RUNNER_LABELS:-self-hosted,linux,docker,x64,gpu}"
   BUILDX_HOME: "/home/ubuntu/.docker/buildx"
+
 
 services:
   runner1:
@@ -53,6 +55,7 @@ services:
       GITHUB_RUNNER_NAME: romi-github-runner-1
       RUNNER_WORK_DIR: /var/lib/github-runners/runner1/_work
     volumes:
+      - runner1_state:/actions-runner
       - /var/lib/github-runners/runner1/_work:/var/lib/github-runners/runner1/_work
       - "${DOCKER_SOCK:-$XDG_RUNTIME_DIR/docker.sock}:/var/run/docker.sock"
 
@@ -65,6 +68,7 @@ services:
       GITHUB_RUNNER_NAME: romi-github-runner-2
       RUNNER_WORK_DIR: /var/lib/github-runners/runner2/_work
     volumes:
+      - runner2_state:/actions-runner
       - /var/lib/github-runners/runner2/_work:/var/lib/github-runners/runner2/_work
       - "${DOCKER_SOCK:-$XDG_RUNTIME_DIR/docker.sock}:/var/run/docker.sock"
 
@@ -77,6 +81,7 @@ services:
       GITHUB_RUNNER_NAME: romi-github-runner-3
       RUNNER_WORK_DIR: /var/lib/github-runners/runner3/_work
     volumes:
+      - runner3_state:/actions-runner
       - /var/lib/github-runners/runner3/_work:/var/lib/github-runners/runner3/_work
       - "${DOCKER_SOCK:-$XDG_RUNTIME_DIR/docker.sock}:/var/run/docker.sock"
 
@@ -89,5 +94,12 @@ services:
       GITHUB_RUNNER_NAME: romi-github-runner-4
       RUNNER_WORK_DIR: /var/lib/github-runners/runner4/_work
     volumes:
+      - runner4_state:/actions-runner
       - /var/lib/github-runners/runner4/_work:/var/lib/github-runners/runner4/_work
       - "${DOCKER_SOCK:-$XDG_RUNTIME_DIR/docker.sock}:/var/run/docker.sock"
+
+volumes:
+  runner1_state:
+  runner2_state:
+  runner3_state:
+  runner4_state:

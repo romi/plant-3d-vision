@@ -100,7 +100,7 @@ jobs:
         continue-on-error: false   # fail the job if image is missing
       - name: Run Unit Tests
         run: |
-          ./docker/p3dv-devel/run.sh -t ${TAG} --no-copy --unittest
+          ./docker/p3dv-devel/run.sh -t ${TAG} --unittest
 
   integration-tests:
     runs-on: self-hosted
@@ -119,4 +119,4 @@ jobs:
         continue-on-error: false   # fail the job if image is missing
       - name: Run Integration Tests
         run: |
-          ./docker/p3dv-devel/run.sh -t ${TAG} --no-copy --test-integration
+          ./docker/p3dv-devel/run.sh -t ${TAG} --test-integration

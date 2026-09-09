@@ -1,41 +1,7 @@
 #!/bin/bash
 
-# --------------------------------
-# Functions for colors and messages
-# --------------------------------
-setup_colors() {
-  RED="\033[0;31m"    # Define red color code
-  GREEN="\033[0;32m"  # Define green color code
-  YELLOW="\033[0;33m" # Define yellow color code
-  BLUE="\033[0;34m"   # Define blue color code for debug messages
-  NC="\033[0m"        # No Color code to reset colors
-  INFO="${GREEN}INFO${NC}    "    # Prefix for info messages
-  WARNING="${YELLOW}WARNING${NC} " # Prefix for warning messages
-  ERROR="${RED}$(bold ERROR)${NC}   " # Prefix for error messages using bold function
-  DEBUG="${BLUE}DEBUG${NC}   "   # Prefix for debug messages
-}
-
-bold() {
-  echo -e "\e[1m$*\e[0m" # Make text bold and reset
-}
-
-log_info() {
-  echo -e "${INFO}$1" # Print info message with INFO prefix
-}
-
-log_warning() {
-  echo -e "${WARNING}$1" # Print warning message with WARNING prefix
-}
-
-log_error() {
-  echo -e "${ERROR}$1" # Print error message with ERROR prefix
-}
-
-log_debug() {
-  if [ "${DEBUG_MODE}" = true ]; then
-    echo -e "${DEBUG}$1" # Print debug message with DEBUG prefix if debug mode is enabled
-  fi
-}
+# Load shared helpers
+source "$(dirname "$0")/../utils.sh"
 
 # --------------------------------
 # Functions for script initialization
@@ -49,14 +15,14 @@ initialize_variables() {
   cmd=''
   # Volume mounting options:
   mount_option=""
-  # Destination directory for the repository mounting point in the container:
-  source_dir="/workspace"
+  # Host directory containing the source code:
+  host_src_dir="$(pwd)"
+  # Container directory where to mount the source code:
+  container_src_dir="/mnt_src"
   # Self-test flag (0/1 to indicate call to a test)
   SELF_TEST=0
   # Debug mode is disabled by default
   DEBUG_MODE=false
-  # New flag: skip copying source code into the container
-  NO_COPY=false
 
   # Define test commands
   unittest_cmd="python3 -m unittest discover -s plant-3d-vision/tests/unit/"
@@ -94,8 +60,8 @@ show_usage() {
     Image tag to use." \
     "By default, use the '${VTAG}' tag."
   echo "  -s, --source_dir
-    Path to the source code directory to create inside the docker container." \
-    "Defaults to '${source_dir}'."
+    Path to the directory containing the source code to mount inside the docker container." \
+    "Defaults to '${host_src_dir}'."
   echo "  -db, --database
     Path to the host database to mount inside the docker container." \
     "By default, use the 'ROMI_DB' environment variable (if defined)."
@@ -198,10 +164,6 @@ parse_arguments() {
       shift
       source_dir=$1
       ;;
-    --no-copy)
-      NO_COPY=true
-      log_debug "NO_COPY flag enabled"
-      ;;
     -db | --database)
       shift
       host_db=$1
@@ -286,8 +248,7 @@ run_interactive_docker() {
   docker_cmd+=" ${mount_option}"
   docker_cmd+=" --user romi:${gid}"
   docker_cmd+=" ${docker_option}"
-  docker_cmd+=" -v $(pwd):${source_dir}"
-  docker_cmd+=" -e NO_COPY=${NO_COPY}"
+  docker_cmd+=" -v $host_src_dir:${container_src_dir}"
   docker_cmd+=" -i"  # use the `-i` flag to load `~/.bashrc`.
   docker_cmd+=" ${USE_TTY}"
   docker_cmd+=" roboticsmicrofarms/p3dv-devel:${VTAG}"
@@ -311,8 +272,7 @@ run_docker_command() {
   docker_cmd+=" ${mount_option}"
   docker_cmd+=" --user romi:${gid}"
   docker_cmd+=" ${docker_option}"
-  docker_cmd+=" -v $(pwd):${source_dir}"
-  docker_cmd+=" -e NO_COPY=${NO_COPY}"
+  docker_cmd+=" -v ${host_src_dir}:${container_src_dir}"
   docker_cmd+=" -i"  # use the `-i` flag to load `~/.bashrc`.
   docker_cmd+=" ${USE_TTY}"
   docker_cmd+=" roboticsmicrofarms/p3dv-devel:${VTAG}"
