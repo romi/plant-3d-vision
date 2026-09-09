@@ -16,9 +16,9 @@ import open3d as o3d
 import skimage
 from scipy.ndimage import binary_erosion
 from scipy.ndimage import generate_binary_structure
-from scipy.ndimage.filters import gaussian_filter
-from scipy.ndimage.morphology import binary_dilation
-from scipy.ndimage.morphology import distance_transform_edt
+from scipy.ndimage import gaussian_filter
+from scipy.ndimage import binary_dilation
+from scipy.ndimage import distance_transform_edt
 from scipy.spatial import cKDTree
 from skimage import measure
 from skimage.exposure import rescale_intensity
