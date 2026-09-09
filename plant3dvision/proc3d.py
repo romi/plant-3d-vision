@@ -2,11 +2,42 @@
 # -*- coding: utf-8 -*-
 
 """
-plant3dvision.proc3d
----------------
+# 3D Data Processing
 
-This module contains all functions for processing of 3D data.
+Functions for processing and analyzing 3D data (point clouds, voxel volumes and
+triangular meshes) of plants, built on Open3D, SciPy, scikit-image and scikit-learn.
 
+## Key Features
+
+- Convert between voxel volumes, point clouds and triangular meshes, with
+  optional Poisson surface reconstruction and marching-cubes meshing.
+- Voxelize point clouds and reconstruct surfaces via signed distance fields.
+- Build k-nearest-neighbour and radius neighbour graphs and derive plant
+  skeletons (including the "XU method" distance-to-root clustering).
+- Crop, filter and prune point clouds, fit planes with RANSAC and compute
+  geometric measures such as convex-hull volume and Chamfer distance.
+- Back-project 3D points to image planes and project camera planes onto a fitted plane.
+- Filter segmented point clouds and find plant bounding boxes using HDBSCAN
+  clustering with geometric and color features.
+
+## Usage Examples
+
+Convert voxel indices to world coordinates:
+```python
+>>> from plant3dvision.proc3d import index2point
+>>> import numpy as np
+>>> index2point(np.array([[0, 0, 0], [1, 2, 3]]), [0., 0., 0.], 0.5)
+array([[0. , 0. , 0. ],
+       [0.5, 1. , 1.5]])
+```
+
+Compute the symmetric Chamfer distance between two point clouds:
+```python
+>>> from plant3dvision.proc3d import chamfer_distance
+>>> import numpy as np
+>>> chamfer_distance(np.array([[0., 0., 0.], [1., 1., 1.]]), np.array([[0., 0., 0.], [1., 1., 1.]]))
+0.0
+```
 """
 import time
 
@@ -14,20 +45,18 @@ import networkx as nx
 import numpy as np
 import open3d as o3d
 import skimage
+from romitask.log import get_logger
+from scipy.ndimage import binary_dilation
 from scipy.ndimage import binary_erosion
+from scipy.ndimage import distance_transform_edt
+from scipy.ndimage import gaussian_filter
 from scipy.ndimage import generate_binary_structure
-from scipy.ndimage.filters import gaussian_filter
-from scipy.ndimage.morphology import binary_dilation
-from scipy.ndimage.morphology import distance_transform_edt
 from scipy.spatial import cKDTree
 from skimage import measure
 from skimage.color import rgb2lab
 from skimage.exposure import rescale_intensity
 from sklearn.cluster import HDBSCAN
-from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
-
-from romitask.log import get_logger
 
 logger = get_logger(__name__)
 
@@ -95,7 +124,7 @@ def point2index(points: np.ndarray, origin: np.ndarray | list, voxel_size: float
 
 
 def pcd2mesh(pcd: o3d.geometry.PointCloud) -> o3d.geometry.TriangleMesh:
-    """Use CGAL to create a Delaunay triangulation of a point cloud with normals.
+    """Use CGAL to create Delaunay triangulation of a point cloud with normals.
 
     Parameters
     ----------
@@ -158,7 +187,7 @@ def pcd2vol(pcd, voxel_size, zero_padding=0):
     voxel_size : float
         Target voxel size.
     zero_padding : int, optional
-        Number of zero padded values on every side of the volume.
+        Number of zero-padded values on every side of the volume.
         Defaults to ``0``.
 
     Returns
@@ -472,9 +501,9 @@ def distance_to_root_clusters(g, root_index, pcd, bin_size):
     Returns
     -------
     networkx.Grah
-        cluster graph
+        The cluster graph.
     dict
-        corresponding cluster for each node in the original graph
+        The corresponding cluster for each node in the original graph.
     """
     import bisect
 
@@ -571,7 +600,7 @@ def skeleton_from_distance_to_root_clusters(pcd, root_index, binsize, k, connect
     # Create initial k-nearest neighbors graph from point cloud
     g = knn_graph(pcd, k)
 
-    # Optionally ensure graph is fully connected by adding edges from root
+    # Optionally, ensure graph is fully connected by adding edges from root
     if connect_all_points:
         connect_graph(g, pcd, root_index)
 
