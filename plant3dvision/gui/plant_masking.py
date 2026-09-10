@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-**Linear Filter GUI**
+**Plant Masking GUI**
 
 A Python module that launches an interactive Qt‑based application for loading plant scan images, applying a customizable linear combination of color‑space channels, and visualizing the filtered result together with a threshold‑derived binary mask.
 It streamlines the exploration of channel weighting and threshold parameters, making it easy to fine‑tune image preprocessing for downstream analysis.
@@ -23,10 +23,10 @@ It streamlines the exploration of channel weighting and threshold parameters, ma
 
 ```shell
 # Launch the GUI, automatically discovering the FSDB path from the 'ROMI_DB' environment variable
-linear_filter
+plant_masking
 
 # Or provide an explicit FSDB directory and optionally open a specific scan
-linear_filter /path/to/FSDB --scan SCAN_ID
+plant_masking /path/to/FSDB --scan SCAN_ID
 ```
 
 Running the script opens the window where you can browse scans, adjust color‑space sliders, set threshold limits, and instantly see how the linear filter affects the image and its mask.
@@ -64,15 +64,28 @@ from plantdb.commons.fsdb.core import FSDB
 from plantdb.commons.log import DEFAULT_LOG_LEVEL
 from plantdb.commons.log import LOG_LEVELS
 from plantdb.commons.log import get_logger
+from skimage.morphology import binary_dilation
+from skimage.morphology import diamond
 
-from plant3dvision.proc2d import dilation
+from plant3dvision.proc2d import binary_mask_from_grayscale
+from plant3dvision.proc2d import excess_green
+from plant3dvision.proc2d import green_fraction
 from plant3dvision.proc2d import linear
+from plant3dvision.proc2d import luminance_thin_lines_enhancement
 
 # Create a logger and set the environment variable
-logger = get_logger("LinearFilterApp", log_level=DEFAULT_LOG_LEVEL)
+logger = get_logger("PlantMaskingApp", log_level=DEFAULT_LOG_LEVEL)
+
+# Available grayscale methods with their default parameters (excl. shared ones).
+METHODS = {
+    "linear": {},
+    "excess_green": {"bright_threshold": 0.5},
+    "green_fraction": {"bright_threshold": 0.5},
+    "luminance_thin_lines_enhancement": {"half_length": 2},
+}
 
 
-class LinearFilterApp(QMainWindow):
+class PlantMaskingApp(QMainWindow):
     """Linear filter GUI application.
 
     Provides an interactive interface to load an image, apply a linear
@@ -148,7 +161,7 @@ class LinearFilterApp(QMainWindow):
         Then call `initUI` to build the graphical user interface.
         """
         super().__init__()
-        self.setWindowTitle("Linear Filter and Threshold")
+        self.setWindowTitle("Filter and Threshold Parameters for Plant‑Masking")
         self.setGeometry(100, 100, 1200, 800)
 
         # Database connection
@@ -291,6 +304,24 @@ class LinearFilterApp(QMainWindow):
         # Sliders
         sliders_layout = QVBoxLayout()
 
+        # Method Selector
+        method_layout = QHBoxLayout()
+        method_label = QLabel("Method:")
+        self.method_combo = QComboBox()
+        self.method_combo.addItems(list(METHODS.keys()))
+        self.method_combo.setToolTip(
+            "Select the grayscale transformation method used to compute the feature image."
+        )
+        self.method_combo.currentTextChanged.connect(self._on_method_changed)
+        method_layout.addWidget(method_label)
+        method_layout.addWidget(self.method_combo)
+        sliders_layout.addLayout(method_layout)
+
+        # --- Linear-specific controls (color space + 3 channels) ---
+        self.linear_container = QWidget()
+        linear_layout = QVBoxLayout()
+        linear_layout.setContentsMargins(0, 0, 0, 0)
+
         # Color Space Selector
         cs_layout = QHBoxLayout()
         cs_label = QLabel("Color Space:")
@@ -307,7 +338,7 @@ class LinearFilterApp(QMainWindow):
         cs_layout.addWidget(cs_label)
         cs_layout.addWidget(self.color_space_combo)
         cs_layout.addWidget(self.cs_help_button)
-        sliders_layout.addLayout(cs_layout)
+        linear_layout.addLayout(cs_layout)
 
         # Channel 1 slider
         ch1_layout = QHBoxLayout()
@@ -331,7 +362,7 @@ class LinearFilterApp(QMainWindow):
         ch1_layout.addWidget(self.ch1_label)
         ch1_layout.addWidget(self.ch1_slider)
         ch1_layout.addWidget(self.ch1_value)
-        sliders_layout.addLayout(ch1_layout)
+        linear_layout.addLayout(ch1_layout)
 
         # Channel 2 slider
         ch2_layout = QHBoxLayout()
@@ -355,7 +386,7 @@ class LinearFilterApp(QMainWindow):
         ch2_layout.addWidget(self.ch2_label)
         ch2_layout.addWidget(self.ch2_slider)
         ch2_layout.addWidget(self.ch2_value)
-        sliders_layout.addLayout(ch2_layout)
+        linear_layout.addLayout(ch2_layout)
 
         # Channel 3 slider
         ch3_layout = QHBoxLayout()
@@ -379,7 +410,60 @@ class LinearFilterApp(QMainWindow):
         ch3_layout.addWidget(self.ch3_label)
         ch3_layout.addWidget(self.ch3_slider)
         ch3_layout.addWidget(self.ch3_value)
-        sliders_layout.addLayout(ch3_layout)
+        linear_layout.addLayout(ch3_layout)
+
+        self.linear_container.setLayout(linear_layout)
+        sliders_layout.addWidget(self.linear_container)
+
+        # --- bright_threshold control (excess_green / green_fraction) ---
+        self.bright_threshold_container = QWidget()
+        bright_threshold_layout = QHBoxLayout()
+        bright_threshold_layout.setContentsMargins(0, 0, 0, 0)
+        bright_threshold_label = QLabel("Bright Threshold:")
+        self.bright_threshold_slider = QSlider(Qt.Orientation.Horizontal)
+        self.bright_threshold_slider.setRange(0, 100)
+        self.bright_threshold_slider.setValue(50)
+        self.bright_threshold_slider.setMinimumWidth(200)
+        self.bright_threshold_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.bright_threshold_slider.setTickInterval(10)
+        self.bright_threshold_slider.setToolTip(
+            "Brightness threshold in [0, 1]. Pixels with total intensity below this value are set to zero."
+        )
+        self.bright_threshold_value = QDoubleSpinBox()
+        self.bright_threshold_value.setDecimals(2)
+        self.bright_threshold_value.setRange(0.0, 1.0)
+        self.bright_threshold_value.setSingleStep(0.01)
+        self.bright_threshold_value.setValue(0.5)
+        bright_threshold_layout.addWidget(bright_threshold_label)
+        bright_threshold_layout.addWidget(self.bright_threshold_slider)
+        bright_threshold_layout.addWidget(self.bright_threshold_value)
+        self.bright_threshold_container.setLayout(bright_threshold_layout)
+        sliders_layout.addWidget(self.bright_threshold_container)
+
+        # --- half_length control (luminance_thin_lines_enhancement) ---
+        self.half_length_container = QWidget()
+        half_length_layout = QHBoxLayout()
+        half_length_layout.setContentsMargins(0, 0, 0, 0)
+        half_length_label = QLabel("Half Length:")
+        self.half_length_slider = QSlider(Qt.Orientation.Horizontal)
+        self.half_length_slider.setRange(1, 10)
+        self.half_length_slider.setValue(2)
+        self.half_length_slider.setMinimumWidth(200)
+        self.half_length_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.half_length_slider.setTickInterval(1)
+        self.half_length_slider.setToolTip(
+            "Half-length of the line structuring element (a value of 2 yields a 5-pixel line)."
+        )
+        self.half_length_value = QDoubleSpinBox()
+        self.half_length_value.setDecimals(0)
+        self.half_length_value.setRange(1, 10)
+        self.half_length_value.setSingleStep(1.0)
+        self.half_length_value.setValue(2)
+        half_length_layout.addWidget(half_length_label)
+        half_length_layout.addWidget(self.half_length_slider)
+        half_length_layout.addWidget(self.half_length_value)
+        self.half_length_container.setLayout(half_length_layout)
+        sliders_layout.addWidget(self.half_length_container)
 
         # Threshold & Dilation controls
         threshold_dilation_layout = QHBoxLayout()
@@ -388,7 +472,7 @@ class LinearFilterApp(QMainWindow):
         self.min_threshold_spinbox = QDoubleSpinBox()
         self.min_threshold_spinbox.setRange(0.0, 1.0)
         self.min_threshold_spinbox.setSingleStep(0.01)
-        self.min_threshold_spinbox.setValue(0.3)
+        self.min_threshold_spinbox.setValue(0.2)
         self.min_threshold_spinbox.setToolTip(
             "Minimum intensity value for the mask. Pixels with values below this are excluded from the binary mask."
         )
@@ -412,10 +496,30 @@ class LinearFilterApp(QMainWindow):
             "Binary dilation applied to the mask image."
         )
 
+        # Minimum connected-component size control
+        min_size_label = QLabel("Min Size:")
+        self.min_size_slider = QSlider(Qt.Orientation.Horizontal)
+        self.min_size_slider.setRange(0, 25)
+        self.min_size_slider.setValue(0)
+        self.min_size_slider.setMinimumWidth(80)
+        self.min_size_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.min_size_slider.setTickInterval(5)
+        self.min_size_slider.setToolTip(
+            "Minimum connected component size in pixels (0 keeps every component)."
+        )
+        self.min_size_value = QDoubleSpinBox()
+        self.min_size_value.setDecimals(0)
+        self.min_size_value.setRange(0, 25)
+        self.min_size_value.setSingleStep(1.0)
+        self.min_size_value.setValue(0)
+
         threshold_dilation_layout.addWidget(min_thresh_label)
         threshold_dilation_layout.addWidget(self.min_threshold_spinbox)
         threshold_dilation_layout.addWidget(max_thresh_label)
         threshold_dilation_layout.addWidget(self.max_threshold_spinbox)
+        threshold_dilation_layout.addWidget(min_size_label)
+        threshold_dilation_layout.addWidget(self.min_size_slider)
+        threshold_dilation_layout.addWidget(self.min_size_value)
         threshold_dilation_layout.addWidget(dilation_label)
         threshold_dilation_layout.addWidget(self.dilation_spinbox)
         sliders_layout.addLayout(threshold_dilation_layout)
@@ -436,7 +540,7 @@ class LinearFilterApp(QMainWindow):
         # Ensure the controls panel stays compact
         controls_container = QWidget()
         controls_container.setLayout(controls_layout)
-        controls_container.setMaximumHeight(250)  # limit height
+        controls_container.setMaximumHeight(320)  # limit height
         controls_container.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)  # fixed vertical size
 
         # Add controls to main layout
@@ -480,6 +584,15 @@ class LinearFilterApp(QMainWindow):
         self.min_threshold_spinbox.valueChanged.connect(self._process_image_timer.start)
         self.max_threshold_spinbox.valueChanged.connect(self._process_image_timer.start)
         self.dilation_spinbox.valueChanged.connect(self._process_image_timer.start)
+        self.bright_threshold_slider.valueChanged.connect(self._on_bright_threshold_slider_changed)
+        self.bright_threshold_value.valueChanged.connect(self._on_bright_threshold_spinbox_changed)
+        self.half_length_slider.valueChanged.connect(self._on_half_length_slider_changed)
+        self.half_length_value.valueChanged.connect(self._on_half_length_spinbox_changed)
+        self.min_size_slider.valueChanged.connect(self._on_min_size_slider_changed)
+        self.min_size_value.valueChanged.connect(self._on_min_size_spinbox_changed)
+
+        # Set initial method-specific control visibility (defaults to 'linear')
+        self._on_method_changed(self.method_combo.currentText())
 
     def _filter_scans(self, text):
         """Filter the scan dropdown based on search box text."""
@@ -597,27 +710,38 @@ class LinearFilterApp(QMainWindow):
             return  # nothing to load
 
         logger.info("Found a local_config.toml file, loading previous parameters...")
-        # - Make sure we have a list of three float coefficients
-        params = mask_cfg.get("parameters", [])
-        if isinstance(params, str):
-            # Stored as a string like "[0.5, 1.0, 0.5]"
-            params = [float(v) for v in params.strip("[]").split(",")]
-        elif isinstance(params, list):
-            # Ensure every element is a float (it may be an int)
-            params = [float(v) for v in params]
+        # - Selected method (default to 'linear' for legacy configs)
+        method = mask_cfg.get("method", "linear")
+        if method not in METHODS:
+            method = "linear"
+        self.method_combo.setCurrentText(method)
 
         # - Populate the UI widgets
-        # colour‑space selector
-        self.color_space_combo.setCurrentText(mask_cfg.get("colorspace", "RGB"))
+        if method == "linear":
+            # Make sure we have a list of three float coefficients
+            params = mask_cfg.get("parameters", [])
+            if isinstance(params, str):
+                # Stored as a string like "[0.5, 1.0, 0.5]"
+                params = [float(v) for v in params.strip("[]").split(",")]
+            elif isinstance(params, list):
+                # Ensure every element is a float (it may be an int)
+                params = [float(v) for v in params]
 
-        # sliders expect values in the range 0–100
-        self.ch1_slider.setValue(int(params[0] * 100))
-        self.ch2_slider.setValue(int(params[1] * 100))
-        self.ch3_slider.setValue(int(params[2] * 100))
+            # colour‑space selector
+            self.color_space_combo.setCurrentText(mask_cfg.get("colorspace", "RGB"))
+            # sliders expect values in the range 0–100
+            self.ch1_slider.setValue(int(params[0] * 100))
+            self.ch2_slider.setValue(int(params[1] * 100))
+            self.ch3_slider.setValue(int(params[2] * 100))
+        elif method in ("excess_green", "green_fraction"):
+            self.bright_threshold_value.setValue(mask_cfg.get("bright_threshold", 0.5))
+        elif method == "luminance_thin_lines_enhancement":
+            self.half_length_value.setValue(mask_cfg.get("half_length", 2))
 
-        # thresholds and dilation
+        # thresholds, min size and dilation
         self.min_threshold_spinbox.setValue(mask_cfg.get("min_threshold", 0.0))
         self.max_threshold_spinbox.setValue(mask_cfg.get("max_threshold", 1.0))
+        self.min_size_value.setValue(mask_cfg.get("min_size", 0))
         self.dilation_spinbox.setValue(mask_cfg.get("dilation", 0))
 
     def _export_parameters(self):
@@ -630,21 +754,29 @@ class LinearFilterApp(QMainWindow):
             existing_config = {}
 
         try:
+            method = self.method_combo.currentText()
             # Update with new mask parameters
-            existing_config["Masks"] = {
-                "method": "linear",
-                "colorspace": self.color_space_combo.currentText(),
-                "parameters": [
+            masks = {
+                "method": method,
+                "min_threshold": self.min_threshold_spinbox.value(),
+                "max_threshold": self.max_threshold_spinbox.value(),
+                "min_size": self.min_size_value.value(),
+                "dilation": self.dilation_spinbox.value(),
+            }
+            # Method-specific parameters
+            if method == "linear":
+                masks["colorspace"] = self.color_space_combo.currentText()
+                masks["parameters"] = str([
                     self.ch1_slider.value() / 100.0,
                     self.ch2_slider.value() / 100.0,
                     self.ch3_slider.value() / 100.0
-                ],
-                "min_threshold": self.min_threshold_spinbox.value(),
-                "max_threshold": self.max_threshold_spinbox.value(),
-                "dilation": self.dilation_spinbox.value(),
-            }
-            # Convert the list of coefficients to a string
-            existing_config["Masks"]["parameters"] = str(existing_config["Masks"]["parameters"])
+                ])
+            elif method in ("excess_green", "green_fraction"):
+                masks["bright_threshold"] = self.bright_threshold_value.value()
+            elif method == "luminance_thin_lines_enhancement":
+                masks["half_length"] = self.half_length_value.value()
+
+            existing_config["Masks"] = masks
             # Write to file
             with open(config_path, "w") as f:
                 tomlkit.dump(existing_config, f)
@@ -794,6 +926,78 @@ class LinearFilterApp(QMainWindow):
         self.ch3_slider.blockSignals(False)
         self._process_image_timer.start()
 
+    @Slot()
+    def _on_method_changed(self, method):
+        """Show/hide method-specific controls and reset them to defaults."""
+        self.linear_container.setVisible(method == "linear")
+        self.bright_threshold_container.setVisible(method in ("excess_green", "green_fraction"))
+        self.half_length_container.setVisible(method == "luminance_thin_lines_enhancement")
+
+        # Finer threshold resolution for methods whose feature values are small in magnitude.
+        # ponytail: hardcoded precision map; extend if a future method needs another step size.
+        decimals, step = (3, 0.001) if method in ("excess_green", "green_fraction") else (2, 0.01)
+        for spinbox in (self.min_threshold_spinbox, self.max_threshold_spinbox):
+            spinbox.blockSignals(True)
+            spinbox.setDecimals(decimals)
+            spinbox.setSingleStep(step)
+            spinbox.blockSignals(False)
+
+        defaults = METHODS.get(method, {})
+        if "bright_threshold" in defaults:
+            self.bright_threshold_value.setValue(defaults["bright_threshold"])
+        if "half_length" in defaults:
+            self.half_length_value.setValue(defaults["half_length"])
+
+        self._process_image_timer.start()
+
+    @Slot()
+    def _on_bright_threshold_slider_changed(self, value):
+        """Update the bright threshold spinbox from the slider (0-100 → 0-1)."""
+        self.bright_threshold_value.blockSignals(True)
+        self.bright_threshold_value.setValue(value / 100.0)
+        self.bright_threshold_value.blockSignals(False)
+        self._process_image_timer.start()
+
+    @Slot()
+    def _on_bright_threshold_spinbox_changed(self, value):
+        """Update the bright threshold slider from the spinbox value."""
+        self.bright_threshold_slider.blockSignals(True)
+        self.bright_threshold_slider.setValue(int(value * 100))
+        self.bright_threshold_slider.blockSignals(False)
+        self._process_image_timer.start()
+
+    @Slot()
+    def _on_half_length_slider_changed(self, value):
+        """Update the half-length spinbox from the slider."""
+        self.half_length_value.blockSignals(True)
+        self.half_length_value.setValue(value)
+        self.half_length_value.blockSignals(False)
+        self._process_image_timer.start()
+
+    @Slot()
+    def _on_half_length_spinbox_changed(self, value):
+        """Update the half-length slider from the spinbox value."""
+        self.half_length_slider.blockSignals(True)
+        self.half_length_slider.setValue(int(value))
+        self.half_length_slider.blockSignals(False)
+        self._process_image_timer.start()
+
+    @Slot()
+    def _on_min_size_slider_changed(self, value):
+        """Update the min-size spinbox from the slider."""
+        self.min_size_value.blockSignals(True)
+        self.min_size_value.setValue(value)
+        self.min_size_value.blockSignals(False)
+        self._process_image_timer.start()
+
+    @Slot()
+    def _on_min_size_spinbox_changed(self, value):
+        """Update the min-size slider from the spinbox value."""
+        self.min_size_slider.blockSignals(True)
+        self.min_size_slider.setValue(int(value))
+        self.min_size_slider.blockSignals(False)
+        self._process_image_timer.start()
+
     def load_image_from_path(self, file_path: str) -> None:
         """Load an image from an absolute path (used for CLI start‑up).
 
@@ -818,7 +1022,7 @@ class LinearFilterApp(QMainWindow):
                 logger.error(f"Error loading image from path '{file_path}': {e}")
 
     def process_image(self):
-        """Apply the linear filter and threshold, then display results.
+        """Apply the selected grayscale filter and threshold, then display results.
 
         The method reads the current slider positions to obtain channel coefficients, converts the source image
         to the selected color space (if needed), calls `plant3dvision.proc2d.linear` and finally creates a binary
@@ -840,33 +1044,43 @@ class LinearFilterApp(QMainWindow):
             saved_xlim = self.figure.axes[0].get_xlim()
             saved_ylim = self.figure.axes[0].get_ylim()
 
-        # Get values from sliders
-        c1_coef = self.ch1_slider.value() / 100.0
-        c2_coef = self.ch2_slider.value() / 100.0
-        c3_coef = self.ch3_slider.value() / 100.0
+        # Get values from controls
         min_threshold = self.min_threshold_spinbox.value()
         max_threshold = self.max_threshold_spinbox.value()
-        dilation_iterations = self.dilation_spinbox.value()
-        mode = self.color_space_combo.currentText()
+        min_size = self.min_size_value.value()
+        dilation = self.dilation_spinbox.value()
+        method = self.method_combo.currentText()
 
-        # Prepare image in selected color space
-        if mode == 'RGB':
-            img_to_filter = self.original_img
-        else:
-            # Convert using PIL and normalize to [0, 1]
-            converted = self.source_image.convert(mode)
-            img_to_filter = np.array(converted) / 255.0
+        # Apply the selected grayscale method
+        if method == "linear":
+            c1_coef = self.ch1_slider.value() / 100.0
+            c2_coef = self.ch2_slider.value() / 100.0
+            c3_coef = self.ch3_slider.value() / 100.0
+            mode = self.color_space_combo.currentText()
+            coefficients = [c1_coef, c2_coef, c3_coef]
+            self.filtered_img = linear(self.original_img, coefficients, colorspace=mode)
+            filter_desc = f"linear [{mode}] C1:{c1_coef:.2f}, C2:{c2_coef:.2f}, C3:{c3_coef:.2f}"
+        elif method == "excess_green":
+            bright_threshold = self.bright_threshold_value.value()
+            self.filtered_img = excess_green(self.original_img, bright_threshold=bright_threshold)
+            filter_desc = f"excess_green (bright_threshold={bright_threshold:.2f})"
+        elif method == "green_fraction":
+            bright_threshold = self.bright_threshold_value.value()
+            self.filtered_img = green_fraction(self.original_img, bright_threshold=bright_threshold)
+            filter_desc = f"green_fraction (bright_threshold={bright_threshold:.2f})"
+        else:  # luminance_thin_lines_enhancement
+            half_length = self.half_length_value.value()
+            self.filtered_img = luminance_thin_lines_enhancement(self.original_img, half_length=int(half_length))
+            filter_desc = f"luminance_thin_lines_enhancement (half_length={half_length})"
 
-        # Apply linear filter
-        coefficients = [c1_coef, c2_coef, c3_coef]
-        self.filtered_img = linear(self.original_img, coefficients, colorspace=mode)
-
-        # Apply threshold
-        self.mask = (self.filtered_img >= min_threshold) & (self.filtered_img <= max_threshold)
-
-        # Apply dilation if needed
-        if dilation_iterations > 0:
-            self.mask = dilation(self.mask, int(dilation_iterations))
+        # Apply binarization
+        self.mask = binary_mask_from_grayscale(
+            self.filtered_img,
+            min_threshold=min_threshold,
+            max_threshold=max_threshold,
+            min_size=min_size,
+            dilation=dilation,
+        )
 
         # Display results
         self.figure.clear()
@@ -880,15 +1094,18 @@ class LinearFilterApp(QMainWindow):
         # Filtered image
         ax2 = self.figure.add_subplot(132)
         ax2.imshow(self.filtered_img, cmap='gray')
-        ax2.set_title(f"Filtered [{mode}]\nC1:{c1_coef:.2f}, C2:{c2_coef:.2f}, C3:{c3_coef:.2f}")
+        ax2.set_title(f"Filtered\n{filter_desc}")
         ax2.axis('off')
 
         # Mask
         ax3 = self.figure.add_subplot(133)
         ax3.imshow(self.mask, cmap='binary')
-        title = f"Mask ({min_threshold:.2f} <= v <= {max_threshold:.2f})"
-        if dilation_iterations > 0:
-            title += f"\nDilation: {dilation_iterations}"
+        decimals = self.min_threshold_spinbox.decimals()
+        title = f"Mask ({min_threshold:.{decimals}f} <= v <= {max_threshold:.{decimals}f})"
+        if min_size > 0:
+            title += f"\nMin Size: {min_size}"
+        if dilation > 0:
+            title += f"\nDilation: {dilation}"
         ax3.set_title(title)
         ax3.axis('off')
 
@@ -947,7 +1164,7 @@ class LinearFilterApp(QMainWindow):
 @click.argument('fsdb_path', required=False, type=click.Path(exists=True, dir_okay=True))
 @click.option('-s', '--scan', 'scan_id', type=str)
 def main(fsdb_path: str | None = None, scan_id: str = None):
-    """Start the RGB linear filter GUI.
+    """Start the plant masking GUI.
 
     Optionally, provide an image file path to load at launch.
     """
@@ -958,7 +1175,7 @@ def main(fsdb_path: str | None = None, scan_id: str = None):
         raise ValueError(f"Provide a valid path to an FSDB folder or set 'ROMI_DB' environment variable.")
 
     app = QApplication(sys.argv)
-    window = LinearFilterApp(fsdb_path, scan_id)
+    window = PlantMaskingApp(fsdb_path, scan_id)
 
     window.show()
     sys.exit(app.exec())
