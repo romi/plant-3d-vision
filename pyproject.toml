@@ -68,7 +68,7 @@ create_charuco_board = "plant3dvision.cli.create_charuco_board:main"
 volume_viewer = "plant3dvision.gui.volume_viewer:main"
 robustness_evaluation = "plant3dvision.cli.robustness_evaluation:main"
 voronoi_texture_generator = "plant3dvision.cli.voronoi_texture_generator:main"
-linear_filter = "plant3dvision.gui.linear_filter:main"
+plant_masking = "plant3dvision.gui.plant_masking:main"
 pcd_to_mesh = "plant3dvision.gui.pcd_to_mesh:main"
 
 [project.urls]
