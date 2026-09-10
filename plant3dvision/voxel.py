@@ -1,19 +1,35 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# ------------------------------------------------------------------------------
-#  Copyright (c) 2022 Univ. Lyon, ENS de Lyon, UCB Lyon 1, CNRS, INRAe, Inria
-#  All rights reserved.
-#  This file is part of the TimageTK library, and is released under the "GPLv3"
-#  license. Please see the LICENSE.md file that should have been included as
-#  part of this package.
-# ------------------------------------------------------------------------------
 
 """
-Abstract Backprojection Module
+# Abstract Backprojection Module
 
-This module provides an abstract base class for backprojection implementations,
-defining the common API and shared functionalities used by different backend
-implementations (CUDA, OpenCL, etc.).
+Backprojection of 2D segmentation masks into a 3D voxel volume, used for plant 3D reconstruction
+from multiple camera views.
+Each camera view projects the foreground/background labels of its mask through the corresponding camera
+parameters (intrinsics, rotation and translation) into the shared voxel grid, accumulating evidence per voxel.
+
+## Key Features
+
+- Define the common API for backprojection through the abstract `AbstractBackprojection` base class.
+- Support three accumulation methods:
+  - ``"carving"``: discard voxels inconsistent with any mask (space carving, integer counts).
+  - ``"averaging"``: average per-view occupancy, with optional log transformation of the masks.
+  - ``"bayes"``: fuse views with a Bayesian update using a prior probability and the segmentation true/false positive rates.
+- Provide shared helpers: mask loading/inversion, mask preparation (dtype conversion and log transform)
+  and validation, plus batch processing of a fileset against camera metadata.
+
+## Usage
+
+Concrete backends (CUDA, OpenCL, ...) subclass `AbstractBackprojection` and implement the backend-specific hooks:
+`init_buffers`, `process_view`, `get_values` and `clear`.
+The shared `process_fileset` drives a whole fileset through the backend:
+
+```python
+>>> backend = MyBackend(shape=[300, 300, 450], origin=[0., 0., 0.],
+...                     voxel_size=0.5, method="carving")
+>>> vol = backend.process_fileset(fs, camera_metadata)
+```
 """
 from abc import ABC
 from abc import abstractmethod
@@ -57,14 +73,21 @@ class AbstractBackprojection(ABC):
     log : bool
         A boolean flag indicating whether logarithmic transformation is applied
         to a mask in 'averaging' mode.
-    method : {'carving', 'averaging'}
-        The type of backprojection to perform, either 'carving' or 'averaging'.
+    method : {'carving', 'averaging', 'bayes'}
+        The type of backprojection to perform, either 'carving', 'averaging' or 'bayes'.
     dtype : type
         The data type of the voxel values, determined by the backprojection type.
+    prior_prob : float
+        Prior probability of a voxel belonging to the object, used in 'bayes' mode.
+    tpr : float
+        True positive rate (sensitivity) of the segmentation, used in 'bayes' mode.
+    fpr : float
+        False positive rate (1 - specificity) of the segmentation, used in 'bayes' mode.
 
     Notes
     -----
-    The 'carving' mode uses `np.int32` dtype, while 'averaging' mode uses `np.float32`.
+    The 'carving' mode uses `np.int32` dtype, while 'averaging' and 'bayes' modes
+    use `np.float32`.
     Log transformation is only applicable in 'averaging' mode.
     """
 
@@ -72,9 +95,12 @@ class AbstractBackprojection(ABC):
                  shape: list[int],
                  origin: list[float],
                  voxel_size: float,
-                 method: Literal["carving", "averaging"] = "carving",
+                 method: Literal["carving", "averaging", "bayes"] = "carving",
                  default_value: float = 0,
-                 log: bool = False) -> None:
+                 log: bool = False,
+                 prior_prob: float = 0.05,
+                 tpr: float = 0.95,
+                 fpr: float = 0.1) -> None:
         """
         Initialize the abstract backprojection instance.
 
@@ -86,18 +112,27 @@ class AbstractBackprojection(ABC):
             The location of the origin of the voxel space as a list [x0, y0, z0].
         voxel_size : float
             The size of each voxel in the volume.
-        method : {'carving', 'averaging'}, optional
-            Type of backprojection to perform, either 'carving' (default) or 'averaging'.
+        method : {'carving', 'averaging', 'bayes'}, optional
+            Type of backprojection to perform, either 'carving' (default), 'averaging' or 'bayes'.
         default_value : float, optional
             The default voxel data value used during initialization. Default is ``0.0``.
         log : bool, optional
             A boolean flag indicating whether logarithmic transformation is applied to a mask in 'averaging' mode.
             Default is ``False``.
+        prior_prob : float, optional
+            Prior probability of a voxel belonging to the object, used in 'bayes' mode.
+            Default is ``0.05``.
+        tpr : float, optional
+            True positive rate (sensitivity) of the segmentation, used in 'bayes' mode.
+            Default is ``0.95``.
+        fpr : float, optional
+            False positive rate (1 - specificity) of the segmentation, used in 'bayes' mode.
+            Default is ``0.1``.
 
         Raises
         ------
         ValueError
-            If the specified type is not 'carving' or 'averaging'.
+            If the specified type is not 'carving', 'averaging' or 'bayes'.
         """
         self.shape = shape
         self.origin = origin
@@ -105,14 +140,19 @@ class AbstractBackprojection(ABC):
         self.default_value = default_value
         self.log = log
         self.method = method
+        self.prior_prob = prior_prob
+        self.tpr = tpr
+        self.fpr = fpr
 
         # Validate input parameters
-        if method not in ["carving", "averaging"]:
-            raise ValueError(f"Unknown kernel type {method}, valid values are 'averaging' or 'carving'!")
+        if method not in ["carving", "averaging", "bayes"]:
+            raise ValueError(f"Unknown kernel type {method}, valid values are 'averaging', 'carving' or 'bayes'!")
 
         # Set data type based on method
         if method == "carving":
             self.dtype = np.int32
+        elif method == "bayes":
+            self.dtype = np.float32
         elif method == "averaging":
             self.dtype = np.float32
 
