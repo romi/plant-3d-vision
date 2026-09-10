@@ -35,6 +35,7 @@ from plant3dvision.proc3d import find_plant_bounding_box
 from plant3dvision.tasks.colmap import Colmap
 from plant3dvision.tasks.proc2d import Masks
 from plant3dvision.voxel_cuda import Backprojection
+from plant3dvision.voxels_bayes_cuda import BayesianBackprojection
 from romitask import RomiTask
 from romitask.log import get_logger
 from romitask.task import ImagesFilesetExists
@@ -589,7 +590,7 @@ class Voxels(RomiTask):
         defaults to ``1.``.
     method : luigi.Parameter
         Type of back-projection to perform.
-        Valid values are in ["carving", "averaging"].
+        Valid values are in ["carving", "averaging", "bayes"].
         Defaults to ``"carving"``.
     log : luigi.BoolParameter, optional
         If ``True``, convert the mask images to logarithmic values for 'averaging' `method` prior to back-projection.
@@ -668,6 +669,10 @@ class Voxels(RomiTask):
     voxel_size = luigi.FloatParameter(default=1.0)
     method = luigi.Parameter(default="averaging")
     log = luigi.BoolParameter(default=True)
+
+    prior_prob = luigi.FloatParameter(default=0.05)
+    tpr = luigi.FloatParameter(default=0.95)
+    fpr = luigi.FloatParameter(default=0.1)
 
     invert = luigi.BoolParameter(default=False)
     labels = luigi.ListParameter(default=[])
@@ -825,8 +830,14 @@ class Voxels(RomiTask):
             camera_metadata[mask.id] = camera_metadata_from_colmap(cam)
 
         logger.debug("Initialize `Backprojection` instance...")
-        sc = Backprojection(shape=[nx, ny, nz], origin=[x_min, y_min, z_min], voxel_size=float(self.voxel_size),
-                            method=str(self.method), log=bool(self.log))
+        if str(self.method) == "bayes":
+            sc = BayesianBackprojection(shape=[nx, ny, nz], origin=[x_min, y_min, z_min],
+                                        voxel_size=float(self.voxel_size), log=bool(self.log),
+                                        prior_prob=float(self.prior_prob),
+                                        tpr=float(self.tpr), fpr=float(self.fpr))
+        else:
+            sc = Backprojection(shape=[nx, ny, nz], origin=[x_min, y_min, z_min], voxel_size=float(self.voxel_size),
+                                method=str(self.method), log=bool(self.log))
         logger.debug("Processing the mask fileset...")
         vol = sc.process_fileset({mask.id: mask.path() for mask in masks_files},
                                  camera_metadata, bool(self.invert))
@@ -869,6 +880,9 @@ class Voxels(RomiTask):
         if self.method == "averaging":
             # If the "averaging" method, apply value remapping to get the number of agreeing images per voxel:
             return remap_averaging(vol, n_imgs)
+        elif self.method == "bayes":
+            # If the "bayes" method, threshold the log-odds at 0 (posterior probability > 0.5) to get a binary outfile:
+            return np.array(vol >= 0.0).astype(np.uint8)
         else:
             # If the "carving" method, "apply thresholding" to get a binary outfile
             return np.array(vol >= 1.0).astype(np.uint8)
