@@ -8,14 +8,20 @@ plant3dvision.proc2d
 This module contains all functions for processing of 2D image data.
 
 """
+from math import copysign
+from math import floor
 from typing import Literal
 
 import cv2
 import numpy as np
 from skimage.color import convert_colorspace
+from skimage.color import rgb2gray
 from skimage.exposure import rescale_intensity
 from skimage.morphology import binary_dilation
-from skimage.morphology import disk
+from skimage.morphology import diamond
+from skimage.morphology import opening
+from skimage.morphology import remove_small_objects
+from skimage.util import img_as_float
 
 EPS = 1e-9
 
@@ -267,64 +273,299 @@ def excess_green(img: np.ndarray) -> np.ndarray:
     >>> plt.tight_layout()
     >>> plt.show()
 
-    """
-    if not img.dtype == "float":
-        img = np.asarray(img, dtype=float)  # transform the uint8 RGB image into a float RGB numpy array
-    img = rescale_intensity(img, out_range=(0., 1.))
-    s = img.sum(axis=2) + EPS
-    r = img[:, :, 0] / s
-    g = img[:, :, 1] / s
-    b = img[:, :, 2] / s
-    return (2 * g - r - b)
+    s = img.sum(axis=2)  # total intensity per pixel
+    # Mask of pixels bright enough to be considered
+    mask = s >= bright_threshold
+
+    # Normalized color channels (avoid division‑by‑zero)
+    r = np.divide(img[:, :, 0], s, out=np.zeros_like(s), where=s != 0)  # normalized red channel
+    g = np.divide(img[:, :, 1], s, out=np.zeros_like(s), where=s != 0)  # normalized green channel
+    b = np.divide(img[:, :, 2], s, out=np.zeros_like(s), where=s != 0)  # normalized blue channel
+    # (np.divide with `where` avoids a 0/0 warning on black pixels)
+
+    # Excess‑green calculation
+    excess = 2 * g - r - b
+    # Zero out pixels that did not meet the brightness threshold
+    excess = excess * mask.astype(excess.dtype)
+    return excess
 
 
-def dilation(img: np.ndarray, n: int) -> np.ndarray:
-    """
-    Dilates a binary image by `n` pixels using a sequence of cross-shaped footprint.
+def _round_away(x: float) -> int:
+    """Round a float half away from zero.
+
+    Matches the Julia ``RoundNearestTiesAway`` rounding mode, where ties
+    (values ending in ``.5``) round to the value with the larger absolute
+    magnitude, unlike Python's builtin `round`, which rounds ties to even.
 
     Parameters
     ----------
-    img : numpy.ndarray
-        A binary input image to dilate.
-    n : int
-        A number of pixels, equivalent to a radius.
+    x : float
+        The value to round.
 
-    See Also
+    Returns
+    -------
+    int
+        ``x`` rounded half away from zero.
+
+    Examples
     --------
-    skimage.morphology.binary_dilation
-    skimage.morphology.disk
+    >>> from plant3dvision.proc2d import _round_away
+    >>> _round_away(2.5)
+    3
+    >>> _round_away(-2.5)
+    -3
+    """
+    return int(copysign(floor(abs(x) + 0.5), x))
+
+
+def _bresenham_line_path(p1: tuple[int, int], p2: tuple[int, int]) -> list[tuple[int, int]]:
+    """Return the integer points along the segment joining ``p1`` to ``p2``.
+
+    Uses a Bresenham-style linear interpolation producing ``m + 1`` points,
+    where ``m`` is the largest coordinate difference between the two endpoints.
+
+    Parameters
+    ----------
+    p1 : tuple of int
+        Starting point as ``(row, col)``.
+    p2 : tuple of int
+        Ending point as ``(row, col)``.
+
+    Returns
+    -------
+    list of tuple of int
+        The integer points along the line, from ``p1`` to ``p2`` inclusive.
+
+    Examples
+    --------
+    >>> from plant3dvision.proc2d import _bresenham_line_path
+    >>> _bresenham_line_path((0, 0), (5, 2))
+    [(0, 0), (1, 0), (2, 1), (3, 1), (4, 2), (5, 2)]
+    """
+    m = max(abs(p2[0] - p1[0]), abs(p2[1] - p1[1]))  # longest axis -> number of interpolation steps
+    if m == 0:
+        return [p1]
+    pts = []
+    for i in range(m + 1):
+        t = i / m
+        # Snap the linear interpolation to the nearest integer pixel
+        pts.append((_round_away(p1[0] + t * (p2[0] - p1[0])),
+                    _round_away(p1[1] + t * (p2[1] - p1[1]))))
+    return pts
+
+
+def _line_footprint(hl: int, theta: float) -> np.ndarray:
+    """Build a 2D line structuring element of half-length ``hl`` and orientation ``theta``.
+
+    The footprint is a boolean array whose ``True`` pixels lie on a line of the
+    requested orientation, with the origin at its center.
+
+    Parameters
+    ----------
+    hl : int
+        Half-length of the line.
+    theta : float
+        Orientation of the line in degrees.
 
     Returns
     -------
     numpy.ndarray
-        The binary image dilated by `n`.
+        A boolean footprint with the line pixels set to ``True``.
+
+    Examples
+    --------
+    >>> from plant3dvision.proc2d import _line_footprint
+    >>> _line_footprint(1, 0)
+    array([[ True, False,  True]])
+    """
+    if hl == 0:
+        return np.array([[True]])
+    c = np.cos(np.radians(theta))
+    s = np.sin(np.radians(theta))
+    # Normalize so the line always spans exactly `hl` pixels along its dominant axis
+    scale = hl / max(abs(c), abs(s))
+    dx = _round_away(scale * s)
+    dy = _round_away(scale * c)
+    # Endpoints of the line, dropping the origin (center pixel)
+    pts = [p for p in _bresenham_line_path((-dx, -dy), (dx, dy)) if p != (0, 0)]
+    h = 2 * abs(dx) + 1
+    w = 2 * abs(dy) + 1
+    fp = np.zeros((h, w), dtype=bool)
+    for row, col in pts:
+        fp[dx + row, dy + col] = True  # shift line offsets to the footprint center
+    return fp
+
+
+def luminance_thin_lines_enhancement(img: np.ndarray, half_length: int = 2) -> np.ndarray:
+    """Enhance thin lines in the luminance of an RGB image.
+
+    The enhancement is computed as the maximum of the morphological openings of the luminance image
+    using line structuring elements rotated over 180 degrees, minus the opening with a box of matching size.
+    This process retains bright structures thinner than ``hl`` while removing flat or thicker regions.
+
+    Parameters
+    ----------
+    img : numpy.ndarray
+        An RGB image represented as an ``NxMx3`` array.
+    half_length : int
+        Half-length of the line structuring element (a value of 2 yields a 5-pixel line).
+
+    Returns
+    -------
+    numpy.ndarray
+        The line-enhanced luminance image as an ``NxM`` float array in ``[0, 1]``.
 
     Examples
     --------
     >>> import matplotlib.pyplot as plt
     >>> from imageio.v3 import imread
     >>> from plant3dvision import test_db_path
-    >>> from plant3dvision.proc2d import linear, dilation
+    >>> from plant3dvision.proc2d import luminance_thin_lines_enhancement
+    >>> from plant3dvision.proc2d import binary_mask_from_grayscale
     >>> path = test_db_path()
     >>> img = imread(path.joinpath('real_plant/images/00000_rgb.jpg'))
-    >>> filter_img = linear(img, [0.1, 1., 0.1])  # apply `linear` filter
-    >>> threshold = 0.3
-    >>> mask = filter_img > threshold  # convert to binary mask using a threshold
-    >>> radius = 2
-    >>> dilated_mask = dilation(mask, radius)  # apply a dilation to binary mask
-    >>> fig, axes = plt.subplots(2, 2, figsize=(8, 7))
-    >>> axes[0, 0].imshow(img)
-    >>> axes[0, 0].set_title("Original image")
-    >>> axes[0, 1].imshow(filter_img, cmap='gray')
-    >>> axes[0, 1].set_title("Filtered image (linear)")
-    >>> axes[1, 0].imshow(mask, cmap='gray')
-    >>> axes[1, 0].set_title(f"Binary mask image (threshold={threshold})")
-    >>> axes[1, 1].imshow(dilated_mask, cmap='gray')
-    >>> axes[1, 1].set_title(f"Dilated binary mask image (radius={radius})")
-    >>> [ax.set_axis_off() for ax in axes.flatten()]
+    >>> gray_img = luminance_thin_lines_enhancement(img, half_length=2)
+    >>> mask_img = binary_mask_from_grayscale(gray_img, min_threshold=0.06, min_size=3, dilation=0)
+    >>> fig, ax = plt.subplots(1, 2, figsize=(12, 5))
+    >>> ax[0].imshow(gray_img, cmap="gray")
+    >>> ax[0].set_title("Line-enhanced luminance image")
+    >>> ax[1].imshow(mask_img, cmap="gray")
+    >>> ax[1].set_title("Binary mask")
     >>> plt.tight_layout()
     >>> plt.show()
-
     """
-    img = binary_dilation(img, footprint=disk(n, decomposition='sequence'))
-    return img
+    # Compute the luminance of the RGB image
+    img = rgb2gray(img)
+    # A thin bright structure survives a line opening but not the larger box opening,
+    # so (max of line openings) - (box opening) isolates lines thinner than `hl` while
+    # cancelling flat or thick regions.
+    out = opening(img, _line_footprint(half_length, 0))
+    for i in range(1, 4 * half_length):
+        se = _line_footprint(half_length, -i * 45 / half_length)
+        out = np.maximum(out, opening(img, se))
+    out = out - opening(img, np.ones((2 * half_length + 1, 2 * half_length + 1)))
+    return out
+
+
+def green_fraction(img: np.ndarray, bright_threshold: float = 127 / 255) -> np.ndarray:
+    r"""Compute the green fraction index of an RGB image.
+
+    For each pixel the index is the green channel normalized by the total intensity:
+
+    .. math::
+        f(x) = g(x) / (r(x) + g(x) + b(x)),
+
+    where :math:`r(x)`, :math:`g(x)`, and :math:`b(x)` denote the red, green, and blue
+    intensity values of pixel :math:`x`, respectively.
+
+    Pixels whose total intensity ``r+g+b`` falls below this value (in the ``[0, 1]`` range)
+    are set to zero before the excess‑green calculation. This helps guard against noisy dark pixels.
+
+    Parameters
+    ----------
+    img : numpy.ndarray
+        An RGB image represented as an ``NxMx3`` array.
+    bright_threshold : float, optional
+        Brightness threshold in ``[0, 1]``.
+        Pixels with a total intensity below ``l`` are set to zero.
+        Defaults to ``127 / 255``.
+
+    Returns
+    -------
+    numpy.ndarray
+        The green fraction image as an ``NxM`` float array in ``[0, 1]``.
+
+    Examples
+    --------
+    >>> import matplotlib.pyplot as plt
+    >>> from imageio.v3 import imread
+    >>> from plant3dvision import test_db_path
+    >>> from plant3dvision.proc2d import green_fraction
+    >>> from plant3dvision.proc2d import binary_mask_from_grayscale
+    >>> path = test_db_path()
+    >>> img = imread(path.joinpath('real_plant/images/00000_rgb.jpg'))
+    >>> gray_img = green_fraction(img, bright_threshold=0.5)
+    >>> mask_img = binary_mask_from_grayscale(gray_img, min_threshold=0.2, min_size=3, dilation=0)
+    >>> fig, ax = plt.subplots(1, 2, figsize=(12, 5))
+    >>> ax[0].imshow(gray_img, cmap="gray")
+    >>> ax[0].set_title("Green fraction image")
+    >>> ax[1].imshow(mask_img, cmap="gray")
+    >>> ax[1].set_title("Binary mask")
+    >>> plt.tight_layout()
+    >>> plt.show()
+    """
+    if img.dtype != "float":
+        img = img_as_float(img)
+
+    g = img[:, :, 1]  # green channel
+    s = img.sum(axis=2)  # total intensity over the channels
+    # Green normalized by total intensity; zero out pixels darker than `bright_threshold`
+    # (np.divide with `where` avoids a 0/0 warning on black pixels)
+    return np.where(s >= bright_threshold, np.divide(g, s, out=np.zeros_like(s), where=s != 0), 0.0)
+
+
+def binary_mask_from_grayscale(gray_img: np.ndarray, min_threshold: float = 0.2, max_threshold: float = 1.,
+                               min_size: int = 0, dilation: int = 3, invert=False) -> np.ndarray:
+    """Apply mask parameters to a grayscale image and return the binary mask.
+
+    The grayscale image is thresholded, small connected components are removed,
+    and, optionally, the resulting mask is dilated with a diamond structuring element.
+
+    Parameters
+    ----------
+    gray_img : numpy.ndarray
+        A grayscale image to binarize as an ``NxM`` array.
+    min_threshold : float, optional
+        Feature low threshold in [0, 1].
+    max_threshold : float, optional
+        Feature high threshold in [0, 1].
+    min_size : int, optional
+        Minimum connected component size in pixels (0 keeps every component).
+    dilation : int, optional
+        Dilation radius of the diamond structuring element (0 disables dilation).
+
+    Returns
+    -------
+    numpy.ndarray
+        The binary mask as an ``NxM`` boolean array.
+
+    Examples
+    --------
+    >>> import matplotlib.pyplot as plt
+    >>> from imageio.v3 import imread
+    >>> from plant3dvision import test_db_path
+    >>> from plant3dvision.proc2d import crop_image
+    >>> from plant3dvision.proc2d import binary_mask_from_grayscale
+    >>> from plant3dvision.proc2d import linear
+    >>> from plant3dvision.proc2d import excess_green
+    >>> from plant3dvision.proc2d import luminance_thin_lines_enhancement
+    >>> from plant3dvision.proc2d import green_fraction
+    >>> path = test_db_path()
+    >>> img = imread(path.joinpath('real_plant/images/00000_rgb.jpg'))
+    >>> img = crop_image(img, bbox=[180, 0, 1080, -1])
+    >>> methods = ["linear", "excess_green", "luminance_thin_lines_enhancement", "green_fraction"]
+    >>> lower_th = [0.2, 0.025, 0.06, 0.2]
+    >>> fig, axes = plt.subplots(2, 4, figsize=(24, 14))
+    >>> for idx, method in enumerate(methods):
+    >>>     gray_img = globals()[method](img)
+    >>>     axes[0, idx].imshow(gray_img, cmap='gray')
+    >>>     axes[0, idx].set_title(method)
+    >>>     axes[0, idx].axis('off')
+    >>>     mask_img = binary_mask_from_grayscale(gray_img, min_threshold=lower_th[idx], min_size=3, dilation=0)
+    >>>     axes[1, idx].imshow(mask_img, cmap='gray')
+    >>>     axes[1, idx].set_title(f"Lower threshold = {lower_th[idx]:.2f}")
+    >>>     axes[1, idx].axis('off')
+    >>> plt.tight_layout()
+    >>> plt.show()
+    """
+    # Keep pixels whose feature value falls in [min_threshold, max_threshold]
+    mask = (gray_img >= min_threshold) & (gray_img <= max_threshold)
+    if invert:
+        mask = np.logical_not(mask)
+    # Detect and remove small components
+    if min_size > 0:
+        mask = remove_small_objects(mask, min_size=min_size)
+    # Apply morphological dilation if required
+    if dilation > 0:
+        mask = binary_dilation(mask, footprint=diamond(dilation))
+    return mask
