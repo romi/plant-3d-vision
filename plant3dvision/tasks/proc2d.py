@@ -8,12 +8,6 @@ import sys
 
 import luigi
 import numpy as np
-
-from plant3dvision import proc2d
-from plant3dvision.camera import colmap_params_from_kwargs
-from plant3dvision.proc2d import crop_image
-from plant3dvision.tasks.colmap import Colmap
-from plant3dvision.utils import jsonify
 from plantdb.commons import io
 from plantdb.commons.db import File
 from plantdb.commons.db import Fileset
@@ -22,6 +16,13 @@ from romitask.task import FileByFileTask
 from romitask.task import ImagesFilesetExists
 from romitask.task import ModelFilesetExists
 from romitask.task import ParallelFileTask
+from skimage.filters import gaussian
+from skimage.util import img_as_ubyte
+
+from plant3dvision import proc2d
+from plant3dvision.proc2d import crop_image
+from plant3dvision.tasks.colmap import Colmap
+from plant3dvision.utils import jsonify
 
 logger = get_logger(__name__, log_level="INFO")
 
@@ -103,6 +104,7 @@ class CropWithBoundingBox(ParallelFileTask):
         outfi.set_metadata({self.get_task_family(): md})
 
         return outfi
+
 
 class Undistort(ParallelFileTask):
     """Image distortion correction using camera intrinsic parameters.
@@ -327,55 +329,63 @@ class Masks(ParallelFileTask):
     """Compute binary masks from RGB images using various filtering methods.
 
     This task applies image transformation techniques to RGB images followed by
-    thresholding to create binary masks. The output is a fileset of binary mask images.
-    The class supports different types of filtering methods, including a linear combination
-    of channels in different colorspace and excess green index.
+    thresholding to create binary masks. The output is a fileset of binary mask
+    images. The class supports different types of filtering methods, including a
+    linear combination of channels in different colorspaces and the excess green
+    index.
 
-    Parameters
+    Attributes
     ----------
-    upstream_task : luigi.TaskParameter, optional
+    upstream_task : luigi.TaskParameter
         The upstream task, should be a task that generates a ``Fileset`` of RGB images.
         It can be ``ImagesFilesetExists`` or ``Undistort``.
-        Defaults to `'Undistort'`.
-    scan_id : luigi.Parameter, optional
+        Defaults to ``'Undistort'``.
+    scan_id : luigi.Parameter
         The dataset id (scan name) to use to create the ``FilesetTarget``.
-        If unspecified (default), the current active scan will be used.
-    query : luigi.DictParameter, optional
-        A filtering dictionary to apply on input ```Fileset`` metadata.
+    query : luigi.DictParameter
+        A filtering dictionary to apply on input ``Fileset`` metadata.
         Key(s) and value(s) must be found in metadata to select the ``File``.
         By default, no filtering is performed; all inputs are used.
-    n_workers : luigi.IntParameter, optional
+    n_workers : luigi.IntParameter
         Number of worker threads to use for parallel processing.
         Defaults to ``-1``, which uses the default ``ThreadPoolExecutor`` behavior.
-    parallel : luigi.BoolParameter, optional
-        Flag to enable/disable parallel processing.
-        Defaults to ``True``.
-    method : luigi.Parameter, optional
-        The type of image tranformation algorithm to use prior to masking by thresholding.
-        Can be "linear" or "excess_green". Defaults to `'linear'`.
-        Have a look at the documentation [mask_methods]_ for more details.
-    colorspace : luigi.ChoiceParameter, optional
-        The colorspace to use for the linear filtering ('RGB', 'HSV' or 'YCbCr')
+    parallel : luigi.BoolParameter
+        Flag to enable/disable parallel processing. Defaults to ``True``.
+    method : luigi.Parameter
+        The type of image transformation algorithm to use prior to masking by thresholding.
+        Can be ``"linear"``, ``"excess_green"``, ``"green_fraction"`` or ``"ltle"``.
+        Defaults to ``'linear'``. Have a look at the documentation [mask_methods]_ for more details.
+    sigma : luigi.FloatParameter
+        The standard deviation of the Gaussian filter applied to the image before masking.
+        Defaults to ``1.0``.
+    colorspace : luigi.ChoiceParameter
+        The colorspace to use for the linear filtering (``'RGB'``, ``'HSV'`` or ``'YCbCr'``).
         Defaults to ``"RGB"``.
-    parameters : luigi.ListParameter, optional
-        A list of linear coefficients, to apply to each channel of the image in the selected
-        colorspace ('RGB', 'HSV' or 'YCbCr').
-        They are only used if the `type` is `"linear"`.
-        Defaults to `[0, 1, 0]` (using only the green channel).
-    min_threshold : luigi.FloatParameter, optional
-        A binarization threshold applied after transforming the image. Defaults to ``0.0``.
-    max_threshold : luigi.FloatParameter, optional
-        A binarization threshold applied after transforming the image. Defaults to ``0.4``.
-    invert : luigi.BoolParameter, optional
+    parameters : luigi.ListParameter
+        A list of linear coefficients, to apply to each channel of the image in the
+        selected colorspace (``'RGB'``, ``'HSV'`` or ``'YCbCr'``).
+        Only used if the ``method`` is ``"linear"``.
+        Defaults to ``[0, 1, 0]`` (using only the green channel).
+    brightness_threshold : luigi.FloatParameter
+        The brightness threshold used by the ``"excess_green"`` and ``"green_fraction"`` methods.
+        Defaults to ``0.5``.
+    half_length : luigi.IntParameter
+        The half-length of the line used by the ``"ltle"`` (luminance thin lines enhancement) method.
+        Defaults to ``2``.
+    min_threshold : luigi.FloatParameter
+        A binarization threshold applied after transforming the image.
+        Defaults to ``0.0``.
+    max_threshold : luigi.FloatParameter
+        A binarization threshold applied after transforming the image.
+        Defaults to ``0.4``.
+    invert : luigi.BoolParameter
         A boolean flag used to invert the input masks. Defaults to ``False``.
-    dilation : luigi.IntParameter, optional
+    min_size : luigi.IntParameter
+        The minimum size of connected components to keep in the binary mask.
+        Defaults to ``3``.
+    dilation : luigi.IntParameter
         A dilation factor for the binary mask images. Applies morphological dilation
-        to expand the masked regions. Defaults to 0 (no dilation).
-
-    Returns
-    -------
-    romitask.task.FilesetTarget
-        The fileset containing the binary mask images.
+        to expand the masked regions. Defaults to ``0`` (no dilation).
 
     See Also
     --------
@@ -385,40 +395,35 @@ class Masks(ParallelFileTask):
 
     Notes
     -----
-    The task creates a binary mask by first applying a filter to transform the RGB image,
-    then thresholding the result, and optionally applying dilation. The filter can be
-    either a linear combination of RGB channels or the excess green index.
+    The task creates a binary mask by first applying a filter to transform the RGB
+    image, then thresholding the result, and optionally applying dilation. The
+    filter can be a linear combination of RGB channels, the excess green index, the
+    green fraction, or a luminance thin lines enhancement.
 
     References
     ----------
     .. [mask_methods] https://docs.romi-project.eu/plant_imager/explanations/masks/
-
-    Examples
-    --------
-    >>> import luigi
-    >>> from plant3dvision import test_db_path
-    >>> from plantdb.commons.fsdb.core import FSDB
-    >>> db = FSDB(test_db_path())
-    >>> global db
-    >>> db.connect()
-    >>> from romitask.task import ImagesFilesetExists
-    >>> from plant3dvision.tasks.colmap import Colmap
-    >>> from plant3dvision.tasks.proc2d import Masks, Undistort
-    >>> image_fs = ImagesFilesetExists(scan_id='real_plant')
-    >>> colmap_task = Colmap(scan_id='real_plant')
-    >>> undistort_task = Undistort(scan_id='real_plant')
-    >>> mask_task = Masks(scan_id='real_plant', query="{'channel':'rgb'}")
-    >>> luigi.build([image_fs, colmap_task, undistort_task, mask_task], local_scheduler=True)
-    >>> db.disconnect()
-
     """
     upstream_task = luigi.TaskParameter(default=Undistort)  # override default attribute from ``RomiTask``
-    method = luigi.Parameter("linear")
+    method = luigi.Parameter("linear")  # {"linear", "excess_green", "green_fraction", "ltle"}
+    # Gaussian filter parameters (common)
+    sigma = luigi.FloatParameter(default=1.0)
+
+    # Linear method parameters
     colorspace = luigi.ChoiceParameter(default="RGB", choices=["RGB", "HSV", "YCbCr"])
     parameters = luigi.ListParameter(default=[0, 1, 0])
+
+    # Green excess and green fraction parameters
+    brightness_threshold = luigi.FloatParameter(default=0.5)
+
+    # Luminescence thin lines enhancement parameters
+    half_length = luigi.IntParameter(default=2)
+
+    # Binarization parameters (common)
     min_threshold = luigi.FloatParameter(default=0.0)
     max_threshold = luigi.FloatParameter(default=0.4)
     invert = luigi.BoolParameter(default=False)
+    min_size = luigi.IntParameter(default=3)
     dilation = luigi.IntParameter(default=0)
 
     def f_raw(self, img: np.ndarray) -> np.ndarray:
@@ -440,10 +445,17 @@ class Masks(ParallelFileTask):
             If the specified filter type is unknown.
         """
         logger.debug(f"Image shape: {img.shape}")
+        # Apply Gaussian filter if required
+        img = gaussian(img, sigma=self.sigma) if self.sigma > 0 else img
+        # Apply selected filter
         if self.method == "linear":
             return proc2d.linear(img, list(self.parameters), colorspace=self.colorspace)
         elif self.method == "excess_green":
-            return proc2d.excess_green(img)
+            return proc2d.excess_green(img, float(self.brightness_threshold))
+        elif self.method == "green_fraction":
+            return proc2d.green_fraction(img, float(self.brightness_threshold))
+        elif self.method == "ltle":
+            return proc2d.luminance_thin_lines_enhancement(img, self.half_length)
         else:
             raise Exception(f"Unknown masking method '{self.method}'!")
 
@@ -467,29 +479,31 @@ class Masks(ParallelFileTask):
         # Apply the filter:
         img = self.f_raw(img)
         # Threshold the filtered image to make a binary mask:
-        img = (img >= self.min_threshold) & (img <= self.max_threshold)
-        if self.invert:
-            img = np.logical_not(img)
-        # Apply dilation to the binary mask, if any:
-        if self.dilation > 0:
-            img = proc2d.dilation(img, self.dilation)
+        img = proc2d.binary_mask_from_grayscale(img, float(self.min_threshold), float(self.max_threshold),
+                                                int(self.min_size), int(self.dilation), self.invert)
         # Convert back to uint8 type:
-        img = np.array(255 * img, dtype=np.uint8)
+        img = img_as_ubyte(img)
         # Save the binary mask image:
         outfi = outfs.create_file(fi.id)
         io.write_image(outfi, img)
         # Add metadata to the binary mask image:
         md = {
             'upstream_task': str(self.upstream_task.get_task_family()),
-            'filter': str(self.method),
-            'colorspace': str(self.colorspace),
-            'min_threshold': self.min_threshold,
-            'max_threshold': self.max_threshold,
-            'invert': self.invert,
-            'dilation': self.dilation
+            'method': str(self.method),
+            'min_threshold': float(self.min_threshold),
+            'max_threshold': float(self.max_threshold),
+            'invert': bool(self.invert),
+            'min_size': float(self.min_size),
+            'dilation': float(self.dilation)
         }
         if self.method == "linear":
-            md.update({'linear_coeff': list(self.parameters)})
+            attrs = ["parameters", "colorspace"]
+        elif self.method in ("excess_green", "green_fraction"):
+            attrs = ["brightness_threshold"]
+        else:
+            attrs = ["half_length"]
+        md.update({attr: getattr(self, attr) for attr in attrs})
+
         if self.query != {}:
             md.update({'query': jsonify(self.query)})
         outfi.set_metadata({self.get_task_family(): md})
