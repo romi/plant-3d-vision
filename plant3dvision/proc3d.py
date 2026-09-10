@@ -1069,6 +1069,242 @@ def vol2pcd_mc(volume: np.ndarray, origin: list[float, float, float], voxel_size
     return pcd, mesh
 
 
+def _gmrf_laplacian(volume: np.ndarray, tau: float) -> "scipy.sparse.csr_matrix":
+    """Build the sparse graph Laplacian ``L`` of a Gaussian Markov Random Field.
+
+    The field is the 7-point voxel stencil with **Welsch** edge weights
+    ``w = exp(-(ΔD/τ)²)``, where ``ΔD`` is the value difference across each
+    neighbouring pair. ``L`` is a symmetric positive semi-definite matrix such
+    that ``xᵀLx`` penalises roughness between voxels with similar values while
+    preserving boundaries (large ``ΔD`` → ``w ≈ 0``).
+
+    Parameters
+    ----------
+    volume : numpy.ndarray
+        3‑D array of voxel values (typically log-odds) of shape ``(nx, ny, nz)``.
+    tau : float
+        Welsch soft-threshold scale. Smaller values preserve sharper edges.
+
+    Returns
+    -------
+    scipy.sparse.csr_matrix
+        The ``(N, N)`` Laplacian matrix, with ``N = nx*ny*nz``, in C order.
+    """
+    from scipy.sparse import coo_matrix, diags
+
+    D = np.asarray(volume, dtype=np.float64)
+    nx, ny, nz = D.shape
+    nyz = ny * nz
+    N = nx * ny * nz
+
+    inv_tau2 = 1.0 / (tau * tau)
+    # Welsch weights on edges along each axis.
+    wx = np.exp(-(np.diff(D, axis=0) ** 2) * inv_tau2)  # (nx-1, ny, nz)
+    wy = np.exp(-(np.diff(D, axis=1) ** 2) * inv_tau2)  # (nx, ny-1, nz)
+    wz = np.exp(-(np.diff(D, axis=2) ** 2) * inv_tau2)  # (nx, ny, nz-1)
+
+    # Flat (C-order) indices of the two endpoints of every edge.
+    iy = np.arange(ny)
+    iz = np.arange(nz)
+
+    # x-direction edges: (x, y, z) <-> (x+1, y, z)
+    i1x = (np.arange(nx - 1)[:, None, None] * nyz + iy[None, :, None] * nz + iz[None, None, :]).ravel()
+    # y-direction edges: (x, y, z) <-> (x, y+1, z)
+    i1y = (np.arange(nx)[:, None, None] * nyz + np.arange(ny - 1)[None, :, None] * nz + iz[None, None, :]).ravel()
+    # z-direction edges: (x, y, z) <-> (x, y, z+1)
+    i1z = (np.arange(nx)[:, None, None] * nyz + iy[None, :, None] * nz + np.arange(nz - 1)[None, None, :]).ravel()
+
+    i2x = i1x + nyz
+    i2y = i1y + nz
+    i2z = i1z + 1
+
+    # Diagonal accumulation: diag[i] = sum of weights of edges incident to i.
+    diag = np.zeros(N, dtype=np.float64)
+    for i1, i2, w in ((i1x, i2x, wx), (i1y, i2y, wy), (i1z, i2z, wz)):
+        np.add.at(diag, i1, w.ravel())
+        np.add.at(diag, i2, w.ravel())
+
+    rows = np.concatenate([i1x, i2x, i1y, i2y, i1z, i2z])
+    cols = np.concatenate([i2x, i1x, i2y, i1y, i2z, i1z])
+    data = np.concatenate([-wx.ravel(), -wx.ravel(),
+                           -wy.ravel(), -wy.ravel(),
+                           -wz.ravel(), -wz.ravel()])
+
+    L = coo_matrix((data, (rows, cols)), shape=(N, N))
+    L = L.tocsr() + diags(diag, format='csr')
+    return L
+
+
+def smooth_volume_gmrf(volume: np.ndarray, tau: float = 10.0, lam: float = 0.0,
+                       max_iter: int | None = None, tol: float = 1e-6) -> np.ndarray:
+    """Smooth a 3‑D voxel volume with GMRF Maximum‑A‑Posteriori estimation.
+
+    Computes the MAP estimate of a Gaussian Markov Random Field,
+    ``x* = argmin_x ‖x − b‖² + λ xᵀ L x``,
+    i.e. the solution of the linear system ``(I + λL) x = b``, where ``b`` is the input
+    volume (the data term) and ``L`` is the Laplacian with Welsch edge weights (see `_gmrf_laplacian`).
+    Set ``lam = 0`` to disable smoothing (returns a copy).
+
+    Parameters
+    ----------
+    volume : numpy.ndarray
+        3‑D array of voxel values (typically log-odds) of shape ``(nx, ny, nz)``.
+    tau : float, optional
+        Welsch soft-threshold scale controlling edge preservation. Default is ``10.0``.
+    lam : float, optional
+        Smoothing strength (penalty weight on ``xᵀLx``). ``0`` disables smoothing.
+        Default is ``0.0``.
+    max_iter : int or None, optional
+        Maximum number of Conjugate‑Gradient iterations. Default is ``None``
+        (let the solver decide).
+    tol : float, optional
+        Relative residual tolerance for the CG solver. Default is ``1e-6``.
+
+    Returns
+    -------
+    numpy.ndarray
+        The smoothed volume, same shape and dtype as ``volume``.
+
+    Notes
+    -----
+    The linear solve is done with `scipy.sparse.linalg.cg`, warm‑started at the raw data ``b``.
+    For volumes too large to build the explicit sparse matrix ``L``, see
+    `smooth_volume_gmrf_linearop` (matrix‑free variant).
+
+    Examples
+    --------
+    >>> from plant3dvision.proc3d import smooth_volume_gmrf
+    >>> import numpy as np
+    >>> from plantdb.commons.test_database import test_database
+    >>> from plantdb.server.core.utils import compute_fileset_matches
+    >>> from plant3dvision.voxels_bayes_cuda import BayesianBackprojection
+    >>> from plant3dvision.tasks.voxel_reconstruction import camera_metadata_from_colmap
+    >>> from plant3dvision.tasks.voxel_reconstruction import remap_averaging
+    >>> from plant3dvision.tasks.voxel_reconstruction import origin_from_bounding_box
+    >>> from plant3dvision.tasks.voxel_reconstruction import shape_from_bounding_box
+    >>> # Set up the database and scan
+    >>> db = test_database('real_plant_analyzed', no_auth=True)
+    >>> db.connect()
+    >>> scan = db.get_scan("real_plant_analyzed")
+    >>> mask_fs_id = compute_fileset_matches(scan)["Masks"]
+    >>> mask_fs = scan.get_fileset(mask_fs_id)
+    >>> # List of input mask files (2D images) to process
+    >>> mask_files = mask_fs.get_files(query={"channel": "rgb"})
+    >>> mask_fp = {mask.id: mask.path() for mask in mask_files}
+    >>> # Example setup: define a bounding box and voxel configuration
+    >>> bounding_box = {"x": [300, 435], "y": [300, 435], "z": [-200, 100]}
+    >>> voxel_size = 0.6
+    >>> # Calculate the shape & origin of the voxel array
+    >>> shape = shape_from_bounding_box(bounding_box, voxel_size)
+    >>> origin = origin_from_bounding_box(bounding_box)  # in real units
+    >>> camera_md = "colmap_camera"  # The camera metadata key in the fileset that provides intrinsic & pose data
+    >>> invert_masks = False  # Whether to invert the mask values
+    >>> mask_md = {mask.id: camera_metadata_from_colmap(mask.get_metadata(camera_md)) for mask in mask_files}
+
+    >>> bp_bayes = BayesianBackprojection(shape, origin, voxel_size, "bayes")
+    >>> volume = bp_bayes.process_fileset(mask_fp, mask_md, invert_masks)
+    >>> print(volume.shape)
+    (226, 226, 501)
+    >>> smooth_volume = smooth_volume_gmrf(volume)
+    >>> print(smooth_volume.shape)
+    (226, 226, 501)
+
+    >>> import pyvista as pv
+    >>> from plant3dvision.visu.pyvista import volume_to_imagedata
+    >>> pv_vol = volume_to_imagedata(volume, origin, voxel_size)
+    >>> pv_smooth_vol = volume_to_imagedata(smooth_volume, origin, voxel_size)
+    >>> plotter = pv.Plotter(shape=(1, 2))
+    >>> plotter.subplot(0, 0)
+    >>> _ = plotter.add_volume(pv_vol, clim=(0, 132), cmap='viridis', opacity='foreground')
+    >>> plotter.show_grid()
+    >>> plotter.subplot(0, 1)
+    >>> _ = plotter.add_volume(pv_smooth_vol, clim=(0, 132), cmap='viridis', opacity='foreground')
+    >>> plotter.show_grid()
+    >>> plotter.link_views()
+    >>> plotter.show()
+
+    """
+    from scipy.sparse.linalg import cg
+
+    D = np.asarray(volume, dtype=np.float64)
+    if lam == 0.0:
+        return D.copy()
+
+    L = _gmrf_laplacian(D, tau)
+    b = D.ravel()
+    # (I + λL)x = b  →  A = identity + λL
+    from scipy.sparse import identity
+    A = identity(L.shape[0], format='csr') + lam * L
+
+    x, info = cg(A, b, x0=b, rtol=tol, maxiter=max_iter)
+    if info > 0:
+        logger.warning(f"CG did not converge within {max_iter or 'default'} iterations (info={info})")
+    return x.reshape(D.shape)
+
+
+def smooth_volume_gmrf_linearop(volume: np.ndarray, tau: float = 10.0, lam: float = 0.0,
+                                max_iter: int | None = None, tol: float = 1e-6) -> np.ndarray:
+    """NOT IMPLEMENTED — matrix‑free variant of :func:`smooth_volume_gmrf`.
+
+    This is a stub kept for the case where the volume is too large to build the
+    explicit sparse Laplacian of :func:`_gmrf_laplacian` (memory of ``L`` is
+    ``O(7N)`` nonzero entries). To implement, replace the explicit matrix with a
+    :class:`scipy.sparse.linalg.LinearOperator` ``A`` such that:
+
+    ``A @ x == (I + λL) x``
+
+    where ``Lx`` is evaluated in a matrix‑free way with the 7‑point stencil
+    (mirroring the Julia ``apply_L!`` and ``build_system_matrix``):
+
+    .. code-block:: python
+
+        from scipy.sparse.linalg import LinearOperator, cg
+
+        def matvec(x):
+            x3 = x.reshape(D.shape)
+            out = x3 * diag + λ * (diag * x3
+                - shifted weighted neighbours in x, y and z)
+            return out.ravel()
+
+        A = LinearOperator((N, N), matvec=matvec, dtype=np.float64)
+        x, info = cg(A, b, x0=b, rtol=tol, maxiter=max_iter)
+
+    where ``diag`` is the per‑voxel accumulated Welsch weight
+    (``np.add.at`` over the three axis weight arrays, as in
+    :func:`_gmrf_laplacian`) and the neighbour terms subtract
+    ``w*neighbour`` along each axis. Keep the CG call identical to
+    :func:`smooth_volume_gmrf`.
+
+    Parameters
+    ----------
+    volume : numpy.ndarray
+        3‑D array of voxel values of shape ``(nx, ny, nz)``.
+    tau : float, optional
+        Welsch soft-threshold scale. Default is ``10.0``.
+    lam : float, optional
+        Smoothing strength. ``0`` disables smoothing. Default is ``0.0``.
+    max_iter : int or None, optional
+        Maximum CG iterations. Default is ``None``.
+    tol : float, optional
+        CG relative residual tolerance. Default is ``1e-6``.
+
+    Returns
+    -------
+    numpy.ndarray
+        The smoothed volume.
+
+    Raises
+    ------
+    NotImplementedError
+        Always, until the matrix‑free operator is implemented.
+    """
+    raise NotImplementedError(
+        "smooth_volume_gmrf_linearop is not implemented yet. "
+        "Use smooth_volume_gmrf (explicit sparse matrix) instead, or implement "
+        "the LinearOperator matvec described in this docstring."
+    )
+
+
 def crop_point_cloud(point_cloud, bounding_box):
     """Crop a point cloud by keeping points inside the bounding-box.
 
