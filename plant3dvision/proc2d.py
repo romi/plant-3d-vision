@@ -79,9 +79,10 @@ def crop_image(img: np.ndarray, bbox: list[int]) -> np.ndarray:
     h = max(0, min(h, img_h - y))
 
     # Perform the actual crop
-    cropped = img[y : y + h, x : x + w]
+    cropped = img[y: y + h, x: x + w]
 
     return cropped
+
 
 def undistort(img: np.ndarray, camera_mtx: np.ndarray, distortion_params: np.ndarray) -> np.ndarray:
     r"""
@@ -112,7 +113,7 @@ def undistort(img: np.ndarray, camera_mtx: np.ndarray, distortion_params: np.nda
     Parameters
     ----------
     img : numpy.ndarray
-        An RGB image as an NxMx3 array.
+        An RGB image represented as an ``NxMx3`` array.
     camera_mtx : numpy.ndarray
         A 3x3 floating-point camera matrix.
     distortion_params : numpy.ndarray
@@ -150,9 +151,9 @@ def undistort(img: np.ndarray, camera_mtx: np.ndarray, distortion_params: np.nda
     return undistorted_data
 
 
-def linear(img: np.ndarray, coefs: list[float, float, float],
+def linear(img: np.ndarray, coefs: list[float, float, float] = [0.2, 1., 0.1],
            colorspace: Literal["RGB", "HSV", "YCbCr"] = "RGB") -> np.ndarray:
-    """
+    r"""
     Linear colour index.
 
     For each pixel :math:`x` the function computes a weighted sum of the three colour
@@ -171,14 +172,12 @@ def linear(img: np.ndarray, coefs: list[float, float, float],
     Parameters
     ----------
     img : numpy.ndarray
-        The input image as a NumPy array with shape (H, W, C), where H is the height, W is the width,
-        and C is the number of color channels. The input image can either be of dtype `uint8` or `float`.
-        This image is expected to be in the RGB colorspace
-    coefs : list[float, float, float]
+        An RGB image represented as an ``NxMx3`` array.
+    coefs : list of float
         A sequence of three coefficients that represent the weights for each color channel's contribution
         to the result. The coefficients should correspond to the order of the color channels in the input
         image, such as [R, G, B] or [H, S, V] depending on the colorspace.
-    colorspace : Literal["RGB", "HSV", "YCbCr"], optional
+    colorspace : {"RGB", "HSV", "YCbCr"}, optional
         The colorspace of the input image. If the colorspace is not "RGB", the image will be converted
         to the specified colorspace before processing. Defaults to "RGB".
 
@@ -187,61 +186,65 @@ def linear(img: np.ndarray, coefs: list[float, float, float],
     numpy.ndarray
         A 2D NumPy array representing the result of the linear transformation. The resulting array has
         the same height and width as the input image, with pixel intensity values normalized to the
-        range [0, 1].
+        range ``[0, 1]``.
 
     Examples
     --------
-    >>> import numpy as np
     >>> import matplotlib.pyplot as plt
     >>> from imageio.v3 import imread
     >>> from plant3dvision import test_db_path
     >>> from plant3dvision.proc2d import linear
+    >>> from plant3dvision.proc2d import binary_mask_from_grayscale
     >>> path = test_db_path()
     >>> img = imread(path.joinpath('real_plant/images/00000_rgb.jpg'))
-    >>> coeff_img = linear(img, [0.2, 1., 0.1], 'RGB')
-    >>> mask_img = coeff_img >= 0.2
+    >>> gray_img = linear(img, [0.2, 1., 0.1], 'RGB')
+    >>> mask_img = binary_mask_from_grayscale(gray_img, min_threshold=0.2, min_size=3, dilation=0)
     >>> fig, ax = plt.subplots(1, 2, figsize=(12, 5))
-    >>> ax[0].imshow(coeff_img)
+    >>> ax[0].imshow(gray_img, cmap="gray")
     >>> ax[0].set_title("Linear transformation image")
-    >>> ax[1].imshow(mask_img)
+    >>> ax[1].imshow(mask_img, cmap="gray")
     >>> ax[1].set_title("Binary mask")
     >>> plt.tight_layout()
     >>> plt.show()
     """
-    if not img.dtype == "float":
-        img = np.asarray(img, dtype=float)  # transform the uint8 RGB image into a float RGB numpy array
+    if img.dtype != "float":
+        img = img_as_float(img)
 
-    img = rescale_intensity(img, out_range=(0., 1.))
     if colorspace != "RGB":
         img = convert_colorspace(img, "RGB", colorspace)
         img = rescale_intensity(img, out_range=(0., 1.))
     return (coefs[0] * img[:, :, 0] + coefs[1] * img[:, :, 1] + coefs[2] * img[:, :, 2]) / sum(coefs)
 
 
-def excess_green(img: np.ndarray) -> np.ndarray:
+def excess_green(img: np.ndarray, bright_threshold: float = 127 / 255) -> np.ndarray:
     r"""
-    Excess green function
+    Excess green function with an optional brightness threshold.
 
     The excess‑green index :math:`f(x)` measures the relative contribution of the green
-    channel compared to the red and blue channels for each pixel :math:`x`.  It is
+    channel compared to the red and blue channels for each pixel :math:`x`. It is
     defined mathematically as
 
     .. math::
-        f(x) = 2\,g(x) - r(x) - b(x),
+        f(x) = 2 \times g(x) - r(x) - b(x),
 
     where :math:`r(x)`, :math:`g(x)`, and :math:`b(x)` denote the red, green, and blue
-    intensity values of pixel :math:`x`, respectively.  The function returns a
-    single‑channel image where each pixel contains its excess‑green value.
+    intensity values of pixel :math:`x`, respectively.
+
+    Pixels whose total intensity ``r+g+b`` falls below this value (in the ``[0, 1]`` range)
+    are set to zero before the excess‑green calculation. This helps guard against noisy dark pixels.
 
     Parameters
     ----------
     img : numpy.ndarray
-        An RGB image as an NxMx3 array.
+        An RGB image represented as an ``NxMx3`` array.
+    bright_threshold : float, optional
+        Brightness threshold in ``[0, 1]``. Pixels with total intensity below
+        this value are ignored (set to ``0``). Defaults to ``127/255``.
 
     Returns
     -------
     numpy.ndarray
-        The excess green image.
+        The excess green image, optionally with dark pixels zeroed out.
 
     References
     ----------
@@ -251,27 +254,24 @@ def excess_green(img: np.ndarray) -> np.ndarray:
     --------
     >>> import matplotlib.pyplot as plt
     >>> from imageio.v3 import imread
+    >>> from skimage.morphology import binary_dilation, diamond
     >>> from plant3dvision import test_db_path
-    >>> from plant3dvision.proc2d import excess_green, dilation
+    >>> from plant3dvision.proc2d import excess_green
+    >>> from plant3dvision.proc2d import binary_mask_from_grayscale
     >>> path = test_db_path()
     >>> img = imread(path.joinpath('real_plant/images/00000_rgb.jpg'))
-    >>> filter_img = excess_green(img)  # apply `excess_green` filter
-    >>> threshold = 0.3
-    >>> mask = filter_img > threshold  # convert to binary mask using a threshold
-    >>> radius = 2
-    >>> dilated_mask = dilation(mask, radius)  # apply a dilation to binary mask
-    >>> fig, axes = plt.subplots(2, 2, figsize=(8, 7))
-    >>> axes[0, 0].imshow(img)
-    >>> axes[0, 0].set_title("Original image")
-    >>> axes[0, 1].imshow(filter_img, cmap='gray')
-    >>> axes[0, 1].set_title("Mask image (excess green filter)")
-    >>> axes[1, 0].imshow(mask, cmap='gray')
-    >>> axes[1, 0].set_title(f"Binary mask image (threshold={threshold})")
-    >>> axes[1, 1].imshow(dilated_mask, cmap='gray')
-    >>> axes[1, 1].set_title(f"Dilated binary mask image (radius={radius})")
-    >>> [ax.set_axis_off() for ax in axes.flatten()]
+    >>> gray_img = excess_green(img)  # apply `excess_green` filter
+    >>> mask_img = binary_mask_from_grayscale(gray_img, min_threshold=0.025, min_size=3, dilation=0)
+    >>> fig, ax = plt.subplots(1, 2, figsize=(12, 5))
+    >>> ax[0].imshow(gray_img, cmap="gray")
+    >>> ax[0].set_title("Excess green image")
+    >>> ax[1].imshow(mask_img, cmap="gray")
+    >>> ax[1].set_title("Binary mask")
     >>> plt.tight_layout()
     >>> plt.show()
+    """
+    if img.dtype != "float":
+        img = img_as_float(img)
 
     s = img.sum(axis=2)  # total intensity per pixel
     # Mask of pixels bright enough to be considered
