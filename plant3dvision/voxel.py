@@ -55,10 +55,9 @@ class AbstractBackprojection(ABC):
     """
     Abstract base class for backprojection implementations.
 
-    This class defines the common API and implements shared functionalities
-    for backprojection operations used in 3D volume reconstruction from 2D images.
-    Concrete implementations must provide backend-specific initialization,
-    buffer management, and kernel execution.
+    This class defines the common API and implements shared functionalities for backprojection operations
+    used in 3D volume reconstruction from 2D images.
+    Concrete implementations must provide backend-specific initialization, buffer management, and kernel execution.
 
     Attributes
     ----------
@@ -71,8 +70,7 @@ class AbstractBackprojection(ABC):
     default_value : float
         The default voxel data value used during initialization.
     log : bool
-        A boolean flag indicating whether logarithmic transformation is applied
-        to a mask in 'averaging' mode.
+        A boolean flag indicating whether logarithmic transformation is applied to a mask in 'averaging' mode.
     method : {'carving', 'averaging', 'bayes'}
         The type of backprojection to perform, either 'carving', 'averaging' or 'bayes'.
     dtype : type
@@ -86,8 +84,7 @@ class AbstractBackprojection(ABC):
 
     Notes
     -----
-    The 'carving' mode uses `np.int32` dtype, while 'averaging' and 'bayes' modes
-    use `np.float32`.
+    The 'carving' mode uses `np.int32` dtype, while 'averaging' and 'bayes' modes use `np.float32`.
     Log transformation is only applicable in 'averaging' mode.
     """
 

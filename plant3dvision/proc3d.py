@@ -1173,8 +1173,8 @@ def smooth_volume_gmrf(volume: np.ndarray, tau: float = 10.0, lam: float = 0.0,
 
     Examples
     --------
-    >>> from plant3dvision.proc3d import smooth_volume_gmrf
     >>> import numpy as np
+    >>> from plant3dvision.proc3d import smooth_volume_gmrf
     >>> from plantdb.commons.test_database import test_database
     >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plant3dvision.voxels_bayes_cuda import BayesianBackprojection
@@ -1200,15 +1200,31 @@ def smooth_volume_gmrf(volume: np.ndarray, tau: float = 10.0, lam: float = 0.0,
     >>> camera_md = "colmap_camera"  # The camera metadata key in the fileset that provides intrinsic & pose data
     >>> invert_masks = False  # Whether to invert the mask values
     >>> mask_md = {mask.id: camera_metadata_from_colmap(mask.get_metadata(camera_md)) for mask in mask_files}
-
-    >>> bp_bayes = BayesianBackprojection(shape, origin, voxel_size, "bayes")
+    >>> # Bayesian backprojection
+    >>> bp_bayes = BayesianBackprojection(shape, origin, voxel_size)
     >>> volume = bp_bayes.process_fileset(mask_fp, mask_md, invert_masks)
     >>> print(volume.shape)
     (226, 226, 501)
-    >>> smooth_volume = smooth_volume_gmrf(volume)
+    >>> # 'volume' is now a NumPy array holding the 3D backprojected data
+    >>> vol_values = np.unique(volume)
+    >>> print(f"Found {len(vol_values)} unique values in the volume.")
+    >>> # Smooth the volume using GMRF
+    >>> smooth_volume = smooth_volume_gmrf(volume, tau=voxel_size*10, lam=5.)
     >>> print(smooth_volume.shape)
     (226, 226, 501)
-
+    >>> # Show the histogram of the volume values
+    >>> import matplotlib.pyplot as plt
+    >>> fig, axes = plt.subplots(1, 2, figsize=(15, 6))
+    >>> axes[0].hist(volume.flatten(), bins=100, color='blue', alpha=0.7)
+    >>> axes[0].hist(smooth_volume.flatten(), bins=100, color='red', alpha=0.7)
+    >>> axes[0].set_xlabel("Voxel value")
+    >>> axes[0].set_ylabel("Voxel frequency")
+    >>> axes[1].hist(volume.flatten(), bins=100, range=(0, np.max(volume)), color='blue', alpha=0.7)
+    >>> axes[1].hist(smooth_volume.flatten(), bins=100, range=(0, np.max(volume)), color='red', alpha=0.7)
+    >>> axes[1].set_xlabel("Voxel value")
+    >>> axes[1].set_ylabel("Voxel frequency")
+    >>> plt.show()
+    >>> # Visualize the original and smoothed volumes
     >>> import pyvista as pv
     >>> from plant3dvision.visu.pyvista import volume_to_imagedata
     >>> pv_vol = volume_to_imagedata(volume, origin, voxel_size)
@@ -1222,16 +1238,15 @@ def smooth_volume_gmrf(volume: np.ndarray, tau: float = 10.0, lam: float = 0.0,
     >>> plotter.show_grid()
     >>> plotter.link_views()
     >>> plotter.show()
-
     """
     from scipy.sparse.linalg import cg
 
-    D = np.asarray(volume, dtype=np.float64)
     if lam == 0.0:
-        return D.copy()
+        return volume
 
-    L = _gmrf_laplacian(D, tau)
-    b = D.ravel()
+    shape = volume.shape
+    L = _gmrf_laplacian(volume, tau)
+    b = volume.ravel()
     # (I + λL)x = b  →  A = identity + λL
     from scipy.sparse import identity
     A = identity(L.shape[0], format='csr') + lam * L
@@ -1239,70 +1254,172 @@ def smooth_volume_gmrf(volume: np.ndarray, tau: float = 10.0, lam: float = 0.0,
     x, info = cg(A, b, x0=b, rtol=tol, maxiter=max_iter)
     if info > 0:
         logger.warning(f"CG did not converge within {max_iter or 'default'} iterations (info={info})")
-    return x.reshape(D.shape)
+    return x.reshape(shape)
 
 
 def smooth_volume_gmrf_linearop(volume: np.ndarray, tau: float = 10.0, lam: float = 0.0,
                                 max_iter: int | None = None, tol: float = 1e-6) -> np.ndarray:
-    """NOT IMPLEMENTED — matrix‑free variant of :func:`smooth_volume_gmrf`.
+    """Smooth a 3‑D voxel volume with GMRF MAP estimation (matrix‑free).
 
-    This is a stub kept for the case where the volume is too large to build the
-    explicit sparse Laplacian of :func:`_gmrf_laplacian` (memory of ``L`` is
-    ``O(7N)`` nonzero entries). To implement, replace the explicit matrix with a
-    :class:`scipy.sparse.linalg.LinearOperator` ``A`` such that:
+    Matrix‑free variant of :func:`smooth_volume_gmrf` that never builds the
+    explicit sparse Laplacian ``L`` (whose memory is ``O(7N)``). Instead it
+    defines a :class:`scipy.sparse.linalg.LinearOperator` ``A`` with
+    ``A @ x == (I + λL) x``, where ``Lx`` is evaluated on the fly with the
+    7‑point voxel stencil, so the peak memory is a handful of dense
+    ``(nx, ny, nz)`` arrays instead of the full sparse matrix.
 
-    ``A @ x == (I + λL) x``
-
-    where ``Lx`` is evaluated in a matrix‑free way with the 7‑point stencil
-    (mirroring the Julia ``apply_L!`` and ``build_system_matrix``):
-
-    .. code-block:: python
-
-        from scipy.sparse.linalg import LinearOperator, cg
-
-        def matvec(x):
-            x3 = x.reshape(D.shape)
-            out = x3 * diag + λ * (diag * x3
-                - shifted weighted neighbours in x, y and z)
-            return out.ravel()
-
-        A = LinearOperator((N, N), matvec=matvec, dtype=np.float64)
-        x, info = cg(A, b, x0=b, rtol=tol, maxiter=max_iter)
-
-    where ``diag`` is the per‑voxel accumulated Welsch weight
-    (``np.add.at`` over the three axis weight arrays, as in
-    :func:`_gmrf_laplacian`) and the neighbour terms subtract
-    ``w*neighbour`` along each axis. Keep the CG call identical to
-    :func:`smooth_volume_gmrf`.
+    The edge weights are the Welsch weights ``w = exp(-(ΔD/τ)²)`` computed once
+    from the input volume, exactly as in :func:`_gmrf_laplacian`.
 
     Parameters
     ----------
     volume : numpy.ndarray
-        3‑D array of voxel values of shape ``(nx, ny, nz)``.
+        3‑D array of voxel values (typically log-odds) of shape ``(nx, ny, nz)``.
     tau : float, optional
-        Welsch soft-threshold scale. Default is ``10.0``.
+        Welsch soft-threshold scale controlling edge preservation. Default is ``10.0``.
     lam : float, optional
-        Smoothing strength. ``0`` disables smoothing. Default is ``0.0``.
+        Smoothing strength (penalty weight on ``xᵀLx``). ``0`` disables smoothing.
+        Default is ``0.0``.
     max_iter : int or None, optional
-        Maximum CG iterations. Default is ``None``.
+        Maximum number of Conjugate‑Gradient iterations. Default is ``None``
+        (let the solver decide).
     tol : float, optional
-        CG relative residual tolerance. Default is ``1e-6``.
+        Relative residual tolerance for the CG solver. Default is ``1e-6``.
 
     Returns
     -------
     numpy.ndarray
-        The smoothed volume.
+        The smoothed volume, same shape and dtype as ``volume``.
 
-    Raises
-    ------
-    NotImplementedError
-        Always, until the matrix‑free operator is implemented.
+    Notes
+    -----
+    Unlike :func:`smooth_volume_gmrf`, the dense per-iteration CG workspace is
+    proportional to the number of voxels rather than the sparse matrix size, so
+    this is the variant to use for volumes too large to build ``L``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from plant3dvision.proc3d import smooth_volume_gmrf_linearop
+    >>> from plantdb.commons.test_database import test_database
+    >>> from plantdb.server.core.utils import compute_fileset_matches
+    >>> from plant3dvision.voxels_bayes_cuda import BayesianBackprojection
+    >>> from plant3dvision.tasks.voxel_reconstruction import camera_metadata_from_colmap
+    >>> from plant3dvision.tasks.voxel_reconstruction import remap_averaging
+    >>> from plant3dvision.tasks.voxel_reconstruction import origin_from_bounding_box
+    >>> from plant3dvision.tasks.voxel_reconstruction import shape_from_bounding_box
+    >>> # Set up the database and scan
+    >>> db = test_database('real_plant_analyzed', no_auth=True)
+    >>> db.connect()
+    >>> scan = db.get_scan("real_plant_analyzed")
+    >>> mask_fs_id = compute_fileset_matches(scan)["Masks"]
+    >>> mask_fs = scan.get_fileset(mask_fs_id)
+    >>> # List of input mask files (2D images) to process
+    >>> mask_files = mask_fs.get_files(query={"channel": "rgb"})
+    >>> mask_fp = {mask.id: mask.path() for mask in mask_files}
+    >>> # Example setup: define a bounding box and voxel configuration
+    >>> bounding_box = {"x": [300, 435], "y": [300, 435], "z": [-200, 100]}
+    >>> voxel_size = 0.6
+    >>> # Calculate the shape & origin of the voxel array
+    >>> shape = shape_from_bounding_box(bounding_box, voxel_size)
+    >>> origin = origin_from_bounding_box(bounding_box)  # in real units
+    >>> camera_md = "colmap_camera"  # The camera metadata key in the fileset that provides intrinsic & pose data
+    >>> invert_masks = False  # Whether to invert the mask values
+    >>> mask_md = {mask.id: camera_metadata_from_colmap(mask.get_metadata(camera_md)) for mask in mask_files}
+    >>> # Bayesian backprojection
+    >>> bp_bayes = BayesianBackprojection(shape, origin, voxel_size)
+    >>> volume = bp_bayes.process_fileset(mask_fp, mask_md, invert_masks)
+    >>> print(volume.shape)
+    (226, 226, 501)
+    >>> # 'volume' is now a NumPy array holding the 3D backprojected data
+    >>> vol_values = np.unique(volume)
+    >>> print(f"Found {len(vol_values)} unique values in the volume.")
+    >>> # Smooth the volume using GMRF
+    >>> smooth_volume = smooth_volume_gmrf_linearop(volume, tau=voxel_size*10, lam=5.)
+    >>> print(smooth_volume.shape)
+    (226, 226, 501)
+    >>> # Show the histogram of the volume values
+    >>> import matplotlib.pyplot as plt
+    >>> fig, axes = plt.subplots(1, 2, figsize=(15, 6))
+    >>> axes[0].hist(volume.flatten(), bins=100, color='blue', alpha=0.7)
+    >>> axes[0].hist(smooth_volume.flatten(), bins=100, color='red', alpha=0.7)
+    >>> axes[0].set_xlabel("Voxel value")
+    >>> axes[0].set_ylabel("Voxel frequency")
+    >>> axes[1].hist(volume.flatten(), bins=100, range=(0, np.max(volume)), color='blue', alpha=0.7)
+    >>> axes[1].hist(smooth_volume.flatten(), bins=100, range=(0, np.max(volume)), color='red', alpha=0.7)
+    >>> axes[1].set_xlabel("Voxel value")
+    >>> axes[1].set_ylabel("Voxel frequency")
+    >>> plt.show()
+    >>> # Visualize the original and smoothed volumes
+    >>> import pyvista as pv
+    >>> from plant3dvision.visu.pyvista import volume_to_imagedata
+    >>> pv_vol = volume_to_imagedata(volume, origin, voxel_size)
+    >>> pv_smooth_vol = volume_to_imagedata(smooth_volume, origin, voxel_size)
+    >>> plotter = pv.Plotter(shape=(1, 2))
+    >>> plotter.subplot(0, 0)
+    >>> _ = plotter.add_volume(pv_vol, clim=(0, 132), cmap='viridis', opacity='foreground')
+    >>> plotter.show_grid()
+    >>> plotter.subplot(0, 1)
+    >>> _ = plotter.add_volume(pv_smooth_vol, clim=(0, 132), cmap='viridis', opacity='foreground')
+    >>> plotter.show_grid()
+    >>> plotter.link_views()
+    >>> plotter.show()
     """
-    raise NotImplementedError(
-        "smooth_volume_gmrf_linearop is not implemented yet. "
-        "Use smooth_volume_gmrf (explicit sparse matrix) instead, or implement "
-        "the LinearOperator matvec described in this docstring."
-    )
+    from scipy.sparse.linalg import LinearOperator, cg
+
+    D = np.asarray(volume, dtype=np.float64)
+    if lam == 0.0:
+        return D.copy()
+
+    nx, ny, nz = D.shape
+    N = nx * ny * nz
+    inv_tau2 = 1.0 / (tau * tau)
+
+    # Per-axis Welsch weights, fixed from the observed volume (as in _gmrf_laplacian).
+    wx = np.exp(-(np.diff(D, axis=0) ** 2) * inv_tau2)  # (nx-1, ny, nz)
+    wy = np.exp(-(np.diff(D, axis=1) ** 2) * inv_tau2)  # (nx, ny-1, nz)
+    wz = np.exp(-(np.diff(D, axis=2) ** 2) * inv_tau2)  # (nx, ny, nz-1)
+
+    # diag[i] = sum of weights of edges incident to i (each edge adds its weight
+    # at BOTH endpoints), matching _gmrf_laplacian.
+    diag = np.zeros(N, dtype=np.float64)
+    iy = np.arange(ny)
+    iz = np.arange(nz)
+
+    i1x = (np.arange(nx - 1)[:, None, None] * ny * nz + iy[None, :, None] * nz + iz[None, None, :]).ravel()
+    i2x = i1x + ny * nz
+    np.add.at(diag, i1x, wx.ravel())
+    np.add.at(diag, i2x, wx.ravel())
+
+    i1y = (np.arange(nx)[:, None, None] * ny * nz + np.arange(ny - 1)[None, :, None] * nz + iz[None, None, :]).ravel()
+    i2y = i1y + nz
+    np.add.at(diag, i1y, wy.ravel())
+    np.add.at(diag, i2y, wy.ravel())
+
+    i1z = (np.arange(nx)[:, None, None] * ny * nz + iy[None, :, None] * nz + np.arange(nz - 1)[None, None, :]).ravel()
+    i2z = i1z + 1
+    np.add.at(diag, i1z, wz.ravel())
+    np.add.at(diag, i2z, wz.ravel())
+
+    diag = diag.reshape(D.shape)
+
+    def matvec(x):
+        x3 = x.reshape(D.shape)
+        Lx = diag * x3
+        Lx[:-1] -= wx * x3[1:]
+        Lx[1:] -= wx * x3[:-1]
+        Lx[:, :-1] -= wy * x3[:, 1:]
+        Lx[:, 1:] -= wy * x3[:, :-1]
+        Lx[:, :, :-1] -= wz * x3[:, :, 1:]
+        Lx[:, :, 1:] -= wz * x3[:, :, :-1]
+        return (x3 + lam * Lx).ravel()
+
+    A = LinearOperator((N, N), matvec=matvec, dtype=np.float64)
+    b = D.ravel()
+    x, info = cg(A, b, x0=b, rtol=tol, maxiter=max_iter)
+    if info > 0:
+        logger.warning(f"CG did not converge within {max_iter or 'default'} iterations (info={info})")
+    return x.reshape(D.shape)
 
 
 def crop_point_cloud(point_cloud, bounding_box):
