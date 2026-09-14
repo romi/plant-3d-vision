@@ -12,7 +12,6 @@ Using docker image requires the docker engine to be available on your system and
 """
 import os
 import pathlib
-import re
 import shutil
 import sqlite3
 import subprocess
@@ -30,6 +29,9 @@ import requests
 from packaging import version
 from plant3dvision import proc3d
 from plant3dvision.thirdparty import read_model
+from plant3dvision.utils import camera_name_and_id_from_filename
+from plant3dvision.utils import _CAM_RE
+from plant3dvision.utils import _LEGACY_RE
 from plant3dvision.utils import docker_pull
 from plantdb.commons.fsdb.core import File
 from romitask.log import get_logger
@@ -1228,22 +1230,16 @@ class ColmapRunner(object):
         image_file = image_files[0]
 
         # Test the new pattern with camera id, e.g. 'picamera1-00000.jpg'
-        try:
-            image_pattern = r"(.+)-([0-9]{5})\.(jpe?g)"  # new pattern (with camera id)
-            re.match(image_pattern, image_file.name).group(1)
-        except AttributeError:
-            logger.warning(f"Image pattern based on camera ID not found!")
-        else:
-            return True, image_pattern
+        cam, _ = camera_name_and_id_from_filename(image_file.name)
+        if cam is not None:
+            return True, _CAM_RE.pattern
+        logger.warning(f"Image pattern based on camera ID not found!")
 
-        # Test the legacy pattern, e.g. '00000_rgb.jpg'
-        try:
-            image_pattern = r"([0-9]{5})_rgb\.(jpe?g)"  # legacy pattern
-            re.match(image_pattern, image_file.name).group(1)
-        except AttributeError:
-            logger.warning(f"Legacy image pattern based on camera ID not found!")
-        else:
-            return False, image_pattern
+        # Legacy pattern, e.g. '00000_rgb.jpg' — camera_name_and_id returns (None, id) for it
+        _cam2, legacy_id = camera_name_and_id_from_filename(image_file.name)
+        if legacy_id is not None:
+            return False, _LEGACY_RE.pattern
+        logger.warning(f"Legacy image pattern based on camera ID not found!")
 
         raise Exception("Could not determine image pattern to use!")
 
@@ -1301,11 +1297,11 @@ class ColmapRunner(object):
             A dictionary mapping the original file names to their corresponding new file names.
         """
         image_pattern = r"(.+)-([0-9]{5})\.(jpe?g)"
-        image_regex = re.compile(image_pattern)
-        self.camera_names = list(set(
-            re.match(image_pattern, f.name).group(1)
+        self.camera_names = list({
+            camera_name_and_id_from_filename(f.name)[0]
             for f in image_files
-        ))
+            if camera_name_and_id_from_filename(f.name)[0] is not None
+        })
         for cam_name in self.camera_names:
             cam_dir = image_dir / cam_name
             cam_dir.mkdir(parents=True, exist_ok=True)
@@ -1313,17 +1309,15 @@ class ColmapRunner(object):
         image_counters = {cam_name: 0 for cam_name in self.camera_names}
         image_names = {}  # original name -> new name
         for path in sorted(image_files, key=lambda p: p.name):
-            match = image_regex.match(path.name)
-            camera = match.group(1)
-            extension = match.group(3)
-            counter = image_counters[camera]
-            if match:
-                new_name = f"{camera}/image{counter:0>5}.{extension}"
-                image_counters[camera] += 1
-                image_names[path.name] = new_name
-                shutil.copy(path, image_dir / new_name)
-            else:
+            cam, _ = camera_name_and_id_from_filename(path.name)
+            if cam is None:
                 raise ValueError(f"Image file name {path.name} does not match the expected pattern {image_pattern}")
+            extension = path.suffix.lstrip(".")
+            counter = image_counters[cam]
+            new_name = f"{cam}/image{counter:0>5}.{extension}"
+            image_counters[cam] += 1
+            image_names[path.name] = new_name
+            shutil.copy(path, image_dir / new_name)
         return image_names
 
     def _init_temp_dir(self, image_dir: pathlib.Path, image_files: list[pathlib.Path]) -> dict[str, str]:

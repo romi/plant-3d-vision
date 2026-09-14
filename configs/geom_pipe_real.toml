@@ -42,6 +42,17 @@ parameters = "[0.2, 1, 0.1]"  # Default: [0, 1, 0] (using only the green channel
 # Binarization threshold applied after transforming the image
 min_threshold = 0.2 # Default: 0.0
 max_threshold = 1.0 # Default: 0.4
+# Per-camera overrides (optional). Each sub-table merges over the globals above;
+# cameras not listed use the globals. Old files without this section run unchanged.
+# Example:
+# [Masks.camera.cameraA]
+# method = "linear"
+# colorspace = "RGB"
+# parameters = "[0.5, 1, 0.2]"
+# min_threshold = 0.3
+# max_threshold = 1.0
+# invert = false
+# dilation = 1
 
 [Voxels]
 # Task that provides the masked images as input

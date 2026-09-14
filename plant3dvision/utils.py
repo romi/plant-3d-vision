@@ -7,10 +7,49 @@ A collection of utility functions for data manipulation, geometric calculations,
 visualization, and file operations. This module provides reusable components to
 simplify common tasks in data analysis and scientific computing projects.
 """
+import re
+from pathlib import Path
+
 import docker
 from tqdm import tqdm
 
 import numpy as np
+
+_CAM_RE = re.compile(r"(.+)-([0-9]{5})\.(jpe?g)")
+_LEGACY_RE = re.compile(r"([0-9]{5})_rgb\.(jpe?g)")
+
+
+def camera_name_and_id_from_filename(name: str | Path | None) -> tuple[str | None, str | None]:
+    """
+    Extract camera name and ID from filename.
+
+    Extract camera name and ID information from a filename using regular expressions.
+    The function first checks if the input is valid, then attempts to match the filename
+    against two different regular expressions to extract the camera information.
+
+    Parameters
+    ----------
+    name : str | Path | None
+        The filename or path to extract camera information from. Can be a string,
+        Path object, or None.
+
+    Returns
+    -------
+    tuple[str | None, str | None]
+        A tuple containing (camera_name, camera_id). Both values will be None if
+        no match is found or if the input is None. Camera name is extracted from
+        the first regex pattern, and camera ID from the second pattern.
+    """
+    if not name:
+        return None, None
+    base = Path(name).name
+    m = _CAM_RE.match(base)
+    if m:
+        return m.group(1), m.group(2)
+    m2 = _LEGACY_RE.match(base)
+    if m2:
+        return None, m2.group(1)
+    return None, None
 
 
 def flatten(l):

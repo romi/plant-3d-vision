@@ -13,7 +13,9 @@ from plant3dvision import proc2d
 from plant3dvision.camera import colmap_params_from_kwargs
 from plant3dvision.proc2d import crop_image
 from plant3dvision.tasks.colmap import Colmap
+from plant3dvision.utils import camera_name_and_id_from_filename
 from plant3dvision.utils import jsonify
+from plant3dvision.utils import recursively_unfreeze
 from plantdb.commons import io
 from plantdb.commons.db import File
 from plantdb.commons.db import Fileset
@@ -371,6 +373,14 @@ class Masks(ParallelFileTask):
     dilation : luigi.IntParameter, optional
         A dilation factor for the binary mask images. Applies morphological dilation
         to expand the masked regions. Defaults to 0 (no dilation).
+    camera : luigi.DictParameter, optional
+        Per-camera overrides. Keys are camera names (from
+        ``plant3dvision.utils.camera_name_and_id_from_filename`` group 1).
+        Values are dicts with any subset of
+        ``method``, ``colorspace``, ``parameters``, ``min_threshold``,
+        ``max_threshold``, ``invert``, ``dilation``.
+        Missing cameras or missing keys fall back to the global values above.
+        TOML: ``[Masks.camera.<name>]`` sub-tables.
 
     Returns
     -------
@@ -388,6 +398,8 @@ class Masks(ParallelFileTask):
     The task creates a binary mask by first applying a filter to transform the RGB image,
     then thresholding the result, and optionally applying dilation. The filter can be
     either a linear combination of RGB channels or the excess green index.
+    Per-camera settings (``camera``) override the globals file-by-file.
+    Adding ``camera`` changes the task hash / output dir (by design).
 
     References
     ----------
@@ -420,8 +432,24 @@ class Masks(ParallelFileTask):
     max_threshold = luigi.FloatParameter(default=0.4)
     invert = luigi.BoolParameter(default=False)
     dilation = luigi.IntParameter(default=0)
+    camera = luigi.DictParameter(default={})
 
-    def f_raw(self, img: np.ndarray) -> np.ndarray:
+    _FALLBACK_KEYS = ("method", "colorspace", "parameters", "min_threshold", "max_threshold", "invert", "dilation")
+
+    def _settings_for(self, fi: File) -> tuple[str | None, dict]:
+        base = {k: getattr(self, k) for k in self._FALLBACK_KEYS}
+        cam, _ = camera_name_and_id_from_filename(fi.filename)
+        pc = recursively_unfreeze(self.camera)
+        over = pc.get(cam, {}) if cam else {}
+        cfg = {**base, **{k: over[k] for k in self._FALLBACK_KEYS if k in over}}
+        if isinstance(cfg["parameters"], str):
+            s = cfg["parameters"].strip()
+            cfg["parameters"] = [float(v) for v in s.strip("[]").split(",") if v.strip()]
+        else:
+            cfg["parameters"] = [float(v) for v in list(cfg["parameters"])]
+        return cam, cfg
+
+    def f_raw(self, img: np.ndarray, cfg: dict) -> np.ndarray:
         """Apply the selected filter to the image.
 
         Parameters
@@ -440,12 +468,12 @@ class Masks(ParallelFileTask):
             If the specified filter type is unknown.
         """
         logger.debug(f"Image shape: {img.shape}")
-        if self.method == "linear":
-            return proc2d.linear(img, list(self.parameters), colorspace=self.colorspace)
-        elif self.method == "excess_green":
+        if cfg["method"] == "linear":
+            return proc2d.linear(img, cfg["parameters"], colorspace=cfg["colorspace"])
+        elif cfg["method"] == "excess_green":
             return proc2d.excess_green(img)
         else:
-            raise Exception(f"Unknown masking method '{self.method}'!")
+            raise Exception(f"Unknown masking method '{cfg['method']}'!")
 
     def f(self, fi: File, outfs: Fileset) -> File:
         """Compute the binary mask image for the input image ``File``.
@@ -464,15 +492,16 @@ class Masks(ParallelFileTask):
         """
         logger.debug(f"Loading file: {fi.filename}")
         img = io.read_image(fi)
+        cam, cfg = self._settings_for(fi)
         # Apply the filter:
-        img = self.f_raw(img)
+        img = self.f_raw(img, cfg)
         # Threshold the filtered image to make a binary mask:
-        img = (img >= self.min_threshold) & (img <= self.max_threshold)
-        if self.invert:
+        img = (img >= cfg["min_threshold"]) & (img <= cfg["max_threshold"])
+        if cfg["invert"]:
             img = np.logical_not(img)
         # Apply dilation to the binary mask, if any:
-        if self.dilation > 0:
-            img = proc2d.dilation(img, self.dilation)
+        if cfg["dilation"] > 0:
+            img = proc2d.dilation(img, int(cfg["dilation"]))
         # Convert back to uint8 type:
         img = np.array(255 * img, dtype=np.uint8)
         # Save the binary mask image:
@@ -481,15 +510,16 @@ class Masks(ParallelFileTask):
         # Add metadata to the binary mask image:
         md = {
             'upstream_task': str(self.upstream_task.get_task_family()),
-            'filter': str(self.method),
-            'colorspace': str(self.colorspace),
-            'min_threshold': self.min_threshold,
-            'max_threshold': self.max_threshold,
-            'invert': self.invert,
-            'dilation': self.dilation
+            'filter': str(cfg["method"]),
+            'colorspace': str(cfg["colorspace"]),
+            'min_threshold': float(cfg["min_threshold"]),
+            'max_threshold': float(cfg["max_threshold"]),
+            'invert': bool(cfg["invert"]),
+            'dilation': int(cfg["dilation"]),
+            'camera': cam or "global"
         }
-        if self.method == "linear":
-            md.update({'linear_coeff': list(self.parameters)})
+        if cfg["method"] == "linear":
+            md.update({'linear_coeff': list(cfg["parameters"])})
         if self.query != {}:
             md.update({'query': jsonify(self.query)})
         outfi.set_metadata({self.get_task_family(): md})
