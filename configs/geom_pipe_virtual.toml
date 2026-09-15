@@ -1,54 +1,112 @@
+# =============================================================================
+# This configuration file defines a lightweight pipeline for virtual plant 3D
+# reconstruction and evaluation. It re‑uses the same Luigi tasks defined in
+# `plant3dvision/tasks/*.py` as the full pipeline, but with parameters tuned
+# for virtual (synthetic) plants – e.g. smaller voxel size and fewer points.
+#
+# The high‑level flow is:
+#
+#  1. Voxels              – Back‑projection of masked images to a voxel grid.
+#  2. PointCloud          – Extract a point cloud from the voxel grid.
+#  3. TriangleMesh        – Build a triangle mesh from the point cloud.
+#  4. CurveSkeleton       – Extract a skeleton from the mesh.
+#  5. TreeGraph           – Convert the skeleton to a tree graph.
+#  6. AnglesAndInternodes – Compute phenotypic traits (angles, internodes).
+#  7. Evaluation sections – Compare against ground‑truth virtual plant data.
+#
+# Each section below contains the task‑specific parameters with defaults that
+# match the implementation in `plant3dvision/tasks/*.py`. Adjust the values as
+# needed for your synthetic dataset and hardware.
+# =============================================================================
+
 [Voxels]
+# Task that provides the masked images as input
 upstream_task = "ImagesFilesetExists"
+# Query to filter files from upstream task by metadata
 upstream_colmap = "DummyTask"
 query = "{\"channel\":\"background\"}"  # use the (inverted) background masks
+# Metadata entry to use to access camera poses
 camera_metadata = "camera"
+# Size of the voxel to reconstruct, defines the resolution of the 3‑D array
 voxel_size = 0.06  # ~9x smaller than real plants
+# Type of back‑projection algorithm to use
+# Options: "carving", "averaging"
 method = "carving"
+# Whether to invert the mask values
 invert = true
 
 [PointCloud]
+# Task that provides the voxel array as input
 upstream_task = "Voxels"
+# Value of the level set on which points are sampled
 level_set_value = 0.0
+# Threshold for the number of missing images allowed in the reconstructed volume
 missing_images_threshold = 0
 
 [TriangleMesh]
+# Task that provides the point cloud as input
 upstream_task = "PointCloud"
-library = "open3d" # or "cgal"
-filtering = "most connected triangles"  # ["", "most connected triangles", "largest connected triangles", "dbscan point-cloud"]
+# Library to use for meshing the point cloud
+# Options: "open3d", "cgal"
+library = "open3d"
+# Filtering method to apply to the obtained triangle mesh
+# Options: "", "most connected triangles", "largest connected triangles", "dbscan point-cloud"
+filtering = "most connected triangles"
+# Depth parameter used by Open3D to mesh the point cloud
 depth = 9  # depth parameter used by Open3D to mesh the point cloud
 
 [CurveSkeleton]
+# Task that provides the triangle mesh as input
 upstream_task = "TriangleMesh"
 
 [TreeGraph]
+# Task that provides the skeleton data as input
 upstream_task = "RefineSkeleton"
+# Axis to use for stem orientation to determine the root node
+# Options: 0 (x‑axis), 1 (y‑axis), 2 (z‑axis)
 z_axis = 2
+# Whether the direction of the stem along the specified axis is inverted
 stem_axis_inverted = false
 
 [AnglesAndInternodes]
+# Task that provides the input data for angle and internode measurements
 upstream_task = "TreeGraph"
+# Characteristic length used for stem skeletonization (in mm)
 characteristic_length = 1.0
+# Whether the stem axis orientation is inverted
 stem_axis_inverted = false
+# Type of organ to analyse (e.g., "fruit")
 organ_type = "fruit"
+# Minimum elongation ratio (length/width) for an organ to be valid
 node_sampling_dist = 2  # ~9x smaller than real plants
+# Minimum size threshold for organs to be considered (e.g., fruit size)
 min_fruit_size = 0.7  # ~9x smaller than real plants
 
-# --------------- Evaluation --------------- #
+# ------------------------------- Evaluation ------------------------------- #
 [PointCloudGroundTruth]
-upstream_task = "VirtualPlantObj" # The dataset must have an obj in VirtualPlant
-pcd_size = 100000 # default 100000
+# The dataset must have an OBJ file in VirtualPlant
+upstream_task = "VirtualPlantObj"
+# Number of points to sample from the ground‑truth OBJ
+pcd_size = 100000  # default 100000
 
 [PointCloudEvaluation]
+# Task that provides the reconstructed point cloud
 upstream_task = "PointCloud"
+# Ground‑truth point cloud to compare against
 ground_truth = "PointCloudGroundTruth"
-max_distance = 2.0 # default to 2.0
+# Maximum allowed distance (in mm) for a point to be considered correct
+max_distance = 2.0  # default to 2.0
 
 [AnglesAndInternodesEvaluation]
+# Upstream task providing the extracted angles and internode measurements
 upstream_task = "AnglesAndInternodes"
+# Ground‑truth virtual plant OBJ for comparison
 ground_truth = "VirtualPlantObj"
+# Tolerance for free (unattached) endpoints in matching (as a ratio)
 free_ends = 0.4
+# Epsilon tolerance for free endpoint matching
 free_ends_eps = 1e-2
 
 [Clean]
+# Whether NOT to ask for confirmation before cleaning a dataset
 no_confirm = true

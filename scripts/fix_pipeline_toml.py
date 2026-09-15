@@ -2,14 +2,47 @@
 # -*- coding: utf-8 -*-
 
 """
-CLI tool to force the *z* coordinate of every image pose stored in a
-PlantDB/FSDB dataset to be negative.
+# Fix reconstruction pipeline configuration files.
 
-Usage example
--------------
-    python set_negative_z_pose.py -db /data/ROMI/test_owner \
-        --scan "2023-03-*" \
-        --db-user admin --db-password secret
+A command‑line utility that repairs and modernizes old `pipeline.toml` configuration files used by PlantDB/FSDB datasets.
+It updates deprecated fields, adds sensible defaults, and creates backups, helping pipelines run reliably without manual editing.
+
+## Key Features
+- **Automatic section fixes**: Updates `Colmap`, `Mask`, `Voxels`, and renames `Undistorted` keys to the current `Undistort` naming.
+- **Backup creation**: By default, saves a timestamped copy of the original TOML before modification (--no-backup to disable).
+- **Flexible input handling**: Can process a single TOML file, all TOML files in a directory, or an entire FSDB database with scan selection patterns.
+- **Selective scan processing**: Uses glob patterns to choose which scans in a database are updated.
+- **Configurable authentication**: Supports DB login credentials or a no‑auth mode for testing.
+- **CLI options**: Simple flags to control backup behavior, authentication, and scan filtering.
+
+## Usage Examples
+
+### Fix a single pipeline.toml file (creates a backup by default)
+
+```shell
+python fix_pipeline_toml.py /data/project/pipeline.toml
+```
+
+### Fix every pipeline.toml in a directory (no backups created)
+
+```shell
+python fix_pipeline_toml.py /data/project/configs --no-backup
+```
+
+### Process an FSDB database, updating only scans from March 2023
+
+```shell
+python fix_pipeline_toml.py /data/FSDB \
+    --scan "2023-03-*" \
+    --user admin --password secret
+```
+
+### Run against a database without authentication (testing mode)
+
+```shell
+python fix_pipeline_toml.py /data/FSDB --no-auth
+```
+
 """
 
 import fnmatch
@@ -21,15 +54,15 @@ from typing import Any
 import click
 import toml
 from toml import TomlDecodeError
-from tqdm import tqdm
 
 from plantdb.commons.fsdb.core import FSDB
 from plantdb.commons.fsdb.core import MARKER_FILE_NAME
+from click_option_group import OptionGroup
+from click_option_group import optgroup
 
 
 def fix_colmap(toml_dict: dict[str, Any]) -> dict[str, Any]:
-    """
-    Fix and augment the ``Colmap`` section of a TOML‑derived dictionary.
+    """Fix and augment the ``Colmap`` section of a TOML‑derived dictionary.
 
     Parameters
     ----------
@@ -95,8 +128,7 @@ def fix_undistorted(toml_dict: dict[str, Any]) -> dict[str, Any]:
 
 
 def fix_mask(toml_dict: dict[str, Any]) -> dict[str, Any]:
-    """
-    Fix and augment the ``Mask`` section of a TOML‑derived dictionary.
+    """Fix and augment the ``Mask`` section of a TOML‑derived dictionary.
 
     Parameters
     ----------
@@ -123,8 +155,7 @@ def fix_mask(toml_dict: dict[str, Any]) -> dict[str, Any]:
 
 
 def fix_voxels(toml_dict: dict[str, Any]) -> dict[str, Any]:
-    """
-    Fix and augment the ``Voxels`` section of a TOML‑derived dictionary.
+    """Fix and augment the ``Voxels`` section of a TOML‑derived dictionary.
 
     Parameters
     ----------
@@ -226,47 +257,45 @@ def config_directory(toml_path: Path, no_backup) -> None:
         _fix_toml(toml_file, no_backup)
 
 
-@click.command()
+@click.command(context_settings=dict(help_option_names=["-h", "--help"]))
 @click.argument('path', type=click.Path(exists=True, file_okay=True, resolve_path=True))
 @click.option('--scan', 'scan_patterns', multiple=True, default=('*',),
               help='Glob pattern(s) to select scans (e.g. "2023‑03‑*"). '
                    'Multiple patterns can be given; they are OR‑combined.')
-@click.option('--db-user', 'db_user', default='guest',
-              help='FSDB username.')
-@click.option('--db-password', 'db_password', default='guest',
-              help='FSDB password.')
-@click.option('--no-auth', is_flag=True, default=False,
-              help="Use a database with automatic 'admin' user log in, for testing purposes only.")
 @click.option('--no-backup', is_flag=True, default=False,
               help="Disable automatic backup of the original TOML configuration file.")
+@optgroup.group("Log in", cls=OptionGroup)
+@optgroup.option('-u', '--user', default='guest',
+              help='FSDB username.')
+@optgroup.option('-p', '--password', default='guest',
+              help='FSDB password.')
+@optgroup.option('--no-auth', is_flag=True, default=False,
+              help="Use a database with automatic 'admin' user log in, for testing purposes only.")
 def main(
         path: Path,
         scan_patterns: tuple[str, ...],
+        no_backup: bool,
         db_user: str,
         db_password: str,
         no_auth: bool,
-        no_backup: bool,
 ) -> None:
     """
-    Connect to the FSDB, optionally filter scans, and apply the negative‑z fix.
+    Fix old TOML configuration files.
 
-    Parameters
-    ----------
-    path : pathlib.Path
-        The path to the TOML files a dicrectory woth TOML files or an FSDB database directory.
-    scan_patterns : tuple[str, ...]
-        Glob pattern(s) to select scans (e.g. "2023‑03‑*").
-        Multiple patterns can be given; they are OR‑combined.
-    db_user : str
-        FSDB username.
-    db_password : str
-        FSDB password.
-    no_auth : bool
-        A boolean flag to switch between session managers.
-        If ``True``, use `NoAuthSessionManager` else use `SingleSessionManager`.
-    no_backup : bool
-        A boolean flag to disable automatic backup of the original TOML configuration file.
-        Default to ``False``.
+    Input PATH can be
+    (1) the path to a single TOML file;
+    (2) the path to a folder containing several TOML files;
+    (3) the path to an FSDB database.
+
+    Fixes are:
+
+    - 'Colmap': update to use MAD-based quality check with new parameters.
+
+    - 'Undistorted': renamed to 'Undistort'.
+
+    - 'Masks': new min and max thresholds, linear method choices.
+
+    - 'Voxels': switch to the new default 'averaging' method instead of the older default 'carving'.
     """
     path = Path(path)
     if path.is_file() and path.suffix == '.toml':

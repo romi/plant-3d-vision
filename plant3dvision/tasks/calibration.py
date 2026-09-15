@@ -453,7 +453,7 @@ class ExtrinsicCalibration(RomiTask):
         self.cli_args["mapper"]["--Mapper.ba_refine_extra_params"] = "0"
 
     def run(self):
-        import toml
+        import tomlkit
         from os.path import abspath
         from os.path import join
         from plant3dvision.filenames import COLMAP_CAMERAS_ID
@@ -476,7 +476,7 @@ class ExtrinsicCalibration(RomiTask):
         images_fileset = self.input().get()
         # Get the scan configuration used to acquire the dataset (with CalibrationScan task):
         scan_cfg = abspath(join(images_fileset.path(), '..', "scan.toml"))
-        scan_cfg = toml.load(scan_cfg)
+        scan_cfg = tomlkit.load(scan_cfg)
 
         # - Get CNC images pose from metadata:
         cnc_poses = get_cnc_poses_from_images_metadata(images_fileset.scan)

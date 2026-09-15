@@ -30,16 +30,16 @@
 # Upstream task that provides the input files
 upstream_task = "ImagesFilesetExists"  # Default: "ImagesFilesetExists"
 # Query to filter files from upstream task by metadata
-query = "{}"  # Default: "{}"  (empty dictionary, no filtering)
-# The colmap "executable" to use
-colmap_exe = "colmap/colmap:20251107.4118"
+query = "{}"  # Default: "{}" (empty dictionary, no filtering)
+# Colmap "executable" to use
+colmap_exe = "roboticsmicrofarms/colmap:3.8"
 # Type of matcher to use with COLMAP
 # Options: "exhaustive" (matches every image against every other) or "sequential" (matches successive images)
-matcher = "sequential"  # Default: "exhaustive"
+matcher = "exhaustive"  # Default: "exhaustive"
 # Use GPU for feature extraction and matching when available
 use_gpu = true  # Default: true
 # Whether images were taken with a single camera (shared intrinsics)
-single_camera = false  # Default: true
+single_camera = true  # Default: true
 # Whether to compute a dense point cloud after sparse reconstruction
 compute_dense = false  # Default: false
 # Maximum alignment error allowed during model alignment
@@ -147,9 +147,19 @@ log = true  # Default: true
 invert = false  # Default: false
 # List of labels to use for multi-class voxel reconstruction (requires a labeled mask dataset)
 labels = "[]"  # Default: [] (empty list)
+# Choose bounding_box_mode. "auto" will try to automatically find a bounding box for the plant.
+bounding_box_mode = "auto"  # Default: "manual"
+# For "auto". Ratio of points to keep from the plant cluster to exclude outliers.
+bounding_box_prune_ratio = 0.98  # Default: 0.98
+# Additional magins for the "auto" bounding box.
+bounding_box_margins = 30  # Default: 30mm
+# For "auto". Weight of the spatial (geometric) features in the clustering. Increase for more spatial influence.
+bounding_box_w_geo = 2.0  # Default: 2.0
+# For "auto". Weight of the colour features in the clustering. Increase for more colour influence.
+bounding_box_w_col = 1.0  # Default: 1.0
 
 [Voxels.bounding_box]
-# 3D bounding box defining the region of interest for reconstruction
+# 3D bounding box defining the region of interest for reconstruction. Unused when bounding_box_mode = "auto".
 # Default: None (uses the entire volume)
 # These values work with the 'real_plant' test data
 x = [330, 450]

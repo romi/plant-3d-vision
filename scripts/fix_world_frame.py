@@ -2,15 +2,14 @@
 # -*- coding: utf-8 -*-
 
 """
-Fix World Frame
-================
+# Fix World Frame
 
 A command‑line utility that normalizes the world frame of images poses stored in a PlantDB/FSDB dataset.
-It enforces a negative *z* coordinate for every image pose and re‑aligns pan angles so they start at 0°,
+It enforces a negative *z* coordinate for every image pose and re‑aligns *pan* angles so they start at 0°,
 making downstream processing pipelines aligned a standard world‑axis orientation.
 
-Key Features
-------------
+## Key Features
+
 - **Negative‑z enforcement**: Converts any positive *z* values in image pose metadata to
   negative values, preserving the original magnitude.
 - **Pan‑offset normalization**: Calculates the pan offset from the first image in each
@@ -20,12 +19,18 @@ Key Features
 - **Selective processing**: Flags ``--no-z`` and ``--no-pan`` allow users to skip individual correction steps.
 - **Batch scan support**: Accepts glob patterns to process multiple scans in a single run.
 
-Usage example
--------------
+## Usage example
+
+### Fix the world frame, updating all scans in the `/data/ROMI/` folder
+
 ```bash
-python fix_world_frame.py -db /data/ROMI/test_owner \
-    --scan "2023-03-*" \
-    --db-user admin --db-password secret
+python fix_world_frame.py /data/ROMI/ --no-auth
+```
+
+### Fix the world frame, updating only scans from March 2023
+
+```bash
+python fix_world_frame.py /data/ROMI/ --scan "2023-03-*" --no-auth
 ```
 """
 
@@ -65,25 +70,21 @@ def set_negative_z_pose(image_f: File) -> None:
     image_f.set_metadata('approximate_pose', [x, y, z, pan, tilt, roll])
 
 
-def lower_z_bbox(toml_dict: Dict[str, Any]) -> Dict[str, Any]:
-    """Lower the Z‑axis bounding box limits in a configuration dictionary.
+def exists_backup_pipeline_toml(scan: Scan) -> bool:
+    """Check whether a backup ``pipeline.toml`` file exists for the given `scan`.
 
     Parameters
     ----------
-    toml_dict : dict
-        Dictionary parsed from a TOML file that contains a ``Voxels`` key.
+    scan : plantdb.commons.fsdb.core.Scan
+        A ``Scan`` instance whose directory is inspected for the backup file.
 
     Returns
     -------
-    dict
-        The dictionary with the updated Z bounding box values.
+    bool
+        ``True`` if ``pipeline.toml`` is present in the scan directory, otherwise ``False``.
     """
-    # Adjust Z‑axis bbox by fixed offsets if present
-    if "bounding_box" in toml_dict["Voxels"]:
-        z_bbox = toml_dict["Voxels"]["bounding_box"]["z"]
-        toml_dict["Voxels"]["bounding_box"]["z"] = sorted([z_bbox[0] - 250, z_bbox[1] - 210])
-
-    return toml_dict
+    backup_pipeline = scan.path() / "pipeline.toml"
+    return backup_pipeline.exists()
 
 
 def get_offset(scan: Scan) -> float:
@@ -95,7 +96,7 @@ def get_offset(scan: Scan) -> float:
 
     Parameters
     ----------
-    scan : Scan
+    scan : plantdb.commons.fsdb.core.Scan
         An object representing the scan, which contains a collection of image files and their corresponding
         metadata.
 
@@ -128,7 +129,7 @@ def correct_pan(image_f: File, offset: float | int) -> None:
 
     Parameters
     ----------
-    image_f : File
+    image_f : plantdb.commons.fsdb.core.File
         The target file object from which the approximate pose metadata is
         extracted and updated.
     offset : float or int
@@ -153,9 +154,9 @@ def correct_pan(image_f: File, offset: float | int) -> None:
 @click.option('--scan', 'scan_patterns', multiple=True, default=('*',),
               help='Glob pattern(s) to select scans (e.g. "2023‑03‑*"). '
                    'Multiple patterns can be given; they are OR‑combined.')
-@click.option('--db-user', 'db_user', default='guest',
+@click.option('-u', '--user', 'db_user', default='guest',
               help='FSDB username (optional).')
-@click.option('--db-password', 'db_password', default='guest',
+@click.option('-p', '--password', 'db_password', default='guest',
               help='FSDB password (optional).')
 @click.option('--no-auth', default=False, is_flag=True,
               help="Use a database with automatic 'admin' user log in, for local database or testing purposes.")
@@ -178,12 +179,11 @@ def main(
     making downstream processing pipelines aligned a standard world‑axis orientation.
     """
     if not (no_auth or (db_user and db_password)):
-        raise click.UsageError("Requires using either the --no-auth flag or using both --db-user and --db-password")
+        raise click.UsageError("Requires using either the --no-auth flag or using both --user and --password")
 
     # Initialize the database
     db = FSDB(db_path, no_auth=no_auth)
     db.connect()
-
 
     # Authenticate unless explicitly disabled
     if not no_auth and (db_user and db_password):
@@ -204,10 +204,15 @@ def main(
         click.echo(f"No scans matched the supplied pattern(s): {scan_patterns}")
         return
 
+    scan_with_pipe_cfg: list[str] = []  # list of scans with a backed-up pipeline.toml file
     # Process each selected scan
     for scan in selected_scans:
         scan_id = scan.id
         click.echo(f"Processing scan: {scan_id}")
+
+        if exists_backup_pipeline_toml(scan) and not no_z:
+            # Add to the list of scans with a backed-up pipeline.toml file
+            scan_with_pipe_cfg.append(scan.id)
 
         images_fs = scan.get_fileset('images')
         offset = get_offset(scan)  # compute pan offset for this scan
@@ -217,30 +222,8 @@ def main(
             if not no_z: set_negative_z_pose(image_f)  # ensure z is negative
             if not no_pan: correct_pan(image_f, offset)  # normalize pan angles
 
-        # Load pipeline configuration (TOML) for possible bbox updates
-        try:
-            toml_dict = toml.load(scan.path() / "pipeline.toml")
-        except FileNotFoundError:
-            click.echo(f"No such pipeline.toml file for scan: {scan_id}")
-            continue
-        except TomlDecodeError:
-            click.echo(f"Could not decode pipeline.toml file for scan: {scan_id}")
-            continue
-        except Exception as e:
-            click.echo(f"Unexpected error: {e}")
-            continue
-
-        edited = False
-        if not no_z:
-            edited = True
-            toml_dict = lower_z_bbox(toml_dict)  # adjust Z bounding box
-
-        # Save modified configuration if any changes were made
-        if edited:
-            with open(scan.path() / "pipeline.toml", "w") as f:
-                toml.dump(toml_dict, f)
-
     click.echo("All done!")
+    click.echo(f"If you intend to reuse them, remember to edit the `Voxels.bounding_box` z-axis values in the backed-up `pipeline.toml` file for these scans: {', '.join(scan_with_pipe_cfg)}")
     db.disconnect()
 
 

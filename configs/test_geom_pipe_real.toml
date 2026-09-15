@@ -10,11 +10,12 @@ align_pcd = true
 camera_model = "SIMPLE_RADIAL"
 qc_check = true
 mad_factor = 3.0
+metrics = '["xy", "z"]'
 distance_threshold = 3.0
 fixed_distance_threshold = 1.0
 angle_threshold = 5.0
 fixed_angle_threshold = 3.5
-max_blind_angle = 20.0
+max_blind_angle = 25.0
 
 [Undistort]
 upstream_task = "ImagesFilesetExists"

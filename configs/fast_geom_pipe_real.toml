@@ -1,6 +1,6 @@
 [Undistort]
 upstream_task = "ImagesFilesetExists"
-camera_model_src = "ExtrinsicCalibration"
+upstream_camera_model = "ExtrinsicCalibration"
 camera_model = ""
 intrinsic_calib_scan_id = ""
 extrinsic_calib_scan_id = "extrinsic_calib_1"  # use a dataset with calibrated intrinsic camera params

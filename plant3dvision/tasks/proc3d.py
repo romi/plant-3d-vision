@@ -282,14 +282,14 @@ class SegmentedPointCloud(RomiTask):
     Attributes
     ----------
     upstream_task : luigi.TaskParameter, optional
-        Task upstream of this task, should provide a point cloud.
+        The upstream task, should provide a point cloud.
         Should be either ``Colmap`` or ``PointCloud``.
         Defaults to ``Colmap``.
     scan_id : luigi.Parameter, optional
         The dataset id (scan name) to use to create the ``FilesetTarget``.
         If unspecified (default), the current active scan will be used.
     upstream_segmentation : luigi.TaskParameter, optional
-        Task upstream of this task, should provide a 2D segmentation of the 'images'.
+        The upstream task, should provide a 2D segmentation of the 'images'.
         Defaults to ``Segmentation2D``.
     use_colmap_poses : luigi.BoolParameter, optional
         Defaults to ``True``.
@@ -472,7 +472,7 @@ class TriangleMesh(RomiTask):
     Parameters
     ----------
     upstream_task  : luigi.TaskParameter, optional
-        Task upstream of this task, should provide a point cloud.
+        The upstream task, should provide a point cloud.
         Defaults to ``PointCloud``.
     scan_id : luigi.Parameter, optional
         The dataset id (scan name) to use to create the ``FilesetTarget``.
@@ -576,7 +576,7 @@ class ClusteredMesh(RomiTask):
     Attributes
     ----------
     upstream_task : luigi.TaskParameter, optional
-        The task upstream to this one, should provide a segmented point cloud.
+        The upstream task, should provide a segmented point cloud.
         Defaults to ``SegmentedPointCloud``.
     scan_id : luigi.Parameter, optional
         The dataset id (scan name) to use to create the ``FilesetTarget``.
@@ -661,7 +661,7 @@ class FilteredSegmentedPointCloud(RomiTask):
     Attributes
     ----------
     upstream_task : luigi.TaskParameter, optional
-        Task upstream of this task, should provide a **labelled** point cloud.
+        The upstream task, should provide a **labelled** point cloud.
         Defaults to ``SegmentedPointCloud``.
     scan_id : luigi.Parameter, optional
         The dataset id (scan name) to use to create the ``FilesetTarget``.
@@ -714,7 +714,7 @@ class OrganSegmentation(RomiTask):
     Attributes
     ----------
     upstream_task : luigi.TaskParameter, optional
-        The task upstream to this one, should provide a segmented point cloud.
+        The upstream task, should provide a segmented point cloud.
         Defaults to ``SegmentedPointCloud``.
     scan_id : luigi.Parameter, optional
         The dataset id (scan name) to use to create the ``FilesetTarget``.
@@ -837,7 +837,7 @@ class CurveSkeleton(RomiTask):
     Parameters
     ----------
     upstream_task : luigi.TaskParameter
-        The task upstream to this one, should provide a triangular mesh.
+        The upstream task, should provide a triangular mesh.
         Defaults to ``TriangleMesh``.
     scan_id : luigi.Parameter, optional
         The dataset id (scan name) to use to create the ``FilesetTarget``.
@@ -905,7 +905,7 @@ class RefineSkeleton(RomiTask):
     Parameters
     ----------
     upstream_task : luigi.TaskParameter
-        The task upstream to this one, should provide a triangular mesh.
+        The upstream task, should provide a triangular mesh.
         Defaults to ``CurveSkeleton``.
     upstream_pcd : luigi.TaskParameter
         The task providing the point cloud to refine the skeleton from.
@@ -1015,7 +1015,7 @@ class VoxelsWithPrior(RomiTask):
     Attributes
     ----------
     upstream_task : luigi.TaskParameter, optional
-        The task upstream to this one, should provide an NPZ voxel volume.
+        The upstream task, should provide an NPZ voxel volume.
         Defaults to ``Voxels``.
     scan_id : luigi.Parameter, optional
         The dataset id (scan name) to use to create the ``FilesetTarget``.

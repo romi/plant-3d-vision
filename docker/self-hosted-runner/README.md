@@ -129,6 +129,23 @@ chmod 660 /run/user/$(id -u)/docker.sock
 > Setting the socket to `600` grants read/write access to the owner only (`srw-------`).
 > Setting the socket to `660` grants read/write access to the owner and group (`srw-rw----`).
 
+### 4. Create the work directories
+
+```shell
+for i in 1 2 3 4; do
+  sudo mkdir -p /var/lib/github-runners/runner${i}/_work
+  sudo chown -R 1000:1000 /var/lib/github-runners/runner${i}
+done
+```
+
+Ensure the host directories are created with the correct offset UID:
+```shell
+sudo install -d -o 100999 -g 100999 \
+  /var/lib/github-runners/runner1/_work \
+  /var/lib/github-runners/runner2/_work \
+  /var/lib/github-runners/runner3/_work \
+  /var/lib/github-runners/runner4/_work
+```
 
 ---
 
@@ -161,27 +178,29 @@ The `docker-compose.yml` file defines a single service named `runner`:
 
 ---
 
-## Running the Runner
+## Running the Runners
 
 ### 1. Create a dotenv secret file
 
-Create a file named `.env` in the project root (same directory as `docker-compose.yml`).  
-The container reads only the values inside the file at startup; the file itself is **not** baked into the Docker image.
-This means that you can publish the _base runner image_ and **not** publish your secrets.
+Create a file named `.env` in the project root (same directory as `docker‑compose.yml`).  
+The file holds **all per‑runner tokens and names** required by the compose file.  
+Only the values inside this file are read at container start – the file itself is **not** baked into the image.
 
 ```dotenv
 # ---------- GitHub ----------
 GITHUB_RUNNER_URL=https://github.com/<YOUR_USERNAME>/<YOUR_REPOSITORY>
-# Get the token from the repo > Settings > Actions > Runners
-GITHUB_RUNNER_TOKEN=YOUR_REGISTRATION_TOKEN
-
-# ---------- Runner ----------
+# ---------- Runner Tokens ----------
+GITHUB_RUNNER_TOKEN_1=TOKEN_FOR_RUNNER_1
+GITHUB_RUNNER_TOKEN_2=TOKEN_FOR_RUNNER_2
+GITHUB_RUNNER_TOKEN_3=TOKEN_FOR_RUNNER_3
+GITHUB_RUNNER_TOKEN_4=TOKEN_FOR_RUNNER_4
+# ---------- Common Runner Settings ----------
 GITHUB_RUNNER_LABELS=self-hosted,linux,docker,x64,gpu
-GITHUB_RUNNER_NAME=romi-github-runner
-
 # ---------- Docker ----------
 # Path to the rootless Docker socket
 DOCKER_SOCK=/run/user/1000/docker.sock
+# Set the GID of the rootless Docker socket
+DOCKER_SOCKET_GID=100983
 ```
 
 > **Security note:** 
@@ -193,18 +212,23 @@ Make sure the user id on the host is `1000`, or change it to the user id you are
 
 Use `$(stat -c '%g' /run/user/$(id -u)/docker.sock)` to get the value for `DOCKER_SOCKET_GID`.
 
+If you need more runners, simply add another block (`GITHUB_RUNNER_TOKEN_N` / `GITHUB_RUNNER_NAME`) and a matching service definition in `docker‑compose.yml`.
+
+
 ### 2. Build & start the runner
 
 ```bash
 docker compose up -d --build
 ```
 
-Docker will download the base images, build the custom runner image, and start the container in detached mode.
+Docker builds the custom runner image (once) and starts **all** services defined in the compose file 
+(`runner1`, `runner2`, ...) in detached mode.
 
 ### 3. View logs
 
+To view the log of a specific runner, says `runner1`:
 ```bash
-docker compose logs -f runner
+docker compose logs -f runner1
 ```
 
 You should see a line similar to:
@@ -213,13 +237,17 @@ You should see a line similar to:
 √ Connected to GitHub
 ```
 
-### 4. Stop the runner
+### 4. Stop the runners
 
 ```bash
 docker compose down
 ```
 
+This stops **all** runner containers and removes the network.
+
 ### 5. Rebuild after making changes
+
+If you modify the Dockerfile, entrypoint script, or any other source, rebuild the image and restart the services:
 
 ```bash
 docker compose down && docker compose build --no-cache && docker compose up -d

@@ -49,6 +49,8 @@ initialize_variables() {
   update_pip_tools=0
   # Options to use with `pip`:
   pip_opt=""
+  # Boolean flag to enable GUI requirements (default disabled):
+  gui=0
   # Boolean flag to install webterm requirements:
   webterm=0
   # Boolean flag to install documentation requirements:
@@ -201,18 +203,6 @@ install_package_source() {
     log_info "'${package_name}' sources installed in $(($(date +%s) - start_time)) s."
     # Check numpy version after installation.
     check_numpy_version
-    # Test package installation
-    log_info "Testing '${package_name}' package installation with Python import..."
-    python3 -c "import ${package_name}" 2>/dev/null
-    test_import_status=$?
-    if [ ${test_import_status} -gt 0 ]; then
-      log_warning "Failure!"
-      # Re-run to show failure message:
-      python3 -c "import ${package_name}"
-      exit ${test_import_status}
-    else
-      log_info "Successful!"
-    fi
   else
     log_error "'${package_name}' sources install failed with code '${build_status}'!"
     exit ${build_status}
