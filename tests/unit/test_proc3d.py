@@ -80,6 +80,44 @@ class TestProc3D(unittest.TestCase):
         newpcd = proc3d.crop_point_cloud(pcd, bounding_box)
         assert (len(newpcd.points) == 1)
 
+    @staticmethod
+    def _gmrf_volume():
+        # Non-uniform volume (a block + a little noise) so smoothing changes values.
+        rng = np.random.default_rng(0)
+        vol = np.zeros((16, 16, 16))
+        vol[6:10, 6:10, 6:10] = 1.0
+        vol = vol + 0.01 * rng.normal(size=vol.shape)
+        return vol
+
+    def test_smooth_volume_gmrf(self):
+        vol = self._gmrf_volume()
+        out = proc3d.smooth_volume_gmrf(vol, lam=1.0)
+        assert (out.shape == vol.shape)
+        assert (not np.array_equal(out, vol))
+
+    def test_smooth_volume_gmrf_lam0_disables_smoothing(self):
+        vol = self._gmrf_volume()
+        out = proc3d.smooth_volume_gmrf(vol, lam=0.0)
+        assert (np.array_equal(out, vol))
+
+    def test_smooth_volume_gmrf_linearop(self):
+        vol = self._gmrf_volume()
+        out = proc3d.smooth_volume_gmrf_linearop(vol, lam=1.0)
+        assert (out.shape == vol.shape)
+        assert (not np.array_equal(out, vol))
+
+    def test_smooth_volume_gmrf_linearop_lam0_disables_smoothing(self):
+        vol = self._gmrf_volume()
+        out = proc3d.smooth_volume_gmrf_linearop(vol, lam=0.0)
+        assert (np.array_equal(out, vol))
+
+    def test_smooth_volume_gmrf_linearop_matches_explicit(self):
+        # Both methods solve the same (I + λL)x = b system.
+        vol = self._gmrf_volume()
+        ref = proc3d.smooth_volume_gmrf(vol, lam=1.0)
+        out = proc3d.smooth_volume_gmrf_linearop(vol, lam=1.0)
+        assert (np.allclose(ref, out, atol=1e-6))
+
 
 if __name__ == "__main__":
     unittest.main()

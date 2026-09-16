@@ -112,3 +112,45 @@ void carve_kernel(
     else if (labels[idx] == 0)
         labels[idx] = 1;
 }
+
+// Bayesian space carving (log-odds) vote for a single view.
+// The `value` buffer is pre-initialized to the prior log-odds; each view adds
+// log(tpr/fpr) where the voxel projects inside the mask, or
+// log((1-tpr)/(1-fpr)) where it projects on background. Mirrors the Julia
+// ROMIVoxels.jl `voxel_voting`.
+extern "C" __global__
+void bayes_kernel(
+    const float *mask, // mask: width x height (row-major float32, 0/1)
+    float *value,      // log-odds volume (float32), accumulates across views
+    const float *intrinsics,
+    const float *rot,
+    const float *tvec,
+    const float *volinfo,
+    const int *shape,
+    int width, int height,
+    float log_occ,     // log(tpr / fpr)
+    float log_empty)   // log((1 - tpr) / (1 - fpr))
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int dim_x = shape[0], dim_y = shape[1], dim_z = shape[2];
+    if (idx >= dim_x * dim_y * dim_z) return;
+
+    int x, y, z;
+    unravel_index(idx, make_int3(dim_x, dim_y, dim_z), x, y, z);
+
+    // Compute 3D point in world coordinates
+    float3 pt = make_float3(
+        volinfo[0] + x * volinfo[3],  // origin_x + x * voxel_size
+        volinfo[1] + y * volinfo[3],  // origin_y + y * voxel_size
+        volinfo[2] + z * volinfo[3]   // origin_z + z * voxel_size
+    );
+
+    int px, py;
+    if (!backproject_point(pt, intrinsics, rot, tvec, width, height, px, py))
+        return;
+
+    // Background projection (mask == 0) also contributes a (negative) vote.
+    float mval = mask[py * width + px];
+    float vote = (mval > 0.5f) ? log_occ : log_empty;
+    atomicAdd(&value[idx], vote);
+}
