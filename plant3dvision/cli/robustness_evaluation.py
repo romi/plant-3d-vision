@@ -637,7 +637,7 @@ def run_task_eval(args):
 
     # - Instantiate `FSDB` local "evaluation database":
     _check_markers(eval_db_path)
-    test_db = FSDB(str(eval_db_path))
+    test_db = FSDB(str(eval_db_path), no_auth=True)
 
     # - Execute the task to evaluate for all replicated datasets:
     if not args.no_pipeline:
