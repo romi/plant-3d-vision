@@ -17,6 +17,7 @@ from romitask.task import ImagesFilesetExists
 from romitask.task import ModelFilesetExists
 from romitask.task import ParallelFileTask
 from skimage.filters import gaussian
+from skimage.morphology import binary_dilation, diamond
 from skimage.util import img_as_ubyte
 
 from plant3dvision import proc2d
@@ -405,7 +406,7 @@ class Masks(ParallelFileTask):
     .. [mask_methods] https://docs.romi-project.eu/plant_imager/explanations/masks/
     """
     upstream_task = luigi.TaskParameter(default=Undistort)  # override default attribute from ``RomiTask``
-    method = luigi.Parameter("linear")  # {"linear", "excess_green", "green_fraction", "ltle"}
+    method = luigi.ChoiceParameter(default="linear", choices=["linear","excess_green","green_fraction","ltle"])
     # Gaussian filter parameters (common)
     sigma = luigi.FloatParameter(default=1.0)
 
@@ -446,7 +447,7 @@ class Masks(ParallelFileTask):
         """
         logger.debug(f"Image shape: {img.shape}")
         # Apply Gaussian filter if required
-        img = gaussian(img, sigma=self.sigma) if self.sigma > 0 else img
+        img = gaussian(img, sigma=self.sigma, channel_axis=-1, preserve_range=True) if self.sigma > 0 else img
         # Apply selected filter
         if self.method == "linear":
             return proc2d.linear(img, list(self.parameters), colorspace=self.colorspace)
@@ -635,7 +636,7 @@ class Segmentation2D(FileByFileTask):
                     label_img = label_img > self.threshold
                     # If required, dilation of the binary mask is performed
                     if self.dilation > 0:
-                        label_img = proc2d.dilation(label_img, self.dilation)
+                        binary_dilation(label_img, diamond(self.dilation), out=label_img)
                 # Convert the image to 8-bit unsigned integers
                 label_img = (label_img * 255).astype(np.uint8)
                 # Invert the binary mask for labels in `inverted_labels` list

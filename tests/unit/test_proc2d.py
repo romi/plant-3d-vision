@@ -69,6 +69,22 @@ class TestProc2D(unittest.TestCase):
         # Zero half-length yields a single-pixel footprint
         assert proc2d._line_footprint(0, 0).shape == (1, 1)
 
+    def test_line_footprint_orientations(self):
+        """Non-axis-aligned footprints must not raise and stay centered."""
+        # hl=1, 90° is vertical; -45°/45° are diagonals
+        fp = proc2d._line_footprint(1, 90)
+        assert np.array_equal(fp, np.array([[True], [False], [True]]))
+        fp = proc2d._line_footprint(1, -45)
+        assert np.array_equal(fp, np.array([[False, False, True], [False, False, False], [True, False, False]]))
+        fp = proc2d._line_footprint(1, 45)
+        assert np.array_equal(fp, np.array([[True, False, False], [False, False, False], [False, False, True]]))
+        # hl=2 checks the abs(dx)/abs(dy) centering for negative dx (regression for #292)
+        for theta in (-45, 45, 90):
+            fp = proc2d._line_footprint(2, theta)
+            assert fp.dtype == bool
+            assert fp[fp.shape[0] // 2, fp.shape[1] // 2] == False  # center excluded
+            assert fp.sum() == 4  # 2 * hl
+
     def test_binary_mask_from_grayscale(self):
         gray = np.array([[0.1, 0.5], [0.9, 1.0]])
         # Thresholding in [min_threshold, max_threshold]

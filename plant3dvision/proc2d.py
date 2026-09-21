@@ -392,7 +392,7 @@ def _line_footprint(hl: int, theta: float) -> np.ndarray:
     w = 2 * abs(dy) + 1
     fp = np.zeros((h, w), dtype=bool)
     for row, col in pts:
-        fp[dx + row, dy + col] = True  # shift line offsets to the footprint center
+        fp[abs(dx) + row, abs(dy) + col] = True  # shift line offsets to the footprint center
     return fp
 
 
