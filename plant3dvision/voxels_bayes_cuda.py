@@ -264,63 +264,10 @@ class BayesianBackprojection(Backprojection):
         """Reset the volume buffer to the prior log-odds."""
         cuda.memcpy_htod(self.values_d, self._prior_lod * np.ones(self.shape, dtype=self.dtype))
 
-    def process_view(self, intrinsics: np.ndarray, rot: np.ndarray, tvec: np.ndarray, mask: np.ndarray) -> None:
-        """Process a single view, adding its log-odds vote to the volume.
-
-        Parameters
-        ----------
-        intrinsics : numpy.ndarray
-            The intrinsic camera parameters ``[fx, fy, cx, cy]``.
-        rot : numpy.ndarray
-            The ``3x3`` rotation matrix.
-        tvec : numpy.ndarray
-            The ``(3,)`` translation vector.
-        mask : numpy.ndarray
-            The ``HxW`` mask image; pixels above ``0.5`` count as occupied.
-        """
-        self._validate_mask(mask)
-        mask = self._prepare_mask(mask)
-
-        # CUDA requires contiguous float32 host arrays for direct H2D copies.
-        intrinsics_h = np.ascontiguousarray(intrinsics, dtype=np.float32)
-        rot_h = np.ascontiguousarray(rot, dtype=np.float32)
-        tvec_h = np.ascontiguousarray(tvec, dtype=np.float32)
+    def _prepare_mask_for_kernel(self, mask: np.ndarray) -> np.ndarray:
         # Bayesian fusion needs a hard 0/1 occupancy decision per pixel, so
-        # threshold the (probabilistic) mask before it reaches the kernel.
-        mask_h = np.ascontiguousarray((np.asarray(mask) > 0.5).astype(np.float32))
+        # threshold the (probabilistic) mask after _prepare_mask and before H2D.
+        return np.ascontiguousarray((np.asarray(mask) > 0.5).astype(np.float32))
 
-        height, width = mask_h.shape
-
-        try:
-            # Upload the mask and camera parameters for this view to the device.
-            mask_d = cuda.mem_alloc(mask_h.nbytes)
-            cuda.memcpy_htod(mask_d, mask_h)
-
-            cuda.memcpy_htod(self.intrinsics_d, intrinsics_h)
-            cuda.memcpy_htod(self.rot_d, rot_h)
-            cuda.memcpy_htod(self.tvec_d, tvec_h)
-
-            # Launch one thread per voxel; each thread projects its voxel into
-            # the view and atomicAdd's the corresponding log-odds vote.
-            num_voxels = int(np.prod(self.shape))
-            threads_per_block = 256
-            blocks_per_grid = int((num_voxels + threads_per_block - 1) // threads_per_block)
-
-            self.kernel(
-                mask_d, self.values_d, self.intrinsics_d, self.rot_d, self.tvec_d,
-                self.volinfo_d, self.shape_d,
-                np.int32(width), np.int32(height),
-                self.log_occ, self.log_empty,
-                block=(threads_per_block, 1, 1),
-                grid=(blocks_per_grid, 1, 1)
-            )
-            # Ensure the kernel has finished before the buffer is freed below.
-            cuda.Context.synchronize()
-        except Exception as e:
-            logger.error(f"Kernel execution failed: {e}")
-            raise
-        finally:
-            if 'mask_d' in locals():
-                mask_d.free()
-
-        return
+    def _extra_kernel_args(self) -> tuple:
+        return (self.log_occ, self.log_empty)
