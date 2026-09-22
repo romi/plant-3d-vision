@@ -1069,6 +1069,54 @@ def vol2pcd_mc(volume: np.ndarray, origin: list[float, float, float], voxel_size
     return pcd, mesh
 
 
+def _gmrf_weights_and_diag(volume: np.ndarray, tau: float):
+    """Compute Welsch weights and edge indices for the 7-point GMRF stencil.
+
+    Parameters
+    ----------
+    volume : numpy.ndarray
+        3-D array (already float64) of voxel values.
+    tau : float
+        Welsch soft-threshold scale, must be > 0.
+
+    Returns
+    -------
+    tuple
+        ``(wx, wy, wz, diag, i1x, i2x, i1y, i2y, i1z, i2z)`` where ``wx/wy/wz``
+        are the per-axis Welsch weights, ``diag`` is the flat ``(N,)`` diagonal
+        (sum of incident weights per voxel), and ``i1*/i2*`` are flat C-order
+        endpoint indices for each axis.
+    """
+    if tau <= 0:
+        raise ValueError(f"tau must be > 0, got {tau}")
+    D = volume
+    nx, ny, nz = D.shape
+    nyz = ny * nz
+    N = nx * ny * nz
+    inv_tau2 = 1.0 / (tau * tau)
+    wx = np.exp(-(np.diff(D, axis=0) ** 2) * inv_tau2)  # (nx-1, ny, nz)
+    wy = np.exp(-(np.diff(D, axis=1) ** 2) * inv_tau2)  # (nx, ny-1, nz)
+    wz = np.exp(-(np.diff(D, axis=2) ** 2) * inv_tau2)  # (nx, ny, nz-1)
+
+    iy = np.arange(ny)
+    iz = np.arange(nz)
+
+    i1x = (np.arange(nx - 1)[:, None, None] * nyz + iy[None, :, None] * nz + iz[None, None, :]).ravel()
+    i1y = (np.arange(nx)[:, None, None] * nyz + np.arange(ny - 1)[None, :, None] * nz + iz[None, None, :]).ravel()
+    i1z = (np.arange(nx)[:, None, None] * nyz + iy[None, :, None] * nz + np.arange(nz - 1)[None, None, :]).ravel()
+
+    i2x = i1x + nyz
+    i2y = i1y + nz
+    i2z = i1z + 1
+
+    diag = np.zeros(N, dtype=np.float64)
+    for i1, i2, w in ((i1x, i2x, wx), (i1y, i2y, wy), (i1z, i2z, wz)):
+        np.add.at(diag, i1, w.ravel())
+        np.add.at(diag, i2, w.ravel())
+
+    return wx, wy, wz, diag, i1x, i2x, i1y, i2y, i1z, i2z
+
+
 def _gmrf_laplacian(volume: np.ndarray, tau: float) -> "scipy.sparse.csr_matrix":
     """Build the sparse graph Laplacian ``L`` of a Gaussian Markov Random Field.
 
@@ -1093,36 +1141,8 @@ def _gmrf_laplacian(volume: np.ndarray, tau: float) -> "scipy.sparse.csr_matrix"
     from scipy.sparse import coo_matrix, diags
 
     D = np.asarray(volume, dtype=np.float64)
-    nx, ny, nz = D.shape
-    nyz = ny * nz
-    N = nx * ny * nz
-
-    inv_tau2 = 1.0 / (tau * tau)
-    # Welsch weights on edges along each axis.
-    wx = np.exp(-(np.diff(D, axis=0) ** 2) * inv_tau2)  # (nx-1, ny, nz)
-    wy = np.exp(-(np.diff(D, axis=1) ** 2) * inv_tau2)  # (nx, ny-1, nz)
-    wz = np.exp(-(np.diff(D, axis=2) ** 2) * inv_tau2)  # (nx, ny, nz-1)
-
-    # Flat (C-order) indices of the two endpoints of every edge.
-    iy = np.arange(ny)
-    iz = np.arange(nz)
-
-    # x-direction edges: (x, y, z) <-> (x+1, y, z)
-    i1x = (np.arange(nx - 1)[:, None, None] * nyz + iy[None, :, None] * nz + iz[None, None, :]).ravel()
-    # y-direction edges: (x, y, z) <-> (x, y+1, z)
-    i1y = (np.arange(nx)[:, None, None] * nyz + np.arange(ny - 1)[None, :, None] * nz + iz[None, None, :]).ravel()
-    # z-direction edges: (x, y, z) <-> (x, y, z+1)
-    i1z = (np.arange(nx)[:, None, None] * nyz + iy[None, :, None] * nz + np.arange(nz - 1)[None, None, :]).ravel()
-
-    i2x = i1x + nyz
-    i2y = i1y + nz
-    i2z = i1z + 1
-
-    # Diagonal accumulation: diag[i] = sum of weights of edges incident to i.
-    diag = np.zeros(N, dtype=np.float64)
-    for i1, i2, w in ((i1x, i2x, wx), (i1y, i2y, wy), (i1z, i2z, wz)):
-        np.add.at(diag, i1, w.ravel())
-        np.add.at(diag, i2, w.ravel())
+    wx, wy, wz, diag, i1x, i2x, i1y, i2y, i1z, i2z = _gmrf_weights_and_diag(D, tau)
+    N = D.size
 
     rows = np.concatenate([i1x, i2x, i1y, i2y, i1z, i2z])
     cols = np.concatenate([i2x, i1x, i2y, i1y, i2z, i1z])
@@ -1143,7 +1163,7 @@ def smooth_volume_gmrf(volume: np.ndarray, tau: float = 10.0, lam: float = 0.0,
     ``x* = argmin_x ‖x − b‖² + λ xᵀ L x``,
     i.e. the solution of the linear system ``(I + λL) x = b``, where ``b`` is the input
     volume (the data term) and ``L`` is the Laplacian with Welsch edge weights (see `_gmrf_laplacian`).
-    Set ``lam = 0`` to disable smoothing (returns a copy).
+    Set ``lam = 0`` to disable smoothing (returns same object, no copy).
 
     Parameters
     ----------
@@ -1367,41 +1387,13 @@ def smooth_volume_gmrf_linearop(volume: np.ndarray, tau: float = 10.0, lam: floa
     """
     from scipy.sparse.linalg import LinearOperator, cg
 
-    D = np.asarray(volume, dtype=np.float64)
     if lam == 0.0:
-        return D.copy()
+        return volume
 
-    nx, ny, nz = D.shape
-    N = nx * ny * nz
-    inv_tau2 = 1.0 / (tau * tau)
-
-    # Per-axis Welsch weights, fixed from the observed volume (as in _gmrf_laplacian).
-    wx = np.exp(-(np.diff(D, axis=0) ** 2) * inv_tau2)  # (nx-1, ny, nz)
-    wy = np.exp(-(np.diff(D, axis=1) ** 2) * inv_tau2)  # (nx, ny-1, nz)
-    wz = np.exp(-(np.diff(D, axis=2) ** 2) * inv_tau2)  # (nx, ny, nz-1)
-
-    # diag[i] = sum of weights of edges incident to i (each edge adds its weight
-    # at BOTH endpoints), matching _gmrf_laplacian.
-    diag = np.zeros(N, dtype=np.float64)
-    iy = np.arange(ny)
-    iz = np.arange(nz)
-
-    i1x = (np.arange(nx - 1)[:, None, None] * ny * nz + iy[None, :, None] * nz + iz[None, None, :]).ravel()
-    i2x = i1x + ny * nz
-    np.add.at(diag, i1x, wx.ravel())
-    np.add.at(diag, i2x, wx.ravel())
-
-    i1y = (np.arange(nx)[:, None, None] * ny * nz + np.arange(ny - 1)[None, :, None] * nz + iz[None, None, :]).ravel()
-    i2y = i1y + nz
-    np.add.at(diag, i1y, wy.ravel())
-    np.add.at(diag, i2y, wy.ravel())
-
-    i1z = (np.arange(nx)[:, None, None] * ny * nz + iy[None, :, None] * nz + np.arange(nz - 1)[None, None, :]).ravel()
-    i2z = i1z + 1
-    np.add.at(diag, i1z, wz.ravel())
-    np.add.at(diag, i2z, wz.ravel())
-
-    diag = diag.reshape(D.shape)
+    D = np.asarray(volume, dtype=np.float64)
+    wx, wy, wz, diag_flat, *_ = _gmrf_weights_and_diag(D, tau)
+    diag = diag_flat.reshape(D.shape)
+    N = D.size
 
     def matvec(x):
         x3 = x.reshape(D.shape)

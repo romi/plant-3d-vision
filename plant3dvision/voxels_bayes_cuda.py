@@ -232,6 +232,12 @@ class BayesianBackprojection(Backprojection):
         ``log(prior_prob/(1-prior_prob))`` are precomputed here so they are available to `init_buffers`
         when the parent constructor allocates the volume buffer.
         """
+        if not 0.0 < prior_prob < 1.0:
+            raise ValueError(f"prior_prob must be in (0, 1), got {prior_prob}")
+        if not 0.0 < tpr < 1.0:
+            raise ValueError(f"tpr must be in (0, 1), got {tpr}")
+        if not 0.0 < fpr < 1.0:
+            raise ValueError(f"fpr must be in (0, 1), got {fpr}")
         # Precompute votes/prior up-front: the parent __init__ calls our
         # init_buffers(), which needs these already set on self.
         self.prior_prob = prior_prob

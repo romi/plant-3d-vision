@@ -75,12 +75,6 @@ class AbstractBackprojection(ABC):
         The type of backprojection to perform, either 'carving', 'averaging' or 'bayes'.
     dtype : type
         The data type of the voxel values, determined by the backprojection type.
-    prior_prob : float
-        Prior probability of a voxel belonging to the object, used in 'bayes' mode.
-    tpr : float
-        True positive rate (sensitivity) of the segmentation, used in 'bayes' mode.
-    fpr : float
-        False positive rate (1 - specificity) of the segmentation, used in 'bayes' mode.
 
     Notes
     -----
@@ -94,10 +88,7 @@ class AbstractBackprojection(ABC):
                  voxel_size: float,
                  method: Literal["carving", "averaging", "bayes"] = "carving",
                  default_value: float = 0,
-                 log: bool = False,
-                 prior_prob: float = 0.05,
-                 tpr: float = 0.95,
-                 fpr: float = 0.1) -> None:
+                 log: bool = False) -> None:
         """
         Initialize the abstract backprojection instance.
 
@@ -116,15 +107,6 @@ class AbstractBackprojection(ABC):
         log : bool, optional
             A boolean flag indicating whether logarithmic transformation is applied to a mask in 'averaging' mode.
             Default is ``False``.
-        prior_prob : float, optional
-            Prior probability of a voxel belonging to the object, used in 'bayes' mode.
-            Default is ``0.05``.
-        tpr : float, optional
-            True positive rate (sensitivity) of the segmentation, used in 'bayes' mode.
-            Default is ``0.95``.
-        fpr : float, optional
-            False positive rate (1 - specificity) of the segmentation, used in 'bayes' mode.
-            Default is ``0.1``.
 
         Raises
         ------
@@ -137,9 +119,6 @@ class AbstractBackprojection(ABC):
         self.default_value = default_value
         self.log = log
         self.method = method
-        self.prior_prob = prior_prob
-        self.tpr = tpr
-        self.fpr = fpr
 
         # Validate input parameters
         if method not in ["carving", "averaging", "bayes"]:
