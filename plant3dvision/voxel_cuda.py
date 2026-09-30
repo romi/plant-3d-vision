@@ -249,6 +249,14 @@ class Backprojection(AbstractBackprojection):
 
         return
 
+    def _prepare_mask_for_kernel(self, mask: np.ndarray) -> np.ndarray:
+        """Hook: transform mask after _prepare_mask and before H2D. Base = float32 contiguous."""
+        return np.ascontiguousarray(mask, dtype=np.float32)
+
+    def _extra_kernel_args(self) -> tuple:
+        """Hook: extra trailing args for self.kernel (bayes = log_occ, log_empty)."""
+        return ()
+
     def process_view(self, intrinsics, rot, tvec, mask):
         """
         Process a view by copying data to GPU and launching a kernel.
@@ -292,7 +300,8 @@ class Backprojection(AbstractBackprojection):
         intrinsics_h = np.ascontiguousarray(intrinsics, dtype=np.float32)
         rot_h = np.ascontiguousarray(rot, dtype=np.float32)
         tvec_h = np.ascontiguousarray(tvec, dtype=np.float32)
-        mask_h = np.ascontiguousarray(mask, dtype=np.float32)  # Always float32 for mask
+        # Threshold after _prepare_mask: _prepare_mask may convert dtype/log for averaging
+        mask_h = self._prepare_mask_for_kernel(mask)
 
         height, width = mask_h.shape
 
@@ -315,7 +324,8 @@ class Backprojection(AbstractBackprojection):
             self.kernel(
                 mask_d, self.values_d, self.intrinsics_d, self.rot_d, self.tvec_d,
                 self.volinfo_d, self.shape_d,
-                np.int32(width), np.int32(height),  # Add width and height parameters
+                np.int32(width), np.int32(height),
+                *self._extra_kernel_args(),
                 block=(threads_per_block, 1, 1),
                 grid=(blocks_per_grid, 1, 1)
             )
