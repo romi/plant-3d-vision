@@ -64,18 +64,31 @@ from romitask.log import get_logger
 logger = get_logger(__name__)
 
 # ----------------------------------------------------------------------
-# Module‑level compilation (executed once when the module is imported)
+# Lazy kernel compilation
 # ----------------------------------------------------------------------
 prg_dir = os.path.join(os.path.dirname(__file__), 'kernels')
 with open(os.path.join(prg_dir, 'backprojection_cuda.c')) as f:
     cuda_code = f.read()
 
-try:
-    _mod = SourceModule(cuda_code, arch=get_capped_arch())
-    _bayes_kernel = _mod.get_function("bayes_kernel")
-except Exception as e:
-    logger.error(f"Failed to compile CUDA kernels: {e}")
-    raise
+_kernels = {}
+
+
+def _get_kernel(name: str):
+    """Compile and return a kernel, lazily, in the current CUDA context.
+
+    Kernels must be compiled in the context that is current at launch time.
+    Compiling at import time binds the handle to the import-time context,
+    which becomes invalid if another library (e.g. PyTorch) later makes its
+    own context current -> ``cuFuncSetBlockShape failed: invalid resource
+    handle``. Compiling on first use in the current context avoids this.
+    """
+    if name not in _kernels:
+        try:
+            _kernels[name] = SourceModule(cuda_code, arch=get_capped_arch()).get_function(name)
+        except Exception as e:
+            logger.error(f"Failed to compile CUDA kernel '{name}': {e}")
+            raise
+    return _kernels[name]
 
 
 def logodds2prob(lod: np.ndarray) -> np.ndarray:
@@ -248,7 +261,7 @@ class BayesianBackprojection(Backprojection):
         self._prior_lod = np.float32(np.log(prior_prob / (1.0 - prior_prob)))
         super().__init__(shape, origin, voxel_size, method="bayes",
                          default_value=default_value, log=False)
-        self.kernel = _bayes_kernel
+        self.kernel = _get_kernel("bayes_kernel")
 
     def init_buffers(self) -> None:
         """Allocate GPU buffers, initialising the volume to the prior log-odds.

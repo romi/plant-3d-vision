@@ -28,22 +28,32 @@ from romitask.log import get_logger
 logger = get_logger(__name__)
 
 # ----------------------------------------------------------------------
-# Module‑level compilation (executed once when the module is imported)
+# Lazy kernel compilation
 # ----------------------------------------------------------------------
 # Path to CUDA kernel file
 prg_dir = os.path.join(os.path.dirname(__file__), 'kernels')
 with open(os.path.join(prg_dir, 'backprojection_cuda.c')) as f:
     cuda_code = f.read()
 
-# Compile the CUDA source and expose the kernel functions.
-try:
-    _mod = SourceModule(cuda_code, arch=get_capped_arch())
-    _average_kernel = _mod.get_function("average_kernel")
-    _carve_kernel = _mod.get_function("carve_kernel")
-except Exception as e:
-    # Log error and re-raise exception if compilation fails
-    logger.error(f"Failed to compile CUDA kernels: {e}")
-    raise
+_kernels = {}
+
+
+def _get_kernel(name: str):
+    """Compile and return a kernel, lazily, in the current CUDA context.
+
+    Kernels must be compiled in the context that is current at launch time.
+    Compiling at import time binds the handle to the import-time context,
+    which becomes invalid if another library (e.g. PyTorch) later makes its
+    own context current -> ``cuFuncSetBlockShape failed: invalid resource
+    handle``. Compiling on first use in the current context avoids this.
+    """
+    if name not in _kernels:
+        try:
+            _kernels[name] = SourceModule(cuda_code, arch=get_capped_arch()).get_function(name)
+        except Exception as e:
+            logger.error(f"Failed to compile CUDA kernel '{name}': {e}")
+            raise
+    return _kernels[name]
 
 
 class Backprojection(AbstractBackprojection):
@@ -174,11 +184,11 @@ class Backprojection(AbstractBackprojection):
         """
         super().__init__(shape, origin, voxel_size, method, default_value, log)
 
-        # Choose the pre‑compiled kernel – no per‑instance compilation
+        # Choose the kernel – compiled lazily in the current CUDA context
         if self.method == "carving":
-            self.kernel = _carve_kernel
+            self.kernel = _get_kernel("carve_kernel")
         else:
-            self.kernel = _average_kernel
+            self.kernel = _get_kernel("average_kernel")
 
         # Initialize GPU memory buffers
         self.init_buffers()
