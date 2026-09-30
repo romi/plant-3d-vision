@@ -726,16 +726,14 @@ class Voxels(RomiTask):
         logger.info(f"Processing a list of {len(masks_files)} mask files...")
         md_str = str(self.camera_metadata).lower()
 
-        # - Define bounding-box to use to define the shape of the voxel array:
-        colmap_fileset = self.input()['colmap'].get()
-        points_dict = json.loads(colmap_fileset.get_file("points3d").read())
-
-        points3d, colors = points_and_colors_from_points_dict(points_dict)
-
         labels = None
         centroids = None
         center = None
         if self.bounding_box_mode == "auto":
+            # - Define bounding-box to use to define the shape of the voxel array:
+            colmap_fileset = self.input()['colmap'].get()
+            points_dict = json.loads(colmap_fileset.get_file("points3d").read())
+            points3d, colors = points_and_colors_from_points_dict(points_dict)
             bounding_box, labels, centroids, center = find_plant_bounding_box(
                 points3d, colors, self.bounding_box_prune_ratio, self.bounding_box_margins,
                 w_geo=self.bounding_box_w_geo, w_col=self.bounding_box_w_col
@@ -771,14 +769,15 @@ class Voxels(RomiTask):
                 self.bounding_box[axis][0] += edit[0]
                 self.bounding_box[axis][1] += edit[1]
 
-        # Print the bounding-box values:
-        logger.info(f"Bounding-box to use: {self.bounding_box}")
-        file: File = self.output_file(file_id="bounding_box_fig", create=True)
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            path = os.path.join(tmp_dir, "bounding_box_fig.png")
-            plot_pointcloud_with_bbox(points3d, colors, self.bounding_box,
-                                      save_path=path)
-            file.import_file(path)
+        if str(self.bounding_box_mode) == "auto":
+            # Print the bounding-box values:
+            logger.info(f"Bounding-box to use: {self.bounding_box}")
+            file: File = self.output_file(file_id="bounding_box_fig", create=True)
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                path = os.path.join(tmp_dir, "bounding_box_fig.png")
+                plot_pointcloud_with_bbox(points3d, colors, self.bounding_box,
+                                          save_path=path)
+                file.import_file(path)
 
         # Print the clustering figure, if computed (auto bounding box mode):
         if labels is not None:
