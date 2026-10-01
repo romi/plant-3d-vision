@@ -1,14 +1,8 @@
 import unittest
-from os.path import abspath
-from os.path import join
-from pathlib import Path
 
 from plant3dvision import colmap
 
 from plantdb.commons.testing import FSDBTestCase
-
-parent_dir = Path(__file__).resolve().parents[1]
-DATABASE_LOCATION = abspath(join(parent_dir, "testdata"))
 
 
 class TestColmap(FSDBTestCase):
