@@ -63,6 +63,7 @@ from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 from skimage.filters import gaussian
+from skimage.util import img_as_ubyte
 from plantdb.commons.fsdb.core import FSDB
 from plantdb.commons.log import DEFAULT_LOG_LEVEL
 from plantdb.commons.log import LOG_LEVELS
@@ -1162,6 +1163,8 @@ class PlantMaskingApp(QMainWindow):
             dilation=dilation,
             invert=self.invert_checkbox.isChecked(),
         )
+        # Convert back to uint8 type (as done in ``Masks.f``)
+        self.mask = img_as_ubyte(self.mask)
 
         # Display results
         self.figure.clear()
