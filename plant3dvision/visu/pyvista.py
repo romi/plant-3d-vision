@@ -670,7 +670,7 @@ def plot_skeleton(skel: dict, **kwargs) -> None:
     >>> plot_skeleton(skel, color='tomato', line_width=2)
     >>> db.disconnect()
     """
-    poly = skeleton_graph_to_polydata(skel, coords_order=kwargs.pop('coords_order', 'zyx'))  # Build the PolyData
+    poly = skeleton_graph_to_polydata(skel, coords_order=kwargs.pop('coords_order', 'xyz'))  # Build the PolyData
 
     plotter = pv.Plotter()
     # Default visual parameters - can be overridden via **kwargs
