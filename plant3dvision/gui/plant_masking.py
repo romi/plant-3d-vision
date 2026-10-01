@@ -47,6 +47,7 @@ from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QApplication
 from PySide6.QtWidgets import QComboBox
 from PySide6.QtWidgets import QDoubleSpinBox
+from PySide6.QtWidgets import QFrame
 from PySide6.QtWidgets import QHBoxLayout
 from PySide6.QtWidgets import QLabel
 from PySide6.QtWidgets import QLineEdit
@@ -60,12 +61,11 @@ from PySide6.QtWidgets import QWidget
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
+from skimage.filters import gaussian
 from plantdb.commons.fsdb.core import FSDB
 from plantdb.commons.log import DEFAULT_LOG_LEVEL
 from plantdb.commons.log import LOG_LEVELS
 from plantdb.commons.log import get_logger
-from skimage.morphology import binary_dilation
-from skimage.morphology import diamond
 
 from plant3dvision.proc2d import binary_mask_from_grayscale
 from plant3dvision.proc2d import excess_green
@@ -180,6 +180,7 @@ class PlantMaskingApp(QMainWindow):
         self.ch1_value = None
         self.ch2_value = None
         self.ch3_value = None
+        self.sigma = 0.0
 
         # Timers (wait after modifications stop for 200 ms before processing)
         self._load_image_timer = QTimer(self, singleShot=True, interval=300)
@@ -304,6 +305,30 @@ class PlantMaskingApp(QMainWindow):
         # Sliders
         sliders_layout = QVBoxLayout()
 
+        # ===== Step 1: Pre-processing (Gaussian Smoothing) =====
+        sliders_layout.addWidget(self._make_divider("1. Pre-processing: Gaussian Smoothing"))
+
+        # Gaussian sigma control
+        sigma_layout = QHBoxLayout()
+        sigma_label = QLabel("Sigma (px):")
+        self.sigma_spinbox = QDoubleSpinBox()
+        self.sigma_spinbox.setRange(0.0, 10.0)
+        self.sigma_spinbox.setSingleStep(0.5)
+        self.sigma_spinbox.setValue(0.0)
+        self.sigma_spinbox.setToolTip(
+            "Standard deviation of the Gaussian blur applied before the grayscale method (0 disables it)."
+        )
+        self.sigma_spinbox.valueChanged.connect(self._on_sigma_changed)
+        self.sigma_spinbox.setMinimumWidth(80)
+        self.sigma_spinbox.setMaximumWidth(120)
+        sigma_layout.addWidget(sigma_label)
+        sigma_layout.addWidget(self.sigma_spinbox)
+        sigma_layout.addStretch(1)
+        sliders_layout.addLayout(sigma_layout)
+
+        # ===== Step 2: Processing (Grayscale Transformation) =====
+        sliders_layout.addWidget(self._make_divider("2. Processing: Grayscale Transformation"))
+
         # Method Selector
         method_layout = QHBoxLayout()
         method_label = QLabel("Method:")
@@ -313,8 +338,11 @@ class PlantMaskingApp(QMainWindow):
             "Select the grayscale transformation method used to compute the feature image."
         )
         self.method_combo.currentTextChanged.connect(self._on_method_changed)
+        self.method_combo.setMinimumWidth(120)
+        self.method_combo.setMaximumWidth(220)
         method_layout.addWidget(method_label)
         method_layout.addWidget(self.method_combo)
+        method_layout.addStretch(1)
         sliders_layout.addLayout(method_layout)
 
         # --- Linear-specific controls (color space + 3 channels) ---
@@ -328,6 +356,8 @@ class PlantMaskingApp(QMainWindow):
         self.color_space_combo = QComboBox()
         self.color_space_combo.addItems(["RGB", "HSV", "YCbCr"])
         self.color_space_combo.currentTextChanged.connect(self.update_channel_labels)
+        self.color_space_combo.setMinimumWidth(120)
+        self.color_space_combo.setMaximumWidth(220)
 
         # ? button to show help
         self.cs_help_button = QPushButton("?")
@@ -337,6 +367,7 @@ class PlantMaskingApp(QMainWindow):
 
         cs_layout.addWidget(cs_label)
         cs_layout.addWidget(self.color_space_combo)
+        cs_layout.addStretch(1)
         cs_layout.addWidget(self.cs_help_button)
         linear_layout.addLayout(cs_layout)
 
@@ -465,10 +496,13 @@ class PlantMaskingApp(QMainWindow):
         self.half_length_container.setLayout(half_length_layout)
         sliders_layout.addWidget(self.half_length_container)
 
+        # ===== Step 3: Post-processing (Binarization) =====
+        sliders_layout.addWidget(self._make_divider("3. Post-processing: Binarization"))
+
         # Threshold & Dilation controls
         threshold_dilation_layout = QHBoxLayout()
 
-        min_thresh_label = QLabel("Min Threshold:")
+        min_thresh_label = QLabel("Min. Threshold:")
         self.min_threshold_spinbox = QDoubleSpinBox()
         self.min_threshold_spinbox.setRange(0.0, 1.0)
         self.min_threshold_spinbox.setSingleStep(0.01)
@@ -540,11 +574,17 @@ class PlantMaskingApp(QMainWindow):
         # Ensure the controls panel stays compact
         controls_container = QWidget()
         controls_container.setLayout(controls_layout)
-        controls_container.setMaximumHeight(320)  # limit height
+        controls_container.setMaximumHeight(420)  # limit height
         controls_container.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)  # fixed vertical size
 
         # Add controls to main layout
         main_layout.addWidget(controls_container)
+
+        # Add horizontal divider between controls and image display
+        divider = QFrame()
+        divider.setFrameShape(QFrame.HLine)
+        divider.setFrameShadow(QFrame.Sunken)
+        main_layout.addWidget(divider)
 
         # --------------------------------------------------------------
         # Image display area with a navigation toolbar above the canvas
@@ -590,9 +630,24 @@ class PlantMaskingApp(QMainWindow):
         self.half_length_value.valueChanged.connect(self._on_half_length_spinbox_changed)
         self.min_size_slider.valueChanged.connect(self._on_min_size_slider_changed)
         self.min_size_value.valueChanged.connect(self._on_min_size_spinbox_changed)
+        self.sigma_spinbox.valueChanged.connect(self._process_image_timer.start)
 
         # Set initial method-specific control visibility (defaults to 'linear')
         self._on_method_changed(self.method_combo.currentText())
+
+    def _make_divider(self, text: str) -> QWidget:
+        """Return a horizontal divider with centered text to label a processing step."""
+        widget = QWidget()
+        layout = QHBoxLayout(widget)
+        layout.setContentsMargins(0, 4, 0, 4)
+        label = QLabel(text)
+        label.setStyleSheet("font-weight: bold;")
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setFrameShadow(QFrame.Shadow.Sunken)
+        layout.addWidget(label)
+        layout.addWidget(line, 1)
+        return widget
 
     def _filter_scans(self, text):
         """Filter the scan dropdown based on search box text."""
@@ -983,6 +1038,12 @@ class PlantMaskingApp(QMainWindow):
         self._process_image_timer.start()
 
     @Slot()
+    def _on_sigma_changed(self, value):
+        """Update the Gaussian sigma value."""
+        self.sigma = value
+        self._process_image_timer.start()
+
+    @Slot()
     def _on_min_size_slider_changed(self, value):
         """Update the min-size spinbox from the slider."""
         self.min_size_value.blockSignals(True)
@@ -1051,6 +1112,10 @@ class PlantMaskingApp(QMainWindow):
         dilation = self.dilation_spinbox.value()
         method = self.method_combo.currentText()
 
+        # Apply Gaussian blur before the grayscale method (if sigma > 0)
+        self.sigma = self.sigma_spinbox.value()
+        img = gaussian(self.original_img, sigma=self.sigma, channel_axis=-1, preserve_range=True) if self.sigma > 0 else self.original_img
+
         # Apply the selected grayscale method
         if method == "linear":
             c1_coef = self.ch1_slider.value() / 100.0
@@ -1058,19 +1123,19 @@ class PlantMaskingApp(QMainWindow):
             c3_coef = self.ch3_slider.value() / 100.0
             mode = self.color_space_combo.currentText()
             coefficients = [c1_coef, c2_coef, c3_coef]
-            self.filtered_img = linear(self.original_img, coefficients, colorspace=mode)
+            self.filtered_img = linear(img, coefficients, colorspace=mode)
             filter_desc = f"linear [{mode}] C1:{c1_coef:.2f}, C2:{c2_coef:.2f}, C3:{c3_coef:.2f}"
         elif method == "excess_green":
             bright_threshold = self.bright_threshold_value.value()
-            self.filtered_img = excess_green(self.original_img, bright_threshold=bright_threshold)
+            self.filtered_img = excess_green(img, bright_threshold=bright_threshold)
             filter_desc = f"excess_green (bright_threshold={bright_threshold:.2f})"
         elif method == "green_fraction":
             bright_threshold = self.bright_threshold_value.value()
-            self.filtered_img = green_fraction(self.original_img, bright_threshold=bright_threshold)
+            self.filtered_img = green_fraction(img, bright_threshold=bright_threshold)
             filter_desc = f"green_fraction (bright_threshold={bright_threshold:.2f})"
         else:  # luminance_thin_lines_enhancement
             half_length = self.half_length_value.value()
-            self.filtered_img = luminance_thin_lines_enhancement(self.original_img, half_length=int(half_length))
+            self.filtered_img = luminance_thin_lines_enhancement(img, half_length=int(half_length))
             filter_desc = f"luminance_thin_lines_enhancement (half_length={half_length})"
 
         # Apply binarization
