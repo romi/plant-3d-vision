@@ -142,7 +142,7 @@ def pcd2mesh(pcd: o3d.geometry.PointCloud) -> o3d.geometry.TriangleMesh:
     >>> from plantdb.commons.io import read_point_cloud
     >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plantdb.commons.test_database import test_database
-    >>> db = test_database()
+    >>> db = test_database(no_auth=True)
     >>> db.connect()
     >>> scan = db.get_scan("real_plant_analyzed")
     >>> pcd_fs_id = compute_fileset_matches(scan)["PointCloud"]
@@ -204,7 +204,7 @@ def pcd2vol(pcd, voxel_size, zero_padding=0):
     >>> from plantdb.commons.io import read_point_cloud
     >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plantdb.commons.test_database import test_database
-    >>> db = test_database()
+    >>> db = test_database(no_auth=True)
     >>> db.connect()
     >>> scan = db.get_scan("real_plant_analyzed")
     >>> pcd_fs_id = compute_fileset_matches(scan)["PointCloud"]
@@ -256,10 +256,10 @@ def mesh_to_skeleton(mesh):
     >>> from plant3dvision.proc3d import mesh_to_skeleton
     >>> from plantdb.commons.io import read_triangle_mesh
     >>> from plantdb.server.core.utils import compute_fileset_matches
-    >>> from plantdb.commons.fsdb.core import FSDB
-    >>> db = FSDB('/data/ROMI/test_owner')
+    >>> from plantdb.commons.test_database import test_database
+    >>> db = test_database(no_auth=True)
     >>> db.connect()
-    >>> scan = db.get_scan("Col-0_E1_1")
+    >>> scan = db.get_scan("real_plant_analyzed")
     >>> mesh_fs_id = compute_fileset_matches(scan)["TriangleMesh"]
     >>> fs = scan.get_fileset(mesh_fs_id)
     >>> f = fs.get_file('TriangleMesh')
@@ -303,7 +303,7 @@ def knn_graph(pcd, k):
     >>> from plantdb.commons.io import read_point_cloud
     >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plantdb.commons.test_database import test_database
-    >>> db = test_database()
+    >>> db = test_database(no_auth=True)
     >>> db.connect()
     >>> scan = db.get_scan("real_plant_analyzed")
     >>> pcd_fs_id = compute_fileset_matches(scan)["PointCloud"]
@@ -359,7 +359,7 @@ def radius_graph(pcd, r):
     >>> from plantdb.commons.io import read_point_cloud
     >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plantdb.commons.test_database import test_database
-    >>> db = test_database()
+    >>> db = test_database(no_auth=True)
     >>> db.connect()
     >>> scan = db.get_scan("real_plant_analyzed")
     >>> pcd_fs_id = compute_fileset_matches(scan)["PointCloud"]
@@ -420,7 +420,7 @@ def connect_graph(g, pcd, root_index):
     >>> from plantdb.commons.io import read_point_cloud
     >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plantdb.commons.test_database import test_database
-    >>> db = test_database()
+    >>> db = test_database(no_auth=True)
     >>> db.connect()
     >>> scan = db.get_scan("real_plant_analyzed")
     >>> pcd_fs_id = compute_fileset_matches(scan)["PointCloud"]
@@ -712,7 +712,7 @@ def vol2pcd_parallel(volume, origin, voxel_size, level_set_value=0):
     >>> from plantdb.commons.io import read_volume
     >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plantdb.commons.test_database import test_database
-    >>> db = test_database()
+    >>> db = test_database(no_auth=True)
     >>> db.connect()
     >>> scan = db.get_scan("real_plant_analyzed")
     >>> vol_fs_id = compute_fileset_matches(scan)["Voxels"]
@@ -865,7 +865,6 @@ def vol2pcd(volume: np.ndarray, origin: np.ndarray | list, voxel_size: float,
     >>> from plantdb.commons.test_database import test_database
     >>> db = test_database(no_auth=True)
     >>> db.connect()
-    >>> db.login('admin', 'admin')
     >>> scan = db.get_scan("real_plant_analyzed")
     >>> vol_fs_id = compute_fileset_matches(scan)["Voxels"]
     >>> vol_fs = scan.get_fileset(vol_fs_id)
@@ -1014,9 +1013,8 @@ def vol2pcd_mc(volume: np.ndarray, origin: list[float, float, float], voxel_size
     >>> from plantdb.commons.io import read_volume
     >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plantdb.commons.test_database import test_database
-    >>> db = test_database()
+    >>> db = test_database(no_auth=True)
     >>> db.connect()
-    >>> db.login('admin', 'admin')
     >>> scan = db.get_scan("real_plant_analyzed")
     >>> vol_fs_id = compute_fileset_matches(scan)["Voxels"]
     >>> vol_fs = scan.get_fileset(vol_fs_id)
@@ -1796,7 +1794,7 @@ def pcd_convex_hull_volume(pcd):
     >>> from plantdb.commons.io import read_point_cloud
     >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plantdb.commons.test_database import test_database
-    >>> db = test_database()
+    >>> db = test_database(no_auth=True)
     >>> db.connect()
     >>> scan = db.get_scan("real_plant_analyzed")
     >>> pcd_fs_id = compute_fileset_matches(scan)["PointCloud"]
@@ -1845,9 +1843,8 @@ def chamfer_distance(pc1: np.ndarray | o3d.geometry.PointCloud, pc2: np.ndarray 
     >>> from plantdb.commons.io import read_volume
     >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plantdb.commons.test_database import test_database
-    >>> db = test_database()
+    >>> db = test_database(no_auth=True)
     >>> db.connect()
-    >>> db.login('admin', 'admin')
     >>> scan = db.get_scan("real_plant_analyzed")
     >>> vol_fs_id = compute_fileset_matches(scan)["Voxels"]
     >>> vol_fs = scan.get_fileset(vol_fs_id)

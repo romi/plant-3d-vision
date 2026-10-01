@@ -206,9 +206,8 @@ def remap_averaging(vol: np.ndarray, n_imgs: int) -> np.ndarray:
     >>> from plantdb.commons.test_database import test_database
     >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plant3dvision.voxel_cuda import Backprojection
-    >>> db = test_database()
+    >>> db = test_database(no_auth=True)
     >>> db.connect()
-    >>> db.login('guest', 'guest')
     >>> scan = db.get_scan("real_plant_analyzed")
     >>> # 1. Let's compute a voxel volume with the averaging method
     >>> mask_fs_id = compute_fileset_matches(scan)["Masks"]

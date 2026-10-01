@@ -323,7 +323,7 @@ def pose_estimation_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_
     >>> from plant3dvision.tasks.colmap import pose_estimation_figure
     >>> from plant3dvision.tasks.colmap import use_precalibrated_poses
     >>> # Example 1 - Get the CNC & COLMAP poses and compare them:
-    >>> db = test_database()
+    >>> db = test_database(no_auth=True)
     >>> db.connect()
     >>> print(db.list_scans())
     ['real_plant_analyzed']

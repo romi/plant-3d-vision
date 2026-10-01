@@ -41,9 +41,8 @@ def volume_to_imagedata(volume: np.ndarray,
     >>> from plantdb.commons.test_database import test_database
     >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plant3dvision.voxel_cuda import Backprojection
-    >>> db = test_database()
+    >>> db = test_database(no_auth=True)
     >>> db.connect()
-    >>> db.login('guest', 'guest')
     >>> scan = db.get_scan("real_plant_analyzed")
     >>> # 1. Let's compute a voxel volume with the averaging method
     >>> mask_fs_id = compute_fileset_matches(scan)["Masks"]
@@ -115,9 +114,8 @@ def o3d_point_cloud_to_polydata(point_cloud: o3d.geometry.PointCloud) -> pv.Poly
     >>> from plantdb.commons.test_database import test_database
     >>> from plantdb.commons.io import read_point_cloud
     >>> from plantdb.server.core.utils import compute_fileset_matches
-    >>> db = test_database()
+    >>> db = test_database(no_auth=True)
     >>> db.connect()
-    >>> db.login('guest', 'guest')
     >>> scan = db.get_scan("real_plant_analyzed")
     >>> pcd_fs_id = compute_fileset_matches(scan)["PointCloud"]
     >>> pcd_fs = scan.get_fileset(pcd_fs_id)
@@ -159,9 +157,8 @@ def o3d_mesh_to_polydata(triangle_mesh: o3d.geometry.TriangleMesh) -> pv.PolyDat
     >>> from plantdb.commons.test_database import test_database
     >>> from plantdb.commons.io import read_triangle_mesh
     >>> from plantdb.server.core.utils import compute_fileset_matches
-    >>> db = test_database()
+    >>> db = test_database(no_auth=True)
     >>> db.connect()
-    >>> db.login('guest', 'guest')
     >>> scan = db.get_scan("real_plant_analyzed")
     >>> mesh_fs_id = compute_fileset_matches(scan)["TriangleMesh"]
     >>> mesh_fs = scan.get_fileset(mesh_fs_id)
@@ -215,11 +212,10 @@ def skeleton_graph_to_polydata(skel: dict, coords_order: str = 'xyz') -> pv.Poly
     >>> from plant3dvision.visu.pyvista import skeleton_graph_to_polydata
     >>> from plantdb.commons.io import read_json
     >>> from plantdb.server.core.utils import compute_fileset_matches
-    >>> from plantdb.commons.fsdb.core import FSDB
-    >>> db = FSDB('/data/ROMI/test_owner')
+    >>> from plantdb.commons.test_database import test_database
+    >>> db = test_database(no_auth=True)
     >>> db.connect()
-    >>> db.login('admin', 'admin')
-    >>> scan = db.get_scan("Col-0_E1_1")
+    >>> scan = db.get_scan("real_plant_analyzed")
     >>> skel_fs_id = compute_fileset_matches(scan)["CurveSkeleton"]
     >>> fs = scan.get_fileset(skel_fs_id)
     >>> f = fs.get_file('CurveSkeleton')
@@ -333,9 +329,8 @@ def plot_image_and_volume(image, volume, **kwargs):
     >>> from plantdb.commons.test_database import test_database
     >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plant3dvision.voxel_cuda import Backprojection
-    >>> db = test_database()
+    >>> db = test_database(no_auth=True)
     >>> db.connect()
-    >>> db.login('guest', 'guest')
     >>> scan = db.get_scan("real_plant_analyzed")
     >>> # 1. Let's compute a voxel volume with the averaging method
     >>> mask_fs_id = compute_fileset_matches(scan)["Masks"]
@@ -468,9 +463,8 @@ def plot_image_and_point_cloud(image, point_cloud, **kwargs):
     >>> from plantdb.commons.test_database import test_database
     >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plant3dvision.voxel_cuda import Backprojection
-    >>> db = test_database()
+    >>> db = test_database(no_auth=True)
     >>> db.connect()
-    >>> db.login('guest', 'guest')
     >>> scan = db.get_scan("real_plant_analyzed")
     >>> # 1. Let's load a point cloud from test data
     >>> pcd_fs_id = compute_fileset_matches(scan)["PointCloud"]
@@ -587,9 +581,8 @@ def plot_image_and_mesh(image, triangular_mesh, **kwargs):
     >>> from plantdb.commons.test_database import test_database
     >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plant3dvision.voxel_cuda import Backprojection
-    >>> db = test_database()
+    >>> db = test_database(no_auth=True)
     >>> db.connect()
-    >>> db.login('guest', 'guest')
     >>> scan = db.get_scan("real_plant_analyzed")
     >>> # 1. Let's load a triangular mesh from test data
     >>> mesh_fs_id = compute_fileset_matches(scan)["TriangleMesh"]
@@ -666,11 +659,10 @@ def plot_skeleton(skel: dict, **kwargs) -> None:
     >>> from plant3dvision.visu.pyvista import plot_skeleton
     >>> from plantdb.commons.io import read_json
     >>> from plantdb.server.core.utils import compute_fileset_matches
-    >>> from plantdb.commons.fsdb.core import FSDB
-    >>> db = FSDB('/data/ROMI/test_owner')
+    >>> from plantdb.commons.test_database import test_database
+    >>> db = test_database(no_auth=True)
     >>> db.connect()
-    >>> db.login('admin', 'admin')
-    >>> scan = db.get_scan("Col-0_E1_1")
+    >>> scan = db.get_scan("real_plant_analyzed")
     >>> skel_fs_id = compute_fileset_matches(scan)["CurveSkeleton"]
     >>> fs = scan.get_fileset(skel_fs_id)
     >>> f = fs.get_file('CurveSkeleton')
