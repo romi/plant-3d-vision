@@ -29,17 +29,18 @@ def _setup_db(dataset, prefix='test', with_models=False):
 class TestGeomAnglesAndInternodes(unittest.TestCase):
 
     def test_real_plant(self):
+        scan_path = _setup_db("real_plant", "geom")
+        print(f"Testing geometric pipeline with data: {scan_path}")
+
         pipeline_conf = REPO_ROOT / "configs/test_geom_pipe_real.toml"
         print(f"Testing geometric pipeline with conf: {pipeline_conf}")
-        plant_dataset = _setup_db("real_plant", "geom")
-        print(f"Testing geometric pipeline with data: {plant_dataset}")
 
         # Perform the AnglesAndInternodes task
-        process = run_task(plant_dataset, "AnglesAndInternodes", pipeline_conf, no_auth=True)
+        process = run_task(scan_path, "AnglesAndInternodes", pipeline_conf, no_auth=True)
         self.assertTrue(process.returncode == 0)
 
         # Check if a minimum number of angles and internodes were computed
-        with open(glob.glob(str(plant_dataset) + "/AnglesAndInternodes_*/AnglesAndInternodes.json")[0]) as f:
+        with open(glob.glob(str(scan_path) + "/AnglesAndInternodes_*/AnglesAndInternodes.json")[0]) as f:
             json_data = json.load(f)
 
         angles = json_data["angles"]
@@ -53,11 +54,11 @@ class TestGeomAnglesAndInternodes(unittest.TestCase):
         self.assertTrue(len(internodes) > 10)
 
     def test_real_plant_custom_matcher(self):
-        plant_dataset = _setup_db("real_plant", "custom")
+        scan_path = _setup_db("real_plant", "custom")
+        print(f"Testing geometric pipeline with data: {scan_path}")
 
         pipeline_conf = REPO_ROOT / "configs/test_geom_pipe_real.toml"
         print(f"Testing geometric pipeline with conf: {pipeline_conf}")
-        print(f"Testing geometric pipeline with data: {plant_dataset}")
 
         print("Modifying the configuration to use the custom 'Colmap.matcher'...")
         # Load the TOML config for the reconstruction pipeline and change the 'Colmap.matcher' to "custom":
@@ -67,11 +68,11 @@ class TestGeomAnglesAndInternodes(unittest.TestCase):
         custom_config["Colmap"]["circular_match_window"] = 6
 
         # Perform the AnglesAndInternodes task
-        process = run_task(plant_dataset, "AnglesAndInternodes", custom_config, no_auth=True)
+        process = run_task(scan_path, "AnglesAndInternodes", custom_config, no_auth=True)
         self.assertTrue(process.returncode == 0)
 
         # Check if a minimum number of angles and internodes were computed
-        with open(glob.glob(str(plant_dataset) + "/AnglesAndInternodes_*/AnglesAndInternodes.json")[0]) as f:
+        with open(glob.glob(str(scan_path) + "/AnglesAndInternodes_*/AnglesAndInternodes.json")[0]) as f:
             json_data = json.load(f)
 
         angles = json_data["angles"]
@@ -85,18 +86,18 @@ class TestGeomAnglesAndInternodes(unittest.TestCase):
         self.assertTrue(len(internodes) > 10)
 
     def test_virtual_plant(self):
-        virtual_plant_data = _setup_db("virtual_plant", "geom")
+        scan_path = _setup_db("virtual_plant", "geom")
+        print(f"Testing geometric pipeline with data: {scan_path}")
 
         pipeline_conf = REPO_ROOT / "configs/test_geom_pipe_virtual.toml"
         print(f"Testing geometric pipeline with conf: {pipeline_conf}")
-        print(f"Testing geometric pipeline with data: {virtual_plant_data}")
 
         # Perform the AnglesAndInternodes
-        process = run_task(virtual_plant_data, "AnglesAndInternodes", pipeline_conf, no_auth=True)
+        process = run_task(scan_path, "AnglesAndInternodes", pipeline_conf, no_auth=True)
         self.assertTrue(process.returncode == 0)
 
         # Check if a minimum number of angles and internodes were computed
-        with open(glob.glob(str(virtual_plant_data) + "/AnglesAndInternodes_*/AnglesAndInternodes.json")[0]) as f:
+        with open(glob.glob(str(scan_path) + "/AnglesAndInternodes_*/AnglesAndInternodes.json")[0]) as f:
             json_data = json.load(f)
 
         angles = json_data["angles"]
@@ -114,17 +115,17 @@ class TestMLAnglesAndInternodes(unittest.TestCase):
 
     def test_real_plant(self):
         scan_path = _setup_db("real_plant", 'ml', with_models=True)
+        print(f"Testing CNN pipeline with data: {scan_path}")
 
         pipeline_conf = REPO_ROOT / "configs/test_ml_pipe_real.toml"
         print(f"Testing CNN pipeline with conf: {pipeline_conf}")
-        print(f"Testing CNN pipeline with data: {scan_path}")
 
         # Perform the AnglesAndInternodes
         process = run_task(scan_path, "AnglesAndInternodes", pipeline_conf, no_auth=True)
         self.assertTrue(process.returncode == 0)
 
         # Check if a minimum number of angles and internodes were computed
-        with open(glob.glob(scan_path + "AnglesAndInternodes_*" + "/" + "AnglesAndInternodes.json")[0]) as f:
+        with open(glob.glob(str(scan_path) + "/AnglesAndInternodes_*/AnglesAndInternodes.json")[0]) as f:
             json_data = json.load(f)
 
         angles = json_data["angles"]
@@ -139,17 +140,17 @@ class TestMLAnglesAndInternodes(unittest.TestCase):
 
     def test_virtual_plant(self):
         scan_path = _setup_db("virtual_plant", "ml", with_models=True)
+        print(f"Testing CNN pipeline with data: {scan_path}")
 
         pipeline_conf = REPO_ROOT / "configs/test_ml_pipe_virtual.toml"
         print(f"Testing CNN pipeline with conf: {pipeline_conf}")
-        print(f"Testing CNN pipeline with data: {scan_path}")
 
         # Perform the AnglesAndInternodes
         process = run_task(scan_path, "AnglesAndInternodes", pipeline_conf, no_auth=True)
         self.assertTrue(process.returncode == 0)
 
         # Check if a minimum number of angles and internodes were computed
-        with open(glob.glob(scan_path + "AnglesAndInternodes_*" + "/" + "AnglesAndInternodes.json")[0]) as f:
+        with open(glob.glob(str(scan_path) + "/AnglesAndInternodes_*/AnglesAndInternodes.json")[0]) as f:
             json_data = json.load(f)
 
         angles = json_data["angles"]
