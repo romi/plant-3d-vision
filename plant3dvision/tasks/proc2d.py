@@ -490,6 +490,7 @@ class Masks(ParallelFileTask):
         # Add metadata to the binary mask image:
         md = {
             'upstream_task': str(self.upstream_task.get_task_family()),
+            'sigma': float(self.sigma),
             'method': str(self.method),
             'min_threshold': float(self.min_threshold),
             'max_threshold': float(self.max_threshold),
