@@ -49,9 +49,9 @@ def crop_image(img: np.ndarray, bbox: list[int]) -> np.ndarray:
     >>> import numpy as np
     >>> import matplotlib.pyplot as plt
     >>> from imageio.v3 import imread
-    >>> from plant3dvision import test_db_path
+    >>> from plantdb.commons.test_database import setup_test_database
     >>> from plant3dvision.proc2d import crop_image
-    >>> path = test_db_path()
+    >>> path = setup_test_database('real_plant')
     >>> img = imread(path.joinpath('real_plant/images/00000_rgb.jpg'))
     >>> cropped = crop_image(img, bbox=[180, 0, 1080, -1])
     >>> plt.imshow(cropped)
@@ -133,9 +133,9 @@ def undistort(img: np.ndarray, camera_mtx: np.ndarray, distortion_params: np.nda
     >>> import numpy as np
     >>> import matplotlib.pyplot as plt
     >>> from imageio.v3 import imread
-    >>> from plant3dvision import test_db_path
+    >>> from plantdb.commons.test_database import setup_test_database
     >>> from plant3dvision.proc2d import undistort
-    >>> path = test_db_path()
+    >>> path = setup_test_database('real_plant')
     >>> img = imread(path.joinpath('real_plant/images/00000_rgb.jpg'))
     >>> camera_mtx = np.array([[1.16e+03, 0., 7.20e+02], [0., 1.16e+03, 5.40e+02], [0., 0., 1.]])
     >>> distortion_vect = np.array([-0.00115644, 0., 0., 0.])  # k1, k2, p1, p2
@@ -192,10 +192,10 @@ def linear(img: np.ndarray, coefs: list[float, float, float] = [0.2, 1., 0.1],
     --------
     >>> import matplotlib.pyplot as plt
     >>> from imageio.v3 import imread
-    >>> from plant3dvision import test_db_path
+    >>> from plantdb.commons.test_database import setup_test_database
     >>> from plant3dvision.proc2d import linear
     >>> from plant3dvision.proc2d import binary_mask_from_grayscale
-    >>> path = test_db_path()
+    >>> path = setup_test_database('real_plant')
     >>> img = imread(path.joinpath('real_plant/images/00000_rgb.jpg'))
     >>> gray_img = linear(img, [0.2, 1., 0.1], 'RGB')
     >>> mask_img = binary_mask_from_grayscale(gray_img, min_threshold=0.2, min_size=3, dilation=0)
@@ -255,10 +255,10 @@ def excess_green(img: np.ndarray, bright_threshold: float = 127 / 255) -> np.nda
     >>> import matplotlib.pyplot as plt
     >>> from imageio.v3 import imread
     >>> from skimage.morphology import binary_dilation, diamond
-    >>> from plant3dvision import test_db_path
+    >>> from plantdb.commons.test_database import setup_test_database
     >>> from plant3dvision.proc2d import excess_green
     >>> from plant3dvision.proc2d import binary_mask_from_grayscale
-    >>> path = test_db_path()
+    >>> path = setup_test_database('real_plant')
     >>> img = imread(path.joinpath('real_plant/images/00000_rgb.jpg'))
     >>> gray_img = excess_green(img)  # apply `excess_green` filter
     >>> mask_img = binary_mask_from_grayscale(gray_img, min_threshold=0.025, min_size=3, dilation=0)
@@ -419,10 +419,10 @@ def luminance_thin_lines_enhancement(img: np.ndarray, half_length: int = 2) -> n
     --------
     >>> import matplotlib.pyplot as plt
     >>> from imageio.v3 import imread
-    >>> from plant3dvision import test_db_path
+    >>> from plantdb.commons.test_database import setup_test_database
     >>> from plant3dvision.proc2d import luminance_thin_lines_enhancement
     >>> from plant3dvision.proc2d import binary_mask_from_grayscale
-    >>> path = test_db_path()
+    >>> path = setup_test_database('real_plant')
     >>> img = imread(path.joinpath('real_plant/images/00000_rgb.jpg'))
     >>> gray_img = luminance_thin_lines_enhancement(img, half_length=2)
     >>> mask_img = binary_mask_from_grayscale(gray_img, min_threshold=0.06, min_size=3, dilation=0)
@@ -479,10 +479,10 @@ def green_fraction(img: np.ndarray, bright_threshold: float = 127 / 255) -> np.n
     --------
     >>> import matplotlib.pyplot as plt
     >>> from imageio.v3 import imread
-    >>> from plant3dvision import test_db_path
+    >>> from plantdb.commons.test_database import setup_test_database
     >>> from plant3dvision.proc2d import green_fraction
     >>> from plant3dvision.proc2d import binary_mask_from_grayscale
-    >>> path = test_db_path()
+    >>> path = setup_test_database('real_plant')
     >>> img = imread(path.joinpath('real_plant/images/00000_rgb.jpg'))
     >>> gray_img = green_fraction(img, bright_threshold=0.5)
     >>> mask_img = binary_mask_from_grayscale(gray_img, min_threshold=0.2, min_size=3, dilation=0)
@@ -533,14 +533,14 @@ def binary_mask_from_grayscale(gray_img: np.ndarray, min_threshold: float = 0.2,
     --------
     >>> import matplotlib.pyplot as plt
     >>> from imageio.v3 import imread
-    >>> from plant3dvision import test_db_path
+    >>> from plantdb.commons.test_database import setup_test_database
     >>> from plant3dvision.proc2d import crop_image
     >>> from plant3dvision.proc2d import binary_mask_from_grayscale
     >>> from plant3dvision.proc2d import linear
     >>> from plant3dvision.proc2d import excess_green
     >>> from plant3dvision.proc2d import luminance_thin_lines_enhancement
     >>> from plant3dvision.proc2d import green_fraction
-    >>> path = test_db_path()
+    >>> path = setup_test_database('real_plant')
     >>> img = imread(path.joinpath('real_plant/images/00000_rgb.jpg'))
     >>> img = crop_image(img, bbox=[180, 0, 1080, -1])
     >>> methods = ["linear", "excess_green", "luminance_thin_lines_enhancement", "green_fraction"]
