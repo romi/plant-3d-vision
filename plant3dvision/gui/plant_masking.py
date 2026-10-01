@@ -522,6 +522,12 @@ class PlantMaskingApp(QMainWindow):
             "Maximum intensity value for the mask. Pixels with values above this are excluded from the binary mask."
         )
 
+        # Invert mask control
+        self.invert_checkbox = QCheckBox("Invert mask")
+        self.invert_checkbox.setToolTip(
+            "Invert the binary mask (True/False)."
+        )
+
         # Dilation control
         dilation_label = QLabel("Dilation (px):")
         self.dilation_spinbox = QDoubleSpinBox()
@@ -557,18 +563,13 @@ class PlantMaskingApp(QMainWindow):
         threshold_dilation_layout.addWidget(self.min_threshold_spinbox)
         threshold_dilation_layout.addWidget(max_thresh_label)
         threshold_dilation_layout.addWidget(self.max_threshold_spinbox)
+        threshold_dilation_layout.addWidget(self.invert_checkbox)
         threshold_dilation_layout.addWidget(min_size_label)
         threshold_dilation_layout.addWidget(self.min_size_slider)
         threshold_dilation_layout.addWidget(self.min_size_value)
         threshold_dilation_layout.addWidget(dilation_label)
         threshold_dilation_layout.addWidget(self.dilation_spinbox)
 
-        # Invert mask control
-        self.invert_checkbox = QCheckBox("Invert mask")
-        self.invert_checkbox.setToolTip(
-            "Invert the binary mask (True/False)."
-        )
-        threshold_dilation_layout.addWidget(self.invert_checkbox)
         sliders_layout.addLayout(threshold_dilation_layout)
 
         # Export Parameters button
