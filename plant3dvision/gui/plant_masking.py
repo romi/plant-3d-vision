@@ -196,7 +196,7 @@ class PlantMaskingApp(QMainWindow):
 
         # After database is initialized, update UI with scan list
         self._update_scan_dropdown()
-        
+
         # Auto-select and load first scan if available
 
         if scan_id and scan_id in self.scan_ids_list:
@@ -228,7 +228,7 @@ class PlantMaskingApp(QMainWindow):
         self.scan_dropdown.clear()
         # Add new items
         self.scan_dropdown.addItems(self.scan_ids_list)
-        
+
         # If there are scans, set the first one as selected
         if self.scan_ids_list:
             self.scan_dropdown.setCurrentIndex(0)
@@ -450,7 +450,7 @@ class PlantMaskingApp(QMainWindow):
         self.bright_threshold_container = QWidget()
         bright_threshold_layout = QHBoxLayout()
         bright_threshold_layout.setContentsMargins(0, 0, 0, 0)
-        bright_threshold_label = QLabel("Bright Threshold:")
+        bright_threshold_label = QLabel("Brightness Threshold:")
         self.bright_threshold_slider = QSlider(Qt.Orientation.Horizontal)
         self.bright_threshold_slider.setRange(0, 100)
         self.bright_threshold_slider.setValue(50)
@@ -475,7 +475,7 @@ class PlantMaskingApp(QMainWindow):
         self.half_length_container = QWidget()
         half_length_layout = QHBoxLayout()
         half_length_layout.setContentsMargins(0, 0, 0, 0)
-        half_length_label = QLabel("Half Length:")
+        half_length_label = QLabel("Half Length (px):")
         self.half_length_slider = QSlider(Qt.Orientation.Horizontal)
         self.half_length_slider.setRange(1, 10)
         self.half_length_slider.setValue(2)
@@ -511,7 +511,7 @@ class PlantMaskingApp(QMainWindow):
             "Minimum intensity value for the mask. Pixels with values below this are excluded from the binary mask."
         )
 
-        max_thresh_label = QLabel("Max Threshold:")
+        max_thresh_label = QLabel("Max. Threshold:")
         self.max_threshold_spinbox = QDoubleSpinBox()
         self.max_threshold_spinbox.setRange(0.0, 1.0)
         self.max_threshold_spinbox.setSingleStep(0.01)
@@ -521,31 +521,35 @@ class PlantMaskingApp(QMainWindow):
         )
 
         # Dilation control
-        dilation_label = QLabel("Dilation:")
+        dilation_label = QLabel("Dilation (px):")
         self.dilation_spinbox = QDoubleSpinBox()
+        self.dilation_spinbox.setDecimals(0)
         self.dilation_spinbox.setRange(0, 5)
         self.dilation_spinbox.setValue(0)
+        self.dilation_spinbox.setMinimumWidth(40)
         # Show a helpful tooltip when the user hovers over the export button
         self.dilation_spinbox.setToolTip(
             "Binary dilation applied to the mask image."
         )
 
         # Minimum connected-component size control
-        min_size_label = QLabel("Min Size:")
+        min_size_label = QLabel("Min. object area (px):")
         self.min_size_slider = QSlider(Qt.Orientation.Horizontal)
         self.min_size_slider.setRange(0, 25)
         self.min_size_slider.setValue(0)
-        self.min_size_slider.setMinimumWidth(80)
+        self.min_size_slider.setMinimumWidth(200)
         self.min_size_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.min_size_slider.setTickInterval(5)
         self.min_size_slider.setToolTip(
-            "Minimum connected component size in pixels (0 keeps every component)."
+            "Minimum object area in pixels. Connected regions smaller than this are removed as noise "
+            "(e.g. dust, debris or specks). Set to 0 to keep every region."
         )
         self.min_size_value = QDoubleSpinBox()
         self.min_size_value.setDecimals(0)
         self.min_size_value.setRange(0, 25)
         self.min_size_value.setSingleStep(1.0)
         self.min_size_value.setValue(0)
+        self.min_size_value.setMinimumWidth(40)
 
         threshold_dilation_layout.addWidget(min_thresh_label)
         threshold_dilation_layout.addWidget(self.min_threshold_spinbox)
@@ -688,10 +692,10 @@ class PlantMaskingApp(QMainWindow):
         """Clear the image display when no images are available."""
         # Clear any existing plots
         self.figure.clear()
-        
+
         # Create a placeholder message
         ax = self.figure.add_subplot(111)
-        ax.text(0.5, 0.5, 'No images available\nSelect a scan with images', 
+        ax.text(0.5, 0.5, 'No images available\nSelect a scan with images',
                 horizontalalignment='center', verticalalignment='center',
                 transform=ax.transAxes, fontsize=16, color='gray')
         ax.axis('off')
@@ -1159,18 +1163,20 @@ class PlantMaskingApp(QMainWindow):
         # Filtered image
         ax2 = self.figure.add_subplot(132)
         ax2.imshow(self.filtered_img, cmap='gray')
-        ax2.set_title(f"Filtered\n{filter_desc}")
+        ax2.set_title(f"Grayscale Transformation\n{filter_desc}")
         ax2.axis('off')
 
         # Mask
         ax3 = self.figure.add_subplot(133)
         ax3.imshow(self.mask, cmap='binary')
         decimals = self.min_threshold_spinbox.decimals()
-        title = f"Mask ({min_threshold:.{decimals}f} <= v <= {max_threshold:.{decimals}f})"
+        title = f"Binarization ({min_threshold:.{decimals}f} <= v <= {max_threshold:.{decimals}f})"
+        if min_size > 0 or dilation > 0:
+            title += "\n"
         if min_size > 0:
-            title += f"\nMin Size: {min_size}"
+            title += f"C.C. Min. Size: {min_size}"
         if dilation > 0:
-            title += f"\nDilation: {dilation}"
+            title += f"{' - ' if min_size > 0 else ''}Dilation: {dilation}"
         ax3.set_title(title)
         ax3.axis('off')
 
