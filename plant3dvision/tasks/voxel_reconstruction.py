@@ -684,7 +684,7 @@ class Voxels(RomiTask):
     bounding_box_w_col = luigi.FloatParameter(default=1.0)
     bounding_box_edit = luigi.DictParameter(default=None)
 
-    def requires(self):
+    def requires(self) -> dict:
         """Determines the dependencies required for the task execution."""
         # Initialize dictionary with mandatory mask images from upstream_task
         tasks = {"masks": self.upstream_task()}
@@ -694,6 +694,328 @@ class Voxels(RomiTask):
             tasks.update({"colmap": Colmap()})
 
         return tasks
+
+    def _resolve_bounding_box(self) -> dict:
+        """Resolve the bounding box to reconstruct from the configured source.
+
+        The bounding box is obtained either from an automatic clustering of the
+        COLMAP point cloud (``bounding_box_mode == "auto"``) or from metadata,
+        then edited and, in auto mode, visualised.
+
+        Returns
+        -------
+        dict
+            The resolved bounding box with keys ``'x'``, ``'y'`` and ``'z'``.
+
+        Raises
+        ------
+        SystemExit
+            If no valid bounding box could be obtained from any source.
+        """
+        points3d = colors = q_labels = centroids = center = None
+        if self.bounding_box_mode == "auto":
+            self.bounding_box, points3d, colors, q_labels, centroids, center = self._auto_bounding_box()
+
+        if self.bounding_box is None:
+            self.bounding_box = self._bounding_box_from_metadata()
+
+        if self.bounding_box is None:
+            logger.critical(f"Could not obtain valid bounding-box for {self.scan_id}!")
+            sys.exit("Error with bounding-box definition!")
+
+        self._apply_bounding_box_edit()
+
+        if self.bounding_box_mode == "auto":
+            logger.info(f"Bounding-box to use: {self.bounding_box}")
+            self._plot_bounding_box(points3d, colors)
+            if q_labels is not None:
+                self._plot_clusters(points3d, q_labels, centroids, center)
+
+        return self.bounding_box
+
+    def _auto_bounding_box(self) -> tuple[dict, Points3D, Colors, ndarray | None, ndarray | None, ndarray | None]:
+        """Estimate the bounding box from the COLMAP point cloud via clustering.
+
+        Returns
+        -------
+        tuple
+            ``(bounding_box, points3d, colors, q_labels, centroids, center)`` where
+            ``bounding_box`` is a dict with keys ``'x'``, ``'y'``, ``'z'`` and the
+            remaining values are the clustering outputs used for visualisation.
+        """
+        colmap_fileset = self.input()['colmap'].get()
+        points_dict = json.loads(colmap_fileset.get_file("points3d").read())
+        points3d, colors = points_and_colors_from_points_dict(points_dict)
+        bounding_box, q_labels, centroids, center = find_plant_bounding_box(
+            points3d, colors, self.bounding_box_prune_ratio, self.bounding_box_margins,
+            w_geo=self.bounding_box_w_geo, w_col=self.bounding_box_w_col
+        )
+        bbox = {
+            "x": (bounding_box[0, 0], bounding_box[0, 1]),
+            "y": (bounding_box[1, 0], bounding_box[1, 1]),
+            "z": (bounding_box[2, 0], bounding_box[2, 1]),
+        }
+        return bbox, points3d, colors, q_labels, centroids, center
+
+    def _bounding_box_from_metadata(self) -> dict | None:
+        """Look up the bounding box from scan, COLMAP or images metadata.
+
+        Returns
+        -------
+        dict or None
+            The bounding box found in metadata, or ``None`` if none is available.
+        """
+        md_str = str(self.camera_metadata).lower()
+
+        bounding_box = self.output().get().scan.get_metadata("bounding_box", default=None)
+        logger.debug(f"Bounding-box from scan metadata: {bounding_box}")
+
+        if bounding_box is None and md_str == 'colmap_camera':
+            colmap_fileset = self.input()['colmap'].get()
+            bounding_box = colmap_fileset.get_metadata("bounding_box", default=None)
+            logger.debug(f"Bounding-box from Colmap fileset: {bounding_box}")
+
+        if bounding_box is None:
+            bounding_box = ImagesFilesetExists().output().get().get_metadata("bounding_box", default=None)
+
+        return bounding_box
+
+    def _apply_bounding_box_edit(self) -> None:
+        """Apply the ``bounding_box_edit`` offsets to the current bounding box."""
+        if self.bounding_box_edit is None:
+            return
+        for axis in ['x', 'y', 'z']:
+            edit = self.bounding_box_edit.get(axis, [0., 0.])
+            self.bounding_box[axis][0] += edit[0]
+            self.bounding_box[axis][1] += edit[1]
+
+    def _plot_bounding_box(self, points3d: Points3D, colors: Colors) -> None:
+        """Save a figure of the point cloud with the resolved bounding box."""
+        file: File = self.output_file(file_id="bounding_box_fig", create=True)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = os.path.join(tmp_dir, "bounding_box_fig.png")
+            plot_pointcloud_with_bbox(points3d, colors, self.bounding_box, save_path=path)
+            file.import_file(path)
+
+    def _plot_clusters(self, points3d: Points3D, q_labels: ndarray, centroids: ndarray, center: ndarray) -> None:
+        """Save a figure of the point cloud coloured by clustering labels."""
+        clusters_file: File = self.output_file(file_id="auto_bb_clusters_fig", create=True)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = os.path.join(tmp_dir, "auto_bb_clusters_fig.png")
+            plot_pointcloud_with_clusters(points3d, q_labels, centroids, center, save_path=path)
+            clusters_file.import_file(path)
+
+    def _resolve_labels(self) -> list[str]:
+        """Determine the list of labels to process.
+
+        Returns
+        -------
+        list of str
+            The labels to process. An empty list means unlabelled masks.
+        """
+        if len(self.labels) == 0:
+            masks_fileset = self.input()['masks'].get()
+            labels = masks_fileset.get_metadata("label_names", default=None)
+            if not labels:
+                logger.warning("No metadata 'label_names' in Masks fileset metadata!")
+                logger.debug(masks_fileset.get_metadata())
+                return []
+            logger.info(f"Found {len(labels)} labels in Masks fileset metadata: {labels}")
+            return list(labels)
+
+        labels = list(self.labels)
+        logger.info(f"Got a list of {len(labels)} labels: {labels}")
+        return labels
+
+    def _run_label(self, label: str | None = None) -> None:
+        """Reconstruct and save the voxel volume for a single label channel.
+
+        Parameters
+        ----------
+        label : str or None, optional
+            Channel label to process. If ``None``, the unlabelled masks are used.
+        """
+        masks_files = self._mask_files(label)
+        adjusted_bbox = self._apply_displacement(self.bounding_box)
+
+        shape = shape_from_bounding_box(adjusted_bbox, self.voxel_size)
+        origin = np.array([adjusted_bbox['x'][0], adjusted_bbox['y'][0], adjusted_bbox['z'][0]])
+
+        camera_metadata = self._camera_metadata(masks_files)
+        bp = self._backprojection(shape, origin)
+
+        logger.debug("Processing the mask fileset...")
+        vol = bp.process_fileset({mask.id: mask.path() for mask in masks_files},
+                                 camera_metadata, bool(self.invert))
+        logger.debug(f"Voxel volume shape: {vol.shape}")
+        logger.debug(f"Voxel volume size: {vol.size}")
+        if len(np.unique(vol)) == 1:
+            logger.warning("There is something WRONG with the volume!")
+
+        n_imgs = len(masks_files)
+        md = self._volume_metadata(n_imgs, origin, label)
+        self._write_volume(vol, n_imgs, label, md)
+
+    def _mask_files(self, label: str | None = None) -> list[File]:
+        """Return the mask files to process, optionally filtered by channel label.
+
+        Parameters
+        ----------
+        label : str or None, optional
+            Channel label to filter the masks on. If ``None``, no channel filter is applied.
+
+        Returns
+        -------
+        list of File
+            The mask files matching the query.
+        """
+        masks_fileset = self.input()['masks'].get()
+        md_query = dict(self.query)
+        msg = ""
+        if label is not None:
+            md_query.update({'channel': label})
+            msg = f" for channel '{label}'"
+        masks_files = masks_fileset.get_files(query=md_query)
+        logger.info(f"Processing a list of {len(masks_files)} mask files{msg}...")
+        return masks_files
+
+    def _apply_displacement(self, bounding_box: dict) -> dict:
+        """Return the bounding box shifted by the scan displacement, if any.
+
+        Parameters
+        ----------
+        bounding_box : dict
+            Bounding box with keys ``'x'``, ``'y'``, ``'z'``.
+
+        Returns
+        -------
+        dict
+            The bounding box with the scan ``displacement`` offsets applied.
+        """
+        adjusted = {axis: list(sorted(bounding_box[axis])) for axis in ('x', 'y', 'z')}
+        try:
+            displacement = self.input()['masks'].get().scan.get_metadata("displacement", default=None)
+            for axis, key in zip(('x', 'y', 'z'), ('dx', 'dy', 'dz')):
+                offset = displacement[key]
+                adjusted[axis][0] += offset
+                adjusted[axis][1] += offset
+        except Exception:
+            logger.warning("No 'displacement' found in scan metadata!")
+        return adjusted
+
+    def _camera_metadata(self, masks_files: list[File]) -> dict[str, dict]:
+        """Build the camera metadata dictionary for the given mask files.
+
+        Parameters
+        ----------
+        masks_files : list of File
+            Mask files to extract camera metadata from.
+
+        Returns
+        -------
+        dict
+            Mapping of ``mask.id`` to its COLMAP camera metadata.
+        """
+        md_str = str(self.camera_metadata).lower()
+        camera_metadata = {}
+        for mask in masks_files:
+            cam = mask.get_metadata(md_str, default=None)
+            camera_metadata[mask.id] = camera_metadata_from_colmap(cam)
+        return camera_metadata
+
+    def _backprojection(self, shape: tuple[int, int, int], origin: ndarray) -> Backprojection | BayesianBackprojection:
+        """Instantiate the back-projection engine matching the configured method.
+
+        Parameters
+        ----------
+        shape : tuple of int
+            Shape of the voxel array ``(nx, ny, nz)``.
+        origin : numpy.ndarray
+            Origin of the voxel array ``(x_min, y_min, z_min)``.
+
+        Returns
+        -------
+        Backprojection or BayesianBackprojection
+            The configured back-projection instance.
+        """
+        logger.debug("Initialize `Backprojection` instance...")
+        if str(self.method) == "bayes":
+            return BayesianBackprojection(shape=list(shape), origin=origin.tolist(),
+                                          voxel_size=float(self.voxel_size), log=bool(self.log),
+                                          prior_prob=float(self.prior_prob),
+                                          tpr=float(self.tpr), fpr=float(self.fpr))
+        return Backprojection(shape=list(shape), origin=origin.tolist(), voxel_size=float(self.voxel_size),
+                              method=str(self.method), log=bool(self.log))
+
+    def _volume_metadata(self, n_imgs: int, origin: ndarray, label: str | None = None) -> dict:
+        """Build the metadata dictionary describing the reconstructed volume.
+
+        Parameters
+        ----------
+        n_imgs : int
+            Number of mask images that contributed to the volume.
+        origin : numpy.ndarray
+            Origin of the voxel array.
+        label : str or None, optional
+            Channel label, if any.
+
+        Returns
+        -------
+        dict
+            Volume metadata.
+        """
+        md = {
+            'voxel_size': float(self.voxel_size),
+            'origin': origin.tolist(),
+            'method': str(self.method),
+            'n_img': n_imgs
+        }
+        if label is not None:
+            md.update({'channel': label})
+        return md
+
+    def _remap(self, vol: ndarray, n_imgs: int) -> ndarray:
+        """Convert the raw back-projection volume into the final voxel values.
+
+        Parameters
+        ----------
+        vol : numpy.ndarray
+            Raw volume produced by the back-projection.
+        n_imgs : int
+            Number of mask images that contributed to the volume.
+
+        Returns
+        -------
+        numpy.ndarray
+            The remapped volume.
+        """
+        if self.method == "averaging":
+            # Count the number of agreeing images per voxel.
+            return remap_averaging(vol, n_imgs)
+        if self.method == "bayes":
+            # Threshold the log-odds at 0 (posterior probability > 0.5) to get a binary outfile.
+            return np.array(vol >= 0.0).astype(np.uint8)
+        # Carving: threshold to get a binary outfile.
+        return np.array(vol >= 1.0).astype(np.uint8)
+
+    def _write_volume(self, vol: ndarray, n_imgs: int, label: str | None, md: dict) -> None:
+        """Remap, write and annotate the reconstructed volume.
+
+        Parameters
+        ----------
+        vol : numpy.ndarray
+            Raw voxel volume produced by the back-projection.
+        n_imgs : int
+            Number of mask images that contributed to the volume.
+        label : str or None
+            Channel label, used for the output file suffix.
+        md : dict
+            Metadata to attach to the output file.
+        """
+        outfile = self.output_file(suffix=f"_{label}" if label is not None else None, create=True)
+        vol = self._remap(vol, n_imgs)
+        io.write_volume(outfile, vol)
+        outfile.set_metadata(md)
 
     def run(self):
         """Main processing workflow to generate a voxel volume from input mask files.
@@ -721,167 +1043,12 @@ class Voxels(RomiTask):
             If no displacement is found.
             If improperly formatted metadata is detected.
         """
-        masks_fileset = self.input()['masks'].get()
-        masks_files = masks_fileset.get_files(query=self.query)
-        logger.info(f"Processing a list of {len(masks_files)} mask files...")
-        md_str = str(self.camera_metadata).lower()
+        self._resolve_bounding_box()
 
-        labels = None
-        centroids = None
-        center = None
-        if self.bounding_box_mode == "auto":
-            # - Define bounding-box to use to define the shape of the voxel array:
-            colmap_fileset = self.input()['colmap'].get()
-            points_dict = json.loads(colmap_fileset.get_file("points3d").read())
-            points3d, colors = points_and_colors_from_points_dict(points_dict)
-            bounding_box, labels, centroids, center = find_plant_bounding_box(
-                points3d, colors, self.bounding_box_prune_ratio, self.bounding_box_margins,
-                w_geo=self.bounding_box_w_geo, w_col=self.bounding_box_w_col
-            )
-            self.bounding_box = {
-                "x": (bounding_box[0, 0], bounding_box[0, 1]),
-                "y": (bounding_box[1, 0], bounding_box[1, 1]),
-                "z": (bounding_box[2, 0], bounding_box[2, 1]),
-            }
+        labels = self._resolve_labels()
 
-        # Get it from the `Scan` metadata:
-        if self.bounding_box is None:
-            self.bounding_box = self.output().get().scan.get_metadata("bounding_box", default=None)
-            logger.debug(f"Bounding-box from scan metadata: {self.bounding_box}")
-        # Get it from Colmap if required:
-        if self.bounding_box is None and md_str == 'colmap_camera':
-            colmap_fileset = self.input()['colmap'].get()
-            if self.bounding_box is None:
-                self.bounding_box = colmap_fileset.get_metadata("bounding_box", default=None)
-            logger.debug(f"Bounding-box from Colmap fileset: {self.bounding_box}")
-        # Try to get it from 'images' metadata in last resort:
-        if self.bounding_box is None:
-            self.bounding_box = ImagesFilesetExists().output().get().get_metadata("bounding_box", default=None)
-
-        if self.bounding_box is None:
-            logger.critical(f"Could not obtain valid bounding-box for {self.scan_id}!")
-            sys.exit("Error with bounding-box definition!")
-
-        # Edit the bounding-box
-        if self.bounding_box_edit is not None:
-            for axis in ['x', 'y', 'z']:
-                edit = self.bounding_box_edit.get(axis, [0., 0.])
-                self.bounding_box[axis][0] += edit[0]
-                self.bounding_box[axis][1] += edit[1]
-
-        if str(self.bounding_box_mode) == "auto":
-            # Print the bounding-box values:
-            logger.info(f"Bounding-box to use: {self.bounding_box}")
-            file: File = self.output_file(file_id="bounding_box_fig", create=True)
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                path = os.path.join(tmp_dir, "bounding_box_fig.png")
-                plot_pointcloud_with_bbox(points3d, colors, self.bounding_box,
-                                          save_path=path)
-                file.import_file(path)
-
-        # Print the clustering figure, if computed (auto bounding box mode):
-        if labels is not None:
-            clusters_file: File = self.output_file(file_id="auto_bb_clusters_fig", create=True)
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                path = os.path.join(tmp_dir, "auto_bb_clusters_fig.png")
-                plot_pointcloud_with_clusters(points3d, labels, centroids, center,
-                                              save_path=path)
-                clusters_file.import_file(path)
-
-        # - Check if any displacement exists and use it to modify the shape of the voxel array (to create):
-        x_min, x_max = sorted(self.bounding_box["x"])
-        y_min, y_max = sorted(self.bounding_box["y"])
-        z_min, z_max = sorted(self.bounding_box["z"])
-        try:
-            scan = masks_fileset.scan
-            displacement = scan.get_metadata("displacement", default=None)
-            x_min += displacement["dx"]
-            x_max += displacement["dx"]
-            y_min += displacement["dy"]
-            y_max += displacement["dy"]
-            z_min += displacement["dz"]
-            z_max += displacement["dz"]
-        except:
-            logger.warning("No 'displacement' found in scan metadata!")
-
-        # - Define the shape of the voxel array (to create with `Backprojection`)
-        nx = int((x_max - x_min) / self.voxel_size) + 1
-        ny = int((y_max - y_min) / self.voxel_size) + 1
-        nz = int((z_max - z_min) / self.voxel_size) + 1
-        # - Defines the origin of the voxel array (to create with `Backprojection`)
-        origin = np.array([x_min, y_min, z_min])
-        # - Define labels to use with `Backprojection`, if any:
-        if len(self.labels) == 0:
-            # Try to automatically get labels from the Mask metadata, else set to `None`:
-            labels = masks_fileset.get_metadata("label_names", default=None)
-            try:
-                assert labels is not None and len(labels) != 0
-            except AssertionError:
-                logger.warning("No metadata 'label_names' in `masks_fileset`!")
-                logger.debug(masks_fileset.get_metadata())
+        if len(labels) == 0:
+            self._run_label()
         else:
-            # Defines labels to use in case of semantic labelled masks:
-            labels = list(self.labels)
-
-        camera_metadata = {}
-        for mask in masks_files:
-            cam = mask.get_metadata(md_str, default=None)
-            camera_metadata[mask.id] = camera_metadata_from_colmap(cam)
-
-        logger.debug("Initialize `Backprojection` instance...")
-        if str(self.method) == "bayes":
-            sc = BayesianBackprojection(shape=[nx, ny, nz], origin=[x_min, y_min, z_min],
-                                        voxel_size=float(self.voxel_size), log=bool(self.log),
-                                        prior_prob=float(self.prior_prob),
-                                        tpr=float(self.tpr), fpr=float(self.fpr))
-        else:
-            sc = Backprojection(shape=[nx, ny, nz], origin=[x_min, y_min, z_min], voxel_size=float(self.voxel_size),
-                                method=str(self.method), log=bool(self.log))
-        logger.debug("Processing the mask fileset...")
-        vol = sc.process_fileset({mask.id: mask.path() for mask in masks_files},
-                                 camera_metadata, bool(self.invert))
-        logger.debug(f"Voxel volume shape: {vol.shape}")
-        logger.debug(f"Voxel volume size: {vol.size}")
-        if len(np.unique(vol)) == 1:
-            logger.warning("There is something WRONG with the volume!")
-
-        n_imgs = len(masks_files)
-        # Prepare the metadata dictionary
-        md = {
-            'voxel_size': float(self.voxel_size),
-            'origin': origin.tolist(),
-            'method': str(self.method),
-            'n_img': n_imgs
-        }
-        if labels is not None:
-            for i, label in enumerate(labels):
-                # Get the volume corresponding to the label
-                out = vol[i, :]
-                # Apply value remapping
-                out = self._remap(out, n_imgs)
-                # Write the volume file corresponding to the label
-                logger.debug(f"Writing volume file for label: {label}")
-                outfile = self.output_file(suffix=f"_{label}", create=True)
-                io.write_volume(outfile, out)
-                # Save the volume metadata corresponding to the label
-                md['label'] = label
-                outfile.set_metadata(md)
-        else:
-            outfile = self.output_file(create=True)
-            # Apply value remapping
-            vol = self._remap(vol, n_imgs)
-            # Write the volume file
-            io.write_volume(outfile, vol)
-            # Save the volume metadata
-            outfile.set_metadata(md)
-
-    def _remap(self, vol, n_imgs):
-        if self.method == "averaging":
-            # If the "averaging" method, apply value remapping to get the number of agreeing images per voxel:
-            return remap_averaging(vol, n_imgs)
-        elif self.method == "bayes":
-            # If the "bayes" method, threshold the log-odds at 0 (posterior probability > 0.5) to get a binary outfile:
-            return np.array(vol >= 0.0).astype(np.uint8)
-        else:
-            # If the "carving" method, "apply thresholding" to get a binary outfile
-            return np.array(vol >= 1.0).astype(np.uint8)
+            for label in labels:
+                self._run_label(label)
