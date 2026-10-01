@@ -3,7 +3,6 @@
 
 """Task submodule dedicated to the processing of 2D images that creates 2D images."""
 
-import concurrent.futures
 import sys
 
 import luigi
@@ -23,7 +22,6 @@ from skimage.util import img_as_ubyte
 
 from plant3dvision import proc2d
 from plant3dvision.proc2d import crop_image
-from plant3dvision.tasks.colmap import Colmap
 from plant3dvision.utils import jsonify
 
 logger = get_logger(__name__, log_level="INFO")
@@ -409,7 +407,7 @@ class Masks(ParallelFileTask):
     upstream_task = luigi.TaskParameter(default=Undistort)  # override default attribute from ``RomiTask``
     method = luigi.ChoiceParameter(default="linear", choices=["linear", "excess_green", "green_fraction", "ltle"])
     # Gaussian filter parameters (common)
-    sigma = luigi.FloatParameter(default=1.0)
+    sigma = luigi.FloatParameter(default=0.5)
 
     # Linear method parameters
     colorspace = luigi.ChoiceParameter(default="RGB", choices=["RGB", "HSV", "YCbCr"])
@@ -422,8 +420,8 @@ class Masks(ParallelFileTask):
     half_length = luigi.IntParameter(default=2)
 
     # Binarization parameters (common)
-    min_threshold = luigi.FloatParameter(default=0.0)
-    max_threshold = luigi.FloatParameter(default=0.4)
+    min_threshold = luigi.FloatParameter(default=0.2)
+    max_threshold = luigi.FloatParameter(default=1.0)
     invert = luigi.BoolParameter(default=False)
     min_size = luigi.IntParameter(default=3)
     dilation = luigi.IntParameter(default=0)
