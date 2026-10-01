@@ -45,6 +45,7 @@ from PySide6.QtCore import QTimer
 from PySide6.QtCore import Qt
 from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QCheckBox
 from PySide6.QtWidgets import QComboBox
 from PySide6.QtWidgets import QDoubleSpinBox
 from PySide6.QtWidgets import QFrame
@@ -560,6 +561,13 @@ class PlantMaskingApp(QMainWindow):
         threshold_dilation_layout.addWidget(self.min_size_value)
         threshold_dilation_layout.addWidget(dilation_label)
         threshold_dilation_layout.addWidget(self.dilation_spinbox)
+
+        # Invert mask control
+        self.invert_checkbox = QCheckBox("Invert mask")
+        self.invert_checkbox.setToolTip(
+            "Invert the binary mask (True/False)."
+        )
+        threshold_dilation_layout.addWidget(self.invert_checkbox)
         sliders_layout.addLayout(threshold_dilation_layout)
 
         # Export Parameters button
@@ -628,6 +636,7 @@ class PlantMaskingApp(QMainWindow):
         self.min_threshold_spinbox.valueChanged.connect(self._process_image_timer.start)
         self.max_threshold_spinbox.valueChanged.connect(self._process_image_timer.start)
         self.dilation_spinbox.valueChanged.connect(self._process_image_timer.start)
+        self.invert_checkbox.stateChanged.connect(self._process_image_timer.start)
         self.bright_threshold_slider.valueChanged.connect(self._on_bright_threshold_slider_changed)
         self.bright_threshold_value.valueChanged.connect(self._on_bright_threshold_spinbox_changed)
         self.half_length_slider.valueChanged.connect(self._on_half_length_slider_changed)
@@ -816,11 +825,13 @@ class PlantMaskingApp(QMainWindow):
             method = self.method_combo.currentText()
             # Update with new mask parameters
             masks = {
+                "sigma": self.sigma_spinbox.value(),
                 "method": method,
                 "min_threshold": self.min_threshold_spinbox.value(),
                 "max_threshold": self.max_threshold_spinbox.value(),
                 "min_size": self.min_size_value.value(),
                 "dilation": self.dilation_spinbox.value(),
+                "invert": self.invert_checkbox.isChecked(),
             }
             # Method-specific parameters
             if method == "linear":
@@ -1149,6 +1160,7 @@ class PlantMaskingApp(QMainWindow):
             max_threshold=max_threshold,
             min_size=min_size,
             dilation=dilation,
+            invert=self.invert_checkbox.isChecked(),
         )
 
         # Display results
