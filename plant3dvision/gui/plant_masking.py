@@ -563,10 +563,13 @@ class PlantMaskingApp(QMainWindow):
         threshold_dilation_layout.addWidget(self.min_threshold_spinbox)
         threshold_dilation_layout.addWidget(max_thresh_label)
         threshold_dilation_layout.addWidget(self.max_threshold_spinbox)
+        threshold_dilation_layout.addWidget(self._make_flow_sep())
         threshold_dilation_layout.addWidget(self.invert_checkbox)
+        threshold_dilation_layout.addWidget(self._make_flow_sep())
         threshold_dilation_layout.addWidget(min_size_label)
         threshold_dilation_layout.addWidget(self.min_size_slider)
         threshold_dilation_layout.addWidget(self.min_size_value)
+        threshold_dilation_layout.addWidget(self._make_flow_sep())
         threshold_dilation_layout.addWidget(dilation_label)
         threshold_dilation_layout.addWidget(self.dilation_spinbox)
 
@@ -663,6 +666,12 @@ class PlantMaskingApp(QMainWindow):
         layout.addWidget(label)
         layout.addWidget(line, 1)
         return widget
+
+    def _make_flow_sep(self) -> QLabel:
+        """Return a flow separator label to indicate the flow between post-processing widgets."""
+        arrow = QLabel("→")
+        arrow.setStyleSheet("color: gray;")
+        return arrow
 
     def _filter_scans(self, text):
         """Filter the scan dropdown based on search box text."""
