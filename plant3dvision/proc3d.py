@@ -267,7 +267,13 @@ def mesh_to_skeleton(mesh):
     >>> skel = mesh_to_skeleton(tmesh)
     >>> print(f"There is {len(skel['points'])} points and {len(skel['lines'])} lines in the skeleton.")
     >>> db.disconnect()
-    >>> draw_skeleton(skel)
+    >>> import pyvista as pv
+    >>> from plant3dvision.visu.pyvista import o3d_mesh_to_polydata, skeleton_graph_to_polydata
+    >>> plotter = pv.Plotter()
+    >>> _ = plotter.add_mesh(o3d_mesh_to_polydata(tmesh), color='limegreen', opacity=0.3)
+    >>> _ = plotter.add_mesh(skeleton_graph_to_polydata(skel), color='tomato', line_width=2)
+    >>> _ = plotter.show_grid()
+    >>> plotter.show()
 
     """
     from romicgal import skeletonize_mesh
