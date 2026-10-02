@@ -121,7 +121,7 @@ def origin_from_bounding_box(bounding_box: dict[str, tuple[int, int]], voxel_siz
     >>> from plant3dvision.tasks.voxel_reconstruction import origin_from_bounding_box
     >>> bounding_box = {"x": [300, 435], "y": [300, 435], "z": [-300, 60]}
     >>> print(origin_from_bounding_box(bounding_box))
-    (300, 300, -300)
+    (300.0, 300.0, -300.0)
     >>> voxel_size = 0.5
     >>> print(origin_from_bounding_box(bounding_box, voxel_size)) # to get it in voxel units
     (600.0, 600.0, -600.0)
@@ -165,87 +165,57 @@ def camera_metadata_from_colmap(camera_md: dict) -> dict[str, np.ndarray]:
     }
 
 
-def remap_averaging(vol: np.ndarray, n_imgs: int) -> np.ndarray:
+def remap_averaging(vol: np.ndarray) -> np.ndarray:
     """Remap voxel values produced by the ``averaging`` back‑projection method.
 
-    The function converts the raw floating‑point values returned by
-    ``Backprojection`` (type ``averaging``) into an integer count of how many
-    input images agree on each voxel.  The result is an array with the same
-    shape as ``vol`` whose values lie in the range ``[0, n_imgs]``.
+    The ``averaging`` back‑projection stores, for each voxel, the sum of the
+    per‑view mask contributions that project onto it (each term being a
+    log‑transformed mask value, see ``Backprojection`` and its ``log`` option).
+    These raw floating‑point sums are not directly meaningful, so this function
+    rescales them onto a normalised ``[0, 1]`` range while preserving their
+    ordering: ``1`` is the strongest observed cross‑view agreement (the voxel
+    with the highest accumulated contribution), ``0`` the weakest.  Because the
+    range is normalised by the number of distinct values in ``vol``, the result
+    is independent of the number of input images and can be thresholded
+    consistently across reconstructions.
 
     Parameters
     ----------
     vol : numpy.ndarray
         3‑D (or 4‑D) array containing the raw voxel values from the averaging
-        back‑projection.  The array should be of a floating‑point dtype; its
-        dtype is used to compute the machine epsilon for binning.
-    n_imgs : int
-        Number of mask images that contributed to the back‑projection.  This
-        value is used to shift the remapped indices into a non‑negative range.
+        back‑projection.
 
     Returns
     -------
     numpy.ndarray
-        Integer array of the same shape as ``vol`` where each voxel holds the
-        number of images that agree on that voxel.  The dtype is ``int`` and the
-        values are in ``[0, n_imgs]``.
+        Float array of the same shape as ``vol`` holding the normalised
+        cross‑view agreement in ``[0, 1]``.  Higher values indicate stronger
+        agreement on the plant mask; the value is the voxel's agreement
+        percentile, not an exact image count.
 
     Raises
     ------
-    ValueError
-        If ``vol`` is empty (i.e. ``vol.size == 0``).
     TypeError
-        If ``vol`` is not a ``numpy.ndarray`` or ``n_imgs`` is not an ``int``.
+        If ``vol`` is not a ``numpy.ndarray``.
 
     Examples
     --------
     >>> import numpy as np
     >>> from plant3dvision.tasks.voxel_reconstruction import remap_averaging
-    >>> from plant3dvision.tasks.voxel_reconstruction import origin_from_bounding_box
-    >>> from plant3dvision.tasks.voxel_reconstruction import shape_from_bounding_box
-    >>> from plantdb.commons.test_database import test_database
-    >>> from plantdb.server.core.utils import compute_fileset_matches
-    >>> from plant3dvision.voxel_cuda import Backprojection
-    >>> db = test_database(no_auth=True)
-    >>> db.connect()
-    >>> scan = db.get_scan("real_plant_analyzed")
-    >>> # 1. Let's compute a voxel volume with the averaging method
-    >>> mask_fs_id = compute_fileset_matches(scan)["Masks"]
-    >>> mask_fs = scan.get_fileset(mask_fs_id)
-    >>> # List of input mask files (2D images) to process
-    >>> mask_files = mask_fs.get_files(query={"channel": "rgb"})
-    >>> # Example setup: define a bounding box and voxel configuration
-    >>> bounding_box = {"x": [300, 435], "y": [300, 435], "z": [-300, 60]}
-    >>> voxel_size = 0.6
-    >>> # Calculate the shape & origin of the voxel array
-    >>> shape = shape_from_bounding_box(bounding_box, voxel_size)
-    >>> origin = origin_from_bounding_box(bounding_box)  # in real units
-    >>> bp_averaging = Backprojection(shape, origin, voxel_size, type="averaging", labels=None, log=True)
-    >>> volume = bp_averaging.process_fileset(mask_files, "colmap_camera", False)
-    >>> print(np.unique(volume)[:5])
-    [-1381.552  -1358.5261 -1335.5002 -1312.4744 -1289.4485]
-    >>> volume = remap_averaging(volume, len(mask_files))
-    >>> print(np.unique(volume)[:5])
-    [0 1 2 3 4]
-    >>> db.disconnect()
+    >>> vol = np.array([3., 1., 2., 3., 1.], dtype=np.float32)
+    >>> remap_averaging(vol)
+    array([1. , 0. , 0.5, 1. , 0. ])
     """
     # Sorted list of unique values:
     uniq = np.unique(vol)
-    # Build the lookup table (integer → float)
-    int_labels = np.arange(max(-n_imgs, -len(uniq)), 1)
-
-    # - Bin the volume values
-    # `np.digitize` expects the right‑most edge to be exclusive, so we append a tiny epsilon
-    # to the last edge so that a value exactly equal to the maximum lands in the last bin.
-    eps = np.finfo(vol.dtype).eps
-    bins = np.append(uniq, uniq[-1] + eps)
-    # `bin_idx` is in the range 1 ... len(bins)-1
-    bin_idx = np.digitize(vol, bins, right=False)
-    # Convert to a 0‑based index that matches `int_labels`: (bin 1 → index 0, bin 2 → index 1, ...)
-    int_idx = bin_idx - 1  # shape == vol.shape
-
-    # Remap the whole volume, shifting to non‑negative indices
-    return int_labels[int_idx] + n_imgs
+    n = len(uniq)
+    # Degenerate volume: a single value maps to agreement 0 everywhere.
+    if n <= 1:
+        return np.zeros(vol.shape)
+    # 0-based rank of each voxel's value within the sorted unique values,
+    # normalised so the strongest agreement maps to 1.0.
+    rank = np.searchsorted(uniq, vol)
+    return rank / (n - 1)
 
 
 def points_and_colors_from_points_dict(points_dict: dict) -> tuple[
@@ -597,9 +567,6 @@ class Voxels(RomiTask):
     threshold : luigi.FloatParameter, optional
         The threshold value to use for 'averaging' `method` conversion to logarithmic values.
         Defaults to ``-100.0``.
-    missing_images_threshold : luigi.IntParameter, optional
-        Maximum number of missing images allowed in the processing pipeline.
-        Defaults to ``2``.
     invert : luigi.BoolParameter, optional
         If ``True``, invert the values of the mask.
         Defaults to ``False``.
@@ -657,8 +624,6 @@ class Voxels(RomiTask):
       2. Scan metadata
       3. COLMAP metadata
       4. Images fileset metadata
-    - When using "averaging" type, the threshold is automatically adjusted based on
-      the missing_images_threshold if possible.
     - Displacement metadata, if present, is automatically applied to the bounding box.
     """
     upstream_task = luigi.TaskParameter(default=Masks)
@@ -857,7 +822,7 @@ class Voxels(RomiTask):
 
         n_imgs = len(masks_files)
         md = self._volume_metadata(n_imgs, origin, label)
-        self._write_volume(vol, n_imgs, label, md)
+        self._write_volume(vol, label, md)
 
     def _mask_files(self, label: str | None = None) -> list[File]:
         """Return the mask files to process, optionally filtered by channel label.
@@ -977,15 +942,13 @@ class Voxels(RomiTask):
             md.update({'channel': label})
         return md
 
-    def _remap(self, vol: ndarray, n_imgs: int) -> ndarray:
+    def _remap(self, vol: ndarray) -> ndarray:
         """Convert the raw back-projection volume into the final voxel values.
 
         Parameters
         ----------
         vol : numpy.ndarray
             Raw volume produced by the back-projection.
-        n_imgs : int
-            Number of mask images that contributed to the volume.
 
         Returns
         -------
@@ -993,30 +956,28 @@ class Voxels(RomiTask):
             The remapped volume.
         """
         if self.method == "averaging":
-            # Count the number of agreeing images per voxel.
-            return remap_averaging(vol, n_imgs)
+            # Rank the accumulated per-view mask contributions onto a non-negative scale.
+            return remap_averaging(vol)
         if self.method == "bayes":
             # Threshold the log-odds at 0 (posterior probability > 0.5) to get a binary outfile.
             return np.array(vol >= 0.0).astype(np.uint8)
         # Carving: threshold to get a binary outfile.
         return np.array(vol >= 1.0).astype(np.uint8)
 
-    def _write_volume(self, vol: ndarray, n_imgs: int, label: str | None, md: dict) -> None:
+    def _write_volume(self, vol: ndarray, label: str | None, md: dict) -> None:
         """Remap, write and annotate the reconstructed volume.
 
         Parameters
         ----------
         vol : numpy.ndarray
             Raw voxel volume produced by the back-projection.
-        n_imgs : int
-            Number of mask images that contributed to the volume.
         label : str or None
             Channel label, used for the output file suffix.
         md : dict
             Metadata to attach to the output file.
         """
         outfile = self.output_file(suffix=f"_{label}" if label is not None else None, create=True)
-        vol = self._remap(vol, n_imgs)
+        vol = self._remap(vol)
         io.write_volume(outfile, vol)
         outfile.set_metadata(md)
 
