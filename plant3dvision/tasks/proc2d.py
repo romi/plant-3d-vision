@@ -16,8 +16,8 @@ from romitask.task import ImagesFilesetExists
 from romitask.task import ModelFilesetExists
 from romitask.task import ParallelFileTask
 from skimage.filters import gaussian
-from skimage.morphology import binary_dilation
-from skimage.morphology import diamond
+from skimage.morphology import binary_dilation, diamond
+from skimage.util import img_as_float32
 from skimage.util import img_as_ubyte
 
 from plant3dvision import proc2d
@@ -445,8 +445,11 @@ class Masks(ParallelFileTask):
             If the specified filter type is unknown.
         """
         logger.debug(f"Image shape: {img.shape}")
+        # Convert image to float in range [0, 1]:
+        img = img_as_float32(self.original_img)
         # Apply Gaussian filter if required
-        img = gaussian(img, sigma=self.sigma, channel_axis=-1) if self.sigma > 0 else img
+        if self.sigma > 0:
+            img = gaussian(img, sigma=self.sigma, channel_axis=-1, preserve_range=True)
         # Apply selected filter
         if self.method == "linear":
             return proc2d.linear(img, list(self.parameters), colorspace=self.colorspace)
@@ -489,6 +492,7 @@ class Masks(ParallelFileTask):
         # Add metadata to the binary mask image:
         md = {
             'upstream_task': str(self.upstream_task.get_task_family()),
+            'sigma': float(self.sigma),
             'method': str(self.method),
             'min_threshold': float(self.min_threshold),
             'max_threshold': float(self.max_threshold),
