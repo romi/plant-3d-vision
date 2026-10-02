@@ -40,7 +40,7 @@ upstream_task = "Voxels"
 # Value of the level set on which points are sampled
 level_set_value = 0.0
 # Threshold for the number of missing images allowed in the reconstructed volume
-missing_images_threshold = 0
+min_agreement = 0.0
 
 [TriangleMesh]
 # Task that provides the point cloud as input

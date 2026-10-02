@@ -25,7 +25,7 @@ z = [-5, 125]
 [PointCloud]
 upstream_task = "Voxels"
 labels = "[\"background\"]"
-missing_images_threshold = 1  # Default: 2
+min_agreement = 0.95
 algorithm = "marching-cubes"  # Default: "marching-cubes"
 level_set_value = 0.0
 sigma = 0.8

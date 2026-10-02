@@ -446,7 +446,7 @@ class Masks(ParallelFileTask):
         """
         logger.debug(f"Image shape: {img.shape}")
         # Convert image to float in range [0, 1]:
-        img = img_as_float32(self.original_img)
+        img = img_as_float32(img)
         # Apply Gaussian filter if required
         if self.sigma > 0:
             img = gaussian(img, sigma=self.sigma, channel_axis=-1, preserve_range=True)

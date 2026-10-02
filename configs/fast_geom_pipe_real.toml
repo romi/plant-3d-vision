@@ -27,7 +27,7 @@ z = [ -250, 70,]
 
 [PointCloud]
 upstream_task = "Voxels"
-missing_images_threshold = 2
+min_agreement = 0.5
 
 [TriangleMesh]
 upstream_task = "PointCloud"
