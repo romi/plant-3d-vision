@@ -3,7 +3,6 @@
 
 """Task submodule dedicated to the processing of 2D images that creates 2D images."""
 
-import concurrent.futures
 import sys
 
 import luigi
@@ -18,11 +17,11 @@ from romitask.task import ModelFilesetExists
 from romitask.task import ParallelFileTask
 from skimage.filters import gaussian
 from skimage.morphology import binary_dilation, diamond
+from skimage.util import img_as_float32
 from skimage.util import img_as_ubyte
 
 from plant3dvision import proc2d
 from plant3dvision.proc2d import crop_image
-from plant3dvision.tasks.colmap import Colmap
 from plant3dvision.utils import jsonify
 
 logger = get_logger(__name__, log_level="INFO")
@@ -406,9 +405,9 @@ class Masks(ParallelFileTask):
     .. [mask_methods] https://docs.romi-project.eu/plant_imager/explanations/masks/
     """
     upstream_task = luigi.TaskParameter(default=Undistort)  # override default attribute from ``RomiTask``
-    method = luigi.ChoiceParameter(default="linear", choices=["linear","excess_green","green_fraction","ltle"])
+    method = luigi.ChoiceParameter(default="linear", choices=["linear", "excess_green", "green_fraction", "ltle"])
     # Gaussian filter parameters (common)
-    sigma = luigi.FloatParameter(default=1.0)
+    sigma = luigi.FloatParameter(default=0.5)
 
     # Linear method parameters
     colorspace = luigi.ChoiceParameter(default="RGB", choices=["RGB", "HSV", "YCbCr"])
@@ -421,8 +420,8 @@ class Masks(ParallelFileTask):
     half_length = luigi.IntParameter(default=2)
 
     # Binarization parameters (common)
-    min_threshold = luigi.FloatParameter(default=0.0)
-    max_threshold = luigi.FloatParameter(default=0.4)
+    min_threshold = luigi.FloatParameter(default=0.2)
+    max_threshold = luigi.FloatParameter(default=1.0)
     invert = luigi.BoolParameter(default=False)
     min_size = luigi.IntParameter(default=3)
     dilation = luigi.IntParameter(default=0)
@@ -446,8 +445,11 @@ class Masks(ParallelFileTask):
             If the specified filter type is unknown.
         """
         logger.debug(f"Image shape: {img.shape}")
+        # Convert image to float in range [0, 1]:
+        img = img_as_float32(self.original_img)
         # Apply Gaussian filter if required
-        img = gaussian(img, sigma=self.sigma, channel_axis=-1, preserve_range=True) if self.sigma > 0 else img
+        if self.sigma > 0:
+            img = gaussian(img, sigma=self.sigma, channel_axis=-1, preserve_range=True)
         # Apply selected filter
         if self.method == "linear":
             return proc2d.linear(img, list(self.parameters), colorspace=self.colorspace)
@@ -490,6 +492,7 @@ class Masks(ParallelFileTask):
         # Add metadata to the binary mask image:
         md = {
             'upstream_task': str(self.upstream_task.get_task_family()),
+            'sigma': float(self.sigma),
             'method': str(self.method),
             'min_threshold': float(self.min_threshold),
             'max_threshold': float(self.max_threshold),
@@ -579,7 +582,7 @@ class Segmentation2D(FileByFileTask):
     threshold = luigi.FloatParameter(default=0.01)
     dilation = luigi.IntParameter(default=1)
 
-    def requires(self):
+    def requires(self) -> dict:
         """ Override default `requires` method returning `self.upstream_task()`.
 
         Computing mask using trained deep learning models requires:
@@ -594,65 +597,122 @@ class Segmentation2D(FileByFileTask):
     def run(self):
         from romiseg.predict.segmentation import fileset_segmentation
 
-        # Get the 'image' `Fileset` to segment and filter by `query`:
-        images_fileset = self.input()["images"].get()
-        images_files = images_fileset.get_files(query=self.query)
+        images_fileset, images_files = self._image_files()
         images_path = [im_f.path() for im_f in images_files]
         images_id = [im_f.id for im_f in images_files]
-        # Get the trained model using given `model_id`:
-        model_file = self.input()["model"].get().get_file(self.model_id)
-        # A trained model is required, abort if none found!
-        if model_file is None:
-            raise IOError("unable to find model: %s" % self.model_id)
-        # Get the list of labels used in the trained model:
-        labels = model_file.get_metadata("label_names")
-        # Filter the list of trained labels to save in segmented mask files...
-        if len(self.labels) > 0:
-            # if a list of labels is given ...
-            label_range = [labels.index(x) for x in self.labels]
-        else:
-            # else use all trained labels
-            label_range = range(len(labels))
 
-        # - Apply trained segmentation model on list of image `File`:
+        model_file = self._model_file()
+        labels = model_file.get_metadata("label_names")
+        label_range = self._label_range(labels)
+
         predicted_label_maps = fileset_segmentation(self.Sx, self.Sy, images_path, model_file)
 
-        # - Save class prediction as images, one by one, class per class
-        # Get the output `Fileset` used to save predicted label position in (binary) mask files
         output_fileset = self.output().get()
-        # For every segmented image...
-        for img_idx, pred_labels in enumerate(predicted_label_maps):
-            # And for each label in the filtered label list...
-            for label_id in label_range:
-                # Get the corresponding `File` object to use
-                out_file = output_fileset.create_file(f"{images_id[img_idx]}_{labels[label_id]}")
-                # Get the image for given label as a numpy array
-                label_img = pred_labels[label_id, :, :].cpu().numpy()
-                # Invert the prediction map for labels in the `inverted_labels` list
-                if labels[label_id] in self.inverted_labels:
-                    label_img = 1.0 - label_img
-                # If required, binarize the prediction map to create a binary mask of the predicted label
-                if self.binarize:
-                    label_img = label_img > self.threshold
-                    # If required, dilation of the binary mask is performed
-                    if self.dilation > 0:
-                        binary_dilation(label_img, diamond(self.dilation), out=label_img)
-                # Convert the image to 8-bit unsigned integers
-                label_img = (label_img * 255).astype(np.uint8)
-                # Invert the binary mask for labels in `inverted_labels` list
-                if labels[label_id] in self.inverted_labels:
-                    label_img = 255 - label_img
-                # Save the prediction map or binary mask
-                io.write_image(out_file, label_img, 'png')
-                # Get the original metadata to add them to `File` object metadata
-                orig_metadata = images_fileset.get_file(images_id[img_idx]).get_metadata()
-                # Also add used image id & label to `File` object metadata
-                out_file.set_metadata({
-                    'image_id': images_id[img_idx],
-                    **orig_metadata
-                })
-                out_file.set_metadata({
-                    'channel': labels[label_id],
-                })
-        # Add the list of predicted labels to the metadata of the output `Fileset`
+        self._save_predictions(output_fileset, predicted_label_maps, images_fileset, images_id, labels, label_range)
         output_fileset.set_metadata("label_names", [labels[j] for j in label_range])
+
+    def _image_files(self) -> tuple[Fileset, list[File]]:
+        """Return the input image fileset and its files filtered by ``query``.
+
+        Returns
+        -------
+        tuple of (Fileset, list of File)
+            The input image fileset and the files matching ``query``.
+        """
+        images_fileset = self.input()["images"].get()
+        images_files = images_fileset.get_files(query=self.query)
+        return images_fileset, images_files
+
+    def _model_file(self) -> File:
+        """Return the trained model file, raising if it cannot be found.
+
+        Returns
+        -------
+        File
+            The model file matching ``model_id``.
+
+        Raises
+        ------
+        IOError
+            If no model file matches ``model_id``.
+        """
+        model_file = self.input()["model"].get().get_file(self.model_id)
+        if model_file is None:
+            raise IOError(f"Unable to find model: {self.model_id}")
+        return model_file
+
+    def _label_range(self, labels: list[str]) -> list[int]:
+        """Return the indices of the model labels to save as mask files.
+
+        Parameters
+        ----------
+        labels : list of str
+            The list of labels used in the trained model.
+
+        Returns
+        -------
+        list of int
+            Indices into ``labels`` of the labels to save.
+        """
+        if len(self.labels) > 0:
+            label_range = [labels.index(x) for x in self.labels]
+            logger.info(f"Got a list of {len(labels)} labels: {labels}")
+        else:
+            label_range = list(range(len(labels)))
+            logger.info(f"Using all {len(labels)} trained labels: {labels}")
+        return label_range
+
+    def _save_predictions(self, output_fileset: Fileset, predicted_label_maps: list, images_fileset: Fileset,
+                          images_id: list[str], labels: list[str], label_range: list[int]) -> None:
+        """Save the predicted label maps as mask files, one per image and label.
+
+        Parameters
+        ----------
+        output_fileset : Fileset
+            The output fileset used to save the mask files.
+        predicted_label_maps : list
+            Predicted label maps, one per input image.
+        images_fileset : Fileset
+            The input image fileset, used to retrieve original metadata.
+        images_id : list of str
+            Identifiers of the input images.
+        labels : list of str
+            The list of labels used in the trained model.
+        label_range : list of int
+            Indices into ``labels`` of the labels to save.
+        """
+        for img_idx, pred_labels in enumerate(predicted_label_maps):
+            orig_metadata = images_fileset.get_file(images_id[img_idx]).get_metadata()
+            for label_id in label_range:
+                out_file = output_fileset.create_file(f"{images_id[img_idx]}_{labels[label_id]}")
+                label_img = pred_labels[label_id, :, :].cpu().numpy()
+                label_img = self._postprocess_label(label_img, labels[label_id])
+                io.write_image(out_file, label_img, 'png')
+                out_file.set_metadata({'image_id': images_id[img_idx], **orig_metadata})
+                out_file.set_metadata({'channel': labels[label_id]})
+
+    def _postprocess_label(self, label_img: np.ndarray, label: str) -> np.ndarray:
+        """Convert a raw prediction map into the final 8-bit mask image.
+
+        Parameters
+        ----------
+        label_img : numpy.ndarray
+            Raw prediction map for the label.
+        label : str
+            The label name.
+
+        Returns
+        -------
+        numpy.ndarray
+            The post-processed mask image as 8-bit unsigned integers.
+        """
+        if label in self.inverted_labels:
+            label_img = 1.0 - label_img
+        if self.binarize:
+            label_img = label_img > self.threshold
+            if self.dilation > 0:
+                binary_dilation(label_img, diamond(self.dilation), out=label_img)
+        label_img = (label_img * 255).astype(np.uint8)
+        if label in self.inverted_labels:
+            label_img = 255 - label_img
+        return label_img

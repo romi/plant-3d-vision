@@ -33,7 +33,6 @@ dilation = 1 # Default: 0 (no dilation)
 
 [Voxels]
 upstream_task = "Masks"
-upstream_colmap = "Colmap"
 camera_metadata = "colmap_camera"
 voxel_size = 0.6
 method = "averaging"

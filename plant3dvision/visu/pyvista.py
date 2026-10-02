@@ -41,9 +41,8 @@ def volume_to_imagedata(volume: np.ndarray,
     >>> from plantdb.commons.test_database import test_database
     >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plant3dvision.voxel_cuda import Backprojection
-    >>> db = test_database()
+    >>> db = test_database(no_auth=True)
     >>> db.connect()
-    >>> db.login('guest', 'guest')
     >>> scan = db.get_scan("real_plant_analyzed")
     >>> # 1. Let's compute a voxel volume with the averaging method
     >>> mask_fs_id = compute_fileset_matches(scan)["Masks"]
@@ -115,9 +114,8 @@ def o3d_point_cloud_to_polydata(point_cloud: o3d.geometry.PointCloud) -> pv.Poly
     >>> from plantdb.commons.test_database import test_database
     >>> from plantdb.commons.io import read_point_cloud
     >>> from plantdb.server.core.utils import compute_fileset_matches
-    >>> db = test_database()
+    >>> db = test_database(no_auth=True)
     >>> db.connect()
-    >>> db.login('guest', 'guest')
     >>> scan = db.get_scan("real_plant_analyzed")
     >>> pcd_fs_id = compute_fileset_matches(scan)["PointCloud"]
     >>> pcd_fs = scan.get_fileset(pcd_fs_id)
@@ -159,9 +157,8 @@ def o3d_mesh_to_polydata(triangle_mesh: o3d.geometry.TriangleMesh) -> pv.PolyDat
     >>> from plantdb.commons.test_database import test_database
     >>> from plantdb.commons.io import read_triangle_mesh
     >>> from plantdb.server.core.utils import compute_fileset_matches
-    >>> db = test_database()
+    >>> db = test_database(no_auth=True)
     >>> db.connect()
-    >>> db.login('guest', 'guest')
     >>> scan = db.get_scan("real_plant_analyzed")
     >>> mesh_fs_id = compute_fileset_matches(scan)["TriangleMesh"]
     >>> mesh_fs = scan.get_fileset(mesh_fs_id)
@@ -185,7 +182,7 @@ def o3d_mesh_to_polydata(triangle_mesh: o3d.geometry.TriangleMesh) -> pv.PolyDat
     return pv.PolyData(vertices, faces)
 
 
-def skeleton_graph_to_polydata(skel: dict) -> pv.PolyData:
+def skeleton_graph_to_polydata(skel: dict, coords_order: str = 'xyz') -> pv.PolyData:
     """
     Convert a skeleton graph into a `pyvista.PolyData` object.
 
@@ -193,6 +190,12 @@ def skeleton_graph_to_polydata(skel: dict) -> pv.PolyData:
     ----------
     skel : dict
         Skeleton dictionary with keys ``"points"`` and ``"lines"``.
+    coords_order : str, optional
+        Order of the coordinates in ``skel["points"]``. Either ``"xyz"``
+        (mesh coordinates, e.g. from :func:`plant3dvision.proc3d.mesh_to_skeleton`)
+        or ``"zyx"`` (voxel coordinates, e.g. from
+        :func:`plant3dvision.skeletonize.volume_to_skeleton`). The output
+        ``PolyData`` is always in ``(x, y, z)`` order.
 
     Returns
     -------
@@ -209,32 +212,35 @@ def skeleton_graph_to_polydata(skel: dict) -> pv.PolyData:
     >>> from plant3dvision.visu.pyvista import skeleton_graph_to_polydata
     >>> from plantdb.commons.io import read_json
     >>> from plantdb.server.core.utils import compute_fileset_matches
-    >>> from plantdb.commons.fsdb.core import FSDB
-    >>> db = FSDB('/data/ROMI/test_owner')
+    >>> from plantdb.commons.test_database import test_database
+    >>> db = test_database(no_auth=True)
     >>> db.connect()
-    >>> db.login('admin', 'admin')
-    >>> scan = db.get_scan("Col-0_E1_1")
+    >>> scan = db.get_scan("real_plant_analyzed")
     >>> skel_fs_id = compute_fileset_matches(scan)["CurveSkeleton"]
     >>> fs = scan.get_fileset(skel_fs_id)
     >>> f = fs.get_file('CurveSkeleton')
     >>> skel = read_json(f)
-    >>> skel_pd = skeleton_graph_to_polydata(skel)
+    >>> skel_pd = skeleton_graph_to_polydata(skel, coords_order='zyx')
     >>> import pyvista as pv
     >>> plotter = pv.Plotter()
     >>> _actor = plotter.add_mesh(skel_pd, color='tomato', line_width=2)
     >>> _grid = plotter.show_grid()
     >>> plotter.show()
     """
-    # 1. Gather every unique voxel coordinate (z, y, x) from points + lines
+    # 1. Gather every unique coordinate from points + lines
     all_coords: list[tuple[int, int, int]] = list(map(tuple, skel.get("points", {})))
 
     # Map coordinate -> contiguous point index
     coord_to_idx: dict[tuple[int, int, int], int] = {c: i for i, c in enumerate(sorted(all_coords))}
 
-    # 2. Build the point array, convert to (z, y, z) to (x, y, z)
+    # 2. Build the point array, converting to (x, y, z) order
     points_list = []
-    for (z, y, x) in sorted(coord_to_idx, key=coord_to_idx.get):
-        points_list.append([x, y, z])
+    for coord in sorted(coord_to_idx, key=coord_to_idx.get):
+        if coords_order == 'zyx':
+            z, y, x = coord
+            points_list.append([x, y, z])
+        else:
+            points_list.append(list(coord))
     points = np.array(points_list, dtype=np.float32)
 
     # 3. Build the poly‑line connectivity array
@@ -323,9 +329,8 @@ def plot_image_and_volume(image, volume, **kwargs):
     >>> from plantdb.commons.test_database import test_database
     >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plant3dvision.voxel_cuda import Backprojection
-    >>> db = test_database()
+    >>> db = test_database(no_auth=True)
     >>> db.connect()
-    >>> db.login('guest', 'guest')
     >>> scan = db.get_scan("real_plant_analyzed")
     >>> # 1. Let's compute a voxel volume with the averaging method
     >>> mask_fs_id = compute_fileset_matches(scan)["Masks"]
@@ -458,9 +463,8 @@ def plot_image_and_point_cloud(image, point_cloud, **kwargs):
     >>> from plantdb.commons.test_database import test_database
     >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plant3dvision.voxel_cuda import Backprojection
-    >>> db = test_database()
+    >>> db = test_database(no_auth=True)
     >>> db.connect()
-    >>> db.login('guest', 'guest')
     >>> scan = db.get_scan("real_plant_analyzed")
     >>> # 1. Let's load a point cloud from test data
     >>> pcd_fs_id = compute_fileset_matches(scan)["PointCloud"]
@@ -577,9 +581,8 @@ def plot_image_and_mesh(image, triangular_mesh, **kwargs):
     >>> from plantdb.commons.test_database import test_database
     >>> from plantdb.server.core.utils import compute_fileset_matches
     >>> from plant3dvision.voxel_cuda import Backprojection
-    >>> db = test_database()
+    >>> db = test_database(no_auth=True)
     >>> db.connect()
-    >>> db.login('guest', 'guest')
     >>> scan = db.get_scan("real_plant_analyzed")
     >>> # 1. Let's load a triangular mesh from test data
     >>> mesh_fs_id = compute_fileset_matches(scan)["TriangleMesh"]
@@ -656,11 +659,10 @@ def plot_skeleton(skel: dict, **kwargs) -> None:
     >>> from plant3dvision.visu.pyvista import plot_skeleton
     >>> from plantdb.commons.io import read_json
     >>> from plantdb.server.core.utils import compute_fileset_matches
-    >>> from plantdb.commons.fsdb.core import FSDB
-    >>> db = FSDB('/data/ROMI/test_owner')
+    >>> from plantdb.commons.test_database import test_database
+    >>> db = test_database(no_auth=True)
     >>> db.connect()
-    >>> db.login('admin', 'admin')
-    >>> scan = db.get_scan("Col-0_E1_1")
+    >>> scan = db.get_scan("real_plant_analyzed")
     >>> skel_fs_id = compute_fileset_matches(scan)["CurveSkeleton"]
     >>> fs = scan.get_fileset(skel_fs_id)
     >>> f = fs.get_file('CurveSkeleton')
@@ -668,7 +670,7 @@ def plot_skeleton(skel: dict, **kwargs) -> None:
     >>> plot_skeleton(skel, color='tomato', line_width=2)
     >>> db.disconnect()
     """
-    poly = skeleton_graph_to_polydata(skel)  # Build the PolyData
+    poly = skeleton_graph_to_polydata(skel, coords_order=kwargs.pop('coords_order', 'xyz'))  # Build the PolyData
 
     plotter = pv.Plotter()
     # Default visual parameters - can be overridden via **kwargs

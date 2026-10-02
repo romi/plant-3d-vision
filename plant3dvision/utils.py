@@ -276,7 +276,7 @@ def locate_task_filesets(scan, tasks):
     --------
     >>> from plantdb.commons.test_database import test_database
     >>> from plant3dvision.utils import locate_task_filesets
-    >>> db = test_database()
+    >>> db = test_database(no_auth=True)
     >>> db.connect()
     >>> scan = db.get_scan("real_plant_analyzed")
     >>> tasks = ["PointCloud", "TriangleMesh"]

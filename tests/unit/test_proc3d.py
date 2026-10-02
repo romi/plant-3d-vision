@@ -1,12 +1,12 @@
 import unittest
-from os.path import abspath
-from os.path import join
-from pathlib import Path
 
 import numpy as np
 import open3d
 
 from plant3dvision import proc3d
+from plantdb.commons.io import read_triangle_mesh
+from plantdb.commons.testing import FSDBTestCase
+from plantdb.commons.utils import locate_task_filesets
 
 
 class TestProc3D(unittest.TestCase):
@@ -53,15 +53,6 @@ class TestProc3D(unittest.TestCase):
         assert (origin.tolist() == [0, 0, 0])
         assert (vol[0, 0, 0] == 1)
         assert (vol[1, 1, 1] == 1)
-
-    def test_skeletonize(self):
-        parent_dir = Path(__file__).resolve().parents[1]
-        cylinder_mesh_file = abspath(join(parent_dir, "testdata", "cylinder.ply"))
-
-        mesh = open3d.io.read_triangle_mesh(cylinder_mesh_file)
-        skel = proc3d.mesh_to_skeleton(mesh)
-        assert (len(skel["points"]) > 0)
-        assert (len(skel["lines"]) > 0)
 
     def test_vol2pcd(self):
         vol = np.zeros((100, 100, 100))
@@ -117,6 +108,20 @@ class TestProc3D(unittest.TestCase):
         ref = proc3d.smooth_volume_gmrf(vol, lam=1.0)
         out = proc3d.smooth_volume_gmrf_linearop(vol, lam=1.0)
         assert (np.allclose(ref, out, atol=1e-6))
+
+
+class TestSkeletonize(FSDBTestCase):
+
+    def test_skeletonize(self):
+        db = self.get_test_db()
+        scan = db.get_scan("real_plant_analyzed")
+        mesh_fs_id = locate_task_filesets(scan, ["TriangleMesh"])["TriangleMesh"]
+        fileset = scan.get_fileset(mesh_fs_id)
+        file = fileset.get_file("TriangleMesh")
+        mesh = read_triangle_mesh(file)
+        skel = proc3d.mesh_to_skeleton(mesh)
+        assert (len(skel["points"]) > 0)
+        assert (len(skel["lines"]) > 0)
 
 
 if __name__ == "__main__":
