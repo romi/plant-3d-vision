@@ -446,7 +446,7 @@ class Masks(ParallelFileTask):
         """
         logger.debug(f"Image shape: {img.shape}")
         # Apply Gaussian filter if required
-        img = gaussian(img, sigma=self.sigma, channel_axis=-1, preserve_range=True) if self.sigma > 0 else img
+        img = gaussian(img, sigma=self.sigma, channel_axis=-1) if self.sigma > 0 else img
         # Apply selected filter
         if self.method == "linear":
             return proc2d.linear(img, list(self.parameters), colorspace=self.colorspace)
