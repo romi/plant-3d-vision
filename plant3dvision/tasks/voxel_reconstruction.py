@@ -767,15 +767,19 @@ class Voxels(RomiTask):
         md_str = str(self.camera_metadata).lower()
 
         bounding_box = self.output().get().scan.get_metadata("bounding_box", default=None)
-        logger.debug(f"Bounding-box from scan metadata: {bounding_box}")
+        if bounding_box is not None:
+            logger.info(f"Bounding-box from scan metadata: {bounding_box}")
 
         if bounding_box is None and md_str == 'colmap_camera':
             colmap_fileset = self.input()['colmap'].get()
             bounding_box = colmap_fileset.get_metadata("bounding_box", default=None)
-            logger.debug(f"Bounding-box from Colmap fileset: {bounding_box}")
+            if bounding_box is not None:
+                logger.info(f"Bounding-box from Colmap fileset: {bounding_box}")
 
         if bounding_box is None:
             bounding_box = ImagesFilesetExists().output().get().get_metadata("bounding_box", default=None)
+            if bounding_box is not None:
+                logger.info(f"Bounding-box from ImagesFilesetExists: {bounding_box}")
 
         return bounding_box
 
