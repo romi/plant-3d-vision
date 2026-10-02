@@ -57,7 +57,7 @@ def volume_to_imagedata(volume: np.ndarray,
     >>> origin = origin_from_bounding_box(bounding_box)  # in real units
     >>> bp_averaging = Backprojection(shape, origin, voxel_size, type="averaging", labels=None, log=True)
     >>> volume = bp_averaging.process_fileset(mask_files, "colmap_camera", False)
-    >>> volume = remap_averaging(volume, len(mask_files))
+    >>> volume = remap_averaging(volume)
     >>> # 2. Visualize it
     >>> import pyvista as pv
     >>> pv_vol = volume_to_imagedata(volume, origin, voxel_size)
@@ -345,7 +345,7 @@ def plot_image_and_volume(image, volume, **kwargs):
     >>> origin = origin_from_bounding_box(bounding_box)  # in real units
     >>> bp_averaging = Backprojection(shape, origin, voxel_size, type="averaging", labels=None, log=True)
     >>> volume = bp_averaging.process_fileset(mask_files, "colmap_camera", False)
-    >>> volume = remap_averaging(volume, len(mask_files))
+    >>> volume = remap_averaging(volume)
     >>> # 2. Visualize the computed volume against an original RGB image
     >>> image_f = scan.get_fileset('images').get_files()[0]
     >>> plot_image_and_volume(image_f, volume, origin=origin, spacing=voxel_size, clim=(40, 60), opacity='foreground')
