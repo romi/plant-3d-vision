@@ -45,8 +45,11 @@ class PointCloud(RomiTask):
         With the ``'marching-cubes'`` `algorithm` we advise to use `0.`.
         With the ``'distance-transform'`` `algorithm` we advise to use `1.`.
         Default is ``0.0``.
-    missing_images_threshold : luigi.IntParameter, optional
-        Threshold for the number of missing images allowed in the reconstructed volume.
+    min_agreement : luigi.FloatParameter, optional
+        Minimum normalised cross-view agreement, in ``[0, 1]``, required to
+        keep a voxel when binarizing an ``averaging`` volume.  ``1`` keeps only
+        the most-agreed voxels, ``0`` keeps them all.  Independent of the number
+        of input images.  Default is ``0.95``.
     labels : luigi.ListParameters, optional
         List of class labels to process. An empty list (default) processes a single unlabeled volume.
         A single label processes that specific class. Multiple labels trigger multi-class processing.
@@ -98,7 +101,7 @@ class PointCloud(RomiTask):
                                       var_type=str)
     level_set_value = luigi.FloatParameter(default=0.0)
 
-    missing_images_threshold = luigi.IntParameter(default=2)
+    min_agreement = luigi.FloatParameter(default=0.95)
 
     labels = luigi.ListParameter(default=[])
     background_prior = luigi.FloatParameter(default=1.0)  # only used if labels were defined (multiclass)
@@ -148,10 +151,9 @@ class PointCloud(RomiTask):
             origin = np.array(ifile.get_metadata('origin'))
             voxel_size = float(ifile.get_metadata('voxel_size'))
             method = str(ifile.get_metadata('method', default='carving'))
-            n_img = int(ifile.get_metadata('n_img', default=0.))
             # Read and binarize the volume
             voxels = io.read_volume(ifile)
-            voxels = self._binarize(voxels, method, n_img - self.missing_images_threshold)
+            voxels = self._binarize(voxels, method, self.min_agreement)
             # Collect the names of all classes
             label = list(voxels.keys())
             # Prepare an array to aggregate voxel data from all classes
@@ -228,10 +230,9 @@ class PointCloud(RomiTask):
         origin = np.array(ifile.get_metadata('origin', default=(0., 0., 0.)))
         voxel_size = float(ifile.get_metadata('voxel_size', default=1.))
         method = str(ifile.get_metadata('method', default='carving'))
-        n_img = int(ifile.get_metadata('n_img', default=0.))
 
         # Binarize the volume
-        voxels = self._binarize(voxels, method, n_img - self.missing_images_threshold)
+        voxels = self._binarize(voxels, method, self.min_agreement)
         # Directly create a point cloud from the single volume
         if self.algorithm == 'marching-cubes':
             out, _ = proc3d.vol2pcd_mc(voxels, origin, voxel_size, self.level_set_value, self.sigma, self.mc_level)
