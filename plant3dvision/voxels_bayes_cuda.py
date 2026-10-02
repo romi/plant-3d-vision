@@ -184,7 +184,7 @@ class BayesianBackprojection(Backprojection):
     >>> # Show the histogram of the volume values
     >>> import matplotlib.pyplot as plt
     >>> plt.hist(volume.flatten(), bins=50, range=(0, max(vol_values)))
-    >>> plt.xlabel("Number of agreeing images")
+    >>> plt.xlabel("Cross-view mask agreement (rank)")
     >>> plt.ylabel("Number of voxels")
     >>> plt.show()
 

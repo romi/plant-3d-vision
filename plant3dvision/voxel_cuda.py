@@ -132,13 +132,11 @@ class Backprojection(AbstractBackprojection):
     >>> # 'volume' is now a NumPy array holding the 3D backprojected data
     >>> vol_values = np.unique(volume)
     >>> print(f"Unique values in the volume: {vol_values}")
-    >>> # Map the volume values to the number of missing images for each mask
-    >>> dict(zip(list(range(-len(mask_files), 1))[::-1], vol_values[::-1]))
-    >>> volume = remap_averaging(volume, len(mask_files))
+    >>> volume = remap_averaging(volume)
     >>> # Show the histogram of the volume values
     >>> import matplotlib.pyplot as plt
     >>> plt.hist(volume.flatten(), bins=len(mask_files)+1)
-    >>> plt.xlabel("Number of agreeing images")
+    >>> plt.xlabel("Cross-view mask agreement (rank)")
     >>> plt.ylabel("Number of voxels")
     >>> plt.show()
     >>> # Show the volume slice viewer

@@ -43,7 +43,7 @@ z = [-175, 105]
 
 [PointCloud]
 upstream_task = "Voxels"
-missing_images_threshold = 2  # Default: 2
+min_agreement = 0.95
 algorithm = "marching-cubes"  # Default: "marching-cubes"
 level_set_value = 1.0
 sigma = 0.8

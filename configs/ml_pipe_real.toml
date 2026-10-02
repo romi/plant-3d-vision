@@ -76,7 +76,7 @@ algorithm = "marching-cubes"  # Default: "marching-cubes"
 # Distance of the level set on which the points are sampled
 level_set_value = 0.0  # Default: 1.0
 # Threshold for the number of missing images allowed in the reconstructed volume
-missing_images_threshold = 2  # Default: 2
+min_agreement = 0.95
 # List of labels to use for multi-class point cloud generation
 labels = "[\"background\"]"  # Default: [] (empty list)
 # Prior probability assigned to background points in multi-class segmentation
