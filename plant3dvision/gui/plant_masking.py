@@ -1140,7 +1140,7 @@ class PlantMaskingApp(QMainWindow):
 
         # Apply Gaussian blur before the grayscale method (if sigma > 0)
         self.sigma = self.sigma_spinbox.value()
-        img = gaussian(self.original_img, sigma=self.sigma, channel_axis=-1, preserve_range=True) if self.sigma > 0 else self.original_img
+        img = gaussian(self.original_img, sigma=self.sigma, channel_axis=-1) if self.sigma > 0 else self.original_img
 
         # Apply the selected grayscale method
         if method == "linear":
