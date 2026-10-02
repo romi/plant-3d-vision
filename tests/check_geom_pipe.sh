@@ -114,13 +114,9 @@ if [ -z ${PYOPENCL_CTX+x} ]; then
 fi
 
 # Download the default test datasets if missing:
-if [ ! -d "${r_dataset}" ]; then
-  echo -e "${INFO}Downloading the 'real_plant' test dataset..."
-  setup_test_database real_plant --db-path "${db}"
-fi
-if [ ! -d "${v_dataset}" ]; then
-  echo -e "${INFO}Downloading the 'virtual_plant' test dataset..."
-  setup_test_database virtual_plant --db-path "${db}"
+if [ ! -f "${db}/romidb" ] || [ ! -d "${r_dataset}" ] || [ ! -d "${v_dataset}" ]; then
+  echo -e "${INFO}Setting up the test database..."
+  setup_test_database real_plant virtual_plant --db-path "${db}"
 fi
 
 # If defined, echo defined 'COLMAP_EXE'

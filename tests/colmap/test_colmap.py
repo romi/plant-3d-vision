@@ -41,7 +41,7 @@ def main(args):
     # Set up a test database with the 'real_plant' dataset (pulled from ZENODO):
     db_path = setup_test_database(
         ['real_plant'],
-        out_path=TMP_TEST_DIR
+        db_path=TMP_TEST_DIR
     )
     log_file = db_path / f"colmap.log"
 
