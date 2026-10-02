@@ -137,3 +137,6 @@ CMakeFiles/
 
 # WebTerm users database
 **/users.csv
+
+# Test database (downloaded on demand via the 'setup_test_database' CLI)
+/tests/testdata/

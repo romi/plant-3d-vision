@@ -331,7 +331,7 @@ def get_camera_kwargs_from_images_metadata(img_f):
     --------
     >>> from plantdb.commons.test_database import test_database
     >>> from plant3dvision.camera import get_camera_kwargs_from_images_metadata
-    >>> db = test_database()
+    >>> db = test_database(no_auth=True)
     >>> db.connect()
     >>> scan = db.get_scan('real_plant_analyzed')
     >>> image_files = scan.get_fileset('images').get_files()
@@ -391,7 +391,7 @@ def get_camera_kwargs_from_colmap_json(colmap_cameras):
     >>> from plant3dvision.camera import get_camera_kwargs_from_colmap_json
     >>> from plantdb.commons.test_database import test_database
     >>> from plantdb.utils import locate_task_filesets
-    >>> db = test_database()
+    >>> db = test_database(no_auth=True)
     >>> db.connect()
     >>> scan = db.get_scan('real_plant_analyzed')
     >>> colmap_task = locate_task_filesets(scan, ['Colmap'])['Colmap']
@@ -449,7 +449,7 @@ def format_camera_params(colmap_cameras):
     >>> from plant3dvision.camera import format_camera_params
     >>> from plantdb.commons.test_database import test_database
     >>> from plantdb.utils import locate_task_filesets
-    >>> db = test_database()
+    >>> db = test_database(no_auth=True)
     >>> db.connect()
     >>> scan = db.get_scan('real_plant_analyzed')
     >>> colmap_task = locate_task_filesets(scan, ['Colmap'])['Colmap']
@@ -486,7 +486,7 @@ def format_camera_kwargs(camera_kwargs, indenter=""):
     >>> from plantdb.commons.test_database import test_database
     >>> from plant3dvision.camera import get_camera_kwargs_from_images_metadata
     >>> from plant3dvision.camera import format_camera_kwargs
-    >>> db = test_database()
+    >>> db = test_database(no_auth=True)
     >>> db.connect()
     >>> scan = db.get_scan('real_plant_analyzed')
     >>> image_files = scan.get_fileset('images').get_files()
@@ -637,9 +637,8 @@ def camera_params_from_file(image_f: "File",
     --------
     >>> from plant3dvision.camera import camera_params_from_file
     >>> from plantdb.commons.test_database import test_database
-    >>> db = test_database()
+    >>> db = test_database(no_auth=True)
     >>> db.connect()
-    >>> db.login('guest', 'guest')
     >>> scan = db.get_scan('real_plant_analyzed')
     >>> image_f = scan.get_fileset('images').get_files()[0]
     >>> cam_pos, focal, up, fov = camera_params_from_file(image_f)

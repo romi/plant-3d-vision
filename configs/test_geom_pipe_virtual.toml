@@ -1,16 +1,18 @@
 [Voxels]
 upstream_task = "ImagesFilesetExists"
-upstream_colmap = "DummyTask"
 query = "{\"channel\":\"background\"}"  # use the (inverted) background masks
 camera_metadata = "camera"
 voxel_size = 0.06  # ~9x smaller than real plants
-method = "carving"
+method = "averaging"
 invert = true
 
 [PointCloud]
 upstream_task = "Voxels"
-level_set_value = 0.0
-missing_images_threshold = 0
+missing_images_threshold = 2  # Default: 2
+algorithm = "marching-cubes"  # Default: "marching-cubes"
+level_set_value = 1.0
+sigma = 0.8
+mc_level = 0.5
 
 [TriangleMesh]
 upstream_task = "PointCloud"
@@ -31,7 +33,6 @@ upstream_task = "TreeGraph"
 characteristic_length = 1.0
 stem_axis_inverted = false
 min_fruit_size = 0.8
-
 
 [Clean]
 no_confirm = true

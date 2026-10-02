@@ -23,7 +23,6 @@
 # Task that provides the masked images as input
 upstream_task = "ImagesFilesetExists"
 # Query to filter files from upstream task by metadata
-upstream_colmap = "DummyTask"
 query = "{\"channel\":\"background\"}"  # use the (inverted) background masks
 # Metadata entry to use to access camera poses
 camera_metadata = "camera"
