@@ -112,6 +112,12 @@ if [ -z ${PYOPENCL_CTX+x} ]; then
   echo -e "${INFO}Set 'PYOPENCL_CTX' to '0'."
 fi
 
+# Download the default test datasets if missing:
+if [ ! -f "${db}/romidb" ] || [ ! -d "${dataset}" ] || [ ! -d "${v_dataset}" ]; then
+  echo -e "${INFO}Setting up the test database..."
+  setup_test_database real_plant virtual_plant --db-path "${db}"
+fi
+
 # If defined, echo defined 'COLMAP_EXE'
 if [ -n "${COLMAP_EXE}" ]; then
   echo -e "${INFO}Using '${COLMAP_EXE}' as Colmap executable."
@@ -148,17 +154,11 @@ fi
 
 # - Run the pipeline, up to the selected task, using the machine-learning workflow:
 # 0. Check the presence of the trained CNN model:
-# Create the target directory if missing:
-MODEL_DIRECTORY="${db}/${MODEL_DIRECTORY}"
-if [ ! -d ${MODEL_DIRECTORY} ]; then
-  mkdir -p ${MODEL_DIRECTORY}
-  echo -e "${INFO}Created missing models directory: ${MODEL_DIRECTORY}."
-fi
 # Download the trained CNN model if missing:
-MODEL_EPOCH_896_896_50="${MODEL_DIRECTORY}/Resnet_896_896_epoch50.pt"
+MODEL_EPOCH_896_896_50="${db}/${MODEL_DIRECTORY}/Resnet_896_896_epoch50.pt"
 if [ ! -f ${MODEL_EPOCH_896_896_50} ]; then
   echo -e "${INFO}Downloading missing trained CNN models..."
-  wget -P ${MODEL_DIRECTORY} https://media.romi-project.eu/data/Resnet_896_896_epoch50.pt
+  setup_test_database real_plant --with-models --db-path "${db}"
 fi
 
 # 1. Clean the dataset:

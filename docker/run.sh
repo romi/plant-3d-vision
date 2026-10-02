@@ -121,10 +121,10 @@ show_usage() {
     Run the reconstruction & quantification pipelines (geometric & machine-learning based) on the 'real_plant test dataset."
   echo "  --test-geom-pipeline
     Run the reconstruction & quantification pipeline using the geometric based workflow on the 'real_plant test dataset." \
-    "Test dataset are located under 'tests/testdata'."
+    "Test dataset are downloaded on demand via the .setup_test_database. CLI."
   echo "  --test-ml-pipeline
     Run the reconstruction & quantification pipeline using the machine-learning based workflow on the 'real_plant test dataset." \
-    "Test dataset are located under 'tests/testdata'."
+    "Test dataset are downloaded on demand via the .setup_test_database. CLI."
   echo "  --test-gpu
     Test correct access to NVIDIA GPU resources from docker container."
 

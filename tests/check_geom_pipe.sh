@@ -113,6 +113,12 @@ if [ -z ${PYOPENCL_CTX+x} ]; then
   echo -e "${INFO}Set 'PYOPENCL_CTX' to '0'."
 fi
 
+# Download the default test datasets if missing:
+if [ ! -f "${db}/romidb" ] || [ ! -d "${r_dataset}" ] || [ ! -d "${v_dataset}" ]; then
+  echo -e "${INFO}Setting up the test database..."
+  setup_test_database real_plant virtual_plant --db-path "${db}"
+fi
+
 # If defined, echo defined 'COLMAP_EXE'
 if [ -n "${COLMAP_EXE}" ]; then
   echo -e "${INFO}Using '${COLMAP_EXE}' as Colmap executable."

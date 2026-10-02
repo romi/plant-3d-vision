@@ -372,10 +372,9 @@ EOF
     conda activate plant3dvision
     python3 -c 'import plant3dvision'
     ```
-5. Longer tests using shipped "test dataset":
+5. Longer tests using the "test dataset" (downloaded on demand):
     ```bash
     bash check_pipe.sh
-    rm testdata/models/models/Resnet_896_896_epoch50.pt
     ```
 
 
@@ -410,6 +409,7 @@ In the following example, we will use the `real_plant` dataset from the **test d
 Assuming you are in the `plant-3d-vision` root directory of the repository:
 ```bash
 CWD=$(pwd)  # get the absolute path to the `plant-3d-vision` directory
+setup_test_database real_plant  # download the 'real_plant' test dataset
 docker run -it --rm --gpus all \
   -v $CWD/tests/testdata/:/myapp/db \
   -v $CWD/configs/:/myapp/configs \
@@ -438,6 +438,7 @@ In the following example, we will use the `real_plant` dataset from the **test d
 Assuming you are in the `plant-3d-vision` root directory of the repository:
 ```bash
 CWD=$(pwd)  # get the absolute path to the `plant-3d-vision` directory
+setup_test_database real_plant  # download the 'real_plant' test dataset
 ./docker/run.sh \
   -db $CWD/tests/testdata/ \
   -v $CWD/configs/:/myapp/configs \
@@ -464,6 +465,7 @@ In the `plant3dvision` conda environment, things are a bit simpler.
 To execute the same series of tasks on the `real_plant` dataset from the **test database** and the **geometric pipeline** configuration file shipped in this repository we only have to call the `romi_run_task` CLI.
 Assuming you are in the `plant-3d-vision` root directory of the repository:
 ```shell
+setup_test_database real_plant  # download the 'real_plant' test dataset
 cp -R tests/testdata /tmp/.  # copy the test DB to the temporary directory
 conda activate plant3dvision  # activate the conda environment
 romi_run_task AnglesAndInternodes /tmp/testdata/real_plant/ --config configs/test_geom_pipe_real.toml

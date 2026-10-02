@@ -6,32 +6,30 @@ upstream_task = "ImagesFilesetExists"
 model_fileset = "ModelFilesetExists"
 model_id = "Resnet_896_896_epoch50"  # no default value
 query = "{\"channel\":\"rgb\"}"  # default is an empty dict '{}'
-Sx = 896
-Sy = 896
 binarize = true
-resize = true
-dilation = 1
-epochs = 1
-batch = 1
-learning_rate = 0.0001
-threshold = 0.01
+dilation = 0
 
 [Voxels]
 upstream_task = "Segmentation2D"
-use_colmap_poses = false
+camera_metadata = "camera"  # serach directly in 'images' metadata
 voxel_size = 0.3
 method = "averaging"
-log = false # default to true
-invert = false
-labels = "[\"background\", \"fruit\", \"leaf\", \"pedicel\", \"stem\"]"
+labels = "[\"background\"]"  # use the (inverted) background masks
+invert = true
+[Voxels.bounding_box]
+x = [-15, 35]
+y = [-15, 35]
+z = [-5, 125]
+
 
 [PointCloud]
 upstream_task = "Voxels"
-level_set_value = 0.5 # default to 1.0
-log = false
-background_prior= 1.0
-min_contrast = 1.0
-min_score = 0.01 # default to 0.2
+labels = "[\"background\"]"
+missing_images_threshold = 1  # Default: 2
+algorithm = "marching-cubes"  # Default: "marching-cubes"
+level_set_value = 0.0
+sigma = 0.8
+mc_level = 0.5
 
 [SegmentedPointCloud]
 upstream_segmentation = "Segmentation2D"
@@ -56,20 +54,6 @@ stem_axis = 2
 stem_axis_inverted = false
 min_elongation_ratio = 2.0
 min_fruit_size = 0.1
-
-[Visualization]
-upstream_point_cloud = "PointCloud"
-upstream_mesh = "TriangleMesh"
-upstream_colmap = "Colmap"
-upstream_angles = "AnglesAndInternodes"
-upstream_skeleton = "CurveSkeleton"
-upstream_images = "ImagesFilesetExists"
-query = "{\"channel\":\"rgb\"}"  # default is an empty dict '{}'
-use_colmap_poses = false
-upstream_virtualplantobj = "VirtualPlantObj"
-max_image_size = 1500
-max_point_cloud_size = 10000000
-thumbnail_size = 150
 
 ### Evaluation ###
 

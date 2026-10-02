@@ -15,7 +15,7 @@ distance_threshold = 3.0
 fixed_distance_threshold = 1.0
 angle_threshold = 5.0
 fixed_angle_threshold = 3.5
-max_blind_angle = 20.0
+max_blind_angle = 25.0
 
 [Undistort]
 upstream_task = "ImagesFilesetExists"
@@ -29,23 +29,15 @@ upstream_task = "Undistort"
 model_fileset = "ModelFilesetExists"
 model_id = "Resnet_896_896_epoch50"  # no default value
 query = "{\"channel\":\"rgb\"}"  # default is an empty dict '{}'
-Sx = 896
-Sy = 896
 binarize = true
-resize = true
 dilation = 1
-epochs = 1
-batch = 1
-learning_rate = 0.0001
-threshold = 0.01
 
 [Voxels]
 upstream_task = "Segmentation2D"
-upstream_colmap = "Colmap"
 camera_metadata = "colmap_camera"
 voxel_size = 0.6
 type = "averaging"
-labels = "[\"background\"]"
+labels = "[\"background\"]"  # use the (inverted) background masks
 invert = true
 [Voxels.bounding_box]
 x = [300, 450]

@@ -95,7 +95,7 @@ RUN --mount=type=cache,target=/home/${USER_NAME}/.cache/pip,uid=${USER_ID},gid=$
     # Install `plant-3d-vision` dependencies and sources:
     bash install.sh --no-env --webterm --update-tools && \
     # Download the trained CNN model file:
-    ./get_model.sh /home/${USER_NAME}/
+    ./get_model.sh /home/${USER_NAME}/plant-3d-vision/tests/testdata
 
 COPY --chown=${USER_NAME} docker/p3dv-devel/entrypoint.sh .
 # Make entrypoint executable
