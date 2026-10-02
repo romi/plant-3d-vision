@@ -62,12 +62,13 @@ from PySide6.QtWidgets import QWidget
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
-from skimage.filters import gaussian
-from skimage.util import img_as_ubyte
 from plantdb.commons.fsdb.core import FSDB
 from plantdb.commons.log import DEFAULT_LOG_LEVEL
 from plantdb.commons.log import LOG_LEVELS
 from plantdb.commons.log import get_logger
+from skimage.filters import gaussian
+from skimage.util import img_as_float32
+from skimage.util import img_as_ubyte
 
 from plant3dvision.proc2d import binary_mask_from_grayscale
 from plant3dvision.proc2d import excess_green
@@ -1138,9 +1139,12 @@ class PlantMaskingApp(QMainWindow):
         dilation = self.dilation_spinbox.value()
         method = self.method_combo.currentText()
 
+        # Convert image to float in range [0, 1]:
+        img = img_as_float32(self.original_img)
         # Apply Gaussian blur before the grayscale method (if sigma > 0)
         self.sigma = self.sigma_spinbox.value()
-        img = gaussian(self.original_img, sigma=self.sigma, channel_axis=-1) if self.sigma > 0 else self.original_img
+        if self.sigma > 0:
+            img = gaussian(img, sigma=self.sigma, channel_axis=-1)
 
         # Apply the selected grayscale method
         if method == "linear":
