@@ -231,8 +231,9 @@ def remap_averaging(vol: np.ndarray, n_imgs: int) -> np.ndarray:
     """
     # Sorted list of unique values:
     uniq = np.unique(vol)
-    # Build the lookup table (integer → float)
-    int_labels = np.arange(max(-n_imgs, -len(uniq)), 1)
+    # Build the lookup table (integer → float), sized by the number of unique
+    # values so the epsilon‑bin of the maximum value (index ``len(uniq)``) is valid.
+    int_labels = np.arange(-len(uniq), 1)
 
     # - Bin the volume values
     # `np.digitize` expects the right‑most edge to be exclusive, so we append a tiny epsilon
