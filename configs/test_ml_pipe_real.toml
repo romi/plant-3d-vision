@@ -34,11 +34,10 @@ dilation = 1
 
 [Voxels]
 upstream_task = "Segmentation2D"
-upstream_colmap = "Colmap"
 camera_metadata = "colmap_camera"
 voxel_size = 0.6
 type = "averaging"
-labels = "[\"background\"]"
+labels = "[\"background\"]"  # use the (inverted) background masks
 invert = true
 [Voxels.bounding_box]
 x = [300, 450]
