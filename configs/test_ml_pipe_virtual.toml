@@ -7,21 +7,27 @@ model_fileset = "ModelFilesetExists"
 model_id = "Resnet_896_896_epoch50"  # no default value
 query = "{\"channel\":\"rgb\"}"  # default is an empty dict '{}'
 binarize = true
-dilation = 1
+dilation = 0
 
 [Voxels]
 upstream_task = "Segmentation2D"
-query = "{\"channel\":\"background\"}"  # use the (inverted) background masks
-camera_metadata = "camera"
-voxel_size = 0.06  # ~9x smaller than real plants
+camera_metadata = "camera"  # serach directly in 'images' metadata
+voxel_size = 0.3
 method = "averaging"
+labels = "[\"background\"]"  # use the (inverted) background masks
 invert = true
+[Voxels.bounding_box]
+x = [-15, 35]
+y = [-15, 35]
+z = [-5, 125]
+
 
 [PointCloud]
 upstream_task = "Voxels"
-missing_images_threshold = 2  # Default: 2
+labels = "[\"background\"]"
+missing_images_threshold = 1  # Default: 2
 algorithm = "marching-cubes"  # Default: "marching-cubes"
-level_set_value = 1.0
+level_set_value = 0.0
 sigma = 0.8
 mc_level = 0.5
 
