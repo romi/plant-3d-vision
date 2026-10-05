@@ -313,8 +313,10 @@ class PlantMaskingApp(QMainWindow):
     def initUI(self):
         """Create and arrange all widgets of the GUI.
 
-        The layout consists of three slider panels (one per channel), a color‑space selector, threshold spin boxes,
-        and a Matplotlib canvas for image display. Signal/slot connections are also set up here.
+        The layout is a vertical controls panel (pre‑processing sigma, grayscale
+        method selection with per‑method parameters, and post‑processing
+        binarization) above a Matplotlib canvas for image display. Signal/slot
+        connections are also set up here.
         """
         # Main widget and layout
         main_widget = QWidget()
@@ -355,6 +357,8 @@ class PlantMaskingApp(QMainWindow):
         # Show tick marks on the image index slider
         self.image_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.image_slider.setTickInterval(1)
+        self.image_slider.setPageStep(1)
+        self.image_slider.setSingleStep(1)
         self.image_slider.valueChanged.connect(self._load_image_from_slider)
         # Replace label with a QDoubleSpinBox for precise image index control
         self.image_index_spinbox = QDoubleSpinBox()
@@ -375,13 +379,10 @@ class PlantMaskingApp(QMainWindow):
         main_layout.addWidget(top_panel_container)
 
         # ===== CONTROLS PANEL =====
-        controls_layout = QHBoxLayout()
-
-        # Sliders
-        sliders_layout = QVBoxLayout()
+        controls_layout = QVBoxLayout()
 
         # ===== Step 1: Pre-processing (Gaussian Smoothing) =====
-        sliders_layout.addWidget(self._make_divider("1. Pre-processing: Gaussian Smoothing"))
+        controls_layout.addWidget(self._make_divider("1. Pre-processing: Gaussian Smoothing"))
 
         # Gaussian sigma control
         sigma_layout = QHBoxLayout()
@@ -400,10 +401,10 @@ class PlantMaskingApp(QMainWindow):
         sigma_layout.addWidget(sigma_label)
         sigma_layout.addWidget(self.sigma_spinbox)
         sigma_layout.addStretch(1)
-        sliders_layout.addLayout(sigma_layout)
+        controls_layout.addLayout(sigma_layout)
 
         # ===== Step 2: Processing (Grayscale Transformation) =====
-        sliders_layout.addWidget(self._make_divider("2. Processing: Grayscale Transformation"))
+        controls_layout.addWidget(self._make_divider("2. Processing: Grayscale Transformation"))
 
         # Method Selector
         method_layout = QHBoxLayout()
@@ -419,7 +420,7 @@ class PlantMaskingApp(QMainWindow):
         method_layout.addWidget(method_label)
         method_layout.addWidget(self.method_combo)
         method_layout.addStretch(1)
-        sliders_layout.addLayout(method_layout)
+        controls_layout.addLayout(method_layout)
 
         # --- Linear-specific controls (color space + 3 channels) ---
         self.linear_container = QWidget()
@@ -459,23 +460,23 @@ class PlantMaskingApp(QMainWindow):
             "Adjust the weighting of the third channel."))
 
         self.linear_container.setLayout(linear_layout)
-        sliders_layout.addWidget(self.linear_container)
+        controls_layout.addWidget(self.linear_container)
 
         # --- Method-specific parameter rows (shown/hidden with the method) ---
         self.bright_threshold_container = self._make_slider_row(
             "bright_threshold", "Brightness Threshold:", 0, 100, 50,
             0.0, 1.0, 0.5, 2, 0.01, 10,
             "Brightness threshold in [0, 1]. Pixels with total intensity below this value are set to zero.")
-        sliders_layout.addWidget(self.bright_threshold_container)
+        controls_layout.addWidget(self.bright_threshold_container)
 
         self.half_length_container = self._make_slider_row(
             "half_length", "Half Length (px):", 1, 10, 2,
             1, 10, 2, 0, 1.0, 1,
             "Half-length of the line structuring element (a value of 2 yields a 5-pixel line).")
-        sliders_layout.addWidget(self.half_length_container)
+        controls_layout.addWidget(self.half_length_container)
 
         # ===== Step 3: Post-processing (Binarization) =====
-        sliders_layout.addWidget(self._make_divider("3. Post-processing: Binarization"))
+        controls_layout.addWidget(self._make_divider("3. Post-processing: Binarization"))
 
         # Threshold & Dilation controls
         post_processing_layout = QHBoxLayout()
@@ -553,7 +554,7 @@ class PlantMaskingApp(QMainWindow):
         post_processing_layout.addWidget(self._make_flow_sep())
         post_processing_layout.addLayout(dilation_layout)
 
-        sliders_layout.addLayout(post_processing_layout)
+        controls_layout.addLayout(post_processing_layout)
 
         # Export Parameters button
         self.export_button = QPushButton("Export Parameters")
@@ -563,10 +564,7 @@ class PlantMaskingApp(QMainWindow):
         self.export_button.setToolTip(
             "Export the current parameters to a local configuration for the selected scan."
         )
-        sliders_layout.addWidget(self.export_button, alignment=Qt.AlignmentFlag.AlignHCenter)
-
-        # Add sliders to controls
-        controls_layout.addLayout(sliders_layout)
+        controls_layout.addWidget(self.export_button, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         # Ensure the controls panel stays compact
         controls_container = QWidget()
@@ -578,9 +576,7 @@ class PlantMaskingApp(QMainWindow):
         main_layout.addWidget(controls_container)
 
         # Add horizontal divider between controls and image display
-        divider = QFrame()
-        divider.setFrameShape(QFrame.HLine)
-        divider.setFrameShadow(QFrame.Sunken)
+        divider = self._make_divider("")
         main_layout.addWidget(divider)
 
         # --------------------------------------------------------------
@@ -685,15 +681,20 @@ class PlantMaskingApp(QMainWindow):
         label.setStyleSheet("font-weight: bold;")
         line = QFrame()
         line.setFrameShape(QFrame.Shape.HLine)
-        line.setFrameShadow(QFrame.Shadow.Sunken)
+        #line.setFrameShadow(QFrame.Shadow.Sunken)
+        if self._dark_mode:
+            line.setStyleSheet("color: #CCCCCC;")
         layout.addWidget(label)
         layout.addWidget(line, 1)
         return widget
 
-    def _make_flow_sep(self) -> QLabel:
-        """Return a flow separator label to indicate the flow between post-processing widgets."""
-        sep = QLabel("|")
-        sep.setStyleSheet("color: gray;")
+    def _make_flow_sep(self) -> QFrame:
+        """Return a vertical line separator between post-processing widgets."""
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.VLine)
+        #sep.setFrameShadow(QFrame.Shadow.Sunken)
+        if self._dark_mode:
+            sep.setStyleSheet("color: #CCCCCC;")
         return sep
 
     def _filter_scans(self, text):
