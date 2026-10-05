@@ -378,6 +378,8 @@ class PlantMaskingApp(QMainWindow):
         ch1_layout = QHBoxLayout()
         self.ch1_label = QLabel("Red:")
         self.ch1_slider = QSlider()
+        self.ch1_label.setMinimumWidth(100)  # Fixed width for consistent alignment
+        self.ch1_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.ch1_slider.setOrientation(Qt.Orientation.Horizontal)
         self.ch1_slider.setRange(0, 100)
         self.ch1_slider.setValue(50)
@@ -402,6 +404,8 @@ class PlantMaskingApp(QMainWindow):
         ch2_layout = QHBoxLayout()
         self.ch2_label = QLabel("Green:")
         self.ch2_slider = QSlider()
+        self.ch2_label.setMinimumWidth(100)  # Fixed width for consistent alignment
+        self.ch2_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.ch2_slider.setOrientation(Qt.Orientation.Horizontal)
         self.ch2_slider.setRange(0, 100)
         self.ch2_slider.setValue(100)
@@ -426,6 +430,8 @@ class PlantMaskingApp(QMainWindow):
         ch3_layout = QHBoxLayout()
         self.ch3_label = QLabel("Blue:")
         self.ch3_slider = QSlider()
+        self.ch3_label.setMinimumWidth(100)  # Fixed width for consistent alignment
+        self.ch3_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.ch3_slider.setOrientation(Qt.Orientation.Horizontal)
         self.ch3_slider.setRange(0, 100)
         self.ch3_slider.setValue(50)
@@ -503,25 +509,38 @@ class PlantMaskingApp(QMainWindow):
         sliders_layout.addWidget(self._make_divider("3. Post-processing: Binarization"))
 
         # Threshold & Dilation controls
-        threshold_dilation_layout = QHBoxLayout()
+        post_processing_layout = QHBoxLayout()
+        post_processing_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
+        # Min Threshold
+        min_thresh_layout = QHBoxLayout()
+        min_thresh_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
         min_thresh_label = QLabel("Min. Threshold:")
         self.min_threshold_spinbox = QDoubleSpinBox()
+        self.min_threshold_spinbox.setMinimumWidth(90)
         self.min_threshold_spinbox.setRange(0.0, 1.0)
         self.min_threshold_spinbox.setSingleStep(0.01)
         self.min_threshold_spinbox.setValue(0.2)
         self.min_threshold_spinbox.setToolTip(
             "Minimum intensity value for the mask. Pixels with values below this are excluded from the binary mask."
         )
+        min_thresh_layout.addWidget(min_thresh_label)
+        min_thresh_layout.addWidget(self.min_threshold_spinbox)
 
+        # Max Threshold
+        max_thresh_layout = QHBoxLayout()
+        max_thresh_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
         max_thresh_label = QLabel("Max. Threshold:")
         self.max_threshold_spinbox = QDoubleSpinBox()
+        self.max_threshold_spinbox.setMinimumWidth(90)
         self.max_threshold_spinbox.setRange(0.0, 1.0)
         self.max_threshold_spinbox.setSingleStep(0.01)
         self.max_threshold_spinbox.setValue(1.0)
         self.max_threshold_spinbox.setToolTip(
             "Maximum intensity value for the mask. Pixels with values above this are excluded from the binary mask."
         )
+        max_thresh_layout.addWidget(max_thresh_label)
+        max_thresh_layout.addWidget(self.max_threshold_spinbox)
 
         # Invert mask control
         self.invert_checkbox = QCheckBox("Invert mask")
@@ -530,8 +549,11 @@ class PlantMaskingApp(QMainWindow):
         )
 
         # Dilation control
+        dilation_layout = QHBoxLayout()
+        dilation_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
         dilation_label = QLabel("Dilation (px):")
         self.dilation_spinbox = QDoubleSpinBox()
+        self.dilation_spinbox.setMinimumWidth(90)
         self.dilation_spinbox.setDecimals(0)
         self.dilation_spinbox.setRange(0, 5)
         self.dilation_spinbox.setValue(0)
@@ -540,8 +562,12 @@ class PlantMaskingApp(QMainWindow):
         self.dilation_spinbox.setToolTip(
             "Binary dilation applied to the mask image."
         )
+        dilation_layout.addWidget(dilation_label)
+        dilation_layout.addWidget(self.dilation_spinbox)
 
         # Minimum connected-component size control
+        min_size_layout = QHBoxLayout()
+        min_size_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
         min_size_label = QLabel("Min. object area (px):")
         self.min_size_slider = QSlider(Qt.Orientation.Horizontal)
         self.min_size_slider.setRange(0, 25)
@@ -559,22 +585,20 @@ class PlantMaskingApp(QMainWindow):
         self.min_size_value.setSingleStep(1.0)
         self.min_size_value.setValue(0)
         self.min_size_value.setMinimumWidth(40)
+        min_size_layout.addWidget(min_size_label)
+        min_size_layout.addWidget(self.min_size_slider)
+        min_size_layout.addWidget(self.min_size_value)
 
-        threshold_dilation_layout.addWidget(min_thresh_label)
-        threshold_dilation_layout.addWidget(self.min_threshold_spinbox)
-        threshold_dilation_layout.addWidget(max_thresh_label)
-        threshold_dilation_layout.addWidget(self.max_threshold_spinbox)
-        threshold_dilation_layout.addWidget(self._make_flow_sep())
-        threshold_dilation_layout.addWidget(self.invert_checkbox)
-        threshold_dilation_layout.addWidget(self._make_flow_sep())
-        threshold_dilation_layout.addWidget(min_size_label)
-        threshold_dilation_layout.addWidget(self.min_size_slider)
-        threshold_dilation_layout.addWidget(self.min_size_value)
-        threshold_dilation_layout.addWidget(self._make_flow_sep())
-        threshold_dilation_layout.addWidget(dilation_label)
-        threshold_dilation_layout.addWidget(self.dilation_spinbox)
+        post_processing_layout.addLayout(min_thresh_layout)
+        post_processing_layout.addLayout(max_thresh_layout)
+        post_processing_layout.addWidget(self._make_flow_sep())
+        post_processing_layout.addWidget(self.invert_checkbox)
+        post_processing_layout.addWidget(self._make_flow_sep())
+        post_processing_layout.addLayout(min_size_layout)
+        post_processing_layout.addWidget(self._make_flow_sep())
+        post_processing_layout.addLayout(dilation_layout)
 
-        sliders_layout.addLayout(threshold_dilation_layout)
+        sliders_layout.addLayout(post_processing_layout)
 
         # Export Parameters button
         self.export_button = QPushButton("Export Parameters")
