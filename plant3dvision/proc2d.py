@@ -17,7 +17,7 @@ import numpy as np
 from skimage.color import convert_colorspace
 from skimage.color import rgb2gray
 from skimage.exposure import rescale_intensity
-from skimage.morphology import binary_dilation
+from skimage.morphology import dilation
 from skimage.morphology import diamond
 from skimage.morphology import opening
 from skimage.morphology import remove_small_objects
@@ -198,7 +198,7 @@ def linear(img: np.ndarray, coefs: list[float, float, float] = [0.2, 1., 0.1],
     >>> path = setup_test_database('real_plant')
     >>> img = imread(path.joinpath('real_plant/images/00000_rgb.jpg'))
     >>> gray_img = linear(img, [0.2, 1., 0.1], 'RGB')
-    >>> mask_img = binary_mask_from_grayscale(gray_img, min_threshold=0.2, min_size=3, dilation=0)
+    >>> mask_img = binary_mask_from_grayscale(gray_img,min_threshold=0.2,min_size=3,dilation_radius=0)
     >>> fig, ax = plt.subplots(1, 2, figsize=(12, 5))
     >>> ax[0].imshow(gray_img, cmap="gray")
     >>> ax[0].set_title("Linear transformation image")
@@ -261,7 +261,7 @@ def excess_green(img: np.ndarray, bright_threshold: float = 127 / 255) -> np.nda
     >>> path = setup_test_database('real_plant')
     >>> img = imread(path.joinpath('real_plant/images/00000_rgb.jpg'))
     >>> gray_img = excess_green(img)  # apply `excess_green` filter
-    >>> mask_img = binary_mask_from_grayscale(gray_img, min_threshold=0.025, min_size=3, dilation=0)
+    >>> mask_img = binary_mask_from_grayscale(gray_img,min_threshold=0.025,min_size=3,dilation_radius=0)
     >>> fig, ax = plt.subplots(1, 2, figsize=(12, 5))
     >>> ax[0].imshow(gray_img, cmap="gray")
     >>> ax[0].set_title("Excess green image")
@@ -425,7 +425,7 @@ def luminance_thin_lines_enhancement(img: np.ndarray, half_length: int = 2) -> n
     >>> path = setup_test_database('real_plant')
     >>> img = imread(path.joinpath('real_plant/images/00000_rgb.jpg'))
     >>> gray_img = luminance_thin_lines_enhancement(img, half_length=2)
-    >>> mask_img = binary_mask_from_grayscale(gray_img, min_threshold=0.06, min_size=3, dilation=0)
+    >>> mask_img = binary_mask_from_grayscale(gray_img,min_threshold=0.06,min_size=3,dilation_radius=0)
     >>> fig, ax = plt.subplots(1, 2, figsize=(12, 5))
     >>> ax[0].imshow(gray_img, cmap="gray")
     >>> ax[0].set_title("Line-enhanced luminance image")
@@ -485,7 +485,7 @@ def green_fraction(img: np.ndarray, bright_threshold: float = 127 / 255) -> np.n
     >>> path = setup_test_database('real_plant')
     >>> img = imread(path.joinpath('real_plant/images/00000_rgb.jpg'))
     >>> gray_img = green_fraction(img, bright_threshold=0.5)
-    >>> mask_img = binary_mask_from_grayscale(gray_img, min_threshold=0.2, min_size=3, dilation=0)
+    >>> mask_img = binary_mask_from_grayscale(gray_img,min_threshold=0.2,min_size=3,dilation_radius=0)
     >>> fig, ax = plt.subplots(1, 2, figsize=(12, 5))
     >>> ax[0].imshow(gray_img, cmap="gray")
     >>> ax[0].set_title("Green fraction image")
@@ -505,7 +505,7 @@ def green_fraction(img: np.ndarray, bright_threshold: float = 127 / 255) -> np.n
 
 
 def binary_mask_from_grayscale(gray_img: np.ndarray, min_threshold: float = 0.2, max_threshold: float = 1.,
-                               min_size: int = 0, dilation: int = 3, invert=False) -> np.ndarray:
+                               min_size: int = 0, dilation_radius: int = 3, invert=False) -> np.ndarray:
     """Apply mask parameters to a grayscale image and return the binary mask.
 
     The grayscale image is thresholded, small connected components are removed,
@@ -521,7 +521,7 @@ def binary_mask_from_grayscale(gray_img: np.ndarray, min_threshold: float = 0.2,
         Feature high threshold in [0, 1].
     min_size : int, optional
         Minimum connected component size in pixels (0 keeps every component).
-    dilation : int, optional
+    dilation_radius : int, optional
         Dilation radius of the diamond structuring element (0 disables dilation).
 
     Returns
@@ -551,7 +551,7 @@ def binary_mask_from_grayscale(gray_img: np.ndarray, min_threshold: float = 0.2,
     >>>     axes[0, idx].imshow(gray_img, cmap='gray')
     >>>     axes[0, idx].set_title(method)
     >>>     axes[0, idx].axis('off')
-    >>>     mask_img = binary_mask_from_grayscale(gray_img, min_threshold=lower_th[idx], min_size=3, dilation=0)
+    >>>     mask_img = binary_mask_from_grayscale(gray_img,min_threshold=lower_th[idx],min_size=3,dilation_radius=0)
     >>>     axes[1, idx].imshow(mask_img, cmap='gray')
     >>>     axes[1, idx].set_title(f"Lower threshold = {lower_th[idx]:.2f}")
     >>>     axes[1, idx].axis('off')
@@ -566,6 +566,6 @@ def binary_mask_from_grayscale(gray_img: np.ndarray, min_threshold: float = 0.2,
     if min_size > 0:
         mask = remove_small_objects(mask, max_size=min_size)
     # Apply morphological dilation if required
-    if dilation > 0:
-        mask = binary_dilation(mask, footprint=diamond(dilation))
+    if dilation_radius > 0:
+        mask = dilation(mask, footprint=diamond(dilation_radius))
     return mask

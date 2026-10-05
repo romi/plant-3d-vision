@@ -89,18 +89,19 @@ class TestProc2D(unittest.TestCase):
         gray = np.array([[0.1, 0.5], [0.9, 1.0]])
         # Thresholding in [min_threshold, max_threshold]
         assert np.array_equal(
-            proc2d.binary_mask_from_grayscale(gray, min_threshold=0.2, max_threshold=1.0, dilation=0),
+            proc2d.binary_mask_from_grayscale(gray, min_threshold=0.2, max_threshold=1.0, dilation_radius=0),
             np.array([[False, True], [True, True]]))
         # Inversion flips the mask
         assert np.array_equal(
-            proc2d.binary_mask_from_grayscale(gray, min_threshold=0.2, max_threshold=1.0, dilation=0, invert=True),
+            proc2d.binary_mask_from_grayscale(gray, min_threshold=0.2, max_threshold=1.0, dilation_radius=0,
+                                              invert=True),
             np.array([[True, False], [False, False]]))
 
     def test_binary_mask_dilation(self):
         """Dilation grows a single pixel into a diamond."""
         gray = np.zeros((5, 5))
         gray[2, 2] = 1.0
-        mask = proc2d.binary_mask_from_grayscale(gray, min_threshold=0.5, dilation=1)
+        mask = proc2d.binary_mask_from_grayscale(gray, min_threshold=0.5, dilation_radius=1)
         assert mask[2, 2] and mask[1, 2] and mask[2, 1]
         assert not mask[0, 0]
 
@@ -109,7 +110,7 @@ class TestProc2D(unittest.TestCase):
         img = np.zeros((40, 40, 3))
         img[:, 20, :] = 1.0  # thin bright line
         feat = proc2d.luminance_thin_lines_enhancement(img, half_length=2)
-        mask = proc2d.binary_mask_from_grayscale(feat, min_threshold=0.01, min_size=0, dilation=0)
+        mask = proc2d.binary_mask_from_grayscale(feat, min_threshold=0.01, min_size=0, dilation_radius=0)
         assert mask.shape == (40, 40)
         assert mask.any()
         assert np.all(mask[:, 20])
@@ -119,7 +120,7 @@ class TestProc2D(unittest.TestCase):
         img = np.zeros((30, 30, 3))
         img[10:20, 10:20, 1] = 1.0  # green square
         feat = proc2d.green_fraction(img, bright_threshold=0.1)
-        mask = proc2d.binary_mask_from_grayscale(feat, min_threshold=0.1, min_size=0, dilation=0)
+        mask = proc2d.binary_mask_from_grayscale(feat, min_threshold=0.1, min_size=0, dilation_radius=0)
         assert mask[15, 15]
         assert not mask[0, 0]
 

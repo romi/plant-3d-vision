@@ -1169,14 +1169,9 @@ class PlantMaskingApp(QMainWindow):
             filter_desc = f"luminance_thin_lines_enhancement (half_length={half_length})"
 
         # Apply binarization
-        self.mask = binary_mask_from_grayscale(
-            self.filtered_img,
-            min_threshold=min_threshold,
-            max_threshold=max_threshold,
-            min_size=min_size,
-            dilation=dilation,
-            invert=self.invert_checkbox.isChecked(),
-        )
+        self.mask = binary_mask_from_grayscale(self.filtered_img, min_threshold=min_threshold,
+                                               max_threshold=max_threshold, min_size=min_size, dilation_radius=dilation,
+                                               invert=self.invert_checkbox.isChecked())
         # Convert back to uint8 type (as done in ``Masks.f``)
         self.mask = img_as_ubyte(self.mask)
 
