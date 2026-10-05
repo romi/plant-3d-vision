@@ -417,9 +417,17 @@ class PlantMaskingApp(QMainWindow):
         self.method_combo.currentTextChanged.connect(self._on_method_changed)
         self.method_combo.setMinimumWidth(120)
         self.method_combo.setMaximumWidth(220)
+
+        # ? button to show help
+        self.cs_help_button = QPushButton("?")
+        self.cs_help_button.setFixedSize(24, 24)
+        self.cs_help_button.setToolTip("Show information about color spaces and channel sliders")
+        self.cs_help_button.clicked.connect(self.show_color_space_help)
+
         method_layout.addWidget(method_label)
         method_layout.addWidget(self.method_combo)
         method_layout.addStretch(1)
+        method_layout.addWidget(self.cs_help_button)
         controls_layout.addLayout(method_layout)
 
         # --- Linear-specific controls (color space + 3 channels) ---
@@ -436,16 +444,9 @@ class PlantMaskingApp(QMainWindow):
         self.color_space_combo.setMinimumWidth(120)
         self.color_space_combo.setMaximumWidth(220)
 
-        # ? button to show help
-        self.cs_help_button = QPushButton("?")
-        self.cs_help_button.setFixedSize(24, 24)
-        self.cs_help_button.setToolTip("Show information about color spaces and channel sliders")
-        self.cs_help_button.clicked.connect(self.show_color_space_help)
-
         cs_layout.addWidget(cs_label)
         cs_layout.addWidget(self.color_space_combo)
         cs_layout.addStretch(1)
-        cs_layout.addWidget(self.cs_help_button)
         linear_layout.addLayout(cs_layout)
 
         # Channel weight rows
