@@ -694,9 +694,9 @@ class PlantMaskingApp(QMainWindow):
 
     def _make_flow_sep(self) -> QLabel:
         """Return a flow separator label to indicate the flow between post-processing widgets."""
-        arrow = QLabel("→")
-        arrow.setStyleSheet("color: gray;")
-        return arrow
+        sep = QLabel("|")
+        sep.setStyleSheet("color: gray;")
+        return sep
 
     def _filter_scans(self, text):
         """Filter the scan dropdown based on search box text."""
