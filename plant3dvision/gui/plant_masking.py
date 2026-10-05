@@ -144,6 +144,8 @@ class TickSlider(QSlider):
 class PlantMaskingApp(QMainWindow):
     """Linear filter GUI application.
 
+    Debounce interval (ms) applied to controller changes before reprocessing.
+
     Provides an interactive interface to load an image, apply a linear
     combination of its color channels, and visualize the resulting filtered
     image and threshold mask.
@@ -209,6 +211,7 @@ class PlantMaskingApp(QMainWindow):
         Single‑shot timer (300 ms) that triggers filter processing after
         any parameter change.
     """
+    _DEBOUNCE_MS = 300
 
     def __init__(self, fsdb_path: str | Path, scan_id: str | None):
         """Initialize the main window and UI elements.
@@ -241,10 +244,10 @@ class PlantMaskingApp(QMainWindow):
         # Detect dark mode at startup
         self._dark_mode = self._detect_dark_mode()
 
-        # Timers (wait after modifications stop for 200 ms before processing)
-        self._load_image_timer = QTimer(self, singleShot=True, interval=300)
+        # Timers (debounce: wait after modifications stop before processing)
+        self._load_image_timer = QTimer(self, singleShot=True, interval=self._DEBOUNCE_MS)
         self._load_image_timer.timeout.connect(self._load_image)
-        self._process_image_timer = QTimer(self, singleShot=True, interval=300)
+        self._process_image_timer = QTimer(self, singleShot=True, interval=self._DEBOUNCE_MS)
         self._process_image_timer.timeout.connect(self.process_image)
 
         # Initialize UI first (without scan list)
@@ -625,7 +628,6 @@ class PlantMaskingApp(QMainWindow):
         self.half_length_value.valueChanged.connect(self._on_half_length_spinbox_changed)
         self.min_size_slider.valueChanged.connect(self._on_min_size_slider_changed)
         self.min_size_value.valueChanged.connect(self._on_min_size_spinbox_changed)
-        self.sigma_spinbox.valueChanged.connect(self._process_image_timer.start)
 
         # Set initial method-specific control visibility (defaults to 'linear')
         self._on_method_changed(self.method_combo.currentText())
