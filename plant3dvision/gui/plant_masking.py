@@ -248,7 +248,7 @@ class PlantMaskingApp(QMainWindow):
         self._process_image_timer.timeout.connect(self.process_image)
 
         # Initialize UI first (without scan list)
-        self.initUI()
+        self.init_ui()
 
         # Initialize database after UI is created
         self._init_database()
@@ -310,7 +310,7 @@ class PlantMaskingApp(QMainWindow):
         else:
             self.scan_dropdown.setCurrentIndex(-1)
 
-    def initUI(self):
+    def init_ui(self):
         """Create and arrange all widgets of the GUI.
 
         The layout is a vertical controls panel (pre‑processing sigma, grayscale
