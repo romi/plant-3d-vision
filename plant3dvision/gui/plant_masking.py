@@ -44,6 +44,9 @@ from PIL import Image
 from PySide6.QtCore import QTimer
 from PySide6.QtCore import Qt
 from PySide6.QtCore import Slot
+from PySide6.QtGui import QColor
+from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import QApplication
 from PySide6.QtWidgets import QCheckBox
 from PySide6.QtWidgets import QComboBox
@@ -57,6 +60,9 @@ from PySide6.QtWidgets import QMessageBox
 from PySide6.QtWidgets import QPushButton
 from PySide6.QtWidgets import QSizePolicy
 from PySide6.QtWidgets import QSlider
+from PySide6.QtWidgets import QStyle
+from PySide6.QtWidgets import QStyleOptionSlider
+from PySide6.QtWidgets import QStylePainter
 from PySide6.QtWidgets import QVBoxLayout
 from PySide6.QtWidgets import QWidget
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
@@ -86,6 +92,53 @@ METHODS = {
     "green_fraction": {"bright_threshold": 0.5},
     "luminance_thin_lines_enhancement": {"half_length": 2},
 }
+
+class TickSlider(QSlider):
+    """A QSlider that draws tick marks in a bright color for dark-mode visibility."""
+
+    _tick_color = QColor("#CCCCCC")
+    _tick_length = 5
+
+    def paintEvent(self, event):
+        painter = QStylePainter(self)
+        opt = QStyleOptionSlider()
+        self.initStyleOption(opt)
+
+        # Draw groove
+        opt.subControls = QStyle.SC_SliderGroove
+        painter.drawComplexControl(QStyle.CC_Slider, opt)
+
+        # Draw handle
+        opt.subControls = QStyle.SC_SliderHandle
+        painter.drawComplexControl(QStyle.CC_Slider, opt)
+
+        # Draw ticks manually (style sheets suppress them)
+        interval = self.tickInterval()
+        if interval == 0:
+            interval = self.pageStep()
+
+        if self.tickPosition() != QSlider.NoTicks:
+            handle = self.style().subControlRect(
+                QStyle.CC_Slider, opt, QStyle.SC_SliderHandle, self
+            )
+            handle_half = handle.width() / 2.0
+            value_range = self.maximum() - self.minimum()
+            drawing_range = self.width() - handle.width()
+            factor = drawing_range / value_range if value_range else 1
+
+            painter.setPen(self._tick_color)
+            for i in range(self.minimum(), self.maximum() + 1, interval):
+                x = round(factor * (i - self.minimum()) + handle_half)
+                if self.tickPosition() in (
+                        QSlider.TicksBothSides, QSlider.TicksAbove
+                ):
+                    y = self.rect().top()
+                    painter.drawLine(x, y, x, y + self._tick_length)
+                if self.tickPosition() in (
+                        QSlider.TicksBothSides, QSlider.TicksBelow
+                ):
+                    y = self.rect().bottom()
+                    painter.drawLine(x, y, x, y - self._tick_length)
 
 
 class PlantMaskingApp(QMainWindow):
@@ -185,6 +238,9 @@ class PlantMaskingApp(QMainWindow):
         self.ch3_value = None
         self.sigma = 0.0
 
+        # Detect dark mode at startup
+        self._dark_mode = self._detect_dark_mode()
+
         # Timers (wait after modifications stop for 200 ms before processing)
         self._load_image_timer = QTimer(self, singleShot=True, interval=300)
         self._load_image_timer.timeout.connect(self._load_image)
@@ -213,6 +269,22 @@ class PlantMaskingApp(QMainWindow):
             # No scans available, show message
             self._clear_display()
             print("No scans available in the database. Please check your FSDB path.")
+
+    @staticmethod
+    def _detect_dark_mode() -> bool:
+        """Detect if the OS/GUI is in dark mode."""
+        try:
+            hints = QGuiApplication.styleHints()
+            scheme = hints.colorScheme()
+            if scheme != Qt.ColorScheme.Unknown:
+                return scheme == Qt.ColorScheme.Dark
+        except AttributeError:
+            pass
+        # Fallback for older Qt: compare palette text vs window lightness
+        palette = QApplication.palette()
+        text = palette.color(QPalette.ColorRole.WindowText)
+        window = palette.color(QPalette.ColorRole.Window)
+        return text.lightness() > window.lightness()
 
     def _init_database(self):
         """Initialize the database connection and load scan list."""
@@ -276,7 +348,7 @@ class PlantMaskingApp(QMainWindow):
 
         # Image slider
         image_slider_label = QLabel("Image:")
-        self.image_slider = QSlider(Qt.Orientation.Horizontal)
+        self.image_slider = TickSlider(Qt.Orientation.Horizontal)
         self.image_slider.setMinimum(0)
         self.image_slider.setMaximum(0)
         self.image_slider.setValue(0)
@@ -377,9 +449,9 @@ class PlantMaskingApp(QMainWindow):
         # Channel 1 slider
         ch1_layout = QHBoxLayout()
         self.ch1_label = QLabel("Red:")
-        self.ch1_slider = QSlider()
         self.ch1_label.setMinimumWidth(100)  # Fixed width for consistent alignment
         self.ch1_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.ch1_slider = TickSlider()
         self.ch1_slider.setOrientation(Qt.Orientation.Horizontal)
         self.ch1_slider.setRange(0, 100)
         self.ch1_slider.setValue(50)
@@ -403,9 +475,9 @@ class PlantMaskingApp(QMainWindow):
         # Channel 2 slider
         ch2_layout = QHBoxLayout()
         self.ch2_label = QLabel("Green:")
-        self.ch2_slider = QSlider()
         self.ch2_label.setMinimumWidth(100)  # Fixed width for consistent alignment
         self.ch2_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.ch2_slider = TickSlider()
         self.ch2_slider.setOrientation(Qt.Orientation.Horizontal)
         self.ch2_slider.setRange(0, 100)
         self.ch2_slider.setValue(100)
@@ -429,9 +501,9 @@ class PlantMaskingApp(QMainWindow):
         # Channel 3 slider
         ch3_layout = QHBoxLayout()
         self.ch3_label = QLabel("Blue:")
-        self.ch3_slider = QSlider()
         self.ch3_label.setMinimumWidth(100)  # Fixed width for consistent alignment
         self.ch3_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.ch3_slider = TickSlider()
         self.ch3_slider.setOrientation(Qt.Orientation.Horizontal)
         self.ch3_slider.setRange(0, 100)
         self.ch3_slider.setValue(50)
@@ -460,7 +532,7 @@ class PlantMaskingApp(QMainWindow):
         bright_threshold_layout = QHBoxLayout()
         bright_threshold_layout.setContentsMargins(0, 0, 0, 0)
         bright_threshold_label = QLabel("Brightness Threshold:")
-        self.bright_threshold_slider = QSlider(Qt.Orientation.Horizontal)
+        self.bright_threshold_slider = TickSlider(Qt.Orientation.Horizontal)
         self.bright_threshold_slider.setRange(0, 100)
         self.bright_threshold_slider.setValue(50)
         self.bright_threshold_slider.setMinimumWidth(200)
@@ -485,7 +557,7 @@ class PlantMaskingApp(QMainWindow):
         half_length_layout = QHBoxLayout()
         half_length_layout.setContentsMargins(0, 0, 0, 0)
         half_length_label = QLabel("Half Length (px):")
-        self.half_length_slider = QSlider(Qt.Orientation.Horizontal)
+        self.half_length_slider = TickSlider(Qt.Orientation.Horizontal)
         self.half_length_slider.setRange(1, 10)
         self.half_length_slider.setValue(2)
         self.half_length_slider.setMinimumWidth(200)
@@ -569,7 +641,7 @@ class PlantMaskingApp(QMainWindow):
         min_size_layout = QHBoxLayout()
         min_size_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
         min_size_label = QLabel("Min. object area (px):")
-        self.min_size_slider = QSlider(Qt.Orientation.Horizontal)
+        self.min_size_slider = TickSlider(Qt.Orientation.Horizontal)
         self.min_size_slider.setRange(0, 25)
         self.min_size_slider.setValue(0)
         self.min_size_slider.setMinimumWidth(200)
@@ -1202,20 +1274,30 @@ class PlantMaskingApp(QMainWindow):
         # Display results
         self.figure.clear()
 
+        DARK_BG = '#2a2a2a'
+        if self._dark_mode:
+            self.figure.patch.set_facecolor(DARK_BG)
+
         # Original image
         ax1 = self.figure.add_subplot(131)
+        if self._dark_mode:
+            self._style_ax_dark(ax1)
         ax1.imshow(self.original_img)
         ax1.set_title("Original")
         ax1.axis('off')
 
         # Filtered image
         ax2 = self.figure.add_subplot(132)
+        if self._dark_mode:
+            self._style_ax_dark(ax2)
         ax2.imshow(self.filtered_img, cmap='gray')
         ax2.set_title(f"Grayscale Transformation\n{filter_desc}")
         ax2.axis('off')
 
         # Mask
         ax3 = self.figure.add_subplot(133)
+        if self._dark_mode:
+            self._style_ax_dark(ax3)
         ax3.imshow(self.mask, cmap='binary')
         decimals = self.min_threshold_spinbox.decimals()
         title = f"Binarization ({min_threshold:.{decimals}f} <= v <= {max_threshold:.{decimals}f})"
@@ -1229,6 +1311,8 @@ class PlantMaskingApp(QMainWindow):
         ax3.axis('off')
 
         self.figure.suptitle(f"{self.current_scan.id} - {self.images_list[self.image_slider.value()].id}")
+        if self._dark_mode:
+            self.figure._suptitle.set_color('white')
         self.figure.tight_layout()
 
         # Restore saved axis limits (pan/zoom state)
@@ -1241,6 +1325,16 @@ class PlantMaskingApp(QMainWindow):
 
         # Synchronize axes limits for pan/zoom (only sets up callbacks)
         self._sync_axes_limits()
+
+    @staticmethod
+    def _style_ax_dark(ax):
+        """Apply dark-mode styling to a single axes."""
+        DARK_BG = '#2a2a2a'
+        ax.set_facecolor(DARK_BG)
+        ax.tick_params(colors='white')
+        ax.xaxis.label.set_color('white')
+        ax.yaxis.label.set_color('white')
+        ax.title.set_color('white')
 
     def _sync_axes_limits(self):
         """Synchronize the pan and zoom limits across all three axes."""
