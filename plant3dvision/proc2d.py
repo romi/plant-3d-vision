@@ -564,7 +564,7 @@ def binary_mask_from_grayscale(gray_img: np.ndarray, min_threshold: float = 0.2,
         mask = np.logical_not(mask)
     # Detect and remove small components
     if min_size > 0:
-        mask = remove_small_objects(mask, min_size=min_size)
+        mask = remove_small_objects(mask, max_size=min_size)
     # Apply morphological dilation if required
     if dilation > 0:
         mask = binary_dilation(mask, footprint=diamond(dilation))
