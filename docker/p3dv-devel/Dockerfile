@@ -52,8 +52,8 @@ RUN apt-get update && \
         nvidia-cuda-toolkit \
         python3-dev python3-pip python3-venv \
         gcc build-essential \
-        libeigen3-dev libcgal-dev \
-        libjpeg-dev libffi-dev && \
+        libeigen3-dev libcgal-dev libjpeg-dev libffi-dev \
+        libegl1 libgl1 libx11-6 libusb-1.0-0 libglib2.0-0 libxcb1 && \
     # Clean-up apt cache
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
