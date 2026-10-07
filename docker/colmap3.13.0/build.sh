@@ -229,7 +229,7 @@ build_docker_image() {
   docker_cmd+=" --build-arg UBUNTU_VERSION=\"${UBUNTU_VERSION}\""
   docker_cmd+=" -t \"roboticsmicrofarms/colmap:${VTAG}-cuda_cc${CUDA_CC}\""
   docker_cmd+=" ${DOCKER_OPTS}"  # Additional options like --no-cache, --pull, etc.
-  docker_cmd+=" -f \"docker/colmap3.13/Dockerfile\""
+  docker_cmd+=" -f \"docker/colmap3.13.0/Dockerfile\""
   docker_cmd+=" ."  # Build context
 
   # Print the full command that will be executed
