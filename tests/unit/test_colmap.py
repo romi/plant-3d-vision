@@ -30,7 +30,7 @@ class TestColmap(FSDBTestCase):
         all_cli_args = {
             "feature_extractor": {
                 "--ImageReader.single_camera": "1",
-                "--SiftExtraction.use_gpu": "0"
+                "--FeatureExtraction.use_gpu": "0"
             },
             "exhaustive_matcher": {
                 "--FeatureMatching.use_gpu": "0"
