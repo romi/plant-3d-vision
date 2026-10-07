@@ -1699,23 +1699,26 @@ class ColmapRunner(object):
                                               stream=True, detach=True, working_dir=str(self.colmap_workdir))
         # Return the container logs decoded:
         out = ""
-        if to_log:
-            with open(self.log_file, mode="a") as f:
+        try:
+            if to_log:
+                with open(self.log_file, mode="a") as f:
+                    for line in container.logs(stream=True, follow=True):
+                        line = line.decode("utf-8")
+                        sys.stdout.write(line)
+                        sys.stdout.flush()
+                        out += line
+                        if self._header is not None:
+                            line = line.replace(self._header, "")
+                        f.write(line)
+                        f.flush()
+            else:
                 for line in container.logs(stream=True, follow=True):
                     line = line.decode("utf-8")
                     sys.stdout.write(line)
                     sys.stdout.flush()
-                    out += line
-                    if self._header is not None:
-                        line = line.replace(self._header, "")
-                    f.write(line)
-                    f.flush()
-        else:
-            for line in container.logs(stream=True, follow=True):
-                line = line.decode("utf-8")
-                sys.stdout.write(line)
-                sys.stdout.flush()
-        container.wait()
+            container.wait()
+        finally:
+            container.remove(force=True)
         # Remove any header from the container:
         if self._header is not None:
             out = out.replace(self._header, "")
