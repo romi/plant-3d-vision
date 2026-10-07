@@ -5,8 +5,8 @@ name: CI
 env:
   COLMAP: 3.13.0
 
-# on: pull_request  # disabled – workflow will not be triggered
-on: []  # keep a valid (empty) trigger to make the file syntactically correct
+on: pull_request
+
 jobs:
 
   colmap-docker-build:
