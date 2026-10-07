@@ -1826,7 +1826,7 @@ class ColmapRunner(object):
             args.extend(["--match_type", "pairs"])
             custom_opt = {
                 # Forcefully deactivate "guided_matching" as it breaks the matching in our case
-                "--SiftMatching.guided_matching": 0,
+                "--FeatureMatching.guided_matching": 0,
             }
             cli_args.update(**custom_opt)
             _ = self._colmap_cmd('matches_importer', args, cli_args)
