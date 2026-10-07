@@ -21,7 +21,7 @@ dependencies = [
     "opencv-contrib-python",
     # "pybind11",
     "pyopencl",
-    "scikit-image",
+    "scikit-image>= 0.26",
     "scikit-learn",
     "tomlkit",
     "joblib",
