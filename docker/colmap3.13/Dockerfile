@@ -1,12 +1,12 @@
 ARG UBUNTU_VERSION=24.04
-ARG NVIDIA_CUDA_VERSION=12.9.0
+ARG NVIDIA_CUDA_VERSION=12.9.1
 
 # -----------------------------------------------------------------------------
 # Docker builder stage.
 # -----------------------------------------------------------------------------
 FROM nvidia/cuda:${NVIDIA_CUDA_VERSION}-devel-ubuntu${UBUNTU_VERSION} AS builder
 
-ARG COLMAP_GIT_TAG=3.12.4
+ARG COLMAP_GIT_TAG=3.13.0
 ARG CUDA_ARCHITECTURES=all-major
 ENV QT_XCB_GL_INTEGRATION=xcb_egl
 
@@ -43,7 +43,7 @@ RUN apt-get update && \
 
 # Build and install COLMAP.
 ENV CMAKE_INSTALL_PREFIX=/colmap-install
-RUN git clone https://github.com/colmap/colmap.git
+RUN git clone https://github.com/colmap/colmap.git --depth 1 --shallow-submodules --no-tags --branch ${COLMAP_GIT_TAG}
 RUN cd colmap && \
     git fetch --tags https://github.com/colmap/colmap.git && \
     git checkout ${COLMAP_GIT_TAG} && \

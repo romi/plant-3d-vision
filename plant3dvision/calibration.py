@@ -451,8 +451,8 @@ def pose_estimation_figure(ref_poses, pred_poses, add_image_id=False, pred_scan_
     # Add image or point ids as text:
     for i, im_id in enumerate(im_ids):
         wrong = i in incorrect_poses_idx
-        x_off = 0.05 * np.diff(sorted([x[i], x_c]))
-        y_off = 0.05 * np.diff(sorted([y[i], y_c]))
+        x_off = 0.05 * np.diff(sorted([x[i], x_c]))[0]
+        y_off = 0.05 * np.diff(sorted([y[i], y_c]))[0]
         xt = x[i] - x_off if x[i] < x_c else x[i] + x_off
         yt = y[i] - y_off if y[i] < y_c else y[i] + y_off
         xyax.text(xt, yt, f"{im_id}",
