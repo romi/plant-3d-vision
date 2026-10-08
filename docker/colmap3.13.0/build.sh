@@ -225,7 +225,7 @@ build_docker_image() {
   docker_cmd="docker buildx build"
   docker_cmd+=" --load"
   docker_cmd+=" --build-arg NVIDIA_CUDA_VERSION=\"${NVIDIA_CUDA_VERSION}\""
-  #docker_cmd+=" --build-arg CUDA_ARCHITECTURES=\"${CUDA_CC}\""
+  docker_cmd+=" --build-arg CUDA_ARCHITECTURES=\"${CUDA_CC}\""
   docker_cmd+=" --build-arg UBUNTU_VERSION=\"${UBUNTU_VERSION}\""
   docker_cmd+=" -t \"roboticsmicrofarms/colmap:${VTAG}-cuda_cc${CUDA_CC}\""
   docker_cmd+=" ${DOCKER_OPTS}"  # Additional options like --no-cache, --pull, etc.
