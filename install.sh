@@ -44,7 +44,7 @@ initialize_variables() {
   # Name of the conda environment to create:
   ENV_NAME="plant3dvision"
   # Python version to use when creating a conda environment:
-  py_version="3.10"
+  py_version="3.11"
   # Boolean flag to update pip tools:
   update_pip_tools=0
   # Options to use with `pip`:
