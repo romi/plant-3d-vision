@@ -131,8 +131,7 @@ parse_arguments() {
       exit 0
       ;;
     *)
-      show_usage
-      exit 1
+      DOCKER_OPTS="${DOCKER_OPTS} $1"
       ;;
     esac
     shift
@@ -223,7 +222,8 @@ check_and_fix_base_image() {
 # --------------------------------
 build_docker_image() {
   # Construct the docker build command
-  docker_cmd="docker build"
+  docker_cmd="docker buildx build"
+  docker_cmd+=" --load"
   docker_cmd+=" --build-arg NVIDIA_CUDA_VERSION=\"${NVIDIA_CUDA_VERSION}\""
   #docker_cmd+=" --build-arg CUDA_ARCHITECTURES=\"${CUDA_CC}\""
   docker_cmd+=" --build-arg UBUNTU_VERSION=\"${UBUNTU_VERSION}\""
