@@ -12,22 +12,20 @@ package:
 
 source:
   path: ../../  # to build from cloned sources
-#  git_url: https://github.com/romi/romitask.git
-#  git_tag: dev
 
 build:
-  string: {{ 'py'+ PY_VER.replace('.','') + '_' + environ.get('GIT_DESCRIBE_HASH', 'latest') }}
+  noarch: python  # Build as a platform-independent Python package
   script: python -m pip install .
 
 requirements:
   build:
     - setuptools
-    - python  {{ python }}
+    - python  {{ project.get('requires-python') }}  # Minimum Python version requirement from pyproject.toml
   host:
-    - python  {{ python }}
+    - python  {{ project.get('requires-python') }}  # Minimum Python version requirement from pyproject.toml
   run:
-    - python  {{ python }}
-    - numpy<2  # `romiseg` & `romicgal` both require this!
+    - python  {{ project.get('requires-python') }}  # Minimum Python version requirement from pyproject.toml
+    - numpy >=2
     {% for dep in deps %}
     {% if not dep.startswith('open3d') %}
     - {{ dep }}
@@ -36,11 +34,11 @@ requirements:
 
 about:
   home: {{ urls.get('Homepage') }}
+  summary: {{ project.get('description') }}
+  dev_url: {{ urls.get('Repository') }}
   license: LGPL-3.0-or-later
   license_file: LICENSE
-  summary: {{ project.get('description') }}
   description: |
     The _3D plant phenotyping platform_ of the ROMI project allows to performs a full 3D analysis of plants.
     It combines an imaging station with a powerful image processing pipeline, to build a 3D representation of plants.
     This package act as the main data processing workflow and require other ROMI libraries.
-  dev_url: {{ urls.get('Repository') }}
