@@ -349,9 +349,9 @@ EOF
     git submodule init
     git submodule update
     ```
-2. Create a conda environment named `plant3dvision` with Python3.8, for example:
+2. Create a conda environment named `plant3dvision` with Python 3.11 or later, for example:
     ```bash
-    conda create --name plant3dvision "python=3.9"
+    conda create --name plant3dvision "python=3.11"
     ```
 3. Install the submodules (`plantdb`, `romitask`, `romiseg`, `romicgal` & `dtw`) and `plant3dvision` in activated environment:
     ```bash

@@ -44,6 +44,9 @@ from PIL import Image
 from PySide6.QtCore import QTimer
 from PySide6.QtCore import Qt
 from PySide6.QtCore import Slot
+from PySide6.QtGui import QColor
+from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import QApplication
 from PySide6.QtWidgets import QCheckBox
 from PySide6.QtWidgets import QComboBox
@@ -57,6 +60,9 @@ from PySide6.QtWidgets import QMessageBox
 from PySide6.QtWidgets import QPushButton
 from PySide6.QtWidgets import QSizePolicy
 from PySide6.QtWidgets import QSlider
+from PySide6.QtWidgets import QStyle
+from PySide6.QtWidgets import QStyleOptionSlider
+from PySide6.QtWidgets import QStylePainter
 from PySide6.QtWidgets import QVBoxLayout
 from PySide6.QtWidgets import QWidget
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
@@ -87,9 +93,58 @@ METHODS = {
     "luminance_thin_lines_enhancement": {"half_length": 2},
 }
 
+class TickSlider(QSlider):
+    """A QSlider that draws tick marks in a bright color for dark-mode visibility."""
+
+    _tick_color = QColor("#CCCCCC")
+    _tick_length = 5
+
+    def paintEvent(self, event):
+        painter = QStylePainter(self)
+        opt = QStyleOptionSlider()
+        self.initStyleOption(opt)
+
+        # Draw groove
+        opt.subControls = QStyle.SC_SliderGroove
+        painter.drawComplexControl(QStyle.CC_Slider, opt)
+
+        # Draw handle
+        opt.subControls = QStyle.SC_SliderHandle
+        painter.drawComplexControl(QStyle.CC_Slider, opt)
+
+        # Draw ticks manually (style sheets suppress them)
+        interval = self.tickInterval()
+        if interval == 0:
+            interval = self.pageStep()
+
+        if self.tickPosition() != QSlider.NoTicks:
+            handle = self.style().subControlRect(
+                QStyle.CC_Slider, opt, QStyle.SC_SliderHandle, self
+            )
+            handle_half = handle.width() / 2.0
+            value_range = self.maximum() - self.minimum()
+            drawing_range = self.width() - handle.width()
+            factor = drawing_range / value_range if value_range else 1
+
+            painter.setPen(self._tick_color)
+            for i in range(self.minimum(), self.maximum() + 1, interval):
+                x = round(factor * (i - self.minimum()) + handle_half)
+                if self.tickPosition() in (
+                        QSlider.TicksBothSides, QSlider.TicksAbove
+                ):
+                    y = self.rect().top()
+                    painter.drawLine(x, y, x, y + self._tick_length)
+                if self.tickPosition() in (
+                        QSlider.TicksBothSides, QSlider.TicksBelow
+                ):
+                    y = self.rect().bottom()
+                    painter.drawLine(x, y, x, y - self._tick_length)
+
 
 class PlantMaskingApp(QMainWindow):
     """Linear filter GUI application.
+
+    Debounce interval (ms) applied to controller changes before reprocessing.
 
     Provides an interactive interface to load an image, apply a linear
     combination of its color channels, and visualize the resulting filtered
@@ -156,6 +211,7 @@ class PlantMaskingApp(QMainWindow):
         Single‑shot timer (300 ms) that triggers filter processing after
         any parameter change.
     """
+    _DEBOUNCE_MS = 300
 
     def __init__(self, fsdb_path: str | Path, scan_id: str | None):
         """Initialize the main window and UI elements.
@@ -185,14 +241,17 @@ class PlantMaskingApp(QMainWindow):
         self.ch3_value = None
         self.sigma = 0.0
 
-        # Timers (wait after modifications stop for 200 ms before processing)
-        self._load_image_timer = QTimer(self, singleShot=True, interval=300)
+        # Detect dark mode at startup
+        self._dark_mode = self._detect_dark_mode()
+
+        # Timers (debounce: wait after modifications stop before processing)
+        self._load_image_timer = QTimer(self, singleShot=True, interval=self._DEBOUNCE_MS)
         self._load_image_timer.timeout.connect(self._load_image)
-        self._process_image_timer = QTimer(self, singleShot=True, interval=300)
+        self._process_image_timer = QTimer(self, singleShot=True, interval=self._DEBOUNCE_MS)
         self._process_image_timer.timeout.connect(self.process_image)
 
         # Initialize UI first (without scan list)
-        self.initUI()
+        self.init_ui()
 
         # Initialize database after UI is created
         self._init_database()
@@ -213,6 +272,22 @@ class PlantMaskingApp(QMainWindow):
             # No scans available, show message
             self._clear_display()
             print("No scans available in the database. Please check your FSDB path.")
+
+    @staticmethod
+    def _detect_dark_mode() -> bool:
+        """Detect if the OS/GUI is in dark mode."""
+        try:
+            hints = QGuiApplication.styleHints()
+            scheme = hints.colorScheme()
+            if scheme != Qt.ColorScheme.Unknown:
+                return scheme == Qt.ColorScheme.Dark
+        except AttributeError:
+            pass
+        # Fallback for older Qt: compare palette text vs window lightness
+        palette = QApplication.palette()
+        text = palette.color(QPalette.ColorRole.WindowText)
+        window = palette.color(QPalette.ColorRole.Window)
+        return text.lightness() > window.lightness()
 
     def _init_database(self):
         """Initialize the database connection and load scan list."""
@@ -238,11 +313,13 @@ class PlantMaskingApp(QMainWindow):
         else:
             self.scan_dropdown.setCurrentIndex(-1)
 
-    def initUI(self):
+    def init_ui(self):
         """Create and arrange all widgets of the GUI.
 
-        The layout consists of three slider panels (one per channel), a color‑space selector, threshold spin boxes,
-        and a Matplotlib canvas for image display. Signal/slot connections are also set up here.
+        The layout is a vertical controls panel (pre‑processing sigma, grayscale
+        method selection with per‑method parameters, and post‑processing
+        binarization) above a Matplotlib canvas for image display. Signal/slot
+        connections are also set up here.
         """
         # Main widget and layout
         main_widget = QWidget()
@@ -276,13 +353,15 @@ class PlantMaskingApp(QMainWindow):
 
         # Image slider
         image_slider_label = QLabel("Image:")
-        self.image_slider = QSlider(Qt.Orientation.Horizontal)
+        self.image_slider = TickSlider(Qt.Orientation.Horizontal)
         self.image_slider.setMinimum(0)
         self.image_slider.setMaximum(0)
         self.image_slider.setValue(0)
         # Show tick marks on the image index slider
         self.image_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.image_slider.setTickInterval(1)
+        self.image_slider.setPageStep(1)
+        self.image_slider.setSingleStep(1)
         self.image_slider.valueChanged.connect(self._load_image_from_slider)
         # Replace label with a QDoubleSpinBox for precise image index control
         self.image_index_spinbox = QDoubleSpinBox()
@@ -303,13 +382,10 @@ class PlantMaskingApp(QMainWindow):
         main_layout.addWidget(top_panel_container)
 
         # ===== CONTROLS PANEL =====
-        controls_layout = QHBoxLayout()
-
-        # Sliders
-        sliders_layout = QVBoxLayout()
+        controls_layout = QVBoxLayout()
 
         # ===== Step 1: Pre-processing (Gaussian Smoothing) =====
-        sliders_layout.addWidget(self._make_divider("1. Pre-processing: Gaussian Smoothing"))
+        controls_layout.addWidget(self._make_divider("1. Pre-processing: Gaussian Smoothing"))
 
         # Gaussian sigma control
         sigma_layout = QHBoxLayout()
@@ -322,15 +398,16 @@ class PlantMaskingApp(QMainWindow):
             "Standard deviation of the Gaussian blur applied before the grayscale method (0 disables it)."
         )
         self.sigma_spinbox.valueChanged.connect(self._on_sigma_changed)
-        self.sigma_spinbox.setMinimumWidth(80)
-        self.sigma_spinbox.setMaximumWidth(120)
+        self.sigma_spinbox.setDecimals(1)
+        self.sigma_spinbox.setMinimumWidth(40)
+        self.sigma_spinbox.setMaximumWidth(60)
         sigma_layout.addWidget(sigma_label)
         sigma_layout.addWidget(self.sigma_spinbox)
         sigma_layout.addStretch(1)
-        sliders_layout.addLayout(sigma_layout)
+        controls_layout.addLayout(sigma_layout)
 
         # ===== Step 2: Processing (Grayscale Transformation) =====
-        sliders_layout.addWidget(self._make_divider("2. Processing: Grayscale Transformation"))
+        controls_layout.addWidget(self._make_divider("2. Processing: Grayscale Transformation"))
 
         # Method Selector
         method_layout = QHBoxLayout()
@@ -343,10 +420,18 @@ class PlantMaskingApp(QMainWindow):
         self.method_combo.currentTextChanged.connect(self._on_method_changed)
         self.method_combo.setMinimumWidth(120)
         self.method_combo.setMaximumWidth(220)
+
+        # ? button to show help
+        self.cs_help_button = QPushButton("?")
+        self.cs_help_button.setFixedSize(24, 24)
+        self.cs_help_button.setToolTip("Show information about color spaces and channel sliders")
+        self.cs_help_button.clicked.connect(self.show_color_space_help)
+
         method_layout.addWidget(method_label)
         method_layout.addWidget(self.method_combo)
         method_layout.addStretch(1)
-        sliders_layout.addLayout(method_layout)
+        method_layout.addWidget(self.cs_help_button)
+        controls_layout.addLayout(method_layout)
 
         # --- Linear-specific controls (color space + 3 channels) ---
         self.linear_container = QWidget()
@@ -362,219 +447,118 @@ class PlantMaskingApp(QMainWindow):
         self.color_space_combo.setMinimumWidth(120)
         self.color_space_combo.setMaximumWidth(220)
 
-        # ? button to show help
-        self.cs_help_button = QPushButton("?")
-        self.cs_help_button.setFixedSize(24, 24)
-        self.cs_help_button.setToolTip("Show information about color spaces and channel sliders")
-        self.cs_help_button.clicked.connect(self.show_color_space_help)
-
         cs_layout.addWidget(cs_label)
         cs_layout.addWidget(self.color_space_combo)
         cs_layout.addStretch(1)
-        cs_layout.addWidget(self.cs_help_button)
         linear_layout.addLayout(cs_layout)
 
-        # Channel 1 slider
-        ch1_layout = QHBoxLayout()
-        self.ch1_label = QLabel("Red:")
-        self.ch1_slider = QSlider()
-        self.ch1_slider.setOrientation(Qt.Orientation.Horizontal)
-        self.ch1_slider.setRange(0, 100)
-        self.ch1_slider.setValue(50)
-        self.ch1_slider.setMinimumWidth(200)
-        # Show tick marks on the channel slider
-        self.ch1_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
-        self.ch1_slider.setTickInterval(10)
-        self.ch1_slider.setToolTip(
-            "Adjust the weighting of the first channel."
-        )
-        self.ch1_value = QDoubleSpinBox()
-        self.ch1_value.setDecimals(2)
-        self.ch1_value.setRange(0.0, 1.0)
-        self.ch1_value.setSingleStep(0.01)
-        self.ch1_value.setValue(0.5)
-        ch1_layout.addWidget(self.ch1_label)
-        ch1_layout.addWidget(self.ch1_slider)
-        ch1_layout.addWidget(self.ch1_value)
-        linear_layout.addLayout(ch1_layout)
-
-        # Channel 2 slider
-        ch2_layout = QHBoxLayout()
-        self.ch2_label = QLabel("Green:")
-        self.ch2_slider = QSlider()
-        self.ch2_slider.setOrientation(Qt.Orientation.Horizontal)
-        self.ch2_slider.setRange(0, 100)
-        self.ch2_slider.setValue(100)
-        self.ch2_slider.setMinimumWidth(200)
-        # Show tick marks on the channel slider
-        self.ch2_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
-        self.ch2_slider.setTickInterval(10)
-        self.ch2_slider.setToolTip(
-            "Adjust the weighting of the second channel."
-        )
-        self.ch2_value = QDoubleSpinBox()
-        self.ch2_value.setDecimals(2)
-        self.ch2_value.setRange(0.0, 1.0)
-        self.ch2_value.setSingleStep(0.01)
-        self.ch2_value.setValue(1.0)
-        ch2_layout.addWidget(self.ch2_label)
-        ch2_layout.addWidget(self.ch2_slider)
-        ch2_layout.addWidget(self.ch2_value)
-        linear_layout.addLayout(ch2_layout)
-
-        # Channel 3 slider
-        ch3_layout = QHBoxLayout()
-        self.ch3_label = QLabel("Blue:")
-        self.ch3_slider = QSlider()
-        self.ch3_slider.setOrientation(Qt.Orientation.Horizontal)
-        self.ch3_slider.setRange(0, 100)
-        self.ch3_slider.setValue(50)
-        self.ch3_slider.setMinimumWidth(200)
-        # Show tick marks on the channel slider
-        self.ch3_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
-        self.ch3_slider.setTickInterval(10)
-        self.ch3_slider.setToolTip(
-            "Adjust the weighting of the third channel."
-        )
-        self.ch3_value = QDoubleSpinBox()
-        self.ch3_value.setDecimals(2)
-        self.ch3_value.setRange(0.0, 1.0)
-        self.ch3_value.setSingleStep(0.01)
-        self.ch3_value.setValue(0.5)
-        ch3_layout.addWidget(self.ch3_label)
-        ch3_layout.addWidget(self.ch3_slider)
-        ch3_layout.addWidget(self.ch3_value)
-        linear_layout.addLayout(ch3_layout)
+        # Channel weight rows
+        linear_layout.addWidget(self._make_slider_row(
+            "ch1", "Red:", 0, 100, 50, 0.0, 1.0, 0.5, 2, 0.01, 10,
+            "Adjust the weighting of the first channel."))
+        linear_layout.addWidget(self._make_slider_row(
+            "ch2", "Green:", 0, 100, 100, 0.0, 1.0, 1.0, 2, 0.01, 10,
+            "Adjust the weighting of the second channel."))
+        linear_layout.addWidget(self._make_slider_row(
+            "ch3", "Blue:", 0, 100, 50, 0.0, 1.0, 0.5, 2, 0.01, 10,
+            "Adjust the weighting of the third channel."))
 
         self.linear_container.setLayout(linear_layout)
-        sliders_layout.addWidget(self.linear_container)
+        controls_layout.addWidget(self.linear_container)
 
-        # --- bright_threshold control (excess_green / green_fraction) ---
-        self.bright_threshold_container = QWidget()
-        bright_threshold_layout = QHBoxLayout()
-        bright_threshold_layout.setContentsMargins(0, 0, 0, 0)
-        bright_threshold_label = QLabel("Brightness Threshold:")
-        self.bright_threshold_slider = QSlider(Qt.Orientation.Horizontal)
-        self.bright_threshold_slider.setRange(0, 100)
-        self.bright_threshold_slider.setValue(50)
-        self.bright_threshold_slider.setMinimumWidth(200)
-        self.bright_threshold_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
-        self.bright_threshold_slider.setTickInterval(10)
-        self.bright_threshold_slider.setToolTip(
-            "Brightness threshold in [0, 1]. Pixels with total intensity below this value are set to zero."
-        )
-        self.bright_threshold_value = QDoubleSpinBox()
-        self.bright_threshold_value.setDecimals(2)
-        self.bright_threshold_value.setRange(0.0, 1.0)
-        self.bright_threshold_value.setSingleStep(0.01)
-        self.bright_threshold_value.setValue(0.5)
-        bright_threshold_layout.addWidget(bright_threshold_label)
-        bright_threshold_layout.addWidget(self.bright_threshold_slider)
-        bright_threshold_layout.addWidget(self.bright_threshold_value)
-        self.bright_threshold_container.setLayout(bright_threshold_layout)
-        sliders_layout.addWidget(self.bright_threshold_container)
+        # --- Method-specific parameter rows (shown/hidden with the method) ---
+        self.bright_threshold_container = self._make_slider_row(
+            "bright_threshold", "Brightness Threshold:", 0, 100, 50,
+            0.0, 1.0, 0.5, 2, 0.01, 10,
+            "Brightness threshold in [0, 1]. Pixels with total intensity below this value are set to zero.")
+        controls_layout.addWidget(self.bright_threshold_container)
 
-        # --- half_length control (luminance_thin_lines_enhancement) ---
-        self.half_length_container = QWidget()
-        half_length_layout = QHBoxLayout()
-        half_length_layout.setContentsMargins(0, 0, 0, 0)
-        half_length_label = QLabel("Half Length (px):")
-        self.half_length_slider = QSlider(Qt.Orientation.Horizontal)
-        self.half_length_slider.setRange(1, 10)
-        self.half_length_slider.setValue(2)
-        self.half_length_slider.setMinimumWidth(200)
-        self.half_length_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
-        self.half_length_slider.setTickInterval(1)
-        self.half_length_slider.setToolTip(
-            "Half-length of the line structuring element (a value of 2 yields a 5-pixel line)."
-        )
-        self.half_length_value = QDoubleSpinBox()
-        self.half_length_value.setDecimals(0)
-        self.half_length_value.setRange(1, 10)
-        self.half_length_value.setSingleStep(1.0)
-        self.half_length_value.setValue(2)
-        half_length_layout.addWidget(half_length_label)
-        half_length_layout.addWidget(self.half_length_slider)
-        half_length_layout.addWidget(self.half_length_value)
-        self.half_length_container.setLayout(half_length_layout)
-        sliders_layout.addWidget(self.half_length_container)
+        self.half_length_container = self._make_slider_row(
+            "half_length", "Half Length (px):", 1, 10, 2,
+            1, 10, 2, 0, 1.0, 1,
+            "Half-length of the line structuring element (a value of 2 yields a 5-pixel line).")
+        controls_layout.addWidget(self.half_length_container)
 
         # ===== Step 3: Post-processing (Binarization) =====
-        sliders_layout.addWidget(self._make_divider("3. Post-processing: Binarization"))
+        controls_layout.addWidget(self._make_divider("3. Post-processing: Binarization"))
 
         # Threshold & Dilation controls
-        threshold_dilation_layout = QHBoxLayout()
+        post_processing_layout = QHBoxLayout()
+        post_processing_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
+        # Min Threshold
+        min_thresh_layout = QHBoxLayout()
+        min_thresh_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
         min_thresh_label = QLabel("Min. Threshold:")
         self.min_threshold_spinbox = QDoubleSpinBox()
+        self.min_threshold_spinbox.setMinimumWidth(90)
         self.min_threshold_spinbox.setRange(0.0, 1.0)
         self.min_threshold_spinbox.setSingleStep(0.01)
         self.min_threshold_spinbox.setValue(0.2)
+        self.min_threshold_spinbox.setDecimals(2)
+        self.min_threshold_spinbox.setMinimumWidth(60)
+        self.min_threshold_spinbox.setMaximumWidth(90)
         self.min_threshold_spinbox.setToolTip(
             "Minimum intensity value for the mask. Pixels with values below this are excluded from the binary mask."
         )
+        min_thresh_layout.addWidget(min_thresh_label)
+        min_thresh_layout.addWidget(self.min_threshold_spinbox)
 
+        # Max Threshold
+        max_thresh_layout = QHBoxLayout()
+        max_thresh_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
         max_thresh_label = QLabel("Max. Threshold:")
         self.max_threshold_spinbox = QDoubleSpinBox()
+        self.max_threshold_spinbox.setMinimumWidth(90)
         self.max_threshold_spinbox.setRange(0.0, 1.0)
         self.max_threshold_spinbox.setSingleStep(0.01)
         self.max_threshold_spinbox.setValue(1.0)
+        self.max_threshold_spinbox.setDecimals(2)
+        self.max_threshold_spinbox.setMinimumWidth(60)
+        self.max_threshold_spinbox.setMaximumWidth(90)
         self.max_threshold_spinbox.setToolTip(
             "Maximum intensity value for the mask. Pixels with values above this are excluded from the binary mask."
         )
+        max_thresh_layout.addWidget(max_thresh_label)
+        max_thresh_layout.addWidget(self.max_threshold_spinbox)
 
         # Invert mask control
-        self.invert_checkbox = QCheckBox("Invert mask")
+        self.invert_checkbox = QCheckBox("Invert Mask")
         self.invert_checkbox.setToolTip(
             "Invert the binary mask (True/False)."
         )
 
         # Dilation control
+        dilation_layout = QHBoxLayout()
+        dilation_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
         dilation_label = QLabel("Dilation (px):")
         self.dilation_spinbox = QDoubleSpinBox()
-        self.dilation_spinbox.setDecimals(0)
         self.dilation_spinbox.setRange(0, 5)
         self.dilation_spinbox.setValue(0)
+        self.dilation_spinbox.setDecimals(0)
         self.dilation_spinbox.setMinimumWidth(40)
+        self.dilation_spinbox.setMaximumWidth(60)
         # Show a helpful tooltip when the user hovers over the export button
         self.dilation_spinbox.setToolTip(
             "Binary dilation applied to the mask image."
         )
+        dilation_layout.addWidget(dilation_label)
+        dilation_layout.addWidget(self.dilation_spinbox)
 
-        # Minimum connected-component size control
-        min_size_label = QLabel("Min. object area (px):")
-        self.min_size_slider = QSlider(Qt.Orientation.Horizontal)
-        self.min_size_slider.setRange(0, 25)
-        self.min_size_slider.setValue(0)
-        self.min_size_slider.setMinimumWidth(200)
-        self.min_size_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
-        self.min_size_slider.setTickInterval(5)
-        self.min_size_slider.setToolTip(
+        post_processing_layout.addLayout(min_thresh_layout)
+        post_processing_layout.addLayout(max_thresh_layout)
+        post_processing_layout.addWidget(self._make_flow_sep())
+        post_processing_layout.addWidget(self.invert_checkbox)
+        post_processing_layout.addWidget(self._make_flow_sep())
+        post_processing_layout.addWidget(self._make_slider_row(
+            "min_size", "Min. Object Area (px):", 0, 25, 0,
+            0, 25, 0, 0, 1.0, 5,
             "Minimum object area in pixels. Connected regions smaller than this are removed as noise "
-            "(e.g. dust, debris or specks). Set to 0 to keep every region."
-        )
-        self.min_size_value = QDoubleSpinBox()
-        self.min_size_value.setDecimals(0)
-        self.min_size_value.setRange(0, 25)
-        self.min_size_value.setSingleStep(1.0)
-        self.min_size_value.setValue(0)
-        self.min_size_value.setMinimumWidth(40)
+            "(e.g. dust, debris or specks). Set to 0 to keep every region.", spinbox_width=40))
+        post_processing_layout.addWidget(self._make_flow_sep())
+        post_processing_layout.addLayout(dilation_layout)
 
-        threshold_dilation_layout.addWidget(min_thresh_label)
-        threshold_dilation_layout.addWidget(self.min_threshold_spinbox)
-        threshold_dilation_layout.addWidget(max_thresh_label)
-        threshold_dilation_layout.addWidget(self.max_threshold_spinbox)
-        threshold_dilation_layout.addWidget(self._make_flow_sep())
-        threshold_dilation_layout.addWidget(self.invert_checkbox)
-        threshold_dilation_layout.addWidget(self._make_flow_sep())
-        threshold_dilation_layout.addWidget(min_size_label)
-        threshold_dilation_layout.addWidget(self.min_size_slider)
-        threshold_dilation_layout.addWidget(self.min_size_value)
-        threshold_dilation_layout.addWidget(self._make_flow_sep())
-        threshold_dilation_layout.addWidget(dilation_label)
-        threshold_dilation_layout.addWidget(self.dilation_spinbox)
-
-        sliders_layout.addLayout(threshold_dilation_layout)
+        controls_layout.addLayout(post_processing_layout)
 
         # Export Parameters button
         self.export_button = QPushButton("Export Parameters")
@@ -584,10 +568,7 @@ class PlantMaskingApp(QMainWindow):
         self.export_button.setToolTip(
             "Export the current parameters to a local configuration for the selected scan."
         )
-        sliders_layout.addWidget(self.export_button, alignment=Qt.AlignmentFlag.AlignHCenter)
-
-        # Add sliders to controls
-        controls_layout.addLayout(sliders_layout)
+        controls_layout.addWidget(self.export_button, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         # Ensure the controls panel stays compact
         controls_container = QWidget()
@@ -599,9 +580,7 @@ class PlantMaskingApp(QMainWindow):
         main_layout.addWidget(controls_container)
 
         # Add horizontal divider between controls and image display
-        divider = QFrame()
-        divider.setFrameShape(QFrame.HLine)
-        divider.setFrameShadow(QFrame.Sunken)
+        divider = self._make_divider("")
         main_layout.addWidget(divider)
 
         # --------------------------------------------------------------
@@ -649,10 +628,52 @@ class PlantMaskingApp(QMainWindow):
         self.half_length_value.valueChanged.connect(self._on_half_length_spinbox_changed)
         self.min_size_slider.valueChanged.connect(self._on_min_size_slider_changed)
         self.min_size_value.valueChanged.connect(self._on_min_size_spinbox_changed)
-        self.sigma_spinbox.valueChanged.connect(self._process_image_timer.start)
 
         # Set initial method-specific control visibility (defaults to 'linear')
         self._on_method_changed(self.method_combo.currentText())
+
+    def _make_slider_row(self, prefix, label_text, slider_min, slider_max, slider_value,
+                         spin_min, spin_max, spin_value, decimals, step,
+                         tick_interval, tooltip, spinbox_width=None) -> QWidget:
+        """Build a label + slider + value-spinbox row, storing the widgets.
+
+        The row is a fixed-height ``QWidget`` whose children are stored as
+        ``self.{prefix}_label``, ``self.{prefix}_slider`` and ``self.{prefix}_value``.
+        """
+        layout = QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        label = QLabel(label_text)
+        label.setMinimumWidth(100)
+        label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        layout.addWidget(label)
+
+        slider = TickSlider(Qt.Orientation.Horizontal)
+        slider.setRange(slider_min, slider_max)
+        slider.setValue(slider_value)
+        slider.setMinimumWidth(200)
+        slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        slider.setTickInterval(tick_interval)
+        slider.setToolTip(tooltip)
+        layout.addWidget(slider)
+
+        spinbox = QDoubleSpinBox()
+        spinbox.setDecimals(decimals)
+        spinbox.setRange(spin_min, spin_max)
+        spinbox.setSingleStep(step)
+        spinbox.setValue(spin_value)
+        if spinbox_width:
+            spinbox.setMinimumWidth(spinbox_width)
+        layout.addWidget(spinbox)
+
+        setattr(self, f"{prefix}_label", label)
+        setattr(self, f"{prefix}_slider", slider)
+        setattr(self, f"{prefix}_value", spinbox)
+
+        widget = QWidget()
+        widget.setLayout(layout)
+        widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        return widget
 
     def _make_divider(self, text: str) -> QWidget:
         """Return a horizontal divider with centered text to label a processing step."""
@@ -663,16 +684,21 @@ class PlantMaskingApp(QMainWindow):
         label.setStyleSheet("font-weight: bold;")
         line = QFrame()
         line.setFrameShape(QFrame.Shape.HLine)
-        line.setFrameShadow(QFrame.Shadow.Sunken)
+        #line.setFrameShadow(QFrame.Shadow.Sunken)
+        if self._dark_mode:
+            line.setStyleSheet("color: #CCCCCC;")
         layout.addWidget(label)
         layout.addWidget(line, 1)
         return widget
 
-    def _make_flow_sep(self) -> QLabel:
-        """Return a flow separator label to indicate the flow between post-processing widgets."""
-        arrow = QLabel("→")
-        arrow.setStyleSheet("color: gray;")
-        return arrow
+    def _make_flow_sep(self) -> QFrame:
+        """Return a vertical line separator between post-processing widgets."""
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.VLine)
+        #sep.setFrameShadow(QFrame.Shadow.Sunken)
+        if self._dark_mode:
+            sep.setStyleSheet("color: #CCCCCC;")
+        return sep
 
     def _filter_scans(self, text):
         """Filter the scan dropdown based on search box text."""
@@ -1169,34 +1195,39 @@ class PlantMaskingApp(QMainWindow):
             filter_desc = f"luminance_thin_lines_enhancement (half_length={half_length})"
 
         # Apply binarization
-        self.mask = binary_mask_from_grayscale(
-            self.filtered_img,
-            min_threshold=min_threshold,
-            max_threshold=max_threshold,
-            min_size=min_size,
-            dilation=dilation,
-            invert=self.invert_checkbox.isChecked(),
-        )
+        self.mask = binary_mask_from_grayscale(self.filtered_img, min_threshold=min_threshold,
+                                               max_threshold=max_threshold, min_size=min_size, dilation_radius=dilation,
+                                               invert=self.invert_checkbox.isChecked())
         # Convert back to uint8 type (as done in ``Masks.f``)
         self.mask = img_as_ubyte(self.mask)
 
         # Display results
         self.figure.clear()
 
+        DARK_BG = '#2a2a2a'
+        if self._dark_mode:
+            self.figure.patch.set_facecolor(DARK_BG)
+
         # Original image
         ax1 = self.figure.add_subplot(131)
+        if self._dark_mode:
+            self._style_ax_dark(ax1)
         ax1.imshow(self.original_img)
         ax1.set_title("Original")
         ax1.axis('off')
 
         # Filtered image
         ax2 = self.figure.add_subplot(132)
+        if self._dark_mode:
+            self._style_ax_dark(ax2)
         ax2.imshow(self.filtered_img, cmap='gray')
         ax2.set_title(f"Grayscale Transformation\n{filter_desc}")
         ax2.axis('off')
 
         # Mask
         ax3 = self.figure.add_subplot(133)
+        if self._dark_mode:
+            self._style_ax_dark(ax3)
         ax3.imshow(self.mask, cmap='binary')
         decimals = self.min_threshold_spinbox.decimals()
         title = f"Binarization ({min_threshold:.{decimals}f} <= v <= {max_threshold:.{decimals}f})"
@@ -1210,6 +1241,8 @@ class PlantMaskingApp(QMainWindow):
         ax3.axis('off')
 
         self.figure.suptitle(f"{self.current_scan.id} - {self.images_list[self.image_slider.value()].id}")
+        if self._dark_mode:
+            self.figure._suptitle.set_color('white')
         self.figure.tight_layout()
 
         # Restore saved axis limits (pan/zoom state)
@@ -1222,6 +1255,16 @@ class PlantMaskingApp(QMainWindow):
 
         # Synchronize axes limits for pan/zoom (only sets up callbacks)
         self._sync_axes_limits()
+
+    @staticmethod
+    def _style_ax_dark(ax):
+        """Apply dark-mode styling to a single axes."""
+        DARK_BG = '#2a2a2a'
+        ax.set_facecolor(DARK_BG)
+        ax.tick_params(colors='white')
+        ax.xaxis.label.set_color('white')
+        ax.yaxis.label.set_color('white')
+        ax.title.set_color('white')
 
     def _sync_axes_limits(self):
         """Synchronize the pan and zoom limits across all three axes."""

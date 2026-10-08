@@ -21,7 +21,7 @@ dependencies = [
     "opencv-contrib-python",
     # "pybind11",
     "pyopencl",
-    "scikit-image",
+    "scikit-image>= 0.26",
     "scikit-learn",
     "tomlkit",
     "joblib",
@@ -33,7 +33,7 @@ dependencies = [
 ]
 description = "3D reconstruction & quantification of single potted plants from RGB scans."
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.11"
 license = "LGPL-3.0-or-later"
 authors = [
     { name = "Peter Hanappe", email = "peter.hanappe@sony.com" },
