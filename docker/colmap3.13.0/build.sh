@@ -183,17 +183,16 @@ setup_cuda_version() {
     log_info "Using provided NVIDIA CUDA Version: ${NVIDIA_CUDA_VERSION}"
   fi
 
-  # Properly format version to ensure major.minor.patch format
-  # Count the number of dots in the version string
-  dot_count=$(echo "${NVIDIA_CUDA_VERSION}" | tr -cd '.' | wc -c)
-
-  if [ "$dot_count" -eq 0 ]; then
-    # Only major version (e.g., "11")
-    NVIDIA_CUDA_VERSION="${NVIDIA_CUDA_VERSION}.0.0"
-  elif [ "$dot_count" -eq 1 ]; then
-    # Only major.minor (e.g., "11.8")
-    NVIDIA_CUDA_VERSION="${NVIDIA_CUDA_VERSION}.0"
+  # Normalize to major.minor.patch, tolerating a 'CUDA' prefix, whitespace and
+  # trailing text, and pad missing minor/patch with 0 (e.g. '12.9' -> '12.9.0').
+  NVIDIA_CUDA_VERSION=$(echo "${NVIDIA_CUDA_VERSION}" | grep -oE '[0-9]+(\.[0-9]+){0,2}' | head -n1)
+  if [ -z "${NVIDIA_CUDA_VERSION}" ]; then
+    log_error "Could not parse a CUDA version from the provided value!"
+    exit 1
   fi
+
+  IFS='.' read -r major minor patch <<< "${NVIDIA_CUDA_VERSION}"
+  NVIDIA_CUDA_VERSION="${major}.${minor:-0}.${patch:-0}"
 
   log_info "Final NVIDIA CUDA Version: ${NVIDIA_CUDA_VERSION}"
 }
