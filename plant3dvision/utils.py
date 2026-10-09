@@ -7,10 +7,12 @@ A collection of utility functions for data manipulation, geometric calculations,
 visualization, and file operations. This module provides reusable components to
 simplify common tasks in data analysis and scientific computing projects.
 """
-import docker
-from tqdm import tqdm
+import os
+from pathlib import Path
 
+import docker
 import numpy as np
+from tqdm import tqdm
 
 
 def flatten(l):
@@ -437,6 +439,14 @@ def signed_angular_distance(angle1, angle2):
 
     return signed_diff
 
+
+def _docker_client():
+    """Return a Docker client, preferring the rootless socket when present."""
+    rootless = Path(f"/run/user/{os.getuid()}/docker.sock")
+    base_url = str(rootless) if rootless.exists() else None  # None => env/DOCKER_HOST/default socket
+    return docker.APIClient(base_url=base_url)
+
+
 def docker_pull(image_name, tag="latest"):
     """Pull a Docker image from a registry while displaying per‑layer download progress.
 
@@ -478,7 +488,7 @@ def docker_pull(image_name, tag="latest"):
     >>> from plant3dvision.utils import docker_pull
     >>> docker_pull("python", "3.12-slim")
     """
-    client = docker.APIClient()
+    client = _docker_client()
 
     # Track progress bars for each layer
     bars = {}
