@@ -13,6 +13,9 @@ from pathlib import Path
 import docker
 import numpy as np
 from tqdm import tqdm
+from romitask.log import get_logger
+
+logger = get_logger(__name__)
 
 
 def flatten(l):
@@ -494,6 +497,15 @@ def docker_pull(image_name, tag="latest"):
     >>> docker_pull("python", "3.12-slim")
     """
     client = _docker_client()
+
+    # Skip pulling if the exact image and tag already exist locally, so a
+    # locally-built image is not overwritten by (possibly stale) registry one.
+    try:
+        if client.inspect_image(f"{image_name}:{tag}") is not None:
+            logger.info(f"Skipping pull of '{image_name}:{tag}': image already present locally.")
+            return
+    except docker.errors.NotFound:
+        pass
 
     # Track progress bars for each layer
     bars = {}
