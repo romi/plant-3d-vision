@@ -30,7 +30,8 @@ jobs:
       - name: Build Dockerfile
         if: steps.pull_colmap_image.outcome != 'success'   # skip when image was pulled
         run: |
-          ./docker/colmap${COLMAP}/build.sh -t ${COLMAP} --plain
+          ./docker/colmap${COLMAP}/build.sh -t ${COLMAP} --cuda-version 12.9 --plain
+        # self-hosted runner has "sm_61" compute capability, which is last supported by CUDA 12.9
       - name: Log in to Docker Hub
         if: steps.pull_colmap_image.outcome != 'success'   # log in to push only after a fresh build
         uses: docker/login-action@v3
