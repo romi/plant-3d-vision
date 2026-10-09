@@ -41,8 +41,10 @@ initialize_variables() {
   UBUNTU_VERSION="24.04"
   # Default CUDA Compute Capability is empty (to enable automatic detection):
   CUDA_CC=""
-  # Default NVIDIA CUDA Version is empty (to enable automatic detection):
-  NVIDIA_CUDA_VERSION=""
+  # CUDA toolkit to build COLMAP with. Fixed to the version COLMAP 3.13.0 is
+  # tested against (see the official docker recipe); do NOT vary it with the
+  # host driver, as newer untested toolkits (e.g. 13.0) produce broken binaries.
+  COLMAP_CUDA_VERSION="12.9.1"
 }
 
 # --------------------------------
@@ -77,9 +79,6 @@ show_usage() {
   echo "  --cuda-cc
     The CUDA Compute Capability value to use to build Colmap." \
     "By default, try to guess it from the system."
-  echo "  --cuda-version
-    The CUDA version to use to build Colmap." \
-    "By default, try to guess it from the system."
   echo "  --ubuntu-version
     The Ubuntu version to use to build Colmap." \
     "By default, use '${UBUNTU_VERSION}'."
@@ -108,10 +107,6 @@ parse_arguments() {
     --cuda-cc)
       shift
       CUDA_CC=$1
-      ;;
-    --cuda-version)
-      shift
-      NVIDIA_CUDA_VERSION=$1
       ;;
     --ubuntu-version)
       shift
@@ -160,46 +155,28 @@ setup_cuda_compute_capability() {
   fi
 }
 
-setup_cuda_version() {
-  # If NVIDIA_CUDA_VERSION is not set, attempt to derive it:
-  if [ -z "${NVIDIA_CUDA_VERSION}" ]; then
-    # Check if nvidia-smi exists
-    if ! command -v nvidia-smi &> /dev/null; then
-      log_error "nvidia-smi command not found. Please install NVIDIA drivers."
-      NVIDIA_CUDA_VERSION="12.9.1" # Default fallback version
-      log_warning "Assuming default CUDA version: ${NVIDIA_CUDA_VERSION}."
-    else
-      # Extract CUDA version from nvidia-smi output
-      NVIDIA_CUDA_VERSION=$(nvidia-smi -q 2>/dev/null | grep 'CUDA Version' | awk '{print $4}')
-      if [ -z "${NVIDIA_CUDA_VERSION}" ]; then
-        log_error "Failed to determine host NVIDIA CUDA Version using nvidia-smi!"
-        NVIDIA_CUDA_VERSION="12.9.1" # Default fallback version
-        log_warning "Assuming default host CUDA version: ${NVIDIA_CUDA_VERSION}."
-      else
-        log_info "Found host NVIDIA CUDA Version: ${NVIDIA_CUDA_VERSION}"
-      fi
-    fi
-  else
-    log_info "Using provided NVIDIA CUDA Version: ${NVIDIA_CUDA_VERSION}"
+# Warn if the host driver is too old to run the fixed toolkit (the image is
+# built with ${COLMAP_CUDA_VERSION}, so the driver must support at least that).
+check_host_cuda_driver() {
+  if ! command -v nvidia-smi &> /dev/null; then
+    log_warning "nvidia-smi not found: cannot verify the host driver supports CUDA ${COLMAP_CUDA_VERSION}. The image will run only on a host with such a driver."
+    return
   fi
-
-  # Normalize to major.minor.patch, tolerating a 'CUDA' prefix, whitespace and
-  # trailing text, and pad missing minor/patch with 0 (e.g. '12.9' -> '12.9.0').
-  NVIDIA_CUDA_VERSION=$(echo "${NVIDIA_CUDA_VERSION}" | grep -oE '[0-9]+(\.[0-9]+){0,2}' | head -n1)
-  if [ -z "${NVIDIA_CUDA_VERSION}" ]; then
-    log_error "Could not parse a CUDA version from the provided value!"
-    exit 1
+  local host_cuda
+  host_cuda=$(nvidia-smi -q 2>/dev/null | grep 'CUDA Version' | awk '{print $4}' | grep -oE '[0-9]+(\.[0-9]+){0,2}' | head -n1)
+  if [ -z "${host_cuda}" ]; then
+    log_warning "Could not determine host CUDA version from nvidia-smi."
+    return
   fi
-
-  IFS='.' read -r major minor patch <<< "${NVIDIA_CUDA_VERSION}"
-  NVIDIA_CUDA_VERSION="${major}.${minor:-0}.${patch:-0}"
-
-  log_info "Final NVIDIA CUDA Version: ${NVIDIA_CUDA_VERSION}"
+  log_info "Found host NVIDIA CUDA Version: ${host_cuda}"
+  if [ "$(echo -e "${host_cuda}\n${COLMAP_CUDA_VERSION}" | sort -V | head -n1)" != "${COLMAP_CUDA_VERSION}" ]; then
+    log_warning "Host driver CUDA ${host_cuda} is lower than the build toolkit ${COLMAP_CUDA_VERSION}; the image will NOT run on this host."
+  fi
 }
 
 check_and_fix_base_image() {
   local ubuntu_version="${UBUNTU_VERSION}"
-  local cuda_version="${NVIDIA_CUDA_VERSION}"
+  local cuda_version="${COLMAP_CUDA_VERSION}"
   local base_image="nvidia/cuda:${cuda_version}-devel-ubuntu${ubuntu_version}"
 
   log_info "Checking if base image ${base_image} exists..."
@@ -223,7 +200,7 @@ build_docker_image() {
   # Construct the docker build command
   docker_cmd="docker buildx build"
   docker_cmd+=" --load"
-  docker_cmd+=" --build-arg NVIDIA_CUDA_VERSION=\"${NVIDIA_CUDA_VERSION}\""
+  docker_cmd+=" --build-arg NVIDIA_CUDA_VERSION=\"${COLMAP_CUDA_VERSION}\""
   docker_cmd+=" --build-arg CUDA_ARCHITECTURES=\"${CUDA_CC}\""
   docker_cmd+=" --build-arg UBUNTU_VERSION=\"${UBUNTU_VERSION}\""
   docker_cmd+=" -t \"roboticsmicrofarms/colmap:${VTAG}-cuda_cc${CUDA_CC}\""
@@ -266,7 +243,7 @@ main() {
   initialize_variables
   parse_arguments "$@"
   setup_cuda_compute_capability
-  setup_cuda_version
+  check_host_cuda_driver
   check_and_fix_base_image
   build_docker_image
 }
