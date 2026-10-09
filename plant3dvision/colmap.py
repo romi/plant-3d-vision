@@ -31,7 +31,7 @@ import requests
 from packaging import version
 from plant3dvision import proc3d
 from plant3dvision.thirdparty import read_model
-from plant3dvision.utils import docker_pull
+from plant3dvision.utils import docker_pull, _is_rootless
 from plantdb.commons.fsdb.core import File
 from plantdb.commons import io
 from romitask.log import get_logger
@@ -1665,6 +1665,10 @@ class ColmapRunner(object):
         workdir_stat = os.stat(self.colmap_workdir)
         workdir_gid = str(workdir_stat.st_gid)
         workdir_uid = str(workdir_stat.st_uid)
+        # In rootless Docker the host user is mapped to container root, so the
+        # workdir (owned by the host user) appears as root inside the container
+        # and running with the host UID would not match that owner. Run as root.
+        user = None if _is_rootless() else workdir_uid
         # Volume to bind mount
         volumes = {
             str(self.colmap_workdir): {
@@ -1684,7 +1688,7 @@ class ColmapRunner(object):
         if _has_nvidia_gpu():
             gpu_device = docker.types.DeviceRequest(count=-1, capabilities=[['gpu']])
             container = client.containers.run(self.colmap_exe, cmd,
-                                              user=workdir_uid,
+                                              user=user,
                                               # group_add=["colmap_users"],
                                               environment=varenv, volumes=volumes,
                                               stdout=True, stderr=True,
@@ -1692,7 +1696,7 @@ class ColmapRunner(object):
                                               device_requests=[gpu_device], working_dir=str(self.colmap_workdir))
         else:
             container = client.containers.run(self.colmap_exe, cmd,
-                                              user=workdir_uid,
+                                              user=user,
                                               # group_add=["colmap_users"],
                                               environment=varenv, volumes=volumes,
                                               stdout=True, stderr=True,

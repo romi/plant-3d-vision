@@ -440,6 +440,11 @@ def signed_angular_distance(angle1, angle2):
     return signed_diff
 
 
+def _is_rootless():
+    """Return True if Docker runs in rootless mode (rootless socket present)."""
+    return Path(f"/run/user/{os.getuid()}/docker.sock").exists()
+
+
 def _docker_client():
     """Return a Docker client, preferring the rootless socket when present."""
     rootless = Path(f"/run/user/{os.getuid()}/docker.sock")
