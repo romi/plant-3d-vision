@@ -478,7 +478,7 @@ def docker_pull(image_name, tag="latest"):
     >>> from plant3dvision.utils import docker_pull
     >>> docker_pull("python", "3.12-slim")
     """
-    client = docker.APIClient(base_url='unix://var/run/docker.sock')
+    client = docker.APIClient()
 
     # Track progress bars for each layer
     bars = {}
