@@ -443,7 +443,7 @@ def signed_angular_distance(angle1, angle2):
 def _docker_client():
     """Return a Docker client, preferring the rootless socket when present."""
     rootless = Path(f"/run/user/{os.getuid()}/docker.sock")
-    base_url = str(rootless) if rootless.exists() else None  # None => env/DOCKER_HOST/default socket
+    base_url = "unix://" + str(rootless) if rootless.exists() else None  # None => env/DOCKER_HOST/default socket
     return docker.APIClient(base_url=base_url)
 
 
