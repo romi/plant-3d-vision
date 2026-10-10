@@ -1809,12 +1809,13 @@ class ColmapRunner(object):
 
         args = ['--database_path', f'{self.colmap_workdir}/database.db']
 
-        # - Check if GPU is available:
-        if _has_nvidia_gpu():
-            use_gpu_opt = {"--FeatureMatching.use_gpu": '1'}
-        else:
-            use_gpu_opt = {"--FeatureMatching.use_gpu": '0'}
-        cli_args.update(**use_gpu_opt)
+        # - Check if GPU is available, as a default unless the user explicitly set it:
+        if '--FeatureMatching.use_gpu' not in cli_args:
+            if _has_nvidia_gpu():
+                use_gpu_opt = {"--FeatureMatching.use_gpu": '1'}
+            else:
+                use_gpu_opt = {"--FeatureMatching.use_gpu": '0'}
+            cli_args.update(**use_gpu_opt)
 
         if matcher_method == 'sequential':
             cli_args["--SequentialMatching.loop_detection"] = "1"
