@@ -116,7 +116,8 @@ build_docker_image() {
   fi
 
   # Construct the docker build command
-  docker_cmd="docker build"
+  docker_cmd="docker buildx build"
+  docker_cmd+=" --load"
   docker_cmd+=" --build-arg COLMAP_VERSION=\"${COLMAP_VERSION}\""
   docker_cmd+=" --build-arg CUDA_CC=\"${CUDA_CC}\""
   docker_cmd+=" --build-arg PYCUDA_NVCC_FLAGS=\"${PYCUDA_NVCC_FLAGS}\""

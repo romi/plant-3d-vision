@@ -2,6 +2,9 @@
 
 name: CI
 
+env:
+  COLMAP: 3.13.0
+
 on: pull_request
 
 jobs:
@@ -12,15 +15,14 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: true
-      # Define the `env.TAG` to use with './docker/colmap_tag.sh', then try to pull it
       - name: Pull existing Colmap image (if any)
         id: pull_colmap_image
         run: |
-          TAG=$(./docker/colmap_tag.sh 3.8 | tail -n 1)
-          echo "Using colmap image tag: ${TAG}"
-          echo "TAG=${TAG}" >> "$GITHUB_ENV"
-          echo "Using colmap image: roboticsmicrofarms/colmap:${TAG}"
-          docker pull roboticsmicrofarms/colmap:${TAG}
+          COLMAP_TAG=$(./docker/colmap_tag.sh ${COLMAP} | tail -n 1)
+          echo "COLMAP_TAG=${COLMAP_TAG}" >> "$GITHUB_ENV"
+          echo "Using colmap image tag: ${COLMAP_TAG}"
+          echo "Using colmap image: roboticsmicrofarms/colmap:${COLMAP_TAG}"
+          docker pull roboticsmicrofarms/colmap:${COLMAP_TAG}
         continue-on-error: true   # do not fail the job if image is missing
       - name: Set up Docker Buildx
         if: steps.pull_colmap_image.outcome != 'success'   # skip when image was pulled
@@ -28,7 +30,8 @@ jobs:
       - name: Build Dockerfile
         if: steps.pull_colmap_image.outcome != 'success'   # skip when image was pulled
         run: |
-          ./docker/colmap3.8/build.sh --plain --load
+          ./docker/colmap${COLMAP}/build.sh -t ${COLMAP} --plain
+        # self-hosted runner has "sm_61" compute capability, which is last supported by CUDA 12.9
       - name: Log in to Docker Hub
         if: steps.pull_colmap_image.outcome != 'success'   # log in to push only after a fresh build
         uses: docker/login-action@v3
@@ -38,7 +41,7 @@ jobs:
       - name: Push Colmap image
         if: steps.pull_colmap_image.outcome != 'success'   # push only after a fresh build
         run: |
-          docker push roboticsmicrofarms/colmap:${TAG}
+          docker push roboticsmicrofarms/colmap:${COLMAP_TAG}
 
   p3dv-devel-docker-build:
     runs-on: self-hosted
@@ -47,23 +50,22 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: true
-      # Define the `TAG` to use with './docker/colmap_tag.sh', then try to pull it
       - name: Pull existing Colmap image (if any)
         run: |
-          TAG=$(./docker/colmap_tag.sh 3.8 | tail -n 1)
-          echo "Using colmap image tag: ${TAG}"
-          echo "TAG=${TAG}" >> "$GITHUB_ENV"
-          echo "Using colmap image: roboticsmicrofarms/colmap:${TAG}"
-          docker pull roboticsmicrofarms/colmap:${TAG}
+          COLMAP_TAG=$(./docker/colmap_tag.sh ${COLMAP} | tail -n 1)
+          echo "COLMAP_TAG=${COLMAP_TAG}" >> "$GITHUB_ENV"
+          echo "Using colmap image tag: ${COLMAP_TAG}"
+          echo "Using colmap image: roboticsmicrofarms/colmap:${COLMAP_TAG}"
+          docker pull roboticsmicrofarms/colmap:${COLMAP_TAG}
         continue-on-error: false   # fail the job if image is missing
       - name: Pull existing p3dv-devel image (if any)
         id: pull_p3dv_image
         run: |
-          TAG=colmap$(./docker/colmap_tag.sh 3.8 | tail -n 1)
-          echo "Using p3dv-devel image tag: ${TAG}"
-          echo "TAG=${TAG}" >> "$GITHUB_ENV"
-          echo "Using p3dv-devel image: roboticsmicrofarms/p3dv-devel:${TAG}"
-          docker pull roboticsmicrofarms/p3dv-devel:${TAG}
+          P3DV_TAG=colmap${COLMAP_TAG}
+          echo "P3DV_TAG=${P3DV_TAG}" >> "$GITHUB_ENV"
+          echo "Using p3dv-devel image tag: ${P3DV_TAG}"
+          echo "Using p3dv-devel image: roboticsmicrofarms/p3dv-devel:${P3DV_TAG}"
+          docker pull roboticsmicrofarms/p3dv-devel:${P3DV_TAG}
         continue-on-error: true   # do not fail the job if image is missing
       - name: Set up Docker Buildx
         if: steps.pull_p3dv_image.outcome != 'success'   # skip when image was pulled
@@ -71,7 +73,7 @@ jobs:
       - name: Build Dockerfile
         if: steps.pull_p3dv_image.outcome != 'success'   # skip when image was pulled
         run: |
-          ./docker/p3dv-devel/build.sh --plain --load
+          ./docker/p3dv-devel/build.sh -t ${P3DV_TAG} --colmap ${COLMAP} --plain
       - name: Log in to Docker Hub
         if: steps.pull_p3dv_image.outcome != 'success'   # log in to push only after a fresh build
         uses: docker/login-action@v3
@@ -81,7 +83,7 @@ jobs:
       - name: Push p3dv-devel image
         if: steps.pull_p3dv_image.outcome != 'success'   # push only after a fresh build
         run: |
-          docker push roboticsmicrofarms/p3dv-devel:${TAG}
+          docker push roboticsmicrofarms/p3dv-devel:${P3DV_TAG}
 
   unit-tests:
     runs-on: self-hosted
@@ -92,15 +94,16 @@ jobs:
           submodules: true
       - name: Pull existing p3dv-devel image
         run: |
-          TAG=colmap$(./docker/colmap_tag.sh 3.8 | tail -n 1)
-          echo "Using p3dv-devel image tag: ${TAG}"
-          echo "TAG=${TAG}" >> "$GITHUB_ENV"
-          echo "Using colmap image: roboticsmicrofarms/p3dv-devel:${TAG}"
-          docker pull roboticsmicrofarms/p3dv-devel:${TAG}
+          COLMAP_TAG=$(./docker/colmap_tag.sh ${COLMAP} | tail -n 1)
+          P3DV_TAG=colmap${COLMAP_TAG}
+          echo "P3DV_TAG=${P3DV_TAG}" >> "$GITHUB_ENV"
+          echo "Using p3dv-devel image tag: ${P3DV_TAG}"
+          echo "Using colmap image: roboticsmicrofarms/p3dv-devel:${P3DV_TAG}"
+          docker pull roboticsmicrofarms/p3dv-devel:${P3DV_TAG}
         continue-on-error: false   # fail the job if image is missing
       - name: Run Unit Tests
         run: |
-          ./docker/p3dv-devel/run.sh -t ${TAG} --unittest
+          ./docker/p3dv-devel/run.sh -t ${P3DV_TAG} --unittest
 
   integration-tests:
     runs-on: self-hosted
@@ -111,12 +114,13 @@ jobs:
           submodules: true
       - name: Pull existing p3dv-devel image
         run: |
-          TAG=colmap$(./docker/colmap_tag.sh 3.8 | tail -n 1)
-          echo "Using p3dv-devel image tag: ${TAG}"
-          echo "TAG=${TAG}" >> "$GITHUB_ENV"
-          echo "Using colmap image: roboticsmicrofarms/p3dv-devel:${TAG}"
-          docker pull roboticsmicrofarms/p3dv-devel:${TAG}
+          COLMAP_TAG=$(./docker/colmap_tag.sh ${COLMAP} | tail -n 1)
+          P3DV_TAG=colmap${COLMAP_TAG}
+          echo "P3DV_TAG=${P3DV_TAG}" >> "$GITHUB_ENV"
+          echo "Using p3dv-devel image tag: ${P3DV_TAG}"
+          echo "Using colmap image: roboticsmicrofarms/p3dv-devel:${P3DV_TAG}"
+          docker pull roboticsmicrofarms/p3dv-devel:${P3DV_TAG}
         continue-on-error: false   # fail the job if image is missing
       - name: Run Integration Tests
         run: |
-          ./docker/p3dv-devel/run.sh -t ${TAG} --test-integration
+          ./docker/p3dv-devel/run.sh -t ${P3DV_TAG} --test-integration

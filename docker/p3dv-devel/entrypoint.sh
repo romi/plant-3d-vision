@@ -28,9 +28,6 @@ if [ -d "$SOURCE_DIR" ] && [ "$(ls -A "$SOURCE_DIR")" ]; then
     # The --no-env flag prevents creating a new venv since we're already in one
     bash install.sh --no-env --update-tools
 
-    # Download the trained CNN model to the test database directory
-    setup_test_database real_plant --with-models --db-path "${INSTALL_DIR}/tests/testdata"
-
     echo "Installation complete!"
 else
     echo "Warning: Source code not found or empty at $SOURCE_DIR"

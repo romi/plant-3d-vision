@@ -20,8 +20,10 @@ The container:
 1. [Prerequisites](#prerequisites)
 2. [Host Setup](#host-setup)
     - [Install rootless Docker](#1-install-rootless-docker)
-    - [Configure NVIDIA runtime](#2-configure-the-nvidia-runtime-for-rootless-docker)
-    - [Make the Docker socket accessible](#3-make-the-docker-socket-accessible)
+    - [Install the NVIDIA driver and CUDA toolkit (host)](#2-install-the-nvidia-driver-and-cuda-toolkit-host)
+    - [Configure NVIDIA runtime](#3-configure-the-nvidia-runtime-for-rootless-docker)
+    - [Make the Docker socket accessible](#4-make-the-docker-socket-accessible)
+    - [Create the work directories](#5-create-the-work-directories)
 3. [Container Overview](#container-overview)
     - [Base image](#base-runner-image)
     - [Entrypoint script](#entrypoint-script)
@@ -92,7 +94,45 @@ docker info | grep -i rootless
 # Expected output: Rootless: true
 ```
 
-### 2. Configure the NVIDIA Runtime for Rootless Docker
+### 2. Install the NVIDIA driver and CUDA toolkit (host)
+
+The host needs a working NVIDIA driver for GPU passthrough, and the CUDA jobs this runner executes (e.g. COLMAP) need a CUDA toolkit. The combination below is the recommended one for **Pascal GPUs on Ubuntu 24.04**: driver **580** + CUDA **12.9**.
+
+```bash
+# Add NVIDIA's CUDA repo (if not already present)
+wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
+sudo dpkg -i cuda-keyring_1.1-1_all.deb
+sudo apt update
+
+# Find the actual key file
+KEYFILE=$(dpkg -L cuda-keyring | grep '\.gpg$')
+echo "deb [signed-by=$KEYFILE] https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/ /" | \
+  sudo tee /etc/apt/sources.list.d/cuda-ubuntu2404-x86_64.list
+
+sudo apt update
+
+# Install the 580 driver + CUDA 12.x toolkit
+sudo apt install nvidia-driver-580 nvidia-utils-580 cuda-toolkit-12-9
+sudo reboot
+```
+
+After the reboot, verify the driver and the toolkit:
+
+```bash
+nvidia-smi
+nvcc --version
+```
+
+> **Rootless‑specific:**
+> Because rootless Docker runs the whole GPU stack under your **user account** (never root), the CUDA toolkit is not on the default `PATH` of your interactive shell. If `nvcc` is not found after the install, add the following to `~/.bashrc` and reload it with `source ~/.bashrc`:
+
+```bash
+# CUDA
+export PATH=/usr/local/cuda/bin:$PATH
+export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+```
+
+### 3. Configure the NVIDIA Runtime for Rootless Docker
 
 ```bash
 # Install the NVIDIA container toolkit (if not already installed)
@@ -113,7 +153,7 @@ docker run --rm --gpus all nvidia/cuda:11.8.0-base-ubuntu22.04 nvidia-smi
 
 You should see the familiar `nvidia-smi` table with your GPU details.
 
-### 3. Make the Docker socket accessible
+### 4. Make the Docker socket accessible
 
 Rootless Docker uses a per‑user socket located at `/run/user/$UID/docker.sock`.  
 The container needs read‑only access to this socket.
@@ -129,7 +169,7 @@ chmod 660 /run/user/$(id -u)/docker.sock
 > Setting the socket to `600` grants read/write access to the owner only (`srw-------`).
 > Setting the socket to `660` grants read/write access to the owner and group (`srw-rw----`).
 
-### 4. Create the work directories
+### 5. Create the work directories
 
 ```shell
 for i in 1 2 3 4; do
@@ -146,6 +186,9 @@ sudo install -d -o 100999 -g 100999 \
   /var/lib/github-runners/runner3/_work \
   /var/lib/github-runners/runner4/_work
 ```
+
+> **Rootless‑specific:**
+> In rootless Docker the host user is mapped to container **root**, and the host UIDs are offset by the sub‑UID range (here `100999 = 1000 + 99999`). The runner containers therefore run as `1000:1000` and `group_add` the mounted socket GID (see `docker-compose.yml`), so the bind‑mounted work directories keep the correct ownership while the runner can still talk to the Docker daemon.
 
 ---
 
@@ -285,7 +328,8 @@ jobs:
 | `Rootless: false` after `docker info`                                           | The rootless daemon is not running.                                                          | Run `systemctl --user start docker` and re‑source your shell to set `DOCKER_HOST`.                                                                     |
 | GPU not visible inside the container                                            | Host driver version mismatch or missing `--gpus all` flag.                                   | Verify `docker run --gpus all nvidia/cuda:... nvidia-smi` works on the host first.                                                                     |
 | “Failed to register runner” errors                                              | Incorrect URL or missing repository access rights.                                           | Double‑check `GITHUB_RUNNER_URL` (must include the full `https://github.com/...` path) and that the token has `admin:repo_hook` scope.                 |
-| ERROR: Cannot connect to Docker daemon. Is the socket mounted correctly?        |                                                                                              | See [Make the Docker socket accessible](#3-make-the-docker-socket-accessible)                                                                          |
+| `nvcc: command not found` after installing the toolkit               | Under rootless Docker the CUDA binaries are not on your shell’s `PATH`. | Add the `export PATH=/usr/local/cuda/bin:$PATH` (and `LD_LIBRARY_PATH`) lines to `~/.bashrc`, then `source ~/.bashrc`. |
+| ERROR: Cannot connect to Docker daemon. Is the socket mounted correctly?        |                                                                                              | See [Make the Docker socket accessible](#4-make-the-docker-socket-accessible)                                                                          |
 
 **Additional resources**
 

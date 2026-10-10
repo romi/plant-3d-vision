@@ -11,6 +11,8 @@ You can use multiple sources of colmap executable by setting the ``COLMAP_EXE`` 
 Using docker image requires the docker engine to be available on your system and the docker SDK.
 """
 import os
+import pathlib
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -20,22 +22,24 @@ from pathlib import Path
 from typing import Any
 from typing import Literal
 from typing import get_args
+from weakref import finalize
 
 import imageio
 import numpy as np
 import open3d as o3d
+import requests
 from packaging import version
-
 from plant3dvision import proc3d
 from plant3dvision.thirdparty import read_model
+from plant3dvision.utils import docker_pull, _is_rootless
+from plantdb.commons.fsdb.core import File
 from plantdb.commons import io
-from plantdb.commons.db import File
 from romitask.log import get_logger
 
 logger = get_logger(__name__)
 
 #: Default colmap executable:
-DEFAULT_COLMAP = 'roboticsmicrofarms/colmap'
+DEFAULT_COLMAP = 'colmap/colmap:20251107.4118'  # 3.13.0
 #: List of valid colmap executable values:
 COLMAP_DOCKER = ['geki/colmap', 'colmap/colmap', 'roboticsmicrofarms/colmap']
 # - Try to get colmap executable to use from '$COLMAP_EXE' environment variable, or set it to use docker container by default:
@@ -388,7 +392,7 @@ def estimate_rotation_translation_mat(x, y, z, pan, tilt, roll):
     return rot_matrix, tvec
 
 
-def export_camera_parameters(image_files, intrinsics, extrinsics):
+def export_camera_parameters(image_files, intrinsics, extrinsics, name_mapping: dict[str, str] = None):
     """Export camera intrinsics and extrinsic to images metadata.
 
     Parameters
@@ -399,6 +403,8 @@ def export_camera_parameters(image_files, intrinsics, extrinsics):
         An OPENCV intrinsics camera parameter dictionary.
     extrinsics : dict
         A dictionary of images.
+    name_mapping : dict[str, str], optional
+        A mapping of original file names to new file names in the colmap temp directory.
 
     See Also
     --------
@@ -438,21 +444,22 @@ def export_camera_parameters(image_files, intrinsics, extrinsics):
     # -- Export computed intrinsics ('camera_model') & extrinsic ('rotmat', 'tvec' & 'estimated_pose') to metadata:
     logger.info(f"Exporting estimated camera intrinsics and extrinsic parameters to images metadata...")
     for fi in image_files:
+        associated_name = name_mapping[fi.filename] if name_mapping else fi.filename
         try:
-            assert fi.filename in extrinsics
-        except KeyError:
-            logger.error(f"No pose & camera model defined by COLMAP for image '{fi.filename}'!")
+            assert associated_name in extrinsics
+        except AssertionError:
+            logger.error(f"No pose & camera model defined by COLMAP for image '{fi.filename}' !'!")
         else:
             camera = {
-                "rotmat": extrinsics[fi.filename]["rotmat"],
-                "tvec": extrinsics[fi.filename]["tvec"],
-                "camera_model": intrinsics[extrinsics[fi.filename]['camera_id']]
+                "rotmat": extrinsics[associated_name]["rotmat"],
+                "tvec": extrinsics[associated_name]["tvec"],
+                "camera_model": intrinsics[extrinsics[associated_name]['camera_id']]
             }
             # - Add a 'colmap_camera' entry to the file metadata:
             fi.set_metadata("colmap_camera", camera)
             # - Add an 'estimated_pose' [x, y, z, pan, tilt, roll] entry to the file metadata:
-            estimated_pose = estimate_camera_pose(np.array(extrinsics[fi.filename]["rotmat"]),
-                                                  np.array(extrinsics[fi.filename]["tvec"]))
+            estimated_pose = estimate_camera_pose(np.array(extrinsics[associated_name]["rotmat"]),
+                                                  np.array(extrinsics[associated_name]["tvec"]))
             fi.set_metadata("estimated_pose", estimated_pose)
 
     return image_files
@@ -1065,7 +1072,7 @@ class ColmapRunner(object):
                  align_pcd: bool = False,
                  use_calibration: bool = False,
                  bounding_box: dict[str, list[float]] | None = None,
-                 **kwargs: Any) -> None:
+                 multiple_cameras=False, **kwargs: Any) -> None:
         """ColmapRunner constructor.
 
         Parameters
@@ -1086,6 +1093,9 @@ class ColmapRunner(object):
         bounding_box : dict, optional
             If specified (default ``None``), crop the sparse (& dense) point cloud(s) with the given volume dictionary.
             Specifications: {"x": [xmin, xmax], "y": [ymin, ymax], "z": [zmin, zmax]}.
+        multiple_cameras : bool, optional
+            If ``True``, colmap will assume there are multiple cameras and that all images with
+            the same prefix are from the same camera.
 
         Other Parameters
         ----------------
@@ -1202,71 +1212,183 @@ class ColmapRunner(object):
 
         """
         # -- Initialize attributes:
-        self.image_files = img_files  # list of plantdb.commons.fsdb.File
+        self.image_files: list[File] = img_files  # list of plantdb.commons.fsdb.File
         self.matcher_method = matcher_method if matcher_method in MATCHER_METHODS else DEF_MATCHER_METHOD
         self.compute_dense = compute_dense
         self.all_cli_args = all_cli_args
         self.align_pcd = align_pcd
         self.use_calibration = use_calibration
         self.bounding_box = bounding_box
+        self.single_cam_per_directory = multiple_cameras
         self.circular_match_window = kwargs.get('circular_match_window', 2)
+
         # -- Initialize COLMAP directories, poses file & log file:
         # - Get / create a temporary COLMAP working directory
         self.colmap_workdir = Path(os.environ.get("COLMAP_WD", tempfile.mkdtemp(prefix='colmap_')))
-        self.imgs_dir = self.colmap_workdir / 'images'  # COLMAP's 'images' directory
-        self.sparse_dir = self.colmap_workdir / 'sparse'  # COLMAP's 'sparse reconstruction' directory
-        self.dense_dir = self.colmap_workdir / 'dense'  # COLMAP's 'dense reconstruction' directory
+        response = requests.get(
+            "https://github.com/colmap/colmap/releases/download/3.11.1/vocab_tree_faiss_flickr100K_words32K.bin")
+        with open(self.colmap_workdir / "vocab_tree_faiss_flickr100K_words32K.bin", "wb") as f:
+            f.write(response.content)
+        if self.single_cam_per_directory:
+            self.imgs_dir = self.colmap_workdir / 'images'
+        else:
+            self.imgs_dir = self.colmap_workdir / 'images'  # COLMAP's 'images' directory
+        self.sparse_dir: Path = self.colmap_workdir / 'sparse'  # COLMAP's 'sparse reconstruction' directory
+        self.dense_dir: Path = self.colmap_workdir / 'dense'  # COLMAP's 'dense reconstruction' directory
         # - Make sure those directories exist & create them otherwise:
-        self._init_directories()
-        # - Fill COLMAP's 'images' directory with files from the 'images' Fileset (self.image_files)
-        self._init_images_directory()
+        self.camera_names: list[str] = []  # list of camera names, initialized by `self._init_temp_dir`
+        self.image_names: dict[str, str] = self._init_temp_dir(self.imgs_dir, [f.path() for f in img_files])
         # - Initialize the `poses.txt` file required by COLMAP:
         self._init_poses(excluded_ids=kwargs.get('excluded_ids'))
         # - Initialize a log file to gather COLMAP outputs:
         self.log_file = f"{self.colmap_workdir}/colmap.log"
         logger.info(f"See {self.log_file} for a detailed log about COLMAP jobs...")
         # - Check the COLMAP executable to use:
-        self.colmap_exe = None
-        self.colmap_version = None
-        self._header = None
+        self.colmap_exe: str = None
+        self.colmap_version: str = None
+        self._header: str = None
         self._init_exe(kwargs.get('colmap_exe', COLMAP_EXE))
 
-    def _init_directories(self):
-        """Initialize 'images', 'sparse' & 'dense' reconstruction directory."""
-        self.imgs_dir.mkdir(parents=True, exist_ok=True)
-        self.sparse_dir.mkdir(parents=True, exist_ok=True)
-        self.dense_dir.mkdir(parents=True, exist_ok=True)
-        return
+        if not kwargs.get('no_final_clean_up', False):
+           finalize(self, self.clean_up)
 
-    def _init_images_directory(self):
+    def _image_pattern(self, image_files):
+        # Get an image file path to test the patterns:
+        image_file = image_files[0]
+
+        # Test the new pattern with camera id, e.g. 'picamera1-00000.jpg'
+        try:
+            image_pattern = r"(.+)-([0-9]{5})\.(jpe?g)"  # new pattern (with camera id)
+            re.match(image_pattern, image_file.name).group(1)
+        except AttributeError:
+            logger.warning(f"Image pattern based on camera ID not found!")
+        else:
+            return True, image_pattern
+
+        # Test the legacy pattern, e.g. '00000_rgb.jpg'
+        try:
+            image_pattern = r"([0-9]{5})_rgb\.(jpe?g)"  # legacy pattern
+            re.match(image_pattern, image_file.name).group(1)
+        except AttributeError:
+            logger.warning(f"Legacy image pattern based on camera ID not found!")
+        else:
+            return False, image_pattern
+
+        raise Exception("Could not determine image pattern to use!")
+
+    def _init_temp_dir_legacy(self, image_dir: pathlib.Path, image_files: list[pathlib.Path]) -> dict[str, str]:
         """Initialize COLMAP's 'images' directory.
 
         It is required by COLMAP to perform its magic!
         """
         n_rgb_im = 0  # Count the number of RGB images
         n_cp_im = 0  # Count the number of copied RGB images
-        for img_f in self.image_files:
-            # - Check the image file exists in COLMAP's 'images' directory, if not create it:
-            filepath = os.path.join(self.imgs_dir, img_f.filename)
-            img_md = img_f.metadata
+        self.camera_names = ["legacy"]
+        image_names = {}
+        for img_f in sorted(image_files, key=lambda p: p.name):
+            # Check the image file exists in COLMAP's 'images' directory, if not create it:
+            filepath = os.path.join(image_dir, img_f.name)
             image_exists = os.path.isfile(filepath)
-            is_rgb_image = 'channel' in img_md and img_md['channel'] == 'rgb'
-            if is_rgb_image:
-                n_rgb_im += 1
-            if not image_exists and is_rgb_image:
-                im = io.read_image(img_f)  # load the image (from DB)
-                im = im[:, :, :3]  # remove the alpha channel, if any
-                imageio.imwrite(filepath, im)  # write the image to COLMAP's 'images' directory
+            if not image_exists:
+                # im = io.read_image(img_f)  # load the image (from DB)
+                # im = im[:, :, :3]  # remove the alpha channel, if any
+                # imageio.imwrite(filepath, im)  # write the image to COLMAP's 'images' directory
+                shutil.copy(img_f, image_dir / img_f.name)
+                image_names[img_f.name] = img_f.name
                 n_cp_im += 1
         logger.info(f"Copied {n_cp_im} images out of {n_rgb_im} RGB images found in the 'images' Fileset!")
 
         # - Check that COLMAP's 'images' directory is not EMPTY!
-        n_img_workdir = [os.path.isfile(f) for f in os.listdir(self.imgs_dir)]
+        n_img_workdir = [os.path.isfile(f) for f in os.listdir(image_dir)]
         if n_img_workdir == 0:
             logger.critical("No image could be found in COLMAP's 'images' directory after initialization!")
             sys.exit("Check you have a set of images with an 'rgb' value for metadata 'channel'!")
 
-        return
+        return image_names
+
+    def _init_temp_dir_cam_id(self, image_dir: pathlib.Path, image_files: list[pathlib.Path]) -> dict[str, str]:
+        """
+        Initializes a temporary directory for organizing and renaming image files based on
+        a specified naming pattern.
+
+        This function creates a structure of directories and renames input image files
+        according to their camera name and an incremental counter. The renamed images are
+        stored in the specified directory. The function supports grouping of images by camera
+        name extracted from their filenames. It also validates and enforces a specific naming
+        pattern for the input image files.
+
+        Parameters
+        ----------
+        image_dir : pathlib.Path
+            Directory where the organized images and folder structure will be created.
+        image_files : list of pathlib.Path
+            A list of image file paths to be processed and organized.
+
+        Returns
+        -------
+        dict of str
+            A dictionary mapping the original file names to their corresponding new file names.
+        """
+        image_pattern = r"(.+)-([0-9]{5})\.(jpe?g)"
+        image_regex = re.compile(image_pattern)
+        self.camera_names = list(set(
+            re.match(image_pattern, f.name).group(1)
+            for f in image_files
+        ))
+        for cam_name in self.camera_names:
+            cam_dir = image_dir / cam_name
+            cam_dir.mkdir(parents=True, exist_ok=True)
+        # generating names for images
+        image_counters = {cam_name: 0 for cam_name in self.camera_names}
+        image_names = {}  # original name -> new name
+        for path in sorted(image_files, key=lambda p: p.name):
+            match = image_regex.match(path.name)
+            camera = match.group(1)
+            extension = match.group(3)
+            counter = image_counters[camera]
+            if match:
+                new_name = f"{camera}/image{counter:0>5}.{extension}"
+                image_counters[camera] += 1
+                image_names[path.name] = new_name
+                shutil.copy(path, image_dir / new_name)
+            else:
+                raise ValueError(f"Image file name {path.name} does not match the expected pattern {image_pattern}")
+        return image_names
+
+    def _init_temp_dir(self, image_dir: pathlib.Path, image_files: list[pathlib.Path]) -> dict[str, str]:
+        """
+        Initializes a temporary directory for organizing and renaming image files based on
+        a specified naming pattern.
+
+        This function creates a structure of directories and renames input image files
+        according to their camera name and an incremental counter. The renamed images are
+        stored in the specified directory. The function supports grouping of images by camera
+        name extracted from their filenames. It also validates and enforces a specific naming
+        pattern for the input image files.
+
+        Parameters
+        ----------
+        image_dir : pathlib.Path
+            Directory where the organized images and folder structure will be created.
+        image_files : list of pathlib.Path
+            A list of image file paths to be processed and organized.
+
+        Returns
+        -------
+        dict of str
+            A dictionary mapping the original file names to their corresponding new file names.
+        """
+        image_dir.mkdir(parents=True, exist_ok=True)
+        has_cam_id, image_pattern = self._image_pattern(image_files)
+        # Determines camera identifiers, creates per‑camera directories, defaults to single camera
+        if has_cam_id:
+            image_names = self._init_temp_dir_cam_id(image_dir, image_files)
+        else:
+            image_names = self._init_temp_dir_legacy(image_dir, image_files)
+
+        self.sparse_dir.mkdir(parents=True, exist_ok=True)
+        self.dense_dir.mkdir(parents=True, exist_ok=True)
+        return image_names
 
     def _init_poses(self, excluded_ids: list[str] | None = None):
         """Initialize the ``poses.txt`` file for COLMAP.
@@ -1312,8 +1434,16 @@ class ColmapRunner(object):
                 p = img_f.get_metadata(pose_md, default=None)
                 # - If a pose metadata was found for the file, add it to COLMAP's 'poses.txt' file:
                 if p is not None:
-                    s = f"{img_f.filename} {p[0]} {p[1]} {p[2]}\n"
-                    pose_file.write(s)
+                    image_name = self.image_names[img_f.filename]
+                    camera_name = image_name.split('/')[0]
+                    if camera_name == self.camera_names[0]:
+                        # Pattern with camera ID in image filename
+                        s = f"{image_name} {p[0]} {p[1]} {p[2]}\n"
+                        pose_file.write(s)
+                    elif self.camera_names[0] == 'legacy':
+                        # Legacy pattern without camera ID in image filename
+                        s = f"{image_name} {p[0]} {p[1]} {p[2]}\n"
+                        pose_file.write(s)
                 else:
                     missing_pose.append(img_f.id)
 
@@ -1376,6 +1506,9 @@ class ColmapRunner(object):
                 colmap_exe, tag = colmap_exe.split(":")
                 logger.info(f"Requested usage of docker image {colmap_exe}:{tag}...")
 
+            # Try to pull the docker image (nothing will happen if locally found)
+            docker_pull(colmap_exe, tag=tag)
+
             # Try to find the closest matching tag from available Docker images, if any
             # This is done because cuda compute capability may vary depending on available hardware
             # Locally built image may have a different 'cuda_cc' value than the default.
@@ -1392,7 +1525,7 @@ class ColmapRunner(object):
                 client.images.get(self.colmap_exe)
             except ImageNotFound:
                 logger.warning(f"Could not find '{self.colmap_exe}' image locally...")
-                client.images.pull(colmap_exe, tag=tag)
+                docker_pull(colmap_exe, tag=tag)
             else:
                 logger.info(f"Found '{self.colmap_exe}' image locally...")
 
@@ -1532,6 +1665,10 @@ class ColmapRunner(object):
         workdir_stat = os.stat(self.colmap_workdir)
         workdir_gid = str(workdir_stat.st_gid)
         workdir_uid = str(workdir_stat.st_uid)
+        # In rootless Docker the host user is mapped to container root, so the
+        # workdir (owned by the host user) appears as root inside the container
+        # and running with the host UID would not match that owner. Run as root.
+        user = None if _is_rootless() else workdir_uid
         # Volume to bind mount
         volumes = {
             str(self.colmap_workdir): {
@@ -1550,26 +1687,51 @@ class ColmapRunner(object):
         # Run the command & catch the output:
         if _has_nvidia_gpu():
             gpu_device = docker.types.DeviceRequest(count=-1, capabilities=[['gpu']])
-            out = client.containers.run(self.colmap_exe, cmd,
-                                        user=workdir_uid, group_add=["colmap_users"],
-                                        environment=varenv, volumes=volumes,
-                                        stdout=True, stderr=True,
-                                        device_requests=[gpu_device])
+            container = client.containers.run(self.colmap_exe, cmd,
+                                              user=user,
+                                              # group_add=["colmap_users"],
+                                              environment=varenv, volumes=volumes,
+                                              stdout=True, stderr=True,
+                                              stream=True, detach=True,
+                                              device_requests=[gpu_device], working_dir=str(self.colmap_workdir))
         else:
-            out = client.containers.run(self.colmap_exe, cmd,
-                                        user=workdir_uid, group_add=["colmap_users"],
-                                        environment=varenv, volumes=volumes,
-                                        stdout=True, stderr=True)
+            container = client.containers.run(self.colmap_exe, cmd,
+                                              user=user,
+                                              # group_add=["colmap_users"],
+                                              environment=varenv, volumes=volumes,
+                                              stdout=True, stderr=True,
+                                              stream=True, detach=True, working_dir=str(self.colmap_workdir))
         # Return the container logs decoded:
-        out = out.decode('utf8')
+        out = ""
+        try:
+            if to_log:
+                with open(self.log_file, mode="a") as f:
+                    for line in container.logs(stream=True, follow=True):
+                        line = line.decode("utf-8")
+                        sys.stdout.write(line)
+                        sys.stdout.flush()
+                        out += line
+                        if self._header is not None:
+                            line = line.replace(self._header, "")
+                        f.write(line)
+                        f.flush()
+            else:
+                for line in container.logs(stream=True, follow=True):
+                    line = line.decode("utf-8")
+                    sys.stdout.write(line)
+                    sys.stdout.flush()
+            wait_result = container.wait()
+            exit_code = wait_result if isinstance(wait_result, int) else wait_result.get('StatusCode')
+            if exit_code != 0:
+                logger.error("COLMAP docker command failed with exit code %s:\n  %s", exit_code, cmd)
+                if out:
+                    logger.error("COLMAP output:\n%s", out)
+                raise subprocess.CalledProcessError(exit_code, process, output=out)
+        finally:
+            container.remove(force=True)
         # Remove any header from the container:
         if self._header is not None:
             out = out.replace(self._header, "")
-
-        if to_log:
-            # Append the outputs of the COLMAP process to the log file:
-            with open(self.log_file, mode="a") as f:
-                f.writelines(out)
         return out
 
     def _colmap_sources(self, process, to_log):
@@ -1594,15 +1756,28 @@ class ColmapRunner(object):
             # Append the output of the COLMAP process to the log file:
             with open(self.log_file, mode="a") as f:
                 result = subprocess.run(process, stdout=f, stderr=subprocess.PIPE)
-                if result.returncode != 0:
-                    raise subprocess.CalledProcessError(
-                        result.returncode, process, stderr=result.stderr
-                    )
+            if result.returncode != 0:
+                self._log_colmap_failure(process, result)
+                raise subprocess.CalledProcessError(
+                    result.returncode, process, stderr=result.stderr
+                )
         else:
             # Run the subprocess and catch its output to return it decoded
             out = subprocess.run(process, capture_output=True)
             out = out.stdout.decode('utf8')
         return out
+
+    def _log_colmap_failure(self, process, result):
+        """Log a failed COLMAP subprocess with its command, stderr and log tail."""
+        stderr = result.stderr.decode('utf8', errors='replace') if result.stderr else ''
+        logger.error("COLMAP command failed with exit code %s:\n  %s", result.returncode, ' '.join(process))
+        if stderr:
+            logger.error("COLMAP stderr:\n%s", stderr)
+        # - Dump the tail of the COLMAP log file, where the failing step's output was appended:
+        if os.path.exists(self.log_file):
+            with open(self.log_file) as f:
+                lines = f.read().splitlines()
+            logger.error("COLMAP log output (last %d lines):\n%s", 200, '\n'.join(lines[-200:]))
 
     def feature_extractor(self):
         """Perform feature extraction for a set of images."""
@@ -1614,26 +1789,10 @@ class ColmapRunner(object):
 
         # - Check if GPU is available:
         if _has_nvidia_gpu():
-            use_gpu_opt = {"--SiftExtraction.use_gpu": '1'}
+            use_gpu_opt = {"--FeatureExtraction.use_gpu": '1'}
         else:
-            use_gpu_opt = {"--SiftExtraction.use_gpu": '0'}
-
-        sift_args = {
-            # Maximum size of the image maximum dimension
-            "--SiftExtraction.max_image_size": "3200",  # default to 3200
-            # Minimum contrast threshold for feature detection
-            # Impact: Lower values = more features detected; higher values = more reliable features
-            "--SiftExtraction.peak_threshold": "0.0066666666666666671",  # default to 0.0066666666666666671
-            # Edge response threshold for feature filtering
-            # Impact: Higher values = fewer but more stable features; lower values = more features with potential instability
-            "--SiftExtraction.edge_threshold": "10",  # default to 10
-            # Estimates affine shape for oriented ellipses instead of disks
-            # Impact: More robust to image distortions and viewpoint changes
-            "--SiftExtraction.estimate_affine_shape": "0",  # default to 0
-        }
-
-        cli_args = {**sift_args, **use_gpu_opt, **cli_args}
-
+            use_gpu_opt = {"--FeatureExtraction.use_gpu": '0'}
+        cli_args = self.all_cli_args.get('feature_extractor', use_gpu_opt)
         logger.info("Running colmap 'feature_extractor'...")
         logger.debug(f"args: {args}")
         logger.debug(f"cli_args: {cli_args}")
@@ -1650,46 +1809,17 @@ class ColmapRunner(object):
 
         args = ['--database_path', f'{self.colmap_workdir}/database.db']
 
-        sift_args = {
-            # Maximum distance ratio between first and second best match. Controls the ratio test for rejecting ambiguous matches.
-            # Impact: Lower values (0.6-0.7) produce more reliable matches but fewer matches; higher values (0.9) allow more matches but may include more noise.
-            "--SiftMatching.max_ratio": "0.8",  # default to 0.8
-            # Maximum distance to best match. Filters out matches that are too dissimilar.
-            # Impact: Higher values (0.8-0.9) allow more matches but may include more false positives.
-            "--SiftMatching.max_distance": "0.7",  # default to 0.7
-            # Enables bidirectional matching. A match is only accepted if it's mutual between both images.
-            # Impact: Increases matching reliability significantly but reduces the number of matches by about 50%.
-            "--SiftMatching.cross_check": "1",  # default to 1
-            # Minimum number of inliers required for geometric verification to succeed. Controls the minimum quality of matches that are accepted.
-            # Impact: Lower values (10-12) allow more matches but with lower reliability; higher values (20-25) produce more robust matches but fewer.
-            "--SiftMatching.min_num_inliers": "15",  # default to 15
-            # Maximum epipolar error in pixels for geometric verification. Determines how much geometric inconsistency is tolerated in RANSAC.
-            # Impact: Lower values (2-3) produce more robust matches but fewer inliers; higher values (6-8) allow more matches but may include more outliers.
-            "--SiftMatching.max_error": "4",  # default to 4
-            # A priori minimum inlier ratio, affecting RANSAC convergence. Influences how many iterations RANSAC performs.
-            # Impact: Lower ratios (0.1-0.2) allow faster convergence but may miss good solutions; higher ratios (0.3-0.4) ensure better solutions.
-            "--SiftMatching.min_inlier_ratio": "0.25",  # default to 0.25
-            # RANSAC iteration limits. Controls how many times RANSAC runs to find the best geometric model.
-            # Higher max_num_trials allow more thorough search but slower processing.
-            "--SiftMatching.max_num_trials": "10000",  # default to 10000
-            # Whether to attempt to estimate multiple geometric models. Allows for scenes with multiple moving objects or distortions.
-            # Impact: Enabling this can increase processing time but may help with complex scenes.
-            "--SiftMatching.multiple_models": "0",  # default to 0
-            # Whether to perform guided matching using existing geometric estimates.
-            # Impact: Uses previous geometric solutions to guide subsequent matching, improving efficiency and accuracy in certain scenarios.
-            "--SiftMatching.guided_matching": "0",  # default to 0
-            # Forces homography estimation for planar scenes. Useful for flat surfaces where the camera motion is planar.
-            # Impact: Can improve matching accuracy for such scenes.
-            "--SiftMatching.planar_scene": "0",  # default to 0
-        }
-
         # - Check if GPU is available:
         if _has_nvidia_gpu():
-            use_gpu_opt = {"--SiftMatching.use_gpu": '1'}
+            use_gpu_opt = {"--FeatureMatching.use_gpu": '1'}
         else:
-            use_gpu_opt = {"--SiftMatching.use_gpu": '0'}
+            use_gpu_opt = {"--FeatureMatching.use_gpu": '0'}
+        cli_args.update(**use_gpu_opt)
 
-        cli_args = {**sift_args, **use_gpu_opt, **cli_args}
+        if matcher_method == 'sequential':
+            cli_args["--SequentialMatching.loop_detection"] = "1"
+            cli_args[
+                "--SequentialMatching.vocab_tree_path"] = f"{self.colmap_workdir}/vocab_tree_faiss_flickr100K_words32K.bin"
 
         logger.info(f"Running colmap '{matcher_method}_matcher'...")
         logger.debug(f"args: {args}")
@@ -1719,7 +1849,7 @@ class ColmapRunner(object):
             args.extend(["--match_type", "pairs"])
             custom_opt = {
                 # Forcefully deactivate "guided_matching" as it breaks the matching in our case
-                "--SiftMatching.guided_matching": 0,
+                "--FeatureMatching.guided_matching": 0,
             }
             cli_args.update(**custom_opt)
             _ = self._colmap_cmd('matches_importer', args, cli_args)
@@ -1849,7 +1979,7 @@ class ColmapRunner(object):
         intrinsics = self.get_intrinsics()
         extrinsics = self.get_extrinsics()
         if intrinsics is not None and extrinsics is not None:
-            self.image_files = export_camera_parameters(self.image_files, intrinsics, extrinsics)
+            self.image_files = export_camera_parameters(self.image_files, intrinsics, extrinsics, self.image_names)
         return None
 
     def get_sparse_pcd(self):
@@ -1878,7 +2008,7 @@ class ColmapRunner(object):
         except PermissionError as e:
             logger.error(f"Permission denied while removing {self.colmap_workdir}: {e}")
         except FileNotFoundError as e:
-            logger.warning(f"Directory {self.colmap_workdir} already removed or not found: {e}")
+            logger.debug(f"Directory {self.colmap_workdir} already removed or not found: {e}")
         except OSError as e:
             logger.error(f"Failed to remove directory {self.colmap_workdir}: {e}")
         else:
@@ -1969,7 +2099,7 @@ class ColmapRunner(object):
         if len(sparse_pcd.points) == 0:
             raise Exception("Reconstructed sparse point cloud is EMPTY!")
 
-        self.image_files = export_camera_parameters(self.image_files, intrinsics, extrinsics)
+        self.image_files = export_camera_parameters(self.image_files, intrinsics, extrinsics, self.image_names)
 
         # -- If required, performs dense point cloud reconstruction:
         dense_pcd = None
