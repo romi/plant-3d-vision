@@ -73,5 +73,44 @@ class TestColmapDebug(FSDBTestCase):
             runner.clean_up()
 
 
+    def test_colmap_gpu_diagnostic(self):
+        import subprocess
+        print("\n=== nvidia-smi -L ===")
+        try:
+            print(subprocess.run(["nvidia-smi", "-L"], capture_output=True, text=True).stdout)
+        except FileNotFoundError:
+            print("nvidia-smi not found")
+        db = self.get_test_db()
+        scan = db.get_scan("real_plant_analyzed")
+        fileset = scan.get_fileset("images")
+        all_cli_args = {
+            "feature_extractor": {
+                "--ImageReader.single_camera": "1",
+                "--FeatureExtraction.use_gpu": "1",
+            },
+            "exhaustive_matcher": {
+                "--FeatureMatching.use_gpu": "1",
+            },
+        }
+        runner = colmap.ColmapRunner(
+            fileset.get_files()[::2],
+            "exhaustive",
+            compute_dense=False,
+            all_cli_args=all_cli_args,
+            align_pcd=True,
+            use_calibration=False,
+            no_final_clean_up=True,
+        )
+        try:
+            runner.feature_extractor()
+            print("\n=== feature_extractor colmap.log ===")
+            print(open(runner.log_file).read())
+            runner.matcher()
+            print("\n=== exhaustive_matcher colmap.log ===")
+            print(open(runner.log_file).read())
+        finally:
+            runner.clean_up()
+
+
 if __name__ == "__main__":
     unittest.main()
