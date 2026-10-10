@@ -1,5 +1,5 @@
 # syntax = docker/dockerfile:1.12
-ARG COLMAP_VERSION="3.8"
+ARG COLMAP_VERSION="3.13.0"
 ARG CUDA_CC="75"
 FROM roboticsmicrofarms/colmap:${COLMAP_VERSION}-cuda_cc${CUDA_CC}
 
@@ -39,7 +39,6 @@ ARG PYCUDA_NVCC_FLAGS=""
 ENV PYCUDA_NVCC_FLAGS="${PYCUDA_NVCC_FLAGS}"
 
 ENV PYOPENCL_CTX='0'
-# Disable OpenCL automatic platform selection
 ENV PYOPENCL_NO_CACHE=1
 
 RUN apt-get update && \
@@ -93,9 +92,7 @@ RUN --mount=type=cache,target=/home/${USER_NAME}/.cache/pip,uid=${USER_ID},gid=$
     # Activate the virtual environment and install packages
     . /home/${USER_NAME}/venv/bin/activate && \
     # Install `plant-3d-vision` dependencies and sources:
-    bash install.sh --no-env --webterm --update-tools && \
-    # Download the trained CNN model file:
-    ./get_model.sh /home/${USER_NAME}/plant-3d-vision/tests/testdata
+    bash install.sh --no-env --webterm --update-tools
 
 COPY --chown=${USER_NAME} docker/p3dv-devel/entrypoint.sh .
 # Make entrypoint executable
