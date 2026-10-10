@@ -102,12 +102,24 @@ class TestColmapDebug(FSDBTestCase):
             no_final_clean_up=True,
         )
         try:
+            import subprocess
             runner.feature_extractor()
-            print("\n=== feature_extractor colmap.log ===")
-            print(open(runner.log_file).read())
-            runner.matcher()
-            print("\n=== exhaustive_matcher colmap.log ===")
-            print(open(runner.log_file).read())
+            # Re-run feature extraction directly to capture colmap's glog output
+            # (keypoint counts, CUDA errors), which the runner discards on success:
+            for label, method, extra in [
+                ("feature_extractor", "feature_extractor",
+                 ["--ImageReader.single_camera", "1", "--FeatureExtraction.use_gpu", "1"]),
+                ("exhaustive_matcher", "exhaustive_matcher",
+                 ["--FeatureMatching.use_gpu", "1"]),
+            ]:
+                cmd = ["colmap", method,
+                       "--database_path", f"{runner.colmap_workdir}/database.db",
+                       "--image_path", f"{runner.colmap_workdir}/images",
+                       *extra]
+                res = subprocess.run(cmd, capture_output=True, text=True)
+                print(f"\n=== {label} rc={res.returncode} ===")
+                print("STDOUT:\n", res.stdout[-4000:])
+                print("STDERR:\n", res.stderr[-4000:])
         finally:
             runner.clean_up()
 
