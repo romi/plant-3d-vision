@@ -1720,7 +1720,13 @@ class ColmapRunner(object):
                     line = line.decode("utf-8")
                     sys.stdout.write(line)
                     sys.stdout.flush()
-            container.wait()
+            wait_result = container.wait()
+            exit_code = wait_result if isinstance(wait_result, int) else wait_result.get('StatusCode')
+            if exit_code != 0:
+                logger.error("COLMAP docker command failed with exit code %s:\n  %s", exit_code, cmd)
+                if out:
+                    logger.error("COLMAP output:\n%s", out)
+                raise subprocess.CalledProcessError(exit_code, process, output=out)
         finally:
             container.remove(force=True)
         # Remove any header from the container:
@@ -1750,15 +1756,28 @@ class ColmapRunner(object):
             # Append the output of the COLMAP process to the log file:
             with open(self.log_file, mode="a") as f:
                 result = subprocess.run(process, stdout=f, stderr=subprocess.PIPE)
-                if result.returncode != 0:
-                    raise subprocess.CalledProcessError(
-                        result.returncode, process, stderr=result.stderr
-                    )
+            if result.returncode != 0:
+                self._log_colmap_failure(process, result)
+                raise subprocess.CalledProcessError(
+                    result.returncode, process, stderr=result.stderr
+                )
         else:
             # Run the subprocess and catch its output to return it decoded
             out = subprocess.run(process, capture_output=True)
             out = out.stdout.decode('utf8')
         return out
+
+    def _log_colmap_failure(self, process, result):
+        """Log a failed COLMAP subprocess with its command, stderr and log tail."""
+        stderr = result.stderr.decode('utf8', errors='replace') if result.stderr else ''
+        logger.error("COLMAP command failed with exit code %s:\n  %s", result.returncode, ' '.join(process))
+        if stderr:
+            logger.error("COLMAP stderr:\n%s", stderr)
+        # - Dump the tail of the COLMAP log file, where the failing step's output was appended:
+        if os.path.exists(self.log_file):
+            with open(self.log_file) as f:
+                lines = f.read().splitlines()
+            logger.error("COLMAP log output (last %d lines):\n%s", 200, '\n'.join(lines[-200:]))
 
     def feature_extractor(self):
         """Perform feature extraction for a set of images."""
