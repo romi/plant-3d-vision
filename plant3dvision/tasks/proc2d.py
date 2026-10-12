@@ -116,7 +116,8 @@ class Undistort(ParallelFileTask):
     Parameters
     ----------
     upstream_task : luigi.TaskParameter, optional
-        The upstream task, should be a tasks that generates a ``Fileset`` of RGB images.
+        The task to use upstream to the `Undistort` tasks.
+        It should be a tasks that generates a ``Fileset`` of RGB images.
         Defaults to ``'ImagesFilesetExists'``.
     scan_id : luigi.Parameter, optional
         The dataset id (scan name) to use to create the ``FilesetTarget``.
@@ -182,6 +183,9 @@ class Undistort(ParallelFileTask):
     camera_model = luigi.Parameter(default="SIMPLE_RADIAL")  # Camera model type for intrinsic calibration
     intrinsic_calib_scan_id = luigi.Parameter(default="")  # ID of scan containing intrinsic calibration
     extrinsic_calib_scan_id = luigi.Parameter(default="")  # ID of scan containing extrinsic calibration
+
+    n_workers = luigi.IntParameter(default=None)
+    parallel = luigi.BoolParameter(default=True)
 
     def requires(self):
         """Determines the dependencies required for the task execution."""

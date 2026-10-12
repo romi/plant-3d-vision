@@ -7,8 +7,15 @@ A collection of utility functions for data manipulation, geometric calculations,
 visualization, and file operations. This module provides reusable components to
 simplify common tasks in data analysis and scientific computing projects.
 """
+import os
+from pathlib import Path
 
+import docker
 import numpy as np
+from tqdm import tqdm
+from romitask.log import get_logger
+
+logger = get_logger(__name__)
 
 
 def flatten(l):
@@ -234,7 +241,7 @@ def plot_points_circle(x, y, cx, cy, r, figname=None):
     fig, ax = plt.subplots()
     sc = ax.scatter(x, y, marker="x", c="red")
     circle = plt.Circle((cx, cy), radius=r, fill=False)
-    ax.add_artist(circle)
+    ax.add_patch(circle)
     ax.set_aspect('equal')
 
     if figname is not None:
@@ -434,6 +441,115 @@ def signed_angular_distance(angle1, angle2):
     signed_diff = ((diff + 540) % 360) - 180
 
     return signed_diff
+
+
+def _is_rootless():
+    """Return True if Docker runs in rootless mode (rootless socket present)."""
+    return Path(f"/run/user/{os.getuid()}/docker.sock").exists()
+
+
+def _docker_client():
+    """Return a Docker client, preferring the rootless socket when present."""
+    rootless = Path(f"/run/user/{os.getuid()}/docker.sock")
+    base_url = "unix://" + str(rootless) if rootless.exists() else None  # None => env/DOCKER_HOST/default socket
+    return docker.APIClient(base_url=base_url)
+
+
+def docker_pull(image_name, tag="latest"):
+    """Pull a Docker image from a registry while displaying per‑layer download progress.
+
+    Parameters
+    ----------
+    image_name : str
+        Name of the Docker image to pull (e.g., ``ubuntu`` or a repository
+        qualified name such as ``myrepo/myimage``).
+    tag : str, optional
+        Tag of the image to pull. Defaults to ``"latest"``.
+
+    Raises
+    ------
+    docker.errors.APIError
+        If the Docker daemon cannot be contacted or the pull operation fails.
+    RuntimeError
+        If the progress information received from the daemon is malformed or
+        cannot be interpreted.
+
+    Notes
+    -----
+    * The function creates a low‑level Docker client bound to the Unix socket
+      ``/var/run/docker.sock``.
+    * It streams JSON status objects from ``client.pull`` and builds a
+      ``tqdm`` progress bar for each layer that reports a ``total`` size.
+    * Bars are updated with the delta between the current byte count and the
+      previously displayed count, and they are closed when the layer reports
+      ``"Download complete"`` or ``"Pull complete"``.
+    * All progress bars are hidden after completion (``leave=False``) to keep
+      the console output tidy.
+
+    References
+    ----------
+    Docker SDK for Python documentation:
+    https://docker-py.readthedocs.io/en/stable/api.html#docker.api.image.ImageApiMixin.pull
+
+    Examples
+    --------
+    >>> from plant3dvision.utils import docker_pull
+    >>> docker_pull("python", "3.12-slim")
+    """
+    client = _docker_client()
+
+    # Skip pulling if the exact image and tag already exist locally, so a
+    # locally-built image is not overwritten by (possibly stale) registry one.
+    try:
+        if client.inspect_image(f"{image_name}:{tag}") is not None:
+            logger.info(f"Skipping pull of '{image_name}:{tag}': image already present locally.")
+            return
+    except docker.errors.NotFound:
+        pass
+
+    # Track progress bars for each layer
+    bars = {}
+    # Use a counter to assign a fixed vertical position to each layer's bar
+    layer_position = 0
+
+    # pull() with stream=True returns a generator of JSON status objects
+    # [[1]](https://docker-py.readthedocs.io/en/stable/api.html#docker.api.image.ImageApiMixin.pull)
+    for line in client.pull(f"{image_name}:{tag}", stream=True, decode=True):
+        status = line.get('status')
+        layer_id = line.get('id')
+        progress_detail = line.get('progressDetail', {})
+
+        # We only care about layers that have progress information
+        if not layer_id or not status:
+            continue
+
+        # Create a new progress bar for a new layer
+        if layer_id not in bars and 'total' in progress_detail:
+            bars[layer_id] = tqdm(
+                total=progress_detail['total'],
+                unit='B',
+                unit_scale=True,
+                desc=f"Layer {layer_id}",
+                position=layer_position,
+                leave=False  # leave=True keeps the bar on screen after finishing
+            )
+            layer_position += 1
+
+        # Update progress
+        if layer_id in bars:
+            current = progress_detail.get('current', 0)
+            delta = current - bars[layer_id].n
+            if delta > 0:
+                bars[layer_id].update(delta)
+
+            # If the layer is finished, we ensure it hits 100% and stays there
+            if status in ['Download complete', 'Pull complete', 'Already exists']:
+                bars[layer_id].n = bars[layer_id].total
+                bars[layer_id].refresh()
+
+    # Move the cursor below all the finished bars
+    print("\n" * layer_position)
+    print(f"Finished pulling {image_name}:{tag}")
 
 
 def median_deviation(values, angular=False, abs=False):

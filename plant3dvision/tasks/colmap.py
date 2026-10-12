@@ -861,6 +861,9 @@ class Colmap(RomiTask):
 
     # Retry parameters
     retry_count = luigi.IntParameter(default=10)
+
+    cli_args = luigi.DictParameter(default={})
+    no_final_clean_up = luigi.BoolParameter(default=False)
     retry = 0
 
     def _workspace_as_bounding_box(self):
@@ -905,16 +908,19 @@ class Colmap(RomiTask):
         if matcher_str not in self.cli_args:
             self.cli_args[matcher_str] = {}
         # - Set it for feature extraction step:
-        self.cli_args["feature_extractor"]["--SiftExtraction.use_gpu"] = str(int(self.use_gpu))
+        self.cli_args["feature_extractor"]["--FeatureExtraction.use_gpu"] = str(int(self.use_gpu))
         # - Set it for feature matching step:
-        self.cli_args[matcher_str]["--SiftMatching.use_gpu"] = str(int(self.use_gpu))
+        self.cli_args[matcher_str]["--FeatureMatching.use_gpu"] = str(int(self.use_gpu))
 
     def set_single_camera(self):
         """Configure COLMAP CLI parameters to use one or more cameras."""
         if "feature_extractor" not in self.cli_args:
             self.cli_args["feature_extractor"] = {}
         # - Define the camera model:
-        self.cli_args["feature_extractor"]["--ImageReader.single_camera"] = str(self.single_camera)
+        if self.single_camera:
+            self.cli_args["feature_extractor"]["--ImageReader.single_camera"] = str(self.single_camera)
+        else:
+            self.cli_args["feature_extractor"]["--ImageReader.single_camera_per_folder"] = "1"
 
     def set_camera_model(self):
         """Configure COLMAP CLI parameters to defines a camera model."""
@@ -1071,8 +1077,10 @@ class Colmap(RomiTask):
             align_pcd=bool(self.align_pcd),
             use_calibration=extrinsic_calibration,  # impact the ``poses.txt`` file: use calibrated instead of cnc poses
             bounding_box=bounding_box,
+            multiple_cameras=not self.single_camera,
             colmap_exe=str(self.colmap_exe),
-            circular_match_window=self.circular_match_window
+            circular_match_window=self.circular_match_window,
+            no_final_clean_up=bool(self.no_final_clean_up)
         )
 
         # Perform reconstruction and get results
@@ -1196,6 +1204,7 @@ class Colmap(RomiTask):
             suffix = f"_try_{self.retry}{ext}"
             fpath.rename(str(fpath).replace(ext, suffix))
 
+        self.no_final_clean_up = False
         if self.qc_check:
             if not correctly_estimated:
                 _rename_retry_file(dist_outfile.path())
@@ -1213,8 +1222,8 @@ class Colmap(RomiTask):
                     raise Exception(f"Max retries ({self.retry_count}) reached - Failed to estimate camera poses!")
 
         # Clean up the temporary working directory created by the ColmapRunner instance:
-        colmap_runner.clean_up()
-        return
+        if not self.no_final_clean_up:
+            colmap_runner.clean_up()
 
 
 class CameraPoseQC(object):

@@ -543,7 +543,7 @@ class ReconstructionExplorer(QMainWindow):
 
         # Images fileset
         self._images_fs = scan.get_fileset('images')
-        self._image_files = self._images_fs.get_files()
+        self._image_files = sorted(self._images_fs.get_files(), key=lambda f: f.id)
 
         # Reset plotter
         self.plotter.clear()

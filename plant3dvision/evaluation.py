@@ -79,7 +79,7 @@ def estimate_cylinder_radius(pcd):
         pcd_points = np.asarray(pcd.points)
     # Compute the covariance matrix and use eigen value decomposition to get the norms of the inertia matrix:
     cov_matrix = np.cov(pcd_points, rowvar=False)
-    eig_val, eig_vec = np.linalg.eig(cov_matrix)
+    eig_val, eig_vec = np.linalg.eigh(cov_matrix)
     # Find the axes index corresponding to the circle (should have very close eigen values):
     x, y = _find_two_closest(eig_val)
     # Compute the centered point cloud:

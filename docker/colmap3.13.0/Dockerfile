@@ -1,12 +1,12 @@
 ARG UBUNTU_VERSION=24.04
-ARG NVIDIA_CUDA_VERSION=12.9.0
+ARG NVIDIA_CUDA_VERSION=12.9.1
 
 # -----------------------------------------------------------------------------
 # Docker builder stage.
 # -----------------------------------------------------------------------------
 FROM nvidia/cuda:${NVIDIA_CUDA_VERSION}-devel-ubuntu${UBUNTU_VERSION} AS builder
 
-ARG COLMAP_GIT_TAG=3.12.4
+ARG COLMAP_GIT_TAG=3.13.0
 ARG CUDA_ARCHITECTURES=all-major
 ENV QT_XCB_GL_INTEGRATION=xcb_egl
 
@@ -32,15 +32,20 @@ RUN apt-get update && \
         libgmock-dev \
         libsqlite3-dev \
         libglew-dev \
-        qtbase5-dev \
-        libqt5opengl5-dev \
+        qt6-base-dev \
+        libqt6opengl6-dev \
+        libqt6openglwidgets6 \
         libcgal-dev \
         libceres-dev \
         libcurl4-openssl-dev \
-        libmkl-full-dev
+        libssl-dev \
+        libmkl-full-dev \
+        python3-full \
+        python3-venv
 
 # Build and install COLMAP.
-RUN git clone https://github.com/colmap/colmap.git
+ENV CMAKE_INSTALL_PREFIX=/colmap-install
+RUN git clone https://github.com/colmap/colmap.git --depth 1 --shallow-submodules --no-tags --branch ${COLMAP_GIT_TAG}
 RUN cd colmap && \
     git fetch --tags https://github.com/colmap/colmap.git && \
     git checkout ${COLMAP_GIT_TAG} && \
@@ -52,6 +57,14 @@ RUN cd colmap && \
         -DCMAKE_INSTALL_PREFIX=/colmap-install \
         -DBLA_VENDOR=Intel10_64lp && \
     ninja install
+ENV CMAKE_PREFIX_PATH=/colmap-install
+RUN apt-get install -y python3-dev
+RUN python3 -m venv /home/root/colmap_env && \
+    . /home/root/colmap_env/bin/activate && \
+    pip install --upgrade pip && \
+    cd colmap && \
+    pip install .
+
 
 # -----------------------------------------------------------------------------
 # Docker runtime stage.
@@ -74,16 +87,26 @@ RUN apt-get update && \
         libgl1 \
         libglew2.2 \
         libgoogle-glog0v6t64 \
-        libqt5core5a \
-        libqt5gui5 \
-        libqt5widgets5 \
+        libqt6core6 \
+        libqt6gui6 \
+        libqt6widgets6 \
+        libqt6openglwidgets6 \
         libcurl4 \
+        libssl3t64 \
         libmkl-locale \
         libmkl-intel-lp64 \
         libmkl-intel-thread \
-        libmkl-core && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+        libmkl-core \
+        python3-full  \
+        python3-venv \
+        git && \
+    apt-get clean
+
+# Add to python path to virtual env
+ENV VIRTUAL_ENV=/home/root/colmap-venv
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+# Install Python and create virtual environment
+RUN python3 -m venv $VIRTUAL_ENV
 
 # Copy all files from /colmap-install/ in the builder stage to /usr/local/ in
 # the runtime stage. This simulates installing COLMAP in the default location
@@ -92,6 +115,7 @@ RUN apt-get update && \
 # a library. For instance, CMake will be able to find COLMAP easily with the
 # command: find_package(COLMAP REQUIRED).
 COPY --from=builder /colmap-install/ /usr/local/
+COPY --from=builder /home/root/colmap_env/lib $VIRTUAL_ENV/lib
 
 RUN groupadd -g 1001 colmap_users && \
     # Make COLMAP files group-readable and executable

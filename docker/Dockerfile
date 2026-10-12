@@ -1,5 +1,5 @@
 # syntax = docker/dockerfile:1.12
-ARG COLMAP_VERSION="3.8"
+ARG COLMAP_VERSION="3.13"
 ARG CUDA_CC="75"
 FROM roboticsmicrofarms/colmap:${COLMAP_VERSION}-cuda_cc${CUDA_CC}
 
@@ -69,6 +69,13 @@ RUN apt-get update && \
     # Proper setup for OpenCL:
     mkdir -p /etc/OpenCL/vendors && \
     echo "libnvidia-opencl.so.1" > /etc/OpenCL/vendors/nvidia.icd && \
+    # Create the group (and update colmap accessibility) only if it isn’t already present
+    getent group colmap_users || \
+    ( groupadd -g 1001 colmap_users && \
+      chgrp -R colmap_users /usr/local/bin/colmap && \
+      chgrp -R colmap_users /usr/local/share/colmap && \
+      chmod -R g+rx /usr/local/bin/colmap && \
+      chmod -R g+rx /usr/local/share/colmap ) && \
     # Give non-root user (romi) access to all COLMAP related files by making it a member of 'colmap_users' group
     usermod -a -G colmap_users ${USER_NAME} && \
     # Make sure .bashrc gets loaded in non-interactive shells by adding to .bash_profile
