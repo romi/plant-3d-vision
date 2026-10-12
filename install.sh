@@ -86,6 +86,28 @@ check_conda(){
   fi
 }
 
+# Select the PyTorch wheel index matching the GPU compute capability.
+# Newer CUDA builds drop kernels for older GPUs (sm_61 is last supported by CUDA 12.8),
+# so install a build that still ships kernels for the detected GPU.
+get_pytorch_index_url() {
+  local cc=""
+  if command -v nvidia-smi >/dev/null 2>&1; then
+    cc=$(nvidia-smi --query-gpu=compute_cap --format=csv | awk 'NR==2' | tr -d '.')
+  fi
+  if [ -z "${cc}" ] || ! [[ "${cc}" =~ ^[0-9]+$ ]]; then
+    TORCH_INDEX_URL="https://download.pytorch.org/whl/cu128"
+    log_warning "Could not detect GPU compute capability, using PyTorch CUDA 12.8 index '${TORCH_INDEX_URL}'"
+    return
+  fi
+  # Blackwell (CC >= 10.0) requires a CUDA 13.0 build; all older GPUs are covered by CUDA 12.8.
+  if [ "${cc}" -ge 100 ]; then
+    TORCH_INDEX_URL="https://download.pytorch.org/whl/cu130"
+  else
+    TORCH_INDEX_URL="https://download.pytorch.org/whl/cu128"
+  fi
+  log_info "Detected GPU compute capability ${cc}, using PyTorch index '${TORCH_INDEX_URL}'"
+}
+
 get_installed_setuptools() {
   # Try to get the version of setuptools & return an empty string without raising an error
   python3 -c 'import setuptools; print(setuptools.__version__)' 2>/dev/null || echo ""
@@ -435,8 +457,8 @@ main() {
     # Special pre-installation steps for specific packages
     if [[ "${package_name}" == "romiseg" ]]; then
       log_info "# - Installing PyTorch dependencies for 'romiseg'..."
-      # python3 -m pip install torch==1.13.1 torchvision==0.14.1 --extra-index-url https://download.pytorch.org/whl/cu118
-      python3 -m pip install 'torch>=2.0.0' 'torchvision>=0.15.0' --extra-index-url 'https://download.pytorch.org/whl/cu118'
+      get_pytorch_index_url
+      python3 -m pip install 'torch>=2.0.0' 'torchvision>=0.15.0' --index-url "${TORCH_INDEX_URL}"
     elif [[ "${package_name}" == "romicgal" ]]; then
       log_info "# - Installing pybind11 dependency for 'romicgal'..."
       python3 -m pip install pybind11
