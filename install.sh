@@ -89,23 +89,24 @@ check_conda(){
 }
 
 # Select the PyTorch wheel index matching the GPU compute capability.
-# Newer CUDA builds drop kernels for older GPUs (sm_61 is last supported by CUDA 12.8),
-# so install a build that still ships kernels for the detected GPU.
+# romiseg pins torch==2.13.0, which cu128 does NOT ship (its latest is 2.11.0).
+# cu126 is the newest CUDA build that has torch 2.13.0 AND still ships kernels for
+# older GPUs (sm_61 is last supported by CUDA 12.8; cu130 drops it).
 get_pytorch_index_url() {
   local cc=""
   if command -v nvidia-smi >/dev/null 2>&1; then
     cc=$(nvidia-smi --query-gpu=compute_cap --format=csv | awk 'NR==2' | tr -d '.')
   fi
   if [ -z "${cc}" ] || ! [[ "${cc}" =~ ^[0-9]+$ ]]; then
-    TORCH_INDEX_URL="https://download.pytorch.org/whl/cu128"
-    log_warning "Could not detect GPU compute capability, using PyTorch CUDA 12.8 index '${TORCH_INDEX_URL}'"
+    TORCH_INDEX_URL="https://download.pytorch.org/whl/cu126"
+    log_warning "Could not detect GPU compute capability, using PyTorch CUDA 12.6 index '${TORCH_INDEX_URL}'"
     return
   fi
-  # Blackwell (CC >= 10.0) requires a CUDA 13.0 build; all older GPUs are covered by CUDA 12.8.
+  # Blackwell (CC >= 10.0) requires a CUDA 13.0 build; all older GPUs are covered by CUDA 12.6.
   if [ "${cc}" -ge 100 ]; then
     TORCH_INDEX_URL="https://download.pytorch.org/whl/cu130"
   else
-    TORCH_INDEX_URL="https://download.pytorch.org/whl/cu128"
+    TORCH_INDEX_URL="https://download.pytorch.org/whl/cu126"
   fi
   log_info "Detected GPU compute capability ${cc}, using PyTorch index '${TORCH_INDEX_URL}'"
 }
@@ -471,10 +472,10 @@ main() {
       else
         log_info "Using PyTorch index '${TORCH_INDEX_URL}'"
       fi
-      # --force-reinstall: even if torch is already installed, pull the build from the
-      # selected index so the CUDA wheels always match the target GPU (a satisfied
-      # '>=2.0.0' would otherwise keep a stale build like cu130).
-      python3 -m pip install --force-reinstall 'torch>=2.0.0' 'torchvision>=0.15.0' --index-url "${TORCH_INDEX_URL}"
+      # Pin torch/torchvision to exactly what 'romiseg' requires (see romiseg/pyproject.toml):
+      # a '>=2.0.0' floor would overshoot the pin and let romiseg's 'torch==2.13.0' revert to the
+      # default (cu13) build. Pre-installing the pinned cu126 build keeps the sm_61 kernels.
+      python3 -m pip install 'torch==2.13.0' 'torchvision>=0.28,<0.29' --index-url "${TORCH_INDEX_URL}"
     elif [[ "${package_name}" == "romicgal" ]]; then
       log_info "# - Installing pybind11 dependency for 'romicgal'..."
       python3 -m pip install pybind11
