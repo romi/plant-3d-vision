@@ -44,7 +44,7 @@ initialize_variables() {
   # Name of the conda environment to create:
   ENV_NAME="plant3dvision"
   # Python version to use when creating a conda environment:
-  py_version="3.10"
+  py_version="3.11"
   # Boolean flag to update pip tools:
   update_pip_tools=0
   # Options to use with `pip`:
@@ -59,6 +59,8 @@ initialize_variables() {
   notebook=0
   # Boolean flag to control environment creation:
   create_env=1
+  # PyTorch wheel index URL; empty means auto-detect from the GPU compute capability:
+  TORCH_INDEX_URL=""
   # Debug mode is disabled by default
   DEBUG_MODE=false
 }
@@ -84,6 +86,29 @@ check_conda(){
     log_error "Conda is not installed or not found in PATH. Please install Conda before running this script."
     exit 1
   fi
+}
+
+# Select the PyTorch wheel index matching the GPU compute capability.
+# romiseg pins torch==2.13.0, which cu128 does NOT ship (its latest is 2.11.0).
+# cu126 is the newest CUDA build that has torch 2.13.0 AND still ships kernels for
+# older GPUs (sm_61 is last supported by CUDA 12.8; cu130 drops it).
+get_pytorch_index_url() {
+  local cc=""
+  if command -v nvidia-smi >/dev/null 2>&1; then
+    cc=$(nvidia-smi --query-gpu=compute_cap --format=csv | awk 'NR==2' | tr -d '.')
+  fi
+  if [ -z "${cc}" ] || ! [[ "${cc}" =~ ^[0-9]+$ ]]; then
+    TORCH_INDEX_URL="https://download.pytorch.org/whl/cu126"
+    log_warning "Could not detect GPU compute capability, using PyTorch CUDA 12.6 index '${TORCH_INDEX_URL}'"
+    return
+  fi
+  # Blackwell (CC >= 10.0) requires a CUDA 13.0 build; all older GPUs are covered by CUDA 12.6.
+  if [ "${cc}" -ge 100 ]; then
+    TORCH_INDEX_URL="https://download.pytorch.org/whl/cu130"
+  else
+    TORCH_INDEX_URL="https://download.pytorch.org/whl/cu126"
+  fi
+  log_info "Detected GPU compute capability ${cc}, using PyTorch index '${TORCH_INDEX_URL}'"
 }
 
 get_installed_setuptools() {
@@ -242,6 +267,9 @@ show_usage() {
     Update pip tools, like setuptools and packaging."
   echo "  --no-env
     Skip conda environment creation and activation."
+  echo "  --torch-cuda
+    PyTorch CUDA build to install (e.g. 'cu128' or 'cu130').
+    By default, auto-detected from the GPU compute capability."
   echo "  --no-cache-dir
     Deactivate pip cache directory."
   # -- Debug option:
@@ -299,6 +327,10 @@ show_usage() {
       ;;
     --no-env)
       create_env=0
+      ;;
+    --torch-cuda)
+      shift
+      TORCH_INDEX_URL="https://download.pytorch.org/whl/${1}"
       ;;
     --debug)
       DEBUG_MODE=true
@@ -435,8 +467,15 @@ main() {
     # Special pre-installation steps for specific packages
     if [[ "${package_name}" == "romiseg" ]]; then
       log_info "# - Installing PyTorch dependencies for 'romiseg'..."
-      # python3 -m pip install torch==1.13.1 torchvision==0.14.1 --extra-index-url https://download.pytorch.org/whl/cu118
-      python3 -m pip install 'torch>=2.0.0' 'torchvision>=0.15.0' --extra-index-url 'https://download.pytorch.org/whl/cu118'
+      if [ -z "${TORCH_INDEX_URL}" ]; then
+        get_pytorch_index_url
+      else
+        log_info "Using PyTorch index '${TORCH_INDEX_URL}'"
+      fi
+      # Pin torch/torchvision to exactly what 'romiseg' requires (see romiseg/pyproject.toml):
+      # a '>=2.0.0' floor would overshoot the pin and let romiseg's 'torch==2.13.0' revert to the
+      # default (cu13) build. Pre-installing the pinned cu126 build keeps the sm_61 kernels.
+      python3 -m pip install 'torch==2.13.0' 'torchvision>=0.28,<0.29' --index-url "${TORCH_INDEX_URL}"
     elif [[ "${package_name}" == "romicgal" ]]; then
       log_info "# - Installing pybind11 dependency for 'romicgal'..."
       python3 -m pip install pybind11

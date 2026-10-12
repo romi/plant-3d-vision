@@ -249,6 +249,7 @@ run_interactive_docker() {
   docker_cmd+=" --user romi:${gid}"
   docker_cmd+=" ${docker_option}"
   docker_cmd+=" -v $host_src_dir:${container_src_dir}"
+  docker_cmd+=" -e TORCH_CUDA=${TORCH_CUDA}"
   docker_cmd+=" -i"  # use the `-i` flag to load `~/.bashrc`.
   docker_cmd+=" ${USE_TTY}"
   docker_cmd+=" roboticsmicrofarms/p3dv-devel:${VTAG}"
@@ -273,6 +274,7 @@ run_docker_command() {
   docker_cmd+=" --user romi:${gid}"
   docker_cmd+=" ${docker_option}"
   docker_cmd+=" -v ${host_src_dir}:${container_src_dir}"
+  docker_cmd+=" -e TORCH_CUDA=${TORCH_CUDA}"
   docker_cmd+=" -i"  # use the `-i` flag to load `~/.bashrc`.
   docker_cmd+=" ${USE_TTY}"
   docker_cmd+=" roboticsmicrofarms/p3dv-devel:${VTAG}"

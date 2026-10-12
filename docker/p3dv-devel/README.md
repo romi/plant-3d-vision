@@ -1,6 +1,6 @@
 # Plant-3D-Vision base Docker Image
 
-This Docker image provides a **ready‑to‑run environment** for the *plant‑3d‑vision* library, its sub‑modules and all required system dependencies (CUDA, COLMAP, OpenCL, Python3.10, etc.).
+This Docker image provides a **ready‑to‑run environment** for the *plant‑3d‑vision* library, its sub‑modules and all required system dependencies (CUDA, COLMAP, OpenCL, Python 3.11, etc.).
 It is designed specifically for **automated testing** and **GitHub CI pipelines**: the image builds a non‑root user, sets up a Python virtual environment, install the plant-3d-vision sources and all dependencies.
 It runs the `entrypoint.sh` script at container start‑up to replace the sources and re-install the project from a mounted source tree. 
 This way most of the dependencies are installed only once, and the container can be used for multiple runs. 

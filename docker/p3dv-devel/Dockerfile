@@ -1,6 +1,8 @@
 # syntax = docker/dockerfile:1.12
 ARG COLMAP_VERSION="3.13.0"
 ARG CUDA_CC="75"
+# PyTorch CUDA build to bake in (e.g. 'cu128'); empty means auto-detect from the GPU:
+ARG TORCH_CUDA=""
 FROM roboticsmicrofarms/colmap:${COLMAP_VERSION}-cuda_cc${CUDA_CC}
 
 LABEL maintainer="Jonathan LEGRAND <jonathan.legrand@ens-lyon.fr>"
@@ -91,8 +93,10 @@ RUN --mount=type=cache,target=/home/${USER_NAME}/.cache/pip,uid=${USER_ID},gid=$
     python3 -m venv /home/${USER_NAME}/venv && \
     # Activate the virtual environment and install packages
     . /home/${USER_NAME}/venv/bin/activate && \
+    INSTALL_ARGS="--no-env --webterm --update-tools" && \
+    if [ -n "${TORCH_CUDA}" ]; then INSTALL_ARGS="${INSTALL_ARGS} --torch-cuda ${TORCH_CUDA}"; fi && \
     # Install `plant-3d-vision` dependencies and sources:
-    bash install.sh --no-env --webterm --update-tools
+    bash install.sh ${INSTALL_ARGS}
 
 COPY --chown=${USER_NAME} docker/p3dv-devel/entrypoint.sh .
 # Make entrypoint executable

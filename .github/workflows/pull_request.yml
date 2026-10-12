@@ -4,6 +4,9 @@ name: CI
 
 env:
   COLMAP: 3.13.0
+  # PyTorch CUDA build: cu126 ships torch 2.13.0 with sm_61 kernels (Quadro P5000);
+  # cu130 drops sm_61 and cu128 doesn't ship torch 2.13.0 (required by romiseg).
+  TORCH_CUDA: cu126
 
 on: pull_request
 
