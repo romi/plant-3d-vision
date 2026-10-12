@@ -471,7 +471,10 @@ main() {
       else
         log_info "Using PyTorch index '${TORCH_INDEX_URL}'"
       fi
-      python3 -m pip install 'torch>=2.0.0' 'torchvision>=0.15.0' --index-url "${TORCH_INDEX_URL}"
+      # --force-reinstall: even if torch is already installed, pull the build from the
+      # selected index so the CUDA wheels always match the target GPU (a satisfied
+      # '>=2.0.0' would otherwise keep a stale build like cu130).
+      python3 -m pip install --force-reinstall 'torch>=2.0.0' 'torchvision>=0.15.0' --index-url "${TORCH_INDEX_URL}"
     elif [[ "${package_name}" == "romicgal" ]]; then
       log_info "# - Installing pybind11 dependency for 'romicgal'..."
       python3 -m pip install pybind11

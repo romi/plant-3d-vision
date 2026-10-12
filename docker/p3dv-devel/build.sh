@@ -17,6 +17,8 @@ initialize_variables() {
   CUDA_CC=""
   # PYCUDA NVCC flags
   PYCUDA_NVCC_FLAGS=""
+  # PyTorch CUDA build to bake in (e.g. 'cu128'); empty means auto-detect:
+  TORCH_CUDA="${TORCH_CUDA:-}"
   # Debug mode is disabled by default
   DEBUG_MODE=false
 }
@@ -121,6 +123,7 @@ build_docker_image() {
   docker_cmd+=" --build-arg COLMAP_VERSION=\"${COLMAP_VERSION}\""
   docker_cmd+=" --build-arg CUDA_CC=\"${CUDA_CC}\""
   docker_cmd+=" --build-arg PYCUDA_NVCC_FLAGS=\"${PYCUDA_NVCC_FLAGS}\""
+  docker_cmd+=" --build-arg TORCH_CUDA=\"${TORCH_CUDA}\""
   docker_cmd+=" -t \"roboticsmicrofarms/p3dv-devel:${VTAG}\""
   docker_cmd+=" ${DOCKER_OPTS}"  # Additional options like --no-cache, --pull, etc.
   docker_cmd+=" -f \"docker/p3dv-devel/Dockerfile\""
@@ -131,6 +134,7 @@ build_docker_image() {
   log_debug "- COLMAP_VERSION: ${COLMAP_VERSION}"
   log_debug "- CUDA_CC: ${CUDA_CC}"
   log_debug "- PYCUDA_NVCC_FLAGS: ${PYCUDA_NVCC_FLAGS}"
+  log_debug "- TORCH_CUDA: ${TORCH_CUDA}"
   log_debug "- Docker tag: roboticsmicrofarms/p3dv-devel:${VTAG}"
   log_debug "- Docker options: ${DOCKER_OPTS}"
   # Print the full command that will be executed
