@@ -4,6 +4,8 @@ name: CI
 
 env:
   COLMAP: 3.13.0
+  # PyTorch CUDA build: cu128 ships sm_61 kernels (Quadro P5000) that the default cu130 build drops
+  TORCH_CUDA: cu128
 
 on: pull_request
 

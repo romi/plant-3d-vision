@@ -26,7 +26,13 @@ if [ -d "$SOURCE_DIR" ] && [ "$(ls -A "$SOURCE_DIR")" ]; then
     cd ${INSTALL_DIR}
     # Run installation script
     # The --no-env flag prevents creating a new venv since we're already in one
-    bash install.sh --no-env --update-tools
+    INSTALL_ARGS="--no-env --update-tools"
+    # Allow selecting the PyTorch CUDA build at runtime via the TORCH_CUDA env var
+    if [ -n "${TORCH_CUDA}" ]; then
+        INSTALL_ARGS="${INSTALL_ARGS} --torch-cuda ${TORCH_CUDA}"
+        echo "Using TORCH_CUDA=${TORCH_CUDA}"
+    fi
+    bash install.sh ${INSTALL_ARGS}
 
     echo "Installation complete!"
 else

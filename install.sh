@@ -59,6 +59,8 @@ initialize_variables() {
   notebook=0
   # Boolean flag to control environment creation:
   create_env=1
+  # PyTorch wheel index URL; empty means auto-detect from the GPU compute capability:
+  TORCH_INDEX_URL=""
   # Debug mode is disabled by default
   DEBUG_MODE=false
 }
@@ -264,6 +266,9 @@ show_usage() {
     Update pip tools, like setuptools and packaging."
   echo "  --no-env
     Skip conda environment creation and activation."
+  echo "  --torch-cuda
+    PyTorch CUDA build to install (e.g. 'cu128' or 'cu130').
+    By default, auto-detected from the GPU compute capability."
   echo "  --no-cache-dir
     Deactivate pip cache directory."
   # -- Debug option:
@@ -321,6 +326,10 @@ show_usage() {
       ;;
     --no-env)
       create_env=0
+      ;;
+    --torch-cuda)
+      shift
+      TORCH_INDEX_URL="https://download.pytorch.org/whl/${1}"
       ;;
     --debug)
       DEBUG_MODE=true
@@ -457,7 +466,11 @@ main() {
     # Special pre-installation steps for specific packages
     if [[ "${package_name}" == "romiseg" ]]; then
       log_info "# - Installing PyTorch dependencies for 'romiseg'..."
-      get_pytorch_index_url
+      if [ -z "${TORCH_INDEX_URL}" ]; then
+        get_pytorch_index_url
+      else
+        log_info "Using PyTorch index '${TORCH_INDEX_URL}'"
+      fi
       python3 -m pip install 'torch>=2.0.0' 'torchvision>=0.15.0' --index-url "${TORCH_INDEX_URL}"
     elif [[ "${package_name}" == "romicgal" ]]; then
       log_info "# - Installing pybind11 dependency for 'romicgal'..."
