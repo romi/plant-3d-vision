@@ -39,13 +39,13 @@ from romitask.cli.romi_run_task import run_task
 from romitask.log import get_logger
 from tqdm import tqdm
 
+from plant3dvision.colmap import estimate_rotation_translation_mat
 from plant3dvision.compare import _get_task_fileset
 from plant3dvision.compare import average_pairwise_comparison
 
 dirname, filename = os.path.split(os.path.abspath(__file__))
 
 CONF_FILE = os.path.join(dirname, "robustness_evaluation.json")
-URL = "https://docs.romi-project.eu/plant_imager/developer/pipeline_repeatability/"
 
 DATETIME_FMT = "%Y.%m.%d_%H.%M"
 
@@ -667,6 +667,282 @@ def run_task_eval(dataset_path: Path | str, task: str, config: str = "", n_repli
     compare_task_output(test_db, task, scan_replicates, independent_runs=full_pipe)
 
 
+def _get_scan_id(dataset_path: Path) -> str:
+    """Get the base scan id of a scan dataset from its configuration file.
+
+    Parameters
+    ----------
+    dataset_path : pathlib.Path
+        Path to a scan dataset directory.
+
+    Returns
+    -------
+    str
+        The scan id, e.g. ``"ahp6-1_E2_23"``.
+    """
+    cfg_file = dataset_path / "scan.toml"
+    if cfg_file.is_file():
+        try:
+            cfg = tomlkit.load(open(cfg_file, 'r'))
+            return cfg["Scan"]["metadata"]["object"]["dataset_id"]
+        except Exception:
+            pass
+    # Fallback: strip any trailing `_<digits>` replicate suffix from the folder name:
+    import re
+    return re.sub(r"_\d+$", "", dataset_path.name)
+
+
+def _write_json_file(file_obj, data: dict) -> None:
+    """Write a JSON dictionary to a ``File``, creating/overwriting its content."""
+    import tempfile
+    with tempfile.NamedTemporaryFile("w", suffix=".json", newline="", encoding="utf-8", delete=False) as f:
+        json.dump(data, f, indent=1)
+        tmp_name = f.name
+    try:
+        file_obj.import_file(tmp_name)
+    finally:
+        os.remove(tmp_name)
+
+
+def _find_replicate(eval_dir: Path, scan_id: str) -> Path | None:
+    """Return the first replicate ``f"{scan_id}_NN"`` directory found in `eval_dir`, else ``None``."""
+    replicas = sorted(
+        d for d in eval_dir.iterdir()
+        if d.is_dir() and d.name.startswith(f"{scan_id}_")
+        and d.name[len(scan_id) + 1:].isdigit()
+    )
+    return replicas[0] if replicas else None
+
+
+EXCLUDED_FILES = ("colmap", "model_analyzer", "points3d", "sparse", "keypoints_per_image", "matches_per_image_pair")
+
+
+def _copy_replicate_colmap(replicate_dir: Path, median_scan) -> dict | None:
+    """Copy a replicate's ``Colmap*`` fileset into `median_scan` (if absent) and return its camera model.
+
+    Parameters
+    ----------
+    replicate_dir : pathlib.Path
+        Path to a replicate scan dataset (in the evaluation database holding the `comparison_json`).
+    median_scan : plantdb.commons.fsdb.Scan
+        The median scan dataset to host the copied ``Colmap*`` fileset.
+
+    Returns
+    -------
+    dict or None
+        The camera intrinsics (``camera_model``) of the replicate, or ``None`` if it could not be read.
+
+    Notes
+    -----
+    Some Colmap output files are not copied as they are meaningless for the faked task, see `EXCLUDED_FILES`.
+    """
+    rep_db = FSDB(str(replicate_dir.parent), no_auth=True)
+    rep_db.connect()
+    try:
+        rep_scan = rep_db.get_scan(replicate_dir.name)
+        rep_colmap = [fs for fs in rep_scan.get_filesets() if fs.id.startswith("Colmap")]
+        assert len(rep_colmap) == 1, f"Found {len(rep_colmap)} 'Colmap*' filesets in '{replicate_dir.name}'."
+        rep_colmap = rep_colmap[0]
+        camera_model = rep_scan.get_fileset("images").get_files()[0].get_metadata("colmap_camera")["camera_model"]
+
+        if not any(fs.id.startswith("Colmap") for fs in median_scan.get_filesets()):
+            colmap_fs = median_scan.create_fileset(rep_colmap.id)
+            for file_id in rep_colmap.list_files():
+                if file_id in EXCLUDED_FILES:
+                    continue
+                colmap_fs.create_file(file_id).import_file(rep_colmap.get_file(file_id).path())
+        return camera_model
+    finally:
+        rep_db.disconnect()
+
+
+def _fake_colmap_fileset(scan, image_files) -> None:
+    """Fake a ``Colmap*`` fileset on the median scan so it looks like the Colmap task estimated the median poses.
+
+    Parameters
+    ----------
+    scan : plantdb.commons.fsdb.Scan
+        The median scan dataset. It hosts a ``Colmap*`` fileset when copied from a
+        replicate; otherwise one is created.
+    image_files : list[plantdb.commons.fsdb.File]
+        The 'images' fileset files, whose ``estimated_pose``/``colmap_camera`` metadata
+        have already been replaced with the estimated median poses.
+
+    Notes
+    -----
+    * Reuses an existing ``Colmap*`` fileset if present, else creates one.
+    * Some Colmap output files are not copied as they are meaningless for the faked task, see `EXCLUDED_FILES`.
+    * Regenerates ``cnc_vs_colmap_poses_estimated.png`` with `CameraPoseQC.plot_pose_estimation_figure`.
+    * Writes ``ref2pred_pose_distances.json`` & ``ref2pred_pose_distances_stats.json`` and ``cameras.json``
+     from the images metadata.
+    """
+    import numpy as np
+    from plant3dvision.tasks.colmap import CameraPoseQC
+
+    colmap_filesets = [fs for fs in scan.get_filesets() if fs.id.startswith("Colmap")]
+    if len(colmap_filesets) == 1:
+        colmap_fs = colmap_filesets[0]
+    elif len(colmap_filesets) == 0:
+        colmap_fs = scan.create_fileset("Colmap_True_10_5_0_median")
+        logger.info(f"Created the fake '{colmap_fs.id}' fileset in '{scan.id}'.")
+    else:
+        raise AssertionError(f"More than one 'Colmap*' fileset in '{scan.id}': "
+                             f"{[fs.id for fs in colmap_filesets]}.")
+
+    def _get_or_create(file_id):
+        return colmap_fs.get_file(file_id) if colmap_fs.file_exists(file_id) else colmap_fs.create_file(file_id)
+
+    # - Remove the heavy reconstruction/log outputs (disk + files.json), if any:
+    for file_id in ("colmap", "model_analyzer", "points3d", "sparse"):
+        if colmap_fs.file_exists(file_id):
+            colmap_fs.delete_file(file_id)
+
+    # - Recompute the pose estimation quality against the (median) estimated poses:
+    camera_pose_qc = CameraPoseQC(image_files, mad_factor=3., metrics=["xy", "z", "pan"])
+
+    # - Regenerate the pose estimation figure:
+    pose_fig_fpath = f"{colmap_fs.path()}/cnc_vs_colmap_poses_estimated.png"
+    camera_pose_qc.plot_pose_estimation_figure(figname=pose_fig_fpath)
+
+    # - Write the reference->predicted pose distances & their statistics:
+    dist_json = {}
+    dist_stats_json = {}
+    for dist_name, dist_values in camera_pose_qc.dist_dict.items():
+        dist_stats_json.update({
+            f"mean_{dist_name}_distance": float(np.nanmean(list(dist_values.values()))),
+            f"median_{dist_name}_distance": float(np.nanmedian(list(dist_values.values()))),
+            f"std_{dist_name}_distance": float(np.nanstd(list(dist_values.values()))),
+        })
+        dist_json[f"{dist_name}_distances"] = dist_values
+    _write_json_file(_get_or_create("ref2pred_pose_distances"), dist_json)
+    _write_json_file(_get_or_create("ref2pred_pose_distances_stats"), dist_stats_json)
+
+    # - Write the camera intrinsics from the images metadata:
+    camera_model = next(
+        fi.get_metadata("colmap_camera")["camera_model"]
+        for fi in image_files
+        if fi.get_metadata("colmap_camera", default=None) is not None
+    )
+    _write_json_file(_get_or_create("cameras"), {str(camera_model["id"]): camera_model})
+
+
+def create_median_pose_dataset(dataset_path: Path | str, eval_db: Path | str,
+                               out_db_path: Path | str | None = None) -> Path:
+    """Create a ``f"{scan_id}_median"`` scan dataset from the 'estimated median pose'.
+
+    Copies the provided scan dataset and replaces the 'images' fileset
+    ``estimated_pose`` and ``colmap_camera`` metadata with the estimated median
+    poses read from a ``Colmap_cnc_poses_comparison.json`` output. It then fakes
+    the copied ``Colmap*`` fileset so it looks like the Colmap task estimated the
+    median poses (see `_fake_colmap_fileset`).
+
+    Parameters
+    ----------
+    dataset_path : pathlib.Path or str
+        Path to the scan dataset to use as a template (e.g. one of the evaluation replicates).
+    eval_db : pathlib.Path or str
+        Path to the ``Colmap_cnc_poses_comparison.json`` output hosting the 'estimated median pose'.
+    out_db_path : pathlib.Path or str, optional
+        Path to the evaluation database where to create the median dataset.
+        Defaults to the parent directory of `dataset_path`.
+
+    Returns
+    -------
+    pathlib.Path
+        Path to the created ``{scan_id}_median`` scan dataset.
+    """
+    dataset_path = Path(dataset_path).expanduser()
+    eval_db = Path(eval_db).expanduser()
+    if eval_db.is_dir():
+        eval_db = eval_db / "Colmap_cnc_poses_comparison.json"
+        assert eval_db.exists(), f"'{eval_db}' does not exist!"
+    else:
+        assert eval_db.name == "Colmap_cnc_poses_comparison.json", f"Expected '{eval_db.name}' to be 'Colmap_cnc_poses_comparison.json'"
+        assert eval_db.exists(), f"'{eval_db}' does not exist!"
+
+    if out_db_path is None:
+        out_db_path = eval_db.parent
+    else:
+        out_db_path = Path(eval_db).expanduser()
+
+    # - Get the base 'scan_id' from the scan configuration:
+    scan_id = _get_scan_id(dataset_path)
+
+    # - Find a replicate (in the comparison JSON directory) to source the Colmap task outputs from:
+    replicate_dir = _find_replicate(eval_db.parent, scan_id)
+    if replicate_dir is None:
+        logger.warning(f"Could not find any '{scan_id}_NN' replicate next to '{eval_db}'.")
+
+    # - Load the estimated median poses `{image_id: [x, y, z, pan, tilt, roll]}`:
+    comparison = json.load(open(eval_db, 'r'))
+    median_poses = comparison["estimated median pose"]
+
+    # - Copy the provided scan dataset as a template for the median dataset:
+    median_scan_path = out_db_path / f"{scan_id}_median"
+    if median_scan_path.exists():
+        shutil.rmtree(median_scan_path)
+    shutil.copytree(str(dataset_path), str(median_scan_path))
+    _check_markers(median_scan_path)
+    logger.info(f"Created the median pose scan dataset '{median_scan_path}'.")
+
+    # - Replace the 'images' fileset metadata with the estimated median poses:
+    out_db = FSDB(str(out_db_path), no_auth=True)
+    out_db.connect()
+    scan = out_db.get_scan(f"{scan_id}_median")
+
+    # - Copy the Colmap fileset & camera intrinsics from a replicate if the template lacks them:
+    camera_model = None
+    if replicate_dir is not None:
+        camera_model = _copy_replicate_colmap(replicate_dir, scan)
+
+    image_files = scan.get_fileset("images").get_files()
+    for fi in image_files:
+        median_pose = median_poses[fi.id]
+        x, y, z, pan, tilt, roll = median_pose
+        rotmat, tvec = estimate_rotation_translation_mat(x, y, z, pan, tilt, roll)
+        # - Replace the 'estimated_pose' metadata:
+        fi.set_metadata("estimated_pose", median_pose)
+        # - Replace the 'rotmat' & 'tvec' entries of the 'colmap_camera' metadata:
+        colmap_camera = fi.get_metadata("colmap_camera")
+        if not colmap_camera:
+            if camera_model is None:
+                raise ValueError(f"No 'colmap_camera' metadata for '{fi.id}' and no replicate "
+                                 f"to source the camera model from.")
+            colmap_camera = {"camera_model": camera_model}
+        colmap_camera["rotmat"] = rotmat.tolist()
+        colmap_camera["tvec"] = tvec.tolist()
+        fi.set_metadata("colmap_camera", colmap_camera)
+    # - Fake the 'Colmap*' fileset so it reflects the (median) estimated poses:
+    _fake_colmap_fileset(scan, image_files)
+    out_db.disconnect()
+
+    logger.info(f"Replaced 'images' metadata with {len(median_poses)} estimated median poses.")
+    return median_scan_path
+
+
+@click.command("create-median-dataset", context_settings=dict(help_option_names=["-h", "--help"]))
+@click.argument("eval_db", type=click.Path(exists=True, dir_okay=True, file_okay=True))
+@click.argument("dataset_path", type=click.Path(exists=True, file_okay=False))
+@click.option("--out-db", "out_db_path", default="", type=str,
+              help="Database location where to create the median dataset. "
+                   "Defaults to the parent directory of `dataset_path`.")
+@click.option("--log-level", "log_level", default="INFO",
+              type=click.Choice(list(logging._nameToLevel.keys())),
+              help="Set message logging level. Defaults to `INFO`.")
+def main_create_median_dataset(eval_db: str, dataset_path: str, out_db_path: str, log_level: str) -> None:
+    """Create a ``{scan_id}_median`` scan dataset using the 'estimated median pose'.
+
+    Reads the 'estimated median pose' from a ``Colmap_cnc_poses_comparison.json``
+    output, copies the provided scan dataset to ``f"{scan_id}_median"``, replaces
+    the 'images' fileset ``estimated_pose`` and ``colmap_camera`` metadata with the
+    estimated median pose values, and fakes the copied ``Colmap*`` fileset so it
+    looks like the Colmap task estimated the median poses.
+    """
+    global logger
+    logger = get_logger(__name__, None, log_level)
+    create_median_pose_dataset(dataset_path, eval_db, out_db_path or None)
+
+
 @click.command(context_settings=dict(help_option_names=["-h", "--help"]))
 @click.argument("task", type=str, default="AnglesAndInternodes")
 @click.argument("dataset_path", nargs=-1, type=str)
@@ -695,13 +971,14 @@ def run_task_eval(dataset_path: Path | str, task: str, config: str = "", n_repli
 @optgroup.option("--no-date", "no_date", is_flag=True, default=False,
                  help="Do not add the datetime as prefix to the name of the evaluation database directory to create.")
 @optgroup.group("Other options")
+@optgroup.option("--median", is_flag=True, help="Create the median dataset from the Colmap median poses per image.")
 @optgroup.option("--models", default="", help="Models database location to use with ML pipeline.")
 @optgroup.option("--log-level", "log_level", default="INFO",
                  type=click.Choice(list(logging._nameToLevel.keys())),
                  help="Set message logging level. Defaults to `INFO`.")
 def main(task: str, dataset_path: tuple[str, ...], config: str, n_replicates: int, clean: bool,
          full_pipe: bool, no_pipeline: bool, suffix: str, eval_db: str, date_fmt: str, no_date: bool,
-         models: str, log_level: str) -> None:
+         is_median: bool, models: str, log_level: str) -> None:
     """Task robustness evaluation.
 
     Evaluate the robustness of a Reconstruction & Quantification (R&Q) pipeline task by
@@ -738,6 +1015,9 @@ def main(task: str, dataset_path: tuple[str, ...], config: str, n_replicates: in
                           eval_db=eval_db, date_fmt=date_fmt, no_date=no_date, models=models, log_level=log_level)
         except Exception as e:
             print(e)
+
+        if is_median:
+            create_median_pose_dataset(dataset_path=folder, eval_db=eval_db)
 
 
 if __name__ == '__main__':
