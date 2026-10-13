@@ -230,10 +230,14 @@ def _perform_comparisons(eval_db_path, comp_func, task_name, valid_replicates):
         comp_func = [comp_func]  # make a list to work in following loop
     # Get the list of `plantdb.commons.fsdb.Scan` instances to compare from list of Path:
     valid_replicates = [eval_db_path.get_scan(scan.name) for scan in valid_replicates]
-    # - More than one comparison function can be applied to a same task!
+    # - More than one comparison function can be applied to the same task!
     for func in comp_func:
         logger.info(f"Comparing '{task_name}' outputs with '{func}'...")
-        eval(func + "(eval_db_path, task_name, valid_replicates)")
+        if func == "estimated_pose_variability":
+            for axes in ["xyz", "xy", "z", "pan"]:
+                eval(func + "(eval_db_path, task_name, valid_replicates, axes=axes)")
+        else:
+            eval(func + "(eval_db_path, task_name, valid_replicates)")
         # try:
         #     eval(func + "(db, task_name)")
         # except NameError:

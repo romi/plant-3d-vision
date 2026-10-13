@@ -414,7 +414,7 @@ def compare_intrinsic_params(db, task_name, scans_list):
     return
 
 
-def estimated_pose_variability(db, task_name, scans_list):
+def estimated_pose_variability(db, task_name, scans_list, axes='xyz'):
     """Generate a figure showing the colmap poses variability to CNC pose & median pose.
 
     Parameters
@@ -427,15 +427,16 @@ def estimated_pose_variability(db, task_name, scans_list):
         List of ``Scan`` instances to compare.
 
     """
+    logger.info(f"Computing estimated {axes.upper()} pose variability...")
     from scipy.spatial.distance import euclidean
     ref_scan_name = '_'.join(scans_list[0].id.split('_')[:-1])
     # We get the CNC poses from the first scan of the list as they are replicates:
-    cnc_poses_by_image = get_cnc_poses_from_images_metadata(scans_list[0], axes='xyz')
+    cnc_poses_by_image = get_cnc_poses_from_images_metadata(scans_list[0], axes=axes)
 
     # - Get the dictionary of colmap poses (XYZ) indexed by image id by scan id:
     colmap_poses_by_scan = {}  # scan_id indexed
     for scan in scans_list:
-        colmap_poses_by_scan[scan.id] = get_camera_poses_from_images_metadata(scan, "estimated_pose")
+        colmap_poses_by_scan[scan.id] = get_camera_poses_from_images_metadata(scan, "estimated_pose", axes=axes)
 
     # Get the list of image ids:
     im_ids = list(colmap_poses_by_scan[scans_list[0].id].keys())
@@ -457,13 +458,13 @@ def estimated_pose_variability(db, task_name, scans_list):
     # - Compute the distance of estimated colmap poses from the CNC pose for each replicate and image:
     dist2cnc_pose_by_image = {}
     for im_id, colmap_poses in colmap_poses_by_image.items():
-        xyz_cnc = cnc_poses_by_image[im_id]
-        dist2cnc_pose_by_image[im_id] = [euclidean(pose, xyz_cnc) for pose in colmap_poses]
+        cnc_pose = cnc_poses_by_image[im_id]
+        dist2cnc_pose_by_image[im_id] = [euclidean(pose, cnc_pose) for pose in colmap_poses]
     # - Compute the distance of estimated colmap poses from the median pose for each replicate and image:
     dist2median_pose_by_image = {}
     for im_id, colmap_poses in colmap_poses_by_image.items():
-        xyz_median = median_pose_by_image[im_id]
-        dist2median_pose_by_image[im_id] = [euclidean(pose, xyz_median) for pose in colmap_poses]
+        median_pose = median_pose_by_image[im_id]
+        dist2median_pose_by_image[im_id] = [euclidean(pose, median_pose) for pose in colmap_poses]
 
     def _bxplt(ax, dist_dict, title):
         labels = list(dist_dict.keys())
@@ -476,14 +477,14 @@ def estimated_pose_variability(db, task_name, scans_list):
         ax.grid(linestyle='-.')
         return ax
 
-    fig, axes = plt.subplots(nrows=2, ncols=1, figsize=[12, 8])
-    axes[0] = _bxplt(axes[0], dist2cnc_pose_by_image, "Distance to CNC pose.")
-    axes[1] = _bxplt(axes[1], dist2median_pose_by_image, "Distance to median pose.")
-    plt.suptitle(f"{ref_scan_name} - {task_name} pose estimation variability (n={len(scans_list)})")
+    fig, ax = plt.subplots(nrows=2, ncols=1, figsize=[12, 8])
+    ax[0] = _bxplt(ax[0], dist2cnc_pose_by_image, f"Distance to CNC pose ({axes.upper()}).")
+    ax[1] = _bxplt(ax[1], dist2median_pose_by_image, f"Distance to median pose ({axes.upper()}).")
+    plt.suptitle(f"{ref_scan_name} - {task_name} {axes.upper()} pose estimation variability (n={len(scans_list)})")
     plt.tight_layout()
-    plt.savefig(Path(db.basedir) / f'{ref_scan_name} - {task_name}_poses_boxplot.png')
+    plt.savefig(Path(db.basedir) / f'{ref_scan_name} - {task_name}_{axes.lower()}_poses_boxplot.png')
 
-    with open(Path(db.basedir) / f'{task_name}_estimated_poses_deviation.json', 'w') as out_file:
+    with open(Path(db.basedir) / f'{task_name}_estimated_{axes.lower()}_poses_deviation.json', 'w') as out_file:
         json.dump({
             'global mean distance to cnc pose': float(np.mean(np.array(list(dist2cnc_pose_by_image.values())))),
             'global std distance to cnc pose': float(np.std(np.array(list(dist2cnc_pose_by_image.values())))),
