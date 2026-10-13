@@ -1,24 +1,46 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+"""
+# Task Robustness Evaluation
 
-import click
-from click_option_group import optgroup
+Evaluate the robustness of a Reconstruction & Quantification (R&Q) pipeline task by
+replicating a scan dataset, running the task on each replicate, and comparing the outputs.
+
+The module exposes the functions used to build the evaluation database,
+duplicate scan datasets, run the task, and compare its results across replicates.
+It is also a runnable CLI (`robustness_evaluation`) that wires these steps together.
+
+## Key Features
+
+- Build and populate a temporary database to prepare the reference scan.
+- Duplicate the reference scan into an evaluation database as replicates.
+- Run the task to evaluate on each replicate, optionally on the whole pipeline.
+- Compare task outputs file-by-file and with task-specific metrics.
+"""
+
 import datetime
+import filecmp
 import glob
+import json
 import logging
 import os
 import shutil
 import sys
 import tempfile
-import tomlkit
+from itertools import combinations
 from pathlib import Path
-from plant3dvision.compare import *
-from plant3dvision.compare import _get_task_fileset
+
+import click
+import tomlkit
+from click_option_group import optgroup
 from plantdb.commons.fsdb.core import FSDB
 from plantdb.commons.fsdb.path_helpers import MARKER_FILE_NAME
 from romitask.cli.romi_run_task import run_task
 from romitask.log import get_logger
 from tqdm import tqdm
+
+from plant3dvision.compare import _get_task_fileset
+from plant3dvision.compare import average_pairwise_comparison
 
 dirname, filename = os.path.split(os.path.abspath(__file__))
 
@@ -28,30 +50,26 @@ URL = "https://docs.romi-project.eu/plant_imager/developer/pipeline_repeatabilit
 DATETIME_FMT = "%Y.%m.%d_%H.%M"
 
 
-
-def file_by_file_comparison(eval_db_path, task_name, scan_replicates):
-    """Compares task folders, file by file, dump results to JSON.
+def file_by_file_comparison(eval_db_path: FSDB, task_name: str, scan_replicates: list[Path]) -> None:
+    """Compare task folders file by file and dump the results to a JSON file.
 
     Parameters
     ----------
     eval_db_path : plantdb.commons.fsdb.FSDB
-        Local ROMI database instance with the replicated scan datasets
+        Local ROMI database instance with the replicated scan datasets.
     task_name : str
-        name of the task to evaluation
+        Name of the task to evaluate.
     scan_replicates : list of pathlib.Path
         List of `Path` to the replicated scans.
 
-    Notes
-    -----
-    Produce a JSON file that summarize the comparison.
-
     See Also
     --------
-    filecmp.dircmp
+    filecmp.dircmp : Recursively compares the files and directories of two trees.
 
+    Notes
+    -----
+    Produce a JSON file that summarizes the comparison.
     """
-    import filecmp
-    from itertools import combinations
     logger.info(f"Performing file-by-file comparison for the outputs of task '{task_name}'...")
     fcmp = {}
     scan_pairs = combinations(scan_replicates, 2)
@@ -79,27 +97,28 @@ def file_by_file_comparison(eval_db_path, task_name, scan_replicates):
     return
 
 
-def compare_task_output(eval_db_path, task_name, scan_replicates, independent_runs=False):
-    """Method to compare tasks outputs on a series of replicated datasets.
+def compare_task_output(eval_db_path: FSDB, task_name: str, scan_replicates: list[Path],
+                        independent_runs: bool = False) -> None:
+    """Compare task outputs on a series of replicated datasets.
 
     Parameters
     ----------
     eval_db_path : plantdb.commons.fsdb.FSDB
-        Local ROMI database instance with the replicated scan datasets
+        Local ROMI database instance with the replicated scan datasets.
     task_name : str
-        Name of the task to evaluation.
+        Name of the task to evaluate.
     scan_replicates : list of pathlib.Path
         List of `Path` to the replicated scans.
-    independent_runs : bool
-        ``True`` indicate that the chained tasks were performed independently for each replicate.
-        So each of them (all tasks downstream of `task_name` & `task_name`) will be evaluated.
-        Else only perform the evaluation defined for `task_name`.
+    independent_runs : bool, default False
+        When ``True``, indicates that the chained tasks were performed
+        independently for each replicate, so each task downstream of
+        `task_name` (and `task_name` itself) is evaluated. Otherwise only the
+        evaluation defined for `task_name` is performed.
 
     Notes
     -----
     The behaviour of this method is configured by the JSON file `CONF_FILE`.
     It is possible to define more than one comparison method per task.
-
     """
     eval_db_path.connect()
     # - Check the list of scan replicates for successful call of `romi_run_task`
@@ -140,8 +159,21 @@ def compare_task_output(eval_db_path, task_name, scan_replicates, independent_ru
     return
 
 
-def _perform_comparisons(eval_db_path, comp_func, task_name, valid_replicates):
-    """Method that calls for the task comparison function(s) on the list of scan replicates that successfully ran it."""
+def _perform_comparisons(eval_db_path: FSDB, comp_func: str | list[str], task_name: str,
+                         valid_replicates: list[Path]) -> None:
+    """Call the task comparison function(s) on the scan replicates that ran the task.
+
+    Parameters
+    ----------
+    eval_db_path : plantdb.commons.fsdb.FSDB
+        Local ROMI database instance with the replicated scan datasets.
+    comp_func : str or list of str
+        Name(s) of the comparison function(s) to call for `task_name`.
+    task_name : str
+        Name of the task to evaluate.
+    valid_replicates : list of pathlib.Path
+        List of `Path` to the scan replicates that successfully ran `task_name`.
+    """
     if isinstance(comp_func, str):
         comp_func = [comp_func]  # make a list to work in following loop
     # Get the list of `plantdb.commons.fsdb.Scan` instances to compare from list of Path:
@@ -165,8 +197,16 @@ def _perform_comparisons(eval_db_path, comp_func, task_name, valid_replicates):
     return
 
 
-def _copy_tree(origin, dest):
-    """Copy a whole directory from `origin` to `dest`."""
+def _copy_tree(origin: Path | str, dest: Path | str) -> None:
+    """Copy a whole directory from `origin` to `dest`.
+
+    Parameters
+    ----------
+    origin : pathlib.Path or str
+        Source directory to copy.
+    dest : pathlib.Path or str
+        Destination directory for the copy.
+    """
     try:
         shutil.copytree(str(origin), str(dest))
     except:
@@ -174,7 +214,8 @@ def _copy_tree(origin, dest):
     return
 
 
-def fill_tmp_db(dataset_path, models_path=None, extra_scans=None, clean=False):
+def fill_tmp_db(dataset_path: Path | str, models_path: Path | None = None,
+                extra_scans: list[Path] | None = None, clean: bool = False) -> Path:
     """Fill the temporary DB with replicates of `ref_scan` and run the pipeline up to the previous task.
 
     Parameters
@@ -190,7 +231,7 @@ def fill_tmp_db(dataset_path, models_path=None, extra_scans=None, clean=False):
 
     Returns
     -------
-    Path
+    pathlib.Path
         The path to the temporary 'reference scan dataset'.
 
     Notes
@@ -231,8 +272,16 @@ def fill_tmp_db(dataset_path, models_path=None, extra_scans=None, clean=False):
     return tmp_scan_dir
 
 
-def _run_clean_if_requested(tmp_scan_dir, clean):
-    """Clean the input dataset if requested."""
+def _run_clean_if_requested(tmp_scan_dir: Path, clean: bool) -> None:
+    """Clean the input dataset if requested.
+
+    Parameters
+    ----------
+    tmp_scan_dir : pathlib.Path
+        The path to the scan dataset directory to clean.
+    clean : bool
+        Whether to run the ``Clean`` task on `tmp_scan_dir`.
+    """
     bak_cfg_file = tmp_scan_dir / "pipeline.toml"
     if clean:
         # Create a quiet Clean task configuration:
@@ -245,7 +294,8 @@ def _run_clean_if_requested(tmp_scan_dir, clean):
     return
 
 
-def fill_eval_db(eval_db_path, dataset_path, n_replicate, models_path=None, extra_scans=None):
+def fill_eval_db(eval_db_path: Path, dataset_path: Path, n_replicate: int,
+                 models_path: Path | None = None, extra_scans: list[Path] | None = None) -> list[Path]:
     """Fill the evaluation DB with replicates of `ref_scan` and run the pipeline up to the previous task.
 
     Parameters
@@ -264,7 +314,7 @@ def fill_eval_db(eval_db_path, dataset_path, n_replicate, models_path=None, extr
     Returns
     -------
     list
-        list of pathlib.Path of created scan datasets
+        A list of path to the created scan datasets.
 
     Notes
     -----
@@ -298,7 +348,8 @@ def fill_eval_db(eval_db_path, dataset_path, n_replicate, models_path=None, extr
     return scan_replicates
 
 
-def get_eval_db_path(root_location, task_name, suffix="", date_fmt=DATETIME_FMT, no_date=False, **kwargs):
+def get_eval_db_path(root_location: Path, task_name: str, suffix: str = "", date_fmt: str = DATETIME_FMT,
+                     no_date: bool = False, **kwargs: object) -> Path:
     """Generate the "evaluation database" name, for example: '20200803124841_eval_TriangleMesh'.
 
     Parameters
@@ -317,7 +368,7 @@ def get_eval_db_path(root_location, task_name, suffix="", date_fmt=DATETIME_FMT,
     Returns
     -------
     pathlib.Path
-        Path to the evaluation database.
+        The path to the evaluation database.
     """
     if no_date:
         folder_name = f"Eval_{task_name}"
@@ -334,7 +385,7 @@ def get_eval_db_path(root_location, task_name, suffix="", date_fmt=DATETIME_FMT,
     return Path(root_location / folder_name)
 
 
-def initialize_eval_db(eval_db_path="", **kwargs):
+def initialize_eval_db(eval_db_path: str | Path = "", **kwargs: object) -> Path:
     """Initialize the local FSDB "evaluation database".
 
     Parameters
@@ -358,17 +409,12 @@ def initialize_eval_db(eval_db_path="", **kwargs):
     Returns
     -------
     pathlib.Path
-        Path to the "evaluation database" directory.
+        The path to the "evaluation database" directory.
 
     Notes
     -----
     A valid ROMI database (`plantdb`) is a directory with a `romidb` marker file in it.
     We use the tested task name and datetime to create the name of the directory.
-
-    See Also
-    --------
-    plant3dvision.bin.robustness_evaluation.create_test_db_path
-
     """
     # - Get the path to the evaluation DB to create:
     if eval_db_path == "":
@@ -395,7 +441,7 @@ def initialize_eval_db(eval_db_path="", **kwargs):
     return eval_db_path
 
 
-def get_replicates_list(eval_db_path, ds_path):
+def get_replicates_list(eval_db_path: Path, ds_path: Path) -> list[Path]:
     """Get the list of scan replicates.
 
     Parameters
@@ -416,13 +462,19 @@ def get_replicates_list(eval_db_path, ds_path):
     >>> eval_db_path = Path('~/romi_db/calibration_robustness/20220905155852_eval_ExtrinsicCalibration_opencv')
     >>> ds_path = Path('~/romi_db/calibration_robustness/db/extrinsic_calib_1')
     >>> get_replicates_list(eval_db_path.expanduser(),ds_path.expanduser())
-
     """
     return sorted(
         list([idir.expanduser() for idir in eval_db_path.iterdir() if idir.is_dir() and ds_path.name in idir.name]))
 
 
-def _check_markers(path):
+def _check_markers(path: Path) -> None:
+    """Make sure the ``romidb`` marker file exists at `path`.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        Path to the directory where the marker file should be created.
+    """
     # - Make sure the `romidb` marker file exists:
     marker_file = path / MARKER_FILE_NAME
     try:
@@ -432,7 +484,7 @@ def _check_markers(path):
     return
 
 
-def check_extra_dataset(db_location, config_file):
+def check_extra_dataset(db_location: Path, config_file: Path) -> list[Path]:
     """Use the configuration file to search for defined calibration dataset id(s) to copy.
 
     Parameters
@@ -460,10 +512,44 @@ def check_extra_dataset(db_location, config_file):
     return extra_ds
 
 
-def run_task_eval(dataset_path, task, config="", n_replicates=30, clean=False, full_pipe=False,
-                  no_pipeline=False, suffix="", eval_db="", date_fmt=DATETIME_FMT, no_date=False, models="",
-                  log_level="INFO"):
-    """Run the robustness evaluation of a task on a dataset."""
+def run_task_eval(dataset_path: Path | str, task: str, config: str = "", n_replicates: int = 30,
+                  clean: bool = False, full_pipe: bool = False, no_pipeline: bool = False, suffix: str = "",
+                  eval_db: str = "", date_fmt: str = DATETIME_FMT, no_date: bool = False, models: str = "",
+                  log_level: str = "INFO") -> None:
+    """Run the robustness evaluation of a task on a dataset.
+
+    Parameters
+    ----------
+    dataset_path : pathlib.Path or str
+        Path to the reference scan dataset to use for the evaluation.
+    task : str
+        Name of the task to evaluate.
+    config : str, default ""
+        Path to the pipeline TOML configuration file.
+    n_replicates : int, default 30
+        Number of replicates to create for the robustness evaluation.
+    clean : bool, default False
+        Run a ``Clean`` task on the scan dataset prior to duplication.
+    full_pipe : bool, default False
+        Run the whole pipeline independently for each replicate. Otherwise the
+        task to evaluate is run on clones of the results from the upstream task.
+    no_pipeline : bool, default False
+        Do not run the pipeline, only compare task outputs.
+    suffix : str, default ""
+        Suffix to append to the evaluation database directory to create.
+    eval_db : str, default ""
+        Existing evaluation database location to use. If empty, a new
+        evaluation database is automatically created in the parent directory
+        of the input dataset with a timestamp prefix.
+    date_fmt : str, default DATETIME_FMT
+        Datetime format to use as prefix for the evaluation database name.
+    no_date : bool, default False
+        Do not add the datetime prefix to the evaluation database name.
+    models : str, default ""
+        Models database location to use with the ML pipeline.
+    log_level : str, default "INFO"
+        Message logging level.
+    """
     # - Get the path to the reference scan dataset:
     dataset_path = Path(dataset_path).expanduser()
     # - Path to the local database that contains the reference scan dataset:
@@ -494,7 +580,8 @@ def run_task_eval(dataset_path, task, config="", n_replicates=30, clean=False, f
         if len(dir_entries) > 0:
             from plant3dvision.utils import yes_no_choice
             logger.warning(f"The directory '{eval_db_path}' is not EMPTY!")
-            logger.info("Here is the list of directories found:\n" + "\n".join([f"  - {entry}" for entry in dir_entries]))
+            logger.info(
+                "Here is the list of directories found:\n" + "\n".join([f"  - {entry}" for entry in dir_entries]))
             empty_dir = yes_no_choice(f"The directory '{eval_db_path}' is not EMPTY! Do you want to clean it?")
             if empty_dir:
                 # Remove the existing eval DB:
@@ -612,9 +699,13 @@ def run_task_eval(dataset_path, task, config="", n_replicates=30, clean=False, f
 @optgroup.option("--log-level", "log_level", default="INFO",
                  type=click.Choice(list(logging._nameToLevel.keys())),
                  help="Set message logging level. Defaults to `INFO`.")
-def main(task, dataset_path, config, n_replicates, clean, full_pipe, no_pipeline, suffix, eval_db,
-         date_fmt, no_date, models, log_level):
+def main(task: str, dataset_path: tuple[str, ...], config: str, n_replicates: int, clean: bool,
+         full_pipe: bool, no_pipeline: bool, suffix: str, eval_db: str, date_fmt: str, no_date: bool,
+         models: str, log_level: str) -> None:
     """Task robustness evaluation.
+
+    Evaluate the robustness of a Reconstruction & Quantification (R&Q) pipeline task by
+    replicating a scan dataset, running the task on each replicate, and comparing the outputs.
 
     https://docs.romi-project.eu/plant_imager/developer/pipeline_repeatability/
     """
