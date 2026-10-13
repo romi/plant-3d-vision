@@ -534,9 +534,6 @@ def compare_to_cnc_poses(db, task_name, scans_list):
         logger.critical(f"Could not get CNC poses for any of the duplicated scan!")
         return
 
-    # - Get image ids:
-    image_ids = list(cnc_poses.keys())
-
     # - Get all poses estimated by COLMAP indexed by image id and by replicate id:
     camera_poses_by_scan = {}  # {scan_id: {img_id: [x, y, z, pan, tilt, roll]}}
     for scan in scans_list:
@@ -549,65 +546,75 @@ def compare_to_cnc_poses(db, task_name, scans_list):
         else:
             logger.critical(f"Nothing defined here for a task named '{task_name}'!")
 
+    # - Get image ids:
+    image_ids = list(cnc_poses.keys())
+
     # - Get the list of all colmap poses indexed by image id:
     camera_poses_by_image = {im: [] for im in image_ids}
     for scan_id, camera_poses in camera_poses_by_scan.items():
         for im_id, pose in camera_poses.items():
             camera_poses_by_image[im_id].append(pose)
 
+    logger.info("Computing the distance between the CNC 3D coordinates and those estimated by colmap in each replicate, by image.")
     # - Compute the distance between the CNC 3D coordinates and those estimated by colmap in each replicate, by image:
     dist2cnc_coords_by_image = {}
     for im_id, poses in camera_poses_by_image.items():
         xyz_cnc = cnc_poses[im_id][:3]
         dist2cnc_coords_by_image[im_id] = [euclidean([x, y, z], xyz_cnc) for x, y, z, _, _, _ in poses]
 
+    logger.info("Computing the distance between the CNC pan orientation and the one estimated by colmap in each replicate, by image.")
     # - Compute the distance between the CNC pan orientation and the one estimated by colmap in each replicate, by image:
     dist2cnc_pan_by_image = {}
     for im_id, poses in camera_poses_by_image.items():
         pan_cnc = cnc_poses[im_id][3]
-        dist2cnc_pan_by_image[im_id] = [euclidean(pan, pan_cnc) for _, _, _, pan, _, _ in poses]
+        dist2cnc_pan_by_image[im_id] = [euclidean([pan], [pan_cnc]) for _, _, _, pan, _, _ in poses]
 
-    # Compute the mean distance of estimated colmap coordinates from the CNC pose for each image:
-    mean_dist_to_cnc = {im_id: np.mean(d2cnc) for im_id, d2cnc in dist2cnc_coords_by_image.items()}
-    mean_dist_to_cnc_rep = {scan.id: np.mean([dist2cnc_coords_by_image[im_id][scan_idx] for im_id in image_ids]) for
+    logger.info("Computing the median distance of estimated colmap coordinates from the CNC pose for each image.")
+    # Compute the median distance of estimated colmap coordinates from the CNC pose for each image:
+    median_dist_to_cnc = {im_id: np.median(d2cnc) for im_id, d2cnc in dist2cnc_coords_by_image.items()}
+    median_dist_to_cnc_rep = {scan.id: np.median([dist2cnc_coords_by_image[im_id][scan_idx] for im_id in image_ids]) for
                             scan_idx, scan in enumerate(scans_list)}
 
-    # Compute the mean distance of estimated colmap pan orientation from the CNC pose for each image:
-    mean_pan_dist_to_cnc = {im_id: np.mean(d2cnc) for im_id, d2cnc in dist2cnc_pan_by_image.items()}
-    mean_pan_dist_to_cnc_rep = {scan.id: np.mean([dist2cnc_pan_by_image[im_id][scan_idx] for im_id in image_ids]) for
+    logger.info("Computing the median distance of estimated colmap pan orientation from the CNC pose for each image.")
+    # Compute the median distance of estimated colmap pan orientation from the CNC pose for each image:
+    median_pan_dist_to_cnc = {im_id: float(np.median(d2cnc)) for im_id, d2cnc in dist2cnc_pan_by_image.items()}
+    median_pan_dist_to_cnc_rep = {scan.id: float(np.median([dist2cnc_pan_by_image[im_id][scan_idx] for im_id in image_ids])) for
                                 scan_idx, scan in enumerate(scans_list)}
 
-    # Now compute mean pose per image:
-    mean_pose_by_image = {}
+    logger.info("Computing the median pose per image.")
+    # Now compute median pose per image:
+    median_pose_by_image = {}
     for im_id, pose in camera_poses_by_image.items():
-        mean_pose_by_image[im_id] = np.mean(np.array(pose), axis=0)
+        median_pose_by_image[im_id] = np.median(np.array(pose), axis=0).tolist()
 
-    # - Then compute the distance from the mean pose for each replicate:
-    dist2mean_pose_by_image = {}
-    for im_id, mean_pose in mean_pose_by_image.items():
-        dist2mean_pose_by_image[im_id] = [euclidean(camera_poses_by_scan[scan.id][im_id], mean_pose) for scan in scans_list]
+    logger.info("Computing the distance from the median pose for each replicate.")
+    # - Then compute the distance from the median pose for each replicate:
+    dist2median_pose_by_image = {}
+    for im_id, median_pose in median_pose_by_image.items():
+        dist2median_pose_by_image[im_id] = [euclidean(camera_poses_by_scan[scan.id][im_id], median_pose) for scan in scans_list]
     # Compute deviation statistics per image:
-    mean_dist = {im_id: np.mean(d2m) for im_id, d2m in dist2mean_pose_by_image.items()}
-    mean_dist_rep = {scan.id: np.mean([dist2mean_pose_by_image[im_id][scan_idx] for im_id in image_ids]) for
+    median_dist = {im_id: float(np.median(d2m)) for im_id, d2m in dist2median_pose_by_image.items()}
+    median_dist_rep = {scan.id: float(np.median([dist2median_pose_by_image[im_id][scan_idx] for im_id in image_ids])) for
                      scan_idx, scan in enumerate(scans_list)}
-    std_dist = {im_id: np.std(d2m) for im_id, d2m in dist2mean_pose_by_image.items()}
+    std_dist = {im_id: float(np.std(d2m)) for im_id, d2m in dist2median_pose_by_image.items()}
     # Compute global deviation statistics:
-    global_mean_dist = np.mean([d2m for d2m in dist2mean_pose_by_image.values()])
-    global_mean_dist_to_cnc = np.mean([d2cnc for d2cnc in dist2cnc_coords_by_image.values()])
+    global_median_dist = float(np.median([d2m for d2m in dist2median_pose_by_image.values()]))
+    global_median_dist_to_cnc = float(np.median([d2cnc for d2cnc in dist2cnc_coords_by_image.values()]))
 
+    logger.info("Saving the statistics.")
     with open(Path(db.basedir) / f'{task_name}_cnc_poses_comparison.json', 'w') as out_file:
         json.dump({
-            'estimated mean pose': mean_pose_by_image,
-            'global mean distance to CNC pose': global_mean_dist_to_cnc,
-            'replicate mean distance to CNC pose': dict_sort_by_values(mean_dist_to_cnc_rep),
-            'mean distance to CNC pose': mean_dist_to_cnc,
-            'replicate mean distance to CNC pan': dict_sort_by_values(mean_pan_dist_to_cnc_rep),
-            'mean distance to CNC pan': mean_pan_dist_to_cnc,
-            'global mean distance to mean pose': global_mean_dist,
-            'replicate mean distance to mean pose': dict_sort_by_values(mean_dist_rep),
-            'mean distance to mean pose': mean_dist,
-            'std distance to mean pose': std_dist,
-            'distance to mean pose': dist2mean_pose_by_image
+            'estimated median pose': median_pose_by_image,
+            'global median distance to CNC pose': global_median_dist_to_cnc,
+            'replicate median distance to CNC pose': dict_sort_by_values(median_dist_to_cnc_rep),
+            'median distance to CNC pose': median_dist_to_cnc,
+            'replicate median distance to CNC pan': dict_sort_by_values(median_pan_dist_to_cnc_rep),
+            'median distance to CNC pan': median_pan_dist_to_cnc,
+            'global median distance to median pose': global_median_dist,
+            'replicate median distance to median pose': dict_sort_by_values(median_dist_rep),
+            'median distance to median pose': median_dist,
+            'std distance to median pose': std_dist,
+            'distance to median pose': dist2median_pose_by_image
         }, out_file, indent=2)
 
     return
