@@ -194,6 +194,16 @@ def _get_task_fileset(scan_dataset, task_name):
         If there is more than one `Fileset` object matching the task.
         This would mean that this task was run several times (with different parameters).
 
+    Examples
+    --------
+    >>> from plantdb.commons.test_database import test_database
+    >>> from plant3dvision.compare import _get_task_fileset
+    >>> db = test_database('real_plant_analyzed', no_auth=True)
+    >>> db.connect()
+    >>> scan = db.get_scan("real_plant_analyzed")
+    >>> fs = _get_task_fileset(scan, "Colmap")
+    >>> print(fs.id)
+    Colmap_True_null_SIMPLE_RADIAL_ffcef49fdc
     """
     # - List fileset potentially related to the task (the name of the fileset should start with the task name):
     if task_name == "IntrinsicCalibration":
@@ -208,9 +218,9 @@ def _get_task_fileset(scan_dataset, task_name):
         assert len(task_filesets) == 1
     except AssertionError:
         if len(task_filesets) == 0:
-            msg = f"There is NO occurrence of the task {task_name}!\n"
+            msg = f"There is NO occurrence of the task {task_name} in {scan_dataset.id}!"
         else:
-            msg = f"There is more than one occurrence of the task {task_name}:\n"
+            msg = f"There is more than one occurrence of the task {task_name} in {scan_dataset.id}:\n"
             msg += "  - " + "  - ".join([tfs.id for tfs in task_filesets])
         raise AssertionError(msg)
 
