@@ -4,7 +4,7 @@ from pathlib import Path
 
 import click
 
-from plantdb.commons.fsdb.core import MARKER_FILE_NAME
+from plantdb.commons.fsdb.path_helpers import MARKER_FILE_NAME
 from plantdb.commons.fsdb.exceptions import NotAnFSDBError
 from romitask.log import get_logger
 

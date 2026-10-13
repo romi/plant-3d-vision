@@ -56,7 +56,7 @@ import toml
 from toml import TomlDecodeError
 
 from plantdb.commons.fsdb.core import FSDB
-from plantdb.commons.fsdb.core import MARKER_FILE_NAME
+from plantdb.commons.fsdb.path_helpers import MARKER_FILE_NAME
 from click_option_group import OptionGroup
 from click_option_group import optgroup
 

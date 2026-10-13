@@ -14,7 +14,7 @@ from pathlib import Path
 from plant3dvision.compare import *
 from plant3dvision.compare import _get_task_fileset
 from plantdb.commons.fsdb.core import FSDB
-from plantdb.commons.fsdb.core import MARKER_FILE_NAME
+from plantdb.commons.fsdb.path_helpers import MARKER_FILE_NAME
 from romitask.cli.romi_run_task import run_task
 from romitask.log import get_logger
 from tqdm import tqdm
