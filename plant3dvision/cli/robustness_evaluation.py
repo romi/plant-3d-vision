@@ -975,7 +975,7 @@ def main_create_median_dataset(eval_db: str, dataset_path: str, out_db_path: str
                  help="Set message logging level. Defaults to `INFO`.")
 def main(task: str, dataset_path: tuple[str, ...], config: str, n_replicates: int, clean: bool,
          full_pipe: bool, no_pipeline: bool, suffix: str, eval_db: str, date_fmt: str, no_date: bool,
-         is_median: bool, models: str, log_level: str) -> None:
+         median: bool, models: str, log_level: str) -> None:
     """Task robustness evaluation.
 
     Evaluate the robustness of a Reconstruction & Quantification (R&Q) pipeline task by
@@ -1013,7 +1013,7 @@ def main(task: str, dataset_path: tuple[str, ...], config: str, n_replicates: in
         except Exception as e:
             print(e)
 
-        if is_median:
+        if median:
             create_median_pose_dataset(dataset_path=folder, eval_db=eval_db)
 
 
