@@ -748,9 +748,11 @@ def _copy_replicate_colmap(replicate_dir: Path, median_scan) -> dict | None:
         if not any(fs.id.startswith("Colmap") for fs in median_scan.get_filesets()):
             colmap_fs = median_scan.create_fileset(rep_colmap.id)
             for file_id in rep_colmap.list_files():
+                rep_file_path = rep_colmap.get_file(file_id).path()
                 if file_id in EXCLUDED_FILES:
-                    continue
-                colmap_fs.create_file(file_id).import_file(rep_colmap.get_file(file_id).path())
+                    colmap_fs.create_file(file_id).write("", ext=rep_file_path.suffix)  # create empty file
+                else:
+                    colmap_fs.create_file(file_id).import_file(rep_file_path)
         return camera_model
     finally:
         rep_db.disconnect()
@@ -791,11 +793,6 @@ def _fake_colmap_fileset(scan, image_files) -> None:
 
     def _get_or_create(file_id):
         return colmap_fs.get_file(file_id) if colmap_fs.file_exists(file_id) else colmap_fs.create_file(file_id)
-
-    # - Remove the heavy reconstruction/log outputs (disk + files.json), if any:
-    for file_id in ("colmap", "model_analyzer", "points3d", "sparse"):
-        if colmap_fs.file_exists(file_id):
-            colmap_fs.delete_file(file_id)
 
     # - Recompute the pose estimation quality against the (median) estimated poses:
     camera_pose_qc = CameraPoseQC(image_files, mad_factor=3., metrics=["xy", "z", "pan"])
