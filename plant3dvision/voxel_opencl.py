@@ -304,9 +304,10 @@ class Backprojection(AbstractBackprojection):
             cl.enqueue_copy(queue, self.tvec_d, tvec_h)
 
             # Launch kernel with proper arguments
+            extra = (np.float32(self._invalid_projection_value()),) if self.method == "averaging" else ()
             self.kernel(queue, [np.prod(self.shape)], None, mask_d, self.values_d,
                         self.intrinsics_d, self.rot_d,
-                        self.tvec_d, self.volinfo_d, self.shape_d)
+                        self.tvec_d, self.volinfo_d, self.shape_d, *extra)
             queue.finish()
 
         except Exception as e:

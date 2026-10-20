@@ -292,6 +292,22 @@ class AbstractBackprojection(ABC):
 
         return mask
 
+    def _invalid_projection_value(self) -> float:
+        """Per-view value contributed when a voxel projects outside the camera frame.
+
+        Mirrors `_prepare_mask`: a background pixel is `log(EPS)` under the log
+        transform and `0` otherwise. Out-of-frame views must contribute the same,
+        otherwise they are silently skipped and never penalise the voxel.
+
+        Returns
+        -------
+        float
+            The value to accumulate for an invalid projection.
+        """
+        if self.log and self.dtype == np.float32:
+            return float(np.log(EPS))
+        return 0.0
+
     def _validate_mask(self, mask):
         """
         Validate that the mask is suitable for processing.
