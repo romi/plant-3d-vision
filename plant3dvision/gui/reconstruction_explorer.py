@@ -161,6 +161,16 @@ class ReconstructionExplorer(QMainWindow):
         scan_vbox.addWidget(self._scan_combo)
         right_layout.addWidget(scan_group)
 
+        # Images data
+        images_group = QGroupBox("Images")
+        images_vbox = QVBoxLayout(images_group)
+        self._images_fs_combo = QComboBox()
+        self._images_fs_combo.setEnabled(False)
+        self._images_fs_combo.currentTextChanged.connect(self._on_images_fs_changed)
+        images_vbox.addWidget(QLabel("Fileset"))
+        images_vbox.addWidget(self._images_fs_combo)
+        right_layout.addWidget(images_group)
+
         # Voxels data
         voxel_group = QGroupBox("Voxels")
         voxel_vbox = QVBoxLayout(voxel_group)
@@ -185,11 +195,13 @@ class ReconstructionExplorer(QMainWindow):
         self._vol_opacity_combo.currentTextChanged.connect(self._on_vol_opacity_tf_changed)
         # Opacity range selectors (min / max)
         self._vol_opacity_min_spin = QDoubleSpinBox()
-        self._vol_opacity_min_spin.setDecimals(0)
+        self._vol_opacity_min_spin.setDecimals(2)
+        self._vol_opacity_min_spin.setSingleStep(0.01)
         self._vol_opacity_min_spin.setEnabled(False)
         self._vol_opacity_min_spin.valueChanged.connect(self._schedule_vol_opacity_range_update)
         self._vol_opacity_max_spin = QDoubleSpinBox()
-        self._vol_opacity_max_spin.setDecimals(0)
+        self._vol_opacity_max_spin.setDecimals(2)
+        self._vol_opacity_max_spin.setSingleStep(0.01)
         self._vol_opacity_max_spin.setEnabled(False)
         self._vol_opacity_max_spin.valueChanged.connect(self._schedule_vol_opacity_range_update)
 
@@ -394,6 +406,30 @@ class ReconstructionExplorer(QMainWindow):
             return
         self._load_scan(scan_id)
 
+    def _on_images_fs_changed(self, fs_name: str):
+        if not fs_name or not hasattr(self, "_available_images_fs") or fs_name not in self._available_images_fs:
+            return
+        self._images_fs = self._available_images_fs[fs_name]
+        self._image_files = sorted(self._images_fs.get_files(), key=lambda f: f.id)
+
+        n = len(self._image_files)
+        current_idx = min(self._image_slider.value(), max(0, n - 1)) if n > 0 else 0
+
+        self._image_slider.blockSignals(True)
+        self._image_slider.setMinimum(0)
+        self._image_slider.setMaximum(max(0, n - 1))
+        self._image_slider.setTickInterval(1 if n > 1 else 0)
+        self._image_slider.setValue(current_idx)
+        self._image_slider.setEnabled(n > 0)
+        self._image_slider.blockSignals(False)
+
+        if n > 0:
+            self._on_slider_changed(current_idx)
+        else:
+            self._slider_label.setText("Image: -")
+            self.plotter.remove_background_image()
+            self.plotter.render()
+
     def _on_slider_changed(self, value: int):
         if not self._image_files:
             return
@@ -541,9 +577,44 @@ class ReconstructionExplorer(QMainWindow):
         self._mesh_checkbox.setChecked(False)
         self._mesh_checkbox.blockSignals(False)
 
-        # Images fileset
-        self._images_fs = scan.get_fileset('images')
-        self._image_files = sorted(self._images_fs.get_files(), key=lambda f: f.id)
+        # Images filesets: discover available sets among images, Undistort, and Masks
+        self._available_images_fs = {}
+        for fs_candidate in ["images", "Undistort", "Masks"]:
+            try:
+                # Check if mapped via compute_fileset_matches or directly present in scan
+                matched_name = fs_matches.get(fs_candidate, fs_candidate)
+                fs = scan.get_fileset(matched_name)
+                self._available_images_fs[fs_candidate] = fs
+            except (FilesetNotFoundError, KeyError):
+                continue
+
+        self._images_fs_combo.blockSignals(True)
+        self._images_fs_combo.clear()
+        for name in self._available_images_fs.keys():
+            self._images_fs_combo.addItem(name)
+
+        default_fs = None
+        if "Undistort" in self._available_images_fs:
+            default_fs = "Undistort"
+        elif "images" in self._available_images_fs:
+            default_fs = "images"
+        elif self._available_images_fs:
+            default_fs = next(iter(self._available_images_fs))
+
+        if default_fs:
+            self._images_fs_combo.setCurrentText(default_fs)
+            self._images_fs_combo.setEnabled(len(self._available_images_fs) > 1)
+        else:
+            self._images_fs_combo.setEnabled(False)
+
+        self._images_fs_combo.blockSignals(False)
+
+        if default_fs:
+            self._on_images_fs_changed(default_fs)
+        else:
+            self._images_fs = None
+            self._image_files = []
+            self._image_slider.setEnabled(False)
 
         # Reset plotter
         self.plotter.clear()
@@ -555,7 +626,8 @@ class ReconstructionExplorer(QMainWindow):
         self._spacing = None
 
         # Load the reconstruction pipeline configuration
-        self._pipeline_cfg = tomlkit.load(scan.path() / "pipeline.toml")
+        with open(scan.path() / "pipeline.toml", "r") as file:
+         self._pipeline_cfg = tomlkit.load(file)
 
         # Setup slider
         n = len(self._image_files)
