@@ -358,7 +358,7 @@ def plot_image_and_volume(image, volume, **kwargs):
     if isinstance(image, File):
         image_path = image.path()
         image_id = image.id
-        cam_pos, focal_point, up_world, fov_y_deg = camera_params_from_file(image)
+        cam_pos, focal_point, up_world, fov_y_deg = camera_params_from_file(image, rotation=0)
     else:
         image_path = Path(image)
         image_id = image_path.stem
@@ -482,7 +482,7 @@ def plot_image_and_point_cloud(image, point_cloud, **kwargs):
     if isinstance(image, File):
         image_path = image.path()
         image_id = image.id
-        cam_pos, focal_point, up_world, fov_y_deg = camera_params_from_file(image)
+        cam_pos, focal_point, up_world, fov_y_deg = camera_params_from_file(image, rotation=0)
     else:
         image_path = Path(image)
         image_id = image_path.stem
@@ -600,7 +600,7 @@ def plot_image_and_mesh(image, triangular_mesh, **kwargs):
     if isinstance(image, File):
         image_path = image.path()
         image_id = image.id
-        cam_pos, focal_point, up_world, fov_y_deg = camera_params_from_file(image)
+        cam_pos, focal_point, up_world, fov_y_deg = camera_params_from_file(image, rotation=0)
     else:
         image_path = Path(image)
         image_id = image_path.stem

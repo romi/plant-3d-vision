@@ -1,4 +1,8 @@
 import os
+import shutil
+import tempfile
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import wait
 
 import tomlkit
 from PySide6.QtCore import QTimer
@@ -7,6 +11,8 @@ from PySide6.QtWidgets import QSpinBox
 from matplotlib import pyplot as plt
 
 from plant3dvision.camera import camera_params_from_file
+from plant3dvision.camera import image_rotation
+from plant3dvision.camera import rotated_image_path
 from plant3dvision.visu.pyvista import o3d_mesh_to_polydata
 from plant3dvision.visu.pyvista import volume_to_imagedata
 from plantdb.commons.fsdb.exceptions import FilesetNotFoundError
@@ -76,6 +82,9 @@ class ReconstructionExplorer(QMainWindow):
         self._mesh_fs = None
         self._images_fs = None
         self._image_files = []
+        self._rotated = {}  # image file ID -> future of its rotated copy
+        self._rotated_cache_dir = None  # temporary directory holding the rotated copies
+        self._executor = None  # recycled worker pool for the rotated copies
         self._voxel_colormap = "inferno"
         self._vol_opacity_tf_name = 'linear'
         self._vol_opacity_tf = None
@@ -415,6 +424,9 @@ class ReconstructionExplorer(QMainWindow):
         n = len(self._image_files)
         current_idx = min(self._image_slider.value(), max(0, n - 1)) if n > 0 else 0
 
+        self._clear_rotated_cache()
+        self._prefetch_rotated_images(current_idx)
+
         self._image_slider.blockSignals(True)
         self._image_slider.setMinimum(0)
         self._image_slider.setMaximum(max(0, n - 1))
@@ -436,6 +448,45 @@ class ReconstructionExplorer(QMainWindow):
         image_f = self._image_files[value]
         self._slider_label.setText(f"Image: {image_f.id}")
         self._apply_image(image_f)
+
+    def _rotated_cache(self) -> str:
+        """Return the directory holding the rotated copies of the current fileset, creating it once."""
+        if self._rotated_cache_dir is None:
+            self._rotated_cache_dir = tempfile.mkdtemp(prefix="reconstruction_explorer_")
+        return self._rotated_cache_dir
+
+    def _clear_rotated_cache(self):
+        """Drop the rotated copies of the current fileset, waiting for the ones being written."""
+        pending = [future for future in self._rotated.values() if not future.cancel()]
+        wait(pending)
+        self._rotated = {}
+        if self._rotated_cache_dir is not None:
+            shutil.rmtree(self._rotated_cache_dir, ignore_errors=True)
+            self._rotated_cache_dir = None
+
+    def _prefetch_rotated_images(self, current_idx: int = 0):
+        """Batch-generate the rotated copies of the current fileset, starting with the displayed image."""
+        self._rotated = {}
+        if not self._image_files:
+            return
+        rotations = {image_f.id: image_rotation(image_f) for image_f in self._image_files}
+        if not any(rotations.values()):
+            return
+        if self._executor is None:
+            self._executor = ThreadPoolExecutor(max_workers=min(8, os.cpu_count() or 4))
+        cache_dir = self._rotated_cache()
+
+        ordered = [self._image_files[current_idx]]
+        ordered += [image_f for i, image_f in enumerate(self._image_files) if i != current_idx]
+        for image_f in ordered:
+            if rotations[image_f.id]:
+                self._rotated[image_f.id] = self._executor.submit(
+                    rotated_image_path, image_f, rotations[image_f.id], cache_dir)
+
+    def _background_image_path(self, image_f) -> str:
+        """Return the upright copy of `image_f`, waiting for its rotation if still being written."""
+        future = self._rotated.get(image_f.id)
+        return future.result() if future is not None else str(image_f.path())
 
     def _on_voxel_cmap_changed(self, cmap_name: str):
         self._voxel_colormap = cmap_name
@@ -614,6 +665,7 @@ class ReconstructionExplorer(QMainWindow):
         else:
             self._images_fs = None
             self._image_files = []
+            self._clear_rotated_cache()
             self._image_slider.setEnabled(False)
 
         # Reset plotter
@@ -816,11 +868,12 @@ class ReconstructionExplorer(QMainWindow):
             # Metadata missing - just show the image, skip camera update
             cam_pos = focal_point = up_world = fov_y_deg = None
 
+        image_path = self._background_image_path(image_f)
         try:
-            self.plotter.add_background_image(image_f.path(), as_global=False)
+            self.plotter.add_background_image(image_path, as_global=False)
         except:
             self.plotter.remove_background_image()
-            self.plotter.add_background_image(image_f.path(), as_global=False)
+            self.plotter.add_background_image(image_path, as_global=False)
 
         self.plotter.add_text(
             f"Image: {image_f.id}",
@@ -852,6 +905,12 @@ class ReconstructionExplorer(QMainWindow):
         # Stop the debounce timer (if it is still running)
         if self._opacity_range_timer.isActive():
             self._opacity_range_timer.stop()
+
+        # Drop the rotated copies and the worker pool that produces them
+        self._clear_rotated_cache()
+        if self._executor is not None:
+            self._executor.shutdown(wait=True, cancel_futures=True)
+            self._executor = None
 
         # Close the DB connection - this releases any background thread
         try:
