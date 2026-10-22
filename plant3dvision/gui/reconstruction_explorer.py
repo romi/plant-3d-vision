@@ -29,6 +29,7 @@ import numpy as np
 import pyvista as pv
 import pyvistaqt as pvqt
 from vtk import vtkPiecewiseFunction
+from vtk import vtkRenderer
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 from PySide6.QtWidgets import QCheckBox
@@ -95,6 +96,7 @@ class ReconstructionExplorer(QMainWindow):
         self._mesh_color = "orangered"
         self._grid_visible = True
         self._current_cam_params = None  # (pos, focal, up, fov)
+        self._backdrop_renderer = None  # bottom layer clearing the frame while a photo is shown
 
         # Debounce timer for opacity‑range changes
         self._opacity_range_timer = QTimer(self)
@@ -439,7 +441,7 @@ class ReconstructionExplorer(QMainWindow):
             self._on_slider_changed(current_idx)
         else:
             self._slider_label.setText("Image: -")
-            self.plotter.remove_background_image()
+            self._set_background_image(None)
             self.plotter.render()
 
     def _on_slider_changed(self, value: int):
@@ -487,6 +489,52 @@ class ReconstructionExplorer(QMainWindow):
         """Return the upright copy of `image_f`, waiting for its rotation if still being written."""
         future = self._rotated.get(image_f.id)
         return future.result() if future is not None else str(image_f.path())
+
+    def _set_background_image(self, image_path: str | None) -> None:
+        """Show `image_path` as the background, or remove the background when `None`."""
+        renderers = self.plotter.renderers
+        background = renderers._background_renderers[renderers.active_index]
+        if image_path is None:
+            # pyvista never detaches the background renderer from the window, so
+            # remove it explicitly to avoid leaking one per fileset.
+            if background is not None:
+                self.plotter.remove_background_image()
+                self.plotter.render_window.RemoveRenderer(background)
+            if self._backdrop_renderer is not None:
+                self.plotter.render_window.RemoveRenderer(self._backdrop_renderer)
+                self._backdrop_renderer = None
+            return
+        if background is None or 'background' not in background.actors:
+            # ``Plotter.clear`` empties the background renderer without
+            # unregistering it, and pyvista never detaches it from the window.
+            if background is not None:
+                self.plotter.remove_background_image()
+                self.plotter.render_window.RemoveRenderer(background)
+            self.plotter.add_background_image(image_path, as_global=False)
+            if self._backdrop_renderer is None:
+                self._backdrop_renderer = self._add_backdrop_renderer()
+            return
+        # Swap the image actor's input: rebuilding the layer stack on every image
+        # change is unnecessary, ``resize`` refits the camera to the new picture.
+        background.actors['background'].SetInputData(pv.read(image_path))
+        background.resize()
+
+    def _add_backdrop_renderer(self) -> vtkRenderer:
+        """Add an empty bottom-layer renderer that clears the frame every render.
+
+        PyVista's background renderer lives at layer 1 and preserves the colour
+        buffer, so no renderer clears the window and the previous frame shows
+        through wherever the photo does not cover it.
+        """
+        renderer = vtkRenderer()
+        renderer.SetLayer(0)
+        renderer.SetBackground(0.0, 0.0, 0.0)
+        renderer.SetErase(True)
+        renderer.SetPreserveColorBuffer(False)
+        renderer.SetInteractive(False)
+        renderer.SetViewport(0.0, 0.0, 1.0, 1.0)
+        self.plotter.render_window.AddRenderer(renderer)
+        return renderer
 
     def _on_voxel_cmap_changed(self, cmap_name: str):
         self._voxel_colormap = cmap_name
@@ -869,11 +917,7 @@ class ReconstructionExplorer(QMainWindow):
             cam_pos = focal_point = up_world = fov_y_deg = None
 
         image_path = self._background_image_path(image_f)
-        try:
-            self.plotter.add_background_image(image_path, as_global=False)
-        except:
-            self.plotter.remove_background_image()
-            self.plotter.add_background_image(image_path, as_global=False)
+        self._set_background_image(image_path)
 
         self.plotter.add_text(
             f"Image: {image_f.id}",
