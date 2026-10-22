@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+from pathlib import Path
+
+import cv2
 import numpy as np
 from PIL import Image
 
@@ -599,7 +602,74 @@ def colmap_params_from_kwargs(**kwargs):
         return [kwargs['f'], kwargs['f'], kwargs['cx'], kwargs['cy'], kwargs['k'], 0., 0., 0.]
 
 
+#: OpenCV rotation flags for the clockwise angles handled by :func:`rotated_image_path`.
+_CV2_ROTATIONS = {
+    90: cv2.ROTATE_90_CLOCKWISE,
+    180: cv2.ROTATE_180,
+    270: cv2.ROTATE_90_COUNTERCLOCKWISE,
+}
+
+
+def image_rotation(image_f: "File") -> int:
+    """Return the clockwise rotation of an image file in degrees.
+
+    The `rotation` metadata is set by the acquisition software when the camera is mounted rotated
+    relative to the upright position.
+    It is snapped to the nearest multiple of 90° so that the rotated copy of the image and the camera
+    frame used to render it can never disagree.
+
+    Parameters
+    ----------
+    image_f : plantdb.commons.fsdb.File
+        An image ``File`` instance.
+
+    Returns
+    -------
+    int
+        The clockwise rotation in degrees: 0, 90, 180 or 270.
+
+    """
+    rotation = int(image_f.get_metadata('rotation', default=0) or 0) % 360
+    return (rotation + 45) // 90 * 90 % 360
+
+
+def rotated_image_path(image_f: "File", rotation: int, cache_dir: str | Path) -> str:
+    """Return the path to a rotated copy of an image file, creating it if needed.
+
+    Parameters
+    ----------
+    image_f : plantdb.commons.fsdb.File
+        An image ``File`` instance, readable via ``image_f.path()``.
+    rotation : int
+        The clockwise rotation in degrees to apply: 90, 180 or 270.
+        Any other value returns the original image path.
+    cache_dir : str or pathlib.Path
+        Directory where the rotated copy is written.
+        Must exist.
+
+    Returns
+    -------
+    str
+        Path to the (cached) rotated copy, or to the original image if the rotation could not be applied.
+
+    """
+    if rotation not in _CV2_ROTATIONS:
+        return str(image_f.path())
+
+    # Includes the fileset directory and file ID so copies from different filesets never collide.
+    rotated_path = Path(cache_dir) / f"{image_f.path().parent.name}_{image_f.id}_{rotation}.png"
+    if rotated_path.is_file():
+        return str(rotated_path)
+
+    image = cv2.imread(str(image_f.path()), cv2.IMREAD_UNCHANGED)
+    if image is None or not cv2.imwrite(str(rotated_path), cv2.rotate(image, _CV2_ROTATIONS[rotation])):
+        logger.warning(f"Could not create a rotated copy of '{image_f.path()}'.")
+        return str(image_f.path())
+    return str(rotated_path)
+
+
 def camera_params_from_file(image_f: "File",
+                            rotation: int | None = None,
                             ) -> tuple[
     tuple[float, float, float],
     tuple[float, float, float],
@@ -614,6 +684,11 @@ def camera_params_from_file(image_f: "File",
         An image ``File`` instance that provides ``colmap_camera`` and ``estimated_pose`` metadata.
         The file must be readable via ``image_f.path()`` because the image height may be obtained from the
         actual image file when it is not stored in the metadata.
+    rotation : int or None, optional
+        The clockwise rotation in degrees applied to the image for display.
+        Defaults to the file's ``rotation`` metadata, see :func:`image_rotation`.
+        The camera frame is rotated about its optical axis accordingly, and the vertical field-of-view is
+        computed on the rotated (swapped) image dimensions.
 
     Returns
     -------
@@ -657,6 +732,16 @@ def camera_params_from_file(image_f: "File",
     rot_matrix = np.array(img_md['rotmat'])
     t_vec = np.array(img_md['tvec'])
 
+    # Rotate the camera frame about its optical axis (world Z) to match the displayed image.
+    # The camera center is invariant under such a rotation, so the estimated pose stays valid.
+    if rotation is None:
+        rotation = image_rotation(image_f)
+    if rotation:
+        cos, sin = np.cos(np.radians(rotation)), np.sin(np.radians(rotation))
+        axis_rot = np.array([[cos, -sin, 0.], [sin, cos, 0.], [0., 0., 1.]])
+        rot_matrix = axis_rot @ rot_matrix
+        t_vec = axis_rot @ t_vec
+
     # Try to get estimated pose (x, y, z) from metadata; fallback to None
     try:
         x, y, z, _, _, _ = image_f.get_metadata('estimated_pose', default=[None] * 6)
@@ -670,10 +755,15 @@ def camera_params_from_file(image_f: "File",
         except:
             raise ValueError("Missing image metadata 'estimated_pose'.")
 
-    # Focal length in y direction (fy) from camera model parameters
-    fy = img_md['camera_model']['params'][1]
-    # Image height: use stored metadata or read actual image file as fallback
-    img_height = img_md.get('height') or Image.open(image_f.path()).size[1]
+    # Focal length and image dimension along the displayed vertical axis.
+    # A quarter-turn swaps them, so use fx and the image width instead.
+    camera_model = img_md['camera_model']
+    if rotation % 180 == 90:
+        focal, extent_key, extent_index = camera_model['params'][0], 'width', 0
+    else:
+        focal, extent_key, extent_index = camera_model['params'][1], 'height', 1
+    # Image dimension: use stored metadata or read actual image file as fallback
+    img_extent = camera_model.get(extent_key) or Image.open(image_f.path()).size[extent_index]
 
     # Inverse rotation (transpose) to transform from camera to world coordinates
     rot_mat_inv = rot_matrix.T
@@ -685,7 +775,7 @@ def camera_params_from_file(image_f: "File",
     up_world = -rot_mat_inv[:, 1]
     # Point one unit ahead of the camera along its forward axis
     focal_point = np.array(cam_pos) + forward_world
-    # Vertical field‑of‑view (degrees) derived from image height and fy
-    fov_y_deg = np.degrees(2.0 * np.arctan(img_height / (2.0 * fy)))
+    # Vertical field‑of‑view (degrees) derived from the displayed image dimension and focal length
+    fov_y_deg = np.degrees(2.0 * np.arctan(img_extent / (2.0 * focal)))
 
     return cam_pos, tuple(focal_point), tuple(up_world), fov_y_deg

@@ -263,6 +263,8 @@ class Backprojection(AbstractBackprojection):
 
     def _extra_kernel_args(self) -> tuple:
         """Hook: extra trailing args for self.kernel (bayes = log_occ, log_empty)."""
+        if self.method == "averaging":
+            return (np.float32(self._invalid_projection_value()),)
         return ()
 
     def process_view(self, intrinsics, rot, tvec, mask):
