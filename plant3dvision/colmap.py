@@ -12,6 +12,7 @@ Using docker image requires the docker engine to be available on your system and
 """
 import os
 import pathlib
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -45,6 +46,9 @@ DEFAULT_COLMAP = 'colmap/colmap:20251107.4118'  # 3.13.0
 COLMAP_DOCKER = ['geki/colmap', 'colmap/colmap', 'roboticsmicrofarms/colmap']
 # - Try to get colmap executable to use from '$COLMAP_EXE' environment variable, or set it to use docker container by default:
 COLMAP_EXE = os.environ.get('COLMAP_EXE', DEFAULT_COLMAP)
+
+#: Image names inside COLMAP's per-camera directories, e.g. ``picamera/image00024.jpeg``:
+_COLMAP_CAM_IMAGE_RE = re.compile(r"(.+)/image([0-9]{5})\.(jpe?g|png)", re.IGNORECASE)
 
 
 def _has_nvidia_gpu():
@@ -882,10 +886,16 @@ def colmap_matches_fig(kp_match, scan_id, filepath=None, cmap='viridis', vmin=No
     import matplotlib.pyplot as plt
     # Build the full NxN matches matrix
 
-    # Extract the numeric part of the filename so we can sort them correctly
-    def img_key(fname: str) -> int:
-        # “00044_rgb.png” -> 44
-        return int(fname.split("_")[0])
+    # Sort by camera name then by the numeric image index. Two conventions are accepted,
+    # as produced by `ColmapRunner._init_temp_dir`: “picamera/image00044.jpeg” (camera
+    # directories) and “00044_rgb.png” (legacy, single camera).
+    def img_key(fname: str) -> tuple[str, int]:
+        if match := _COLMAP_CAM_IMAGE_RE.fullmatch(fname):
+            return match.group(1), int(match.group(2))
+        if match := _LEGACY_RE.fullmatch(fname):
+            return "", int(match.group(1))
+        raise ValueError(f"Image name {fname!r} matches neither the camera "
+                         f"({_COLMAP_CAM_IMAGE_RE.pattern}) nor the legacy ({_LEGACY_RE.pattern}) convention!")
 
     # Sorted list of unique images (circular order)
     imgs = sorted(

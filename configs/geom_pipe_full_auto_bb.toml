@@ -32,7 +32,7 @@ upstream_task = "ImagesFilesetExists"  # Default: "ImagesFilesetExists"
 # Query to filter files from upstream task by metadata
 query = "{}"  # Default: "{}" (empty dictionary, no filtering)
 # Colmap "executable" to use
-colmap_exe = "roboticsmicrofarms/colmap:3.8"
+colmap_exe = "colmap/colmap:20251107.4118"
 # Type of matcher to use with COLMAP
 # Options: "exhaustive" (matches every image against every other) or "sequential" (matches successive images)
 matcher = "exhaustive"  # Default: "exhaustive"
