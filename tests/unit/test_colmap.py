@@ -80,5 +80,22 @@ class TestColmap(FSDBTestCase):
         runner.run()
 
 
+class TestCameraPoseQC(FSDBTestCase):
+
+    def test_mark_all_poses_as_correct(self):
+        """Disabling the QC must still write the flag downstream tasks filter on."""
+        from plant3dvision.tasks.colmap import CameraPoseQC
+
+        db = self.get_test_db()
+        images = db.get_scan("real_plant_analyzed").get_fileset("images").get_files()
+        for im in images:
+            im.set_metadata("pose_estimation", "incorrect")
+
+        CameraPoseQC(images, 3.0).mark_all_poses_as_correct()
+
+        flags = {im.get_metadata("pose_estimation", default=None) for im in images}
+        self.assertEqual(flags, {"correct"})
+
+
 if __name__ == "__main__":
     unittest.main()
