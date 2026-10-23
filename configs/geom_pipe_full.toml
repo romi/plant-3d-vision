@@ -129,6 +129,21 @@ max_threshold = 1.0 # Default: 0.4
 invert = false  # Default: false
 # Dilation factor for the binary mask images (morphological dilation)
 dilation = 1 # Default: 0 (no dilation)
+# Per-camera overrides, as [Masks.camera.<camera_name>] sub-tables.
+# Each sub-table merges over the global values above for images named "<camera_name>-<id>.<ext>".
+# Cameras without a sub-table, and configs without this section, use the global values.
+# [Masks.camera.cameraA]
+# method = "linear"
+# sigma = 0.5
+# colorspace = "RGB"
+# parameters = "[0.2, 1, 0.1]"
+# brightness_threshold = 0.5
+# half_length = 2
+# min_threshold = 0.2
+# max_threshold = 1.0
+# invert = false
+# min_size = 3
+# dilation = 1
 
 [Voxels]
 # Task that provides the masked images as input

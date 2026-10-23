@@ -13,11 +13,13 @@ It streamlines the exploration of channel weighting and threshold parameters, ma
 - Search and filter scans via a searchable dropdown.
 - Load images from a PlantDB (FSDB) scan.
 - Select among three color spaces (RGB, HSV, YCbCr) and adjust each channel’s contribution with sliders.
+- Filter images by camera source and tune the filter & thresholds separately for each camera.
 - Real‑time preview of the original image, the filtered grayscale image, and the binary mask.
 - Interactive threshold controls (min / max) and optional binary dilation.
 - Synchronized pan/zoom across all three sub‑plots, with mouse‑wheel zoom support.
-- Export the current filter parameters to a `local_config.toml` file attached to the chosen scan.
-- Load existing filter parameters from a `local_config.toml` attached to the chosen scan, if any.
+- Export the current filter parameters either as the scan's global default or as a per-camera override in a
+  `local_config.toml` file attached to the chosen scan.
+- Load existing filter parameters, including per-camera overrides, from a `local_config.toml` attached to the chosen scan.
 
 ## Usage Examples
 
@@ -29,8 +31,8 @@ plant_masking
 plant_masking /path/to/FSDB --scan SCAN_ID
 ```
 
-Running the script opens the window where you can browse scans, adjust color‑space sliders, set threshold limits, and instantly see how the linear filter affects the image and its mask.
-When satisfied, click **Export Parameters** to save the configuration back to the scan’s `local_config.toml`.
+Running the script opens the window where you can browse scans, pick a camera, adjust color‑space sliders, set threshold limits, and instantly see how the linear filter affects the image and its mask.
+When satisfied, export the parameters as the scan-wide default or as an override for the selected camera; both are saved to the scan’s `local_config.toml`.
 """
 
 import os
@@ -81,9 +83,13 @@ from plant3dvision.proc2d import excess_green
 from plant3dvision.proc2d import green_fraction
 from plant3dvision.proc2d import linear
 from plant3dvision.proc2d import luminance_thin_lines_enhancement
+from plant3dvision.utils import camera_name_and_id_from_filename
 
 # Create a logger and set the environment variable
 logger = get_logger("PlantMaskingApp", log_level=DEFAULT_LOG_LEVEL)
+
+#: Camera name used when the dataset has no per-camera image names (legacy, single camera):
+SINGLE_CAMERA = "single"
 
 # Available grayscale methods with their default parameters (excl. shared ones).
 METHODS = {
@@ -92,6 +98,84 @@ METHODS = {
     "green_fraction": {"bright_threshold": 0.5},
     "luminance_thin_lines_enhancement": {"half_length": 2},
 }
+
+# Mapping between the GUI method names and the ``Masks`` task method values:
+METHOD_TO_TASK = {
+    "linear": "linear",
+    "excess_green": "excess_green",
+    "green_fraction": "green_fraction",
+    "luminance_thin_lines_enhancement": "ltle",
+}
+TASK_TO_METHOD = {value: key for key, value in METHOD_TO_TASK.items()}
+
+#: Settings written to ``local_config.toml``, in file order:
+MASK_SETTING_KEYS = ("sigma", "method", "colorspace", "parameters", "brightness_threshold",
+                     "half_length", "min_threshold", "max_threshold", "invert", "min_size",
+                     "dilation")
+
+#: Legacy GUI parameter names, still found in ``local_config.toml`` files:
+LEGACY_SETTING_NAMES = {"bright_threshold": "brightness_threshold"}
+
+
+def normalize_mask_config(cfg: dict) -> dict:
+    """Translate a ``[Masks]`` table read from ``local_config.toml`` into ``Masks`` task names.
+
+    Older GUI versions wrote ``bright_threshold`` and ``luminance_thin_lines_enhancement``;
+    this makes those files load correctly and keeps the camera overrides valid for the task.
+    """
+    normalized = {LEGACY_SETTING_NAMES.get(key, key): value for key, value in cfg.items()}
+    method = normalized.get("method")
+    if method in METHOD_TO_TASK:
+        normalized["method"] = METHOD_TO_TASK[method]
+    parameters = normalized.get("parameters")
+    if isinstance(parameters, str):
+        normalized["parameters"] = [float(v) for v in parameters.strip().strip("[]").split(",") if v.strip()]
+    elif parameters is not None:
+        normalized["parameters"] = [float(v) for v in parameters]
+    return normalized
+
+
+def format_mask_config(cfg: dict) -> dict:
+    """Convert a captured UI state into TOML-ready ``Masks`` values."""
+    formatted = {}
+    for key in MASK_SETTING_KEYS:
+        if key not in cfg:
+            continue
+        value = cfg[key]
+        if key == "parameters":
+            value = str([float(v) for v in value])
+        elif key == "invert":
+            value = bool(value)
+        elif key in ("half_length", "min_size", "dilation"):
+            value = int(value)
+        elif key in ("method", "colorspace"):
+            value = METHOD_TO_TASK.get(value, value) if key == "method" else str(value)
+        else:
+            value = float(value)
+        formatted[key] = value
+    return formatted
+
+
+def write_default_masks(doc: tomlkit.TOMLDocument, cfg: dict) -> None:
+    """Replace the global ``[Masks]`` parameters, keeping the per-camera overrides."""
+    camera_table = doc.get("Masks", {}).get("camera")
+    doc["Masks"] = format_mask_config(cfg)
+    if camera_table is not None:
+        doc["Masks"]["camera"] = camera_table
+
+
+def write_camera_masks(doc: tomlkit.TOMLDocument, camera_name: str, cfg: dict) -> None:
+    """Write one ``[Masks.camera.<name>]`` override, leaving the global parameters untouched."""
+    masks = doc.get("Masks")
+    if masks is None:
+        doc["Masks"] = {}
+        masks = doc["Masks"]
+    camera_table = masks.get("camera")
+    if camera_table is None:
+        masks["camera"] = {}
+        camera_table = masks["camera"]
+    camera_table[camera_name] = format_mask_config(cfg)
+
 
 class TickSlider(QSlider):
     """A QSlider that draws tick marks in a bright color for dark-mode visibility."""
@@ -168,9 +252,12 @@ class PlantMaskingApp(QMainWindow):
     scan_ids_list : list of str
         List of scan identifiers loaded from the database.
     images_list : list
-        List of image files in the current scan.
+        List of image files in the current scan, filtered to the selected camera.
     current_scan : Scan or None
         Currently selected scan object.
+    per_camera : dict of str to dict
+        Masking settings for each camera name, plus the ``"__global__"`` entry holding
+        the scan-wide defaults used by cameras without their own settings.
     ch1_value, ch2_value, ch3_value : QDoubleSpinBox
         Spin boxes that display and allow precise entry of the scaling factors
         for the three channels.
@@ -188,12 +275,16 @@ class PlantMaskingApp(QMainWindow):
         Spin box for the maximum threshold value.
     dilation_spinbox : QDoubleSpinBox
         Spin box for the number of binary dilation iterations.
-    export_button : QPushButton
-        Button to export current parameters to ``local_config.toml``.
+    export_default_button : QPushButton
+        Button to export the current parameters as the scan-wide default in ``local_config.toml``.
+    export_camera_button : QPushButton
+        Button to export the current parameters as an override for the selected camera.
     search_box : QLineEdit
         Text field to filter the scan dropdown.
     scan_dropdown : QComboBox
         Dropdown listing all available scans.
+    camera_combo : QComboBox
+        Dropdown listing the cameras found in the current scan.
     image_slider : QSlider
         Slider to pick an image from the current scan.
     image_index_spinbox : QDoubleSpinBox
@@ -229,6 +320,13 @@ class PlantMaskingApp(QMainWindow):
         self.scan_ids_list = []
         self.images_list = []
         self.current_scan = None
+
+        # All images of the current scan, before camera filtering
+        self._all_images = []
+        # Per-camera masking settings, including the "__global__" defaults
+        self.per_camera: dict[str, dict] = {}
+        self._current_camera: str | None = None
+        self._camera_names: list[str] = []
 
         # Image placeholders
         self.source_image: Image = None  # PIL source image
@@ -350,6 +448,15 @@ class PlantMaskingApp(QMainWindow):
         self.scan_dropdown.currentTextChanged.connect(self._load_scan)
         top_panel_layout.addWidget(scan_label)
         top_panel_layout.addWidget(self.scan_dropdown)
+
+        # Camera dropdown (per-camera filters)
+        self.camera_label = QLabel("Camera:")
+        self.camera_combo = QComboBox()
+        self.camera_combo.setMinimumWidth(140)
+        self.camera_combo.setToolTip("Select a camera source — each camera has its own filter and thresholds.")
+        self.camera_combo.currentTextChanged.connect(self._on_camera_changed)
+        top_panel_layout.addWidget(self.camera_label)
+        top_panel_layout.addWidget(self.camera_combo)
 
         # Image slider
         image_slider_label = QLabel("Image:")
@@ -560,15 +667,24 @@ class PlantMaskingApp(QMainWindow):
 
         controls_layout.addLayout(post_processing_layout)
 
-        # Export Parameters button
-        self.export_button = QPushButton("Export Parameters")
-        self.export_button.setMinimumWidth(250)
-        self.export_button.clicked.connect(self._export_parameters)
-        # Show a helpful tooltip when the user hovers over the export button
-        self.export_button.setToolTip(
-            "Export the current parameters to a local configuration for the selected scan."
+        # Export buttons: global defaults or the selected camera's override
+        export_layout = QHBoxLayout()
+        self.export_default_button = QPushButton("Export Parameters to Default")
+        self.export_default_button.setMinimumWidth(250)
+        self.export_default_button.clicked.connect(self._export_default)
+        self.export_default_button.setToolTip(
+            "Export the current parameters as the scan-wide default (per-camera overrides are kept)."
         )
-        controls_layout.addWidget(self.export_button, alignment=Qt.AlignmentFlag.AlignHCenter)
+        self.export_camera_button = QPushButton("Export Parameters for Camera")
+        self.export_camera_button.setMinimumWidth(250)
+        self.export_camera_button.clicked.connect(self._export_camera)
+        self.export_camera_button.setToolTip(
+            "Export the current parameters as an override for the selected camera."
+        )
+        self.export_camera_button.setVisible(False)
+        export_layout.addWidget(self.export_default_button)
+        export_layout.addWidget(self.export_camera_button)
+        controls_layout.addLayout(export_layout)
 
         # Ensure the controls panel stays compact
         controls_container = QWidget()
@@ -706,22 +822,133 @@ class PlantMaskingApp(QMainWindow):
         filtered_scans = [scan_id for scan_id in self.scan_ids_list if text.lower() in scan_id.lower()]
         self.scan_dropdown.addItems(filtered_scans)
 
+    def _discover_cameras(self) -> list[str]:
+        """List the camera names found in the current scan's image filenames."""
+        cameras = {
+            camera_name_and_id_from_filename(getattr(f, "filename", "") or getattr(f, "id", ""))[0]
+            for f in self._all_images
+        }
+        cameras.discard(None)
+        return sorted(cameras) or [SINGLE_CAMERA]
+
+    def _rebuild_camera_list(self):
+        """Rebuild the camera dropdown from the current scan's images."""
+        self._camera_names = self._discover_cameras()
+        self.camera_combo.blockSignals(True)
+        self.camera_combo.clear()
+        self.camera_combo.addItems(self._camera_names)
+        self.camera_combo.setCurrentIndex(0)
+        self.camera_combo.blockSignals(False)
+        self._current_camera = self._camera_names[0]
+        multiple_cameras = len(self._camera_names) > 1
+        self.camera_label.setVisible(multiple_cameras)
+        self.camera_combo.setVisible(multiple_cameras)
+        self.export_camera_button.setVisible(multiple_cameras)
+
+    def _capture_ui_state(self) -> dict:
+        """Capture the current widget values as a ``Masks`` settings dict."""
+        method = self.method_combo.currentText()
+        state = {
+            "sigma": float(self.sigma_spinbox.value()),
+            "method": METHOD_TO_TASK.get(method, method),
+            "min_threshold": float(self.min_threshold_spinbox.value()),
+            "max_threshold": float(self.max_threshold_spinbox.value()),
+            "invert": self.invert_checkbox.isChecked(),
+            "min_size": int(self.min_size_value.value()),
+            "dilation": int(self.dilation_spinbox.value()),
+        }
+        if method == "linear":
+            state["colorspace"] = self.color_space_combo.currentText()
+            state["parameters"] = [self.ch1_slider.value() / 100.0,
+                                   self.ch2_slider.value() / 100.0,
+                                   self.ch3_slider.value() / 100.0]
+        elif method in ("excess_green", "green_fraction"):
+            state["brightness_threshold"] = float(self.bright_threshold_value.value())
+        else:
+            state["half_length"] = int(self.half_length_value.value())
+        return state
+
+    def _apply_ui_state(self, cfg: dict | None):
+        """Apply a ``Masks`` settings dict to the widgets.
+
+        The method is applied first because changing it resets the method-specific
+        parameters to their defaults; the values from ``cfg`` then override them.
+        """
+        if not cfg:
+            return
+        self.sigma_spinbox.setValue(float(cfg.get("sigma", self.sigma_spinbox.value())))
+        method = TASK_TO_METHOD.get(cfg.get("method", "linear"), cfg.get("method"))
+        if method in METHODS:
+            self.method_combo.setCurrentText(method)
+        if method == "linear":
+            self.color_space_combo.setCurrentText(cfg.get("colorspace", self.color_space_combo.currentText()))
+            parameters = list(cfg.get("parameters", [0.5, 1.0, 0.5]))
+            while len(parameters) < 3:
+                parameters.append(0.0)
+            for slider, value in zip((self.ch1_slider, self.ch2_slider, self.ch3_slider), parameters[:3]):
+                slider.setValue(int(round(float(value) * 100)))
+        elif method in ("excess_green", "green_fraction"):
+            self.bright_threshold_value.setValue(
+                float(cfg.get("brightness_threshold", self.bright_threshold_value.value())))
+        else:
+            self.half_length_value.setValue(int(cfg.get("half_length", self.half_length_value.value())))
+        self.min_threshold_spinbox.setValue(float(cfg.get("min_threshold", self.min_threshold_spinbox.value())))
+        self.max_threshold_spinbox.setValue(float(cfg.get("max_threshold", self.max_threshold_spinbox.value())))
+        self.min_size_value.setValue(int(cfg.get("min_size", self.min_size_value.value())))
+        self.invert_checkbox.setChecked(bool(cfg.get("invert", self.invert_checkbox.isChecked())))
+        self.dilation_spinbox.setValue(int(cfg.get("dilation", self.dilation_spinbox.value())))
+
+    def _apply_camera_filter(self, camera: str | None):
+        """Restrict ``images_list`` to the selected camera, keeping the current image index."""
+        previous_index = self.image_slider.value()
+        if not camera or camera == SINGLE_CAMERA:
+            self.images_list = list(self._all_images)
+        else:
+            self.images_list = [
+                f for f in self._all_images
+                if camera_name_and_id_from_filename(getattr(f, "filename", "") or getattr(f, "id", ""))[0] == camera
+            ] or list(self._all_images)
+        self.image_slider.blockSignals(True)
+        self.image_slider.setMaximum(max(0, len(self.images_list) - 1))
+        self.image_slider.setValue(min(previous_index, len(self.images_list) - 1) if self.images_list else 0)
+        self.image_slider.blockSignals(False)
+        self._update_image_label()
+
+    def _on_camera_changed(self, camera: str):
+        """Store the settings of the previous camera, then show the newly selected one."""
+        if not camera or camera == self._current_camera:
+            return
+        if self._current_camera:
+            self.per_camera[self._current_camera] = self._capture_ui_state()
+        self._current_camera = camera
+        self._apply_camera_filter(camera)
+        self._apply_ui_state(self.per_camera.get(camera) or self.per_camera.get("__global__"))
+        if self.images_list:
+            self._load_image_from_slider(self.image_slider.value())
+        self._process_image_timer.start()
+
     def _load_scan(self, scan_id):
-        """Load the selected scan and populate the image slider."""
+        """Load the selected scan and populate the camera and image controls."""
         if not scan_id or not self.db:
             return
 
         try:
             self.current_scan = self.db.get_scan(scan_id)
             images_fs = self.current_scan.get_fileset('images')
-            self.images_list = images_fs.get_files()
+            self._all_images = images_fs.get_files()
 
-            # Update image slider
-            self.image_slider.setMaximum(max(0, len(self.images_list) - 1))
+            self._rebuild_camera_list()
+            self._import_parameters()
+            self.per_camera.setdefault("__global__", self._capture_ui_state())
+            for camera in self._camera_names:
+                self.per_camera.setdefault(camera, dict(self.per_camera["__global__"]))
+            self._apply_ui_state(self.per_camera[self._current_camera])
+            self._apply_camera_filter(self._current_camera)
+
+            # Reset to the first image of the selected camera
             self.image_slider.setValue(0)
             self._update_image_label()
 
-            # Load first image
             if self.images_list:
                 self._load_image_from_slider(0)
             else:
@@ -730,7 +957,9 @@ class PlantMaskingApp(QMainWindow):
 
         except Exception as e:
             logger.error(f"Error loading scan '{scan_id}': {e}")
+            self._all_images = []
             self.images_list = []
+            self.per_camera = {}
             self.image_slider.setMaximum(0)
             self._update_image_label()
             self._clear_display()
@@ -803,12 +1032,12 @@ class PlantMaskingApp(QMainWindow):
         self.image_slider.setValue(new_index)
 
     def _import_parameters(self):
-        """import current parameters from local_config.toml file, if any."""
+        """Load the scan's ``local_config.toml`` mask parameters, including per-camera overrides."""
         config_path = self.current_scan.path() / "local_config.toml"
         try:
             with open(config_path, "rb") as f:
                 existing_config = tomlkit.load(f)
-        except Exception as e:
+        except Exception:
             existing_config = {}
 
         mask_cfg = existing_config.get("Masks")
@@ -816,83 +1045,57 @@ class PlantMaskingApp(QMainWindow):
             return  # nothing to load
 
         logger.info("Found a local_config.toml file, loading previous parameters...")
-        # - Selected method (default to 'linear' for legacy configs)
-        method = mask_cfg.get("method", "linear")
-        if method not in METHODS:
-            method = "linear"
-        self.method_combo.setCurrentText(method)
+        global_cfg = normalize_mask_config(dict(mask_cfg))
+        global_cfg.pop("camera", None)
+        self.per_camera["__global__"] = global_cfg
+        camera_cfgs = mask_cfg.get("camera", {})
+        if isinstance(camera_cfgs, dict):
+            for camera, overrides in camera_cfgs.items():
+                if isinstance(overrides, dict):
+                    self.per_camera[camera] = {**global_cfg, **normalize_mask_config(dict(overrides))}
+        self._apply_ui_state(global_cfg)
 
-        # - Populate the UI widgets
-        if method == "linear":
-            # Make sure we have a list of three float coefficients
-            params = mask_cfg.get("parameters", [])
-            if isinstance(params, str):
-                # Stored as a string like "[0.5, 1.0, 0.5]"
-                params = [float(v) for v in params.strip("[]").split(",")]
-            elif isinstance(params, list):
-                # Ensure every element is a float (it may be an int)
-                params = [float(v) for v in params]
-
-            # colour‑space selector
-            self.color_space_combo.setCurrentText(mask_cfg.get("colorspace", "RGB"))
-            # sliders expect values in the range 0–100
-            self.ch1_slider.setValue(int(params[0] * 100))
-            self.ch2_slider.setValue(int(params[1] * 100))
-            self.ch3_slider.setValue(int(params[2] * 100))
-        elif method in ("excess_green", "green_fraction"):
-            self.bright_threshold_value.setValue(mask_cfg.get("bright_threshold", 0.5))
-        elif method == "luminance_thin_lines_enhancement":
-            self.half_length_value.setValue(mask_cfg.get("half_length", 2))
-
-        # thresholds, min size and dilation
-        self.min_threshold_spinbox.setValue(mask_cfg.get("min_threshold", 0.0))
-        self.max_threshold_spinbox.setValue(mask_cfg.get("max_threshold", 1.0))
-        self.min_size_value.setValue(mask_cfg.get("min_size", 0))
-        self.dilation_spinbox.setValue(mask_cfg.get("dilation", 0))
-
-    def _export_parameters(self):
-        """Export current parameters to local_config.toml file."""
+    def _export_default(self):
+        """Export the current parameters as the scan-wide default, keeping per-camera overrides."""
+        if not self.current_scan:
+            return
         config_path = self.current_scan.path() / "local_config.toml"
         try:
             with open(config_path, "rb") as f:
-                existing_config = tomlkit.load(f)
-        except Exception as e:
-            existing_config = {}
+                doc = tomlkit.load(f)
+        except Exception:
+            doc = tomlkit.document()
 
         try:
-            method = self.method_combo.currentText()
-            # Update with new mask parameters
-            masks = {
-                "sigma": self.sigma_spinbox.value(),
-                "method": method,
-                "min_threshold": self.min_threshold_spinbox.value(),
-                "max_threshold": self.max_threshold_spinbox.value(),
-                "min_size": self.min_size_value.value(),
-                "dilation": self.dilation_spinbox.value(),
-                "invert": self.invert_checkbox.isChecked(),
-            }
-            # Method-specific parameters
-            if method == "linear":
-                masks["colorspace"] = self.color_space_combo.currentText()
-                masks["parameters"] = str([
-                    self.ch1_slider.value() / 100.0,
-                    self.ch2_slider.value() / 100.0,
-                    self.ch3_slider.value() / 100.0
-                ])
-            elif method in ("excess_green", "green_fraction"):
-                masks["bright_threshold"] = self.bright_threshold_value.value()
-            elif method == "luminance_thin_lines_enhancement":
-                masks["half_length"] = self.half_length_value.value()
-
-            existing_config["Masks"] = masks
-            # Write to file
+            cfg = self._capture_ui_state()
+            self.per_camera["__global__"] = cfg
+            write_default_masks(doc, cfg)
             with open(config_path, "w") as f:
-                tomlkit.dump(existing_config, f)
-
-            logger.info(f"Parameters exported to {config_path}")
-
+                tomlkit.dump(doc, f)
+            logger.info(f"Default parameters exported to {config_path}")
         except Exception as e:
-            logger.error(f"Error exporting parameters: {e}")
+            logger.error(f"Error exporting default parameters: {e}")
+
+    def _export_camera(self):
+        """Export the current parameters as an override for the selected camera only."""
+        if not self.current_scan or not self._current_camera or self._current_camera == SINGLE_CAMERA:
+            return
+        config_path = self.current_scan.path() / "local_config.toml"
+        try:
+            with open(config_path, "rb") as f:
+                doc = tomlkit.load(f)
+        except Exception:
+            doc = tomlkit.document()
+
+        try:
+            cfg = self._capture_ui_state()
+            self.per_camera[self._current_camera] = cfg
+            write_camera_masks(doc, self._current_camera, cfg)
+            with open(config_path, "w") as f:
+                tomlkit.dump(doc, f)
+            logger.info(f"Parameters for camera '{self._current_camera}' exported to {config_path}")
+        except Exception as e:
+            logger.error(f"Error exporting camera parameters: {e}")
 
     def _on_scroll(self, event):
         """Zoom all three axes with the mouse wheel."""

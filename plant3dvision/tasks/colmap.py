@@ -1174,6 +1174,9 @@ class Colmap(RomiTask):
             logger.info(f"Checking pose coherence between CNC (theoretical) and Colmap (estimated)...")
             # - Add a "pose_estimation" metadata and performs estimation accuracy checks if requested:
             correctly_estimated = camera_pose_qc.validate_camera_poses()
+        else:
+            # Downstream tasks filter images on this flag, so it must be written even when unchecked:
+            camera_pose_qc.mark_all_poses_as_correct()
 
         pose_fig_fpath = f"{self.output().get().path()}/cnc_vs_colmap_poses_estimated.png"
         camera_pose_qc.plot_pose_estimation_figure(figname=pose_fig_fpath)
@@ -1947,6 +1950,15 @@ class CameraPoseQC(object):
             plt.close(fig)
         else:
             plt.show()
+
+    def mark_all_poses_as_correct(self) -> None:
+        """Flag every input image as having a correct pose estimate.
+
+        Used when ``qc_check`` is disabled: ``pose_estimation`` is the metadata that
+        downstream tasks (e.g. ``Undistort``) filter on, so it must still be written.
+        """
+        for im in self.image_files:
+            im.set_metadata("pose_estimation", "correct")
 
     def validate_camera_poses(self) -> bool:
         """Check if estimated poses are within acceptable thresholds.

@@ -8,6 +8,7 @@ visualization, and file operations. This module provides reusable components to
 simplify common tasks in data analysis and scientific computing projects.
 """
 import os
+import re
 from pathlib import Path
 
 import docker
@@ -46,6 +47,53 @@ def recursively_unfreeze(value):
     if isinstance(value, Mapping):
         return {k: recursively_unfreeze(v) for k, v in value.items()}
     return value
+
+
+_CAM_RE = re.compile(r"(.+)-([0-9]{5})\.(jpe?g|png)", re.IGNORECASE)
+_LEGACY_RE = re.compile(r"([0-9]{5})_rgb\.(jpe?g|png)", re.IGNORECASE)
+
+
+def camera_name_and_id_from_filename(name: str | Path | None) -> tuple[str | None, str | None]:
+    """Extract the camera name and image ID from an image filename.
+
+    Two naming conventions are recognized:
+
+    * ``<camera_name>-<NNNNN>.<ext>`` (current): returns ``(camera_name, NNNNN)``.
+    * ``<NNNNN>_rgb.<ext>`` (legacy, single camera): returns ``(None, NNNNN)``.
+
+    ``<ext>`` may be ``jpg``, ``jpeg`` or ``png``, in any case.
+
+    Parameters
+    ----------
+    name : str | Path | None
+        Filename or path to parse. Only the basename is considered.
+
+    Returns
+    -------
+    tuple[str | None, str | None]
+        The ``(camera_name, camera_id)`` pair. Both are `None` when the input is
+        empty or does not match either convention.
+
+    Examples
+    --------
+    >>> from plant3dvision.utils import camera_name_and_id_from_filename
+    >>> camera_name_and_id_from_filename("picamera1-00042.png")
+    ('picamera1', '00042')
+    >>> camera_name_and_id_from_filename("00042_rgb.jpeg")
+    (None, '00042')
+    >>> camera_name_and_id_from_filename("plant.png")
+    (None, None)
+    """
+    if not name:
+        return None, None
+    base = Path(name).name
+    match = _CAM_RE.match(base)
+    if match:
+        return match.group(1), match.group(2)
+    match = _LEGACY_RE.match(base)
+    if match:
+        return None, match.group(1)
+    return None, None
 
 
 def jsonify(data: dict) -> dict:
