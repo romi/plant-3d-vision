@@ -39,7 +39,7 @@ matcher = "exhaustive"  # Default: "exhaustive"
 # Use GPU for feature extraction and matching when available
 use_gpu = true  # Default: true
 # Whether images were taken with a single camera (shared intrinsics)
-single_camera = true  # Default: true
+single_camera = false  # Default: true
 # Whether to compute a dense point cloud after sparse reconstruction
 compute_dense = false  # Default: false
 # Maximum alignment error allowed during model alignment
