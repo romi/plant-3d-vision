@@ -22,9 +22,16 @@ from skimage.util import img_as_ubyte
 
 from plant3dvision import proc2d
 from plant3dvision.proc2d import crop_image
+from plant3dvision.utils import camera_name_and_id_from_filename
 from plant3dvision.utils import jsonify
+from plant3dvision.utils import recursively_unfreeze
 
 logger = get_logger(__name__, log_level="INFO")
+
+#: Filtering methods supported by the ``Masks`` task:
+_MASK_METHODS = ("linear", "excess_green", "green_fraction", "ltle")
+#: Colorspaces supported by the ``linear`` method of the ``Masks`` task:
+_MASK_COLORSPACES = ("RGB", "HSV", "YCbCr")
 
 
 class CropWithBoundingBox(ParallelFileTask):
@@ -390,6 +397,15 @@ class Masks(ParallelFileTask):
     dilation : luigi.IntParameter
         A dilation factor for the binary mask images. Applies morphological dilation
         to expand the masked regions. Defaults to ``0`` (no dilation).
+    camera : luigi.DictParameter, optional
+        Per-camera overrides. Keys are camera names, as extracted from the image
+        filenames (``"<camera_name>-<NNNNN>.<ext>"``).
+        Each value is a dict with any subset of ``method``, ``sigma``, ``colorspace``,
+        ``parameters``, ``brightness_threshold``, ``half_length``, ``min_threshold``,
+        ``max_threshold``, ``invert``, ``min_size`` or ``dilation``.
+        Cameras listed here use their overrides merged over the global values above,
+        other cameras use the global values.
+        TOML: ``[Masks.camera.<name>]`` sub-tables.
 
     See Also
     --------
@@ -404,17 +420,20 @@ class Masks(ParallelFileTask):
     filter can be a linear combination of RGB channels, the excess green index, the
     green fraction, or a luminance thin lines enhancement.
 
+    Per-camera settings (``camera``) override the globals file-by-file.
+    Adding ``camera`` changes the task hash / output dir (by design).
+
     References
     ----------
     .. [mask_methods] https://docs.romi-project.eu/plant_imager/explanations/masks/
     """
     upstream_task = luigi.TaskParameter(default=Undistort)  # override default attribute from ``RomiTask``
-    method = luigi.ChoiceParameter(default="linear", choices=["linear", "excess_green", "green_fraction", "ltle"])
+    method = luigi.ChoiceParameter(default="linear", choices=_MASK_METHODS)
     # Gaussian filter parameters (common)
     sigma = luigi.FloatParameter(default=0.5)
 
     # Linear method parameters
-    colorspace = luigi.ChoiceParameter(default="RGB", choices=["RGB", "HSV", "YCbCr"])
+    colorspace = luigi.ChoiceParameter(default="RGB", choices=_MASK_COLORSPACES)
     parameters = luigi.ListParameter(default=[0, 1, 0])
 
     # Green excess and green fraction parameters
@@ -430,13 +449,63 @@ class Masks(ParallelFileTask):
     min_size = luigi.IntParameter(default=3)
     dilation = luigi.IntParameter(default=0)
 
-    def f_raw(self, img: np.ndarray) -> np.ndarray:
+    # Per-camera overrides, as ``{"<camera_name>": {"<parameter>": <value>}}``
+    camera = luigi.DictParameter(default={})
+
+    #: Parameters that may be overridden per camera:
+    _SETTINGS_KEYS = ("method", "sigma", "colorspace", "parameters", "brightness_threshold",
+                      "half_length", "min_threshold", "max_threshold", "invert", "min_size",
+                      "dilation")
+
+    def _validate_camera_config(self) -> None:
+        """Check per-camera overrides for unknown parameters or invalid choices."""
+        for cam_name, overrides in recursively_unfreeze(self.camera).items():
+            unknown = sorted(set(overrides) - set(self._SETTINGS_KEYS))
+            if unknown:
+                raise ValueError(f"Unknown parameter(s) {unknown} in 'Masks.camera.{cam_name}', "
+                                 f"expected any of {list(self._SETTINGS_KEYS)}.")
+            if "method" in overrides and overrides["method"] not in _MASK_METHODS:
+                raise ValueError(f"Invalid method '{overrides['method']}' in 'Masks.camera.{cam_name}', "
+                                 f"expected any of {list(_MASK_METHODS)}.")
+            if "colorspace" in overrides and overrides["colorspace"] not in _MASK_COLORSPACES:
+                raise ValueError(f"Invalid colorspace '{overrides['colorspace']}' in 'Masks.camera.{cam_name}', "
+                                 f"expected any of {list(_MASK_COLORSPACES)}.")
+
+    def _settings_for(self, fi: File) -> tuple[str | None, dict]:
+        """Resolve the masking settings for an image file.
+
+        Per-camera overrides are merged over the global parameter values.
+
+        Parameters
+        ----------
+        fi : plantdb.commons.db.File
+            Input image file, its filename gives the camera name.
+
+        Returns
+        -------
+        tuple of str or None and dict
+            The camera name (``None`` if the filename has no camera name) and the
+            resolved settings.
+        """
+        settings = {key: getattr(self, key) for key in self._SETTINGS_KEYS}
+        cam_name, _ = camera_name_and_id_from_filename(fi.filename)
+        overrides = recursively_unfreeze(self.camera).get(cam_name, {}) if cam_name else {}
+        settings.update({key: value for key, value in overrides.items() if key in self._SETTINGS_KEYS})
+        parameters = settings["parameters"]
+        if isinstance(parameters, str):
+            parameters = parameters.strip().strip("[]").split(",")
+        settings["parameters"] = [float(value) for value in parameters if str(value).strip()]
+        return cam_name, settings
+
+    def f_raw(self, img: np.ndarray, settings: dict) -> np.ndarray:
         """Apply the selected filter to the image.
 
         Parameters
         ----------
         img : numpy.ndarray
             Input RGB image as a numpy array.
+        settings : dict
+            Resolved masking settings, see :meth:`_settings_for`.
 
         Returns
         -------
@@ -452,19 +521,20 @@ class Masks(ParallelFileTask):
         # Convert image to float in range [0, 1]:
         img = img_as_float32(img)
         # Apply Gaussian filter if required
-        if self.sigma > 0:
-            img = gaussian(img, sigma=self.sigma, channel_axis=-1, preserve_range=True)
+        if settings["sigma"] > 0:
+            img = gaussian(img, sigma=settings["sigma"], channel_axis=-1, preserve_range=True)
         # Apply selected filter
-        if self.method == "linear":
-            return proc2d.linear(img, list(self.parameters), colorspace=self.colorspace)
-        elif self.method == "excess_green":
-            return proc2d.excess_green(img, float(self.brightness_threshold))
-        elif self.method == "green_fraction":
-            return proc2d.green_fraction(img, float(self.brightness_threshold))
-        elif self.method == "ltle":
-            return proc2d.luminance_thin_lines_enhancement(img, self.half_length)
+        method = settings["method"]
+        if method == "linear":
+            return proc2d.linear(img, settings["parameters"], colorspace=settings["colorspace"])
+        elif method == "excess_green":
+            return proc2d.excess_green(img, float(settings["brightness_threshold"]))
+        elif method == "green_fraction":
+            return proc2d.green_fraction(img, float(settings["brightness_threshold"]))
+        elif method == "ltle":
+            return proc2d.luminance_thin_lines_enhancement(img, int(settings["half_length"]))
         else:
-            raise Exception(f"Unknown masking method '{self.method}'!")
+            raise Exception(f"Unknown masking method '{method}'!")
 
     def f(self, fi: File, outfs: Fileset) -> File:
         """Compute the binary mask image for the input image ``File``.
@@ -483,11 +553,14 @@ class Masks(ParallelFileTask):
         """
         logger.debug(f"Loading file: {fi.filename}")
         img = io.read_image(fi)
+        cam_name, settings = self._settings_for(fi)
         # Apply the filter:
-        img = self.f_raw(img)
+        img = self.f_raw(img, settings)
         # Threshold the filtered image to make a binary mask:
-        img = proc2d.binary_mask_from_grayscale(img, float(self.min_threshold), float(self.max_threshold),
-                                                int(self.min_size), int(self.dilation), self.invert)
+        img = proc2d.binary_mask_from_grayscale(img, float(settings["min_threshold"]),
+                                                float(settings["max_threshold"]),
+                                                int(settings["min_size"]), int(settings["dilation"]),
+                                                settings["invert"])
         # Convert back to uint8 type:
         img = img_as_ubyte(img)
         # Save the binary mask image:
@@ -496,21 +569,22 @@ class Masks(ParallelFileTask):
         # Add metadata to the binary mask image:
         md = {
             'upstream_task': str(self.upstream_task.get_task_family()),
-            'sigma': float(self.sigma),
-            'method': str(self.method),
-            'min_threshold': float(self.min_threshold),
-            'max_threshold': float(self.max_threshold),
-            'invert': bool(self.invert),
-            'min_size': float(self.min_size),
-            'dilation': float(self.dilation)
+            'sigma': float(settings["sigma"]),
+            'method': str(settings["method"]),
+            'min_threshold': float(settings["min_threshold"]),
+            'max_threshold': float(settings["max_threshold"]),
+            'invert': bool(settings["invert"]),
+            'min_size': float(settings["min_size"]),
+            'dilation': float(settings["dilation"]),
+            'camera': cam_name or "global"
         }
-        if self.method == "linear":
+        if settings["method"] == "linear":
             attrs = ["parameters", "colorspace"]
-        elif self.method in ("excess_green", "green_fraction"):
+        elif settings["method"] in ("excess_green", "green_fraction"):
             attrs = ["brightness_threshold"]
         else:
             attrs = ["half_length"]
-        md.update({attr: getattr(self, attr) for attr in attrs})
+        md.update({attr: settings[attr] for attr in attrs})
 
         if self.query != {}:
             md.update({'query': jsonify(self.query)})
@@ -525,6 +599,7 @@ class Masks(ParallelFileTask):
         infrastructure and then calls ``ParallelFileTask.run`` which iterates over
         all input files, applying the `f` function to generate binary mask images.
         """
+        self._validate_camera_config()
         # Let the parent class handle the parallel execution
         super().run(self.input().get(), self.output().get())
 
