@@ -50,7 +50,8 @@ void average_kernel(
     const float *tvec,
     const float *volinfo,
     const int *shape,
-    int width, int height)
+    int width, int height,
+    float invalid_value)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int dim_x = shape[0], dim_y = shape[1], dim_z = shape[2];
@@ -67,8 +68,12 @@ void average_kernel(
     );
 
     int px, py;
-    if (!backproject_point(pt, intrinsics, rot, tvec, width, height, px, py))
+    if (!backproject_point(pt, intrinsics, rot, tvec, width, height, px, py)) {
+        // Outside the frustum: this view sees no plant there, so count it as background.
+        // Skipping it would leave the voxel unpenalised (and, with log masks, looking perfect).
+        atomicAdd(&value[idx], invalid_value);
         return;
+    }
 
     // Safely access the mask and accumulate
     float mask_val = mask[py * width + px];
@@ -146,8 +151,11 @@ void bayes_kernel(
     );
 
     int px, py;
-    if (!backproject_point(pt, intrinsics, rot, tvec, width, height, px, py))
+    if (!backproject_point(pt, intrinsics, rot, tvec, width, height, px, py)) {
+        // Outside the frustum: treat as background evidence, as a mask miss would.
+        atomicAdd(&value[idx], log_empty);
         return;
+    }
 
     // Background projection (mask == 0) also contributes a (negative) vote.
     float mval = mask[py * width + px];

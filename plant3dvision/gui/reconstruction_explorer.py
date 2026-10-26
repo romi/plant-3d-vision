@@ -1,4 +1,8 @@
 import os
+import shutil
+import tempfile
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import wait
 
 import tomlkit
 from PySide6.QtCore import QTimer
@@ -7,6 +11,8 @@ from PySide6.QtWidgets import QSpinBox
 from matplotlib import pyplot as plt
 
 from plant3dvision.camera import camera_params_from_file
+from plant3dvision.camera import image_rotation
+from plant3dvision.camera import rotated_image_path
 from plant3dvision.visu.pyvista import o3d_mesh_to_polydata
 from plant3dvision.visu.pyvista import volume_to_imagedata
 from plantdb.commons.fsdb.exceptions import FilesetNotFoundError
@@ -23,6 +29,7 @@ import numpy as np
 import pyvista as pv
 import pyvistaqt as pvqt
 from vtk import vtkPiecewiseFunction
+from vtk import vtkRenderer
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 from PySide6.QtWidgets import QCheckBox
@@ -76,6 +83,9 @@ class ReconstructionExplorer(QMainWindow):
         self._mesh_fs = None
         self._images_fs = None
         self._image_files = []
+        self._rotated = {}  # image file ID -> future of its rotated copy
+        self._rotated_cache_dir = None  # temporary directory holding the rotated copies
+        self._executor = None  # recycled worker pool for the rotated copies
         self._voxel_colormap = "inferno"
         self._vol_opacity_tf_name = 'linear'
         self._vol_opacity_tf = None
@@ -86,6 +96,7 @@ class ReconstructionExplorer(QMainWindow):
         self._mesh_color = "orangered"
         self._grid_visible = True
         self._current_cam_params = None  # (pos, focal, up, fov)
+        self._backdrop_renderer = None  # bottom layer clearing the frame while a photo is shown
 
         # Debounce timer for opacity‑range changes
         self._opacity_range_timer = QTimer(self)
@@ -161,6 +172,16 @@ class ReconstructionExplorer(QMainWindow):
         scan_vbox.addWidget(self._scan_combo)
         right_layout.addWidget(scan_group)
 
+        # Images data
+        images_group = QGroupBox("Images")
+        images_vbox = QVBoxLayout(images_group)
+        self._images_fs_combo = QComboBox()
+        self._images_fs_combo.setEnabled(False)
+        self._images_fs_combo.currentTextChanged.connect(self._on_images_fs_changed)
+        images_vbox.addWidget(QLabel("Fileset"))
+        images_vbox.addWidget(self._images_fs_combo)
+        right_layout.addWidget(images_group)
+
         # Voxels data
         voxel_group = QGroupBox("Voxels")
         voxel_vbox = QVBoxLayout(voxel_group)
@@ -185,11 +206,13 @@ class ReconstructionExplorer(QMainWindow):
         self._vol_opacity_combo.currentTextChanged.connect(self._on_vol_opacity_tf_changed)
         # Opacity range selectors (min / max)
         self._vol_opacity_min_spin = QDoubleSpinBox()
-        self._vol_opacity_min_spin.setDecimals(0)
+        self._vol_opacity_min_spin.setDecimals(2)
+        self._vol_opacity_min_spin.setSingleStep(0.01)
         self._vol_opacity_min_spin.setEnabled(False)
         self._vol_opacity_min_spin.valueChanged.connect(self._schedule_vol_opacity_range_update)
         self._vol_opacity_max_spin = QDoubleSpinBox()
-        self._vol_opacity_max_spin.setDecimals(0)
+        self._vol_opacity_max_spin.setDecimals(2)
+        self._vol_opacity_max_spin.setSingleStep(0.01)
         self._vol_opacity_max_spin.setEnabled(False)
         self._vol_opacity_max_spin.valueChanged.connect(self._schedule_vol_opacity_range_update)
 
@@ -394,12 +417,124 @@ class ReconstructionExplorer(QMainWindow):
             return
         self._load_scan(scan_id)
 
+    def _on_images_fs_changed(self, fs_name: str):
+        if not fs_name or not hasattr(self, "_available_images_fs") or fs_name not in self._available_images_fs:
+            return
+        self._images_fs = self._available_images_fs[fs_name]
+        self._image_files = sorted(self._images_fs.get_files(), key=lambda f: f.id)
+
+        n = len(self._image_files)
+        current_idx = min(self._image_slider.value(), max(0, n - 1)) if n > 0 else 0
+
+        self._clear_rotated_cache()
+        self._prefetch_rotated_images(current_idx)
+
+        self._image_slider.blockSignals(True)
+        self._image_slider.setMinimum(0)
+        self._image_slider.setMaximum(max(0, n - 1))
+        self._image_slider.setTickInterval(1 if n > 1 else 0)
+        self._image_slider.setValue(current_idx)
+        self._image_slider.setEnabled(n > 0)
+        self._image_slider.blockSignals(False)
+
+        if n > 0:
+            self._on_slider_changed(current_idx)
+        else:
+            self._slider_label.setText("Image: -")
+            self._set_background_image(None)
+            self.plotter.render()
+
     def _on_slider_changed(self, value: int):
         if not self._image_files:
             return
         image_f = self._image_files[value]
         self._slider_label.setText(f"Image: {image_f.id}")
         self._apply_image(image_f)
+
+    def _rotated_cache(self) -> str:
+        """Return the directory holding the rotated copies of the current fileset, creating it once."""
+        if self._rotated_cache_dir is None:
+            self._rotated_cache_dir = tempfile.mkdtemp(prefix="reconstruction_explorer_")
+        return self._rotated_cache_dir
+
+    def _clear_rotated_cache(self):
+        """Drop the rotated copies of the current fileset, waiting for the ones being written."""
+        pending = [future for future in self._rotated.values() if not future.cancel()]
+        wait(pending)
+        self._rotated = {}
+        if self._rotated_cache_dir is not None:
+            shutil.rmtree(self._rotated_cache_dir, ignore_errors=True)
+            self._rotated_cache_dir = None
+
+    def _prefetch_rotated_images(self, current_idx: int = 0):
+        """Batch-generate the rotated copies of the current fileset, starting with the displayed image."""
+        self._rotated = {}
+        if not self._image_files:
+            return
+        rotations = {image_f.id: image_rotation(image_f) for image_f in self._image_files}
+        if not any(rotations.values()):
+            return
+        if self._executor is None:
+            self._executor = ThreadPoolExecutor(max_workers=min(8, os.cpu_count() or 4))
+        cache_dir = self._rotated_cache()
+
+        ordered = [self._image_files[current_idx]]
+        ordered += [image_f for i, image_f in enumerate(self._image_files) if i != current_idx]
+        for image_f in ordered:
+            if rotations[image_f.id]:
+                self._rotated[image_f.id] = self._executor.submit(
+                    rotated_image_path, image_f, rotations[image_f.id], cache_dir)
+
+    def _background_image_path(self, image_f) -> str:
+        """Return the upright copy of `image_f`, waiting for its rotation if still being written."""
+        future = self._rotated.get(image_f.id)
+        return future.result() if future is not None else str(image_f.path())
+
+    def _set_background_image(self, image_path: str | None) -> None:
+        """Show `image_path` as the background, or remove the background when `None`."""
+        renderers = self.plotter.renderers
+        background = renderers._background_renderers[renderers.active_index]
+        if image_path is None:
+            # pyvista never detaches the background renderer from the window, so
+            # remove it explicitly to avoid leaking one per fileset.
+            if background is not None:
+                self.plotter.remove_background_image()
+                self.plotter.render_window.RemoveRenderer(background)
+            if self._backdrop_renderer is not None:
+                self.plotter.render_window.RemoveRenderer(self._backdrop_renderer)
+                self._backdrop_renderer = None
+            return
+        if background is None or 'background' not in background.actors:
+            # ``Plotter.clear`` empties the background renderer without
+            # unregistering it, and pyvista never detaches it from the window.
+            if background is not None:
+                self.plotter.remove_background_image()
+                self.plotter.render_window.RemoveRenderer(background)
+            self.plotter.add_background_image(image_path, as_global=False)
+            if self._backdrop_renderer is None:
+                self._backdrop_renderer = self._add_backdrop_renderer()
+            return
+        # Swap the image actor's input: rebuilding the layer stack on every image
+        # change is unnecessary, ``resize`` refits the camera to the new picture.
+        background.actors['background'].SetInputData(pv.read(image_path))
+        background.resize()
+
+    def _add_backdrop_renderer(self) -> vtkRenderer:
+        """Add an empty bottom-layer renderer that clears the frame every render.
+
+        PyVista's background renderer lives at layer 1 and preserves the colour
+        buffer, so no renderer clears the window and the previous frame shows
+        through wherever the photo does not cover it.
+        """
+        renderer = vtkRenderer()
+        renderer.SetLayer(0)
+        renderer.SetBackground(0.0, 0.0, 0.0)
+        renderer.SetErase(True)
+        renderer.SetPreserveColorBuffer(False)
+        renderer.SetInteractive(False)
+        renderer.SetViewport(0.0, 0.0, 1.0, 1.0)
+        self.plotter.render_window.AddRenderer(renderer)
+        return renderer
 
     def _on_voxel_cmap_changed(self, cmap_name: str):
         self._voxel_colormap = cmap_name
@@ -541,9 +676,45 @@ class ReconstructionExplorer(QMainWindow):
         self._mesh_checkbox.setChecked(False)
         self._mesh_checkbox.blockSignals(False)
 
-        # Images fileset
-        self._images_fs = scan.get_fileset('images')
-        self._image_files = sorted(self._images_fs.get_files(), key=lambda f: f.id)
+        # Images filesets: discover available sets among images, Undistort, and Masks
+        self._available_images_fs = {}
+        for fs_candidate in ["images", "Undistort", "Masks"]:
+            try:
+                # Check if mapped via compute_fileset_matches or directly present in scan
+                matched_name = fs_matches.get(fs_candidate, fs_candidate)
+                fs = scan.get_fileset(matched_name)
+                self._available_images_fs[fs_candidate] = fs
+            except (FilesetNotFoundError, KeyError):
+                continue
+
+        self._images_fs_combo.blockSignals(True)
+        self._images_fs_combo.clear()
+        for name in self._available_images_fs.keys():
+            self._images_fs_combo.addItem(name)
+
+        default_fs = None
+        if "Undistort" in self._available_images_fs:
+            default_fs = "Undistort"
+        elif "images" in self._available_images_fs:
+            default_fs = "images"
+        elif self._available_images_fs:
+            default_fs = next(iter(self._available_images_fs))
+
+        if default_fs:
+            self._images_fs_combo.setCurrentText(default_fs)
+            self._images_fs_combo.setEnabled(len(self._available_images_fs) > 1)
+        else:
+            self._images_fs_combo.setEnabled(False)
+
+        self._images_fs_combo.blockSignals(False)
+
+        if default_fs:
+            self._on_images_fs_changed(default_fs)
+        else:
+            self._images_fs = None
+            self._image_files = []
+            self._clear_rotated_cache()
+            self._image_slider.setEnabled(False)
 
         # Reset plotter
         self.plotter.clear()
@@ -555,7 +726,8 @@ class ReconstructionExplorer(QMainWindow):
         self._spacing = None
 
         # Load the reconstruction pipeline configuration
-        self._pipeline_cfg = tomlkit.load(scan.path() / "pipeline.toml")
+        with open(scan.path() / "pipeline.toml", "r") as file:
+         self._pipeline_cfg = tomlkit.load(file)
 
         # Setup slider
         n = len(self._image_files)
@@ -744,11 +916,8 @@ class ReconstructionExplorer(QMainWindow):
             # Metadata missing - just show the image, skip camera update
             cam_pos = focal_point = up_world = fov_y_deg = None
 
-        try:
-            self.plotter.add_background_image(image_f.path(), as_global=False)
-        except:
-            self.plotter.remove_background_image()
-            self.plotter.add_background_image(image_f.path(), as_global=False)
+        image_path = self._background_image_path(image_f)
+        self._set_background_image(image_path)
 
         self.plotter.add_text(
             f"Image: {image_f.id}",
@@ -780,6 +949,12 @@ class ReconstructionExplorer(QMainWindow):
         # Stop the debounce timer (if it is still running)
         if self._opacity_range_timer.isActive():
             self._opacity_range_timer.stop()
+
+        # Drop the rotated copies and the worker pool that produces them
+        self._clear_rotated_cache()
+        if self._executor is not None:
+            self._executor.shutdown(wait=True, cancel_futures=True)
+            self._executor = None
 
         # Close the DB connection - this releases any background thread
         try:

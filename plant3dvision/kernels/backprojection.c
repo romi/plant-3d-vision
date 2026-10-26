@@ -75,7 +75,7 @@ bool backproject_point(float3 pt, __global float *intrinsics,
 __kernel void average(__read_only image2d_t mask, __global float *value,
                       __global float *intrinsics, __global float *rot,
                       __global float *tvec, __global float *volinfo,
-                      __global int *shape) 
+                      __global int *shape, float invalid_value)
 {
     // Sampler configuration. We disable normalized coords so we can use integer image coordinates.
     const sampler_t samplerA =
@@ -97,8 +97,10 @@ __kernel void average(__read_only image2d_t mask, __global float *value,
     // Container for projected pixel coordinates
     int2 imagept;
 
-    // Backproject the voxel center onto the image plane; if invalid, skip
+    // Backproject the voxel center onto the image plane; outside the frustum this view
+    // sees no plant there, so count it as background instead of skipping the contribution.
     if (!backproject_point(pt, intrinsics, rot, tvec, mask, &imagept)) {
+        value[idx] += invalid_value;
         return;
     }
 

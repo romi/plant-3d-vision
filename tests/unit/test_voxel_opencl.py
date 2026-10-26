@@ -5,6 +5,9 @@ Unit tests for Backprojection (OpenCL) class focusing on non-hardware dependent 
 
 import unittest
 
+import numpy as np
+
+from plant3dvision.voxel import EPS
 from plant3dvision.voxel_opencl import Backprojection
 
 
@@ -75,6 +78,30 @@ class TestBackprojectionOpenCL(unittest.TestCase):
             )
 
         self.assertIn("Unknown kernel type invalid_method", str(context.exception))
+
+    def test_averaging_out_of_frame_counts_as_background(self):
+        """A voxel outside the frame must accumulate the background value, not be skipped."""
+        try:
+            backproj = Backprojection(
+                shape=[2, 1, 1], origin=[0.0, 0.0, 0.0], voxel_size=1.0,
+                method="averaging", log=True
+            )
+            backproj.init_buffers()
+            # With fx=10 and a 1x1 image, x=0 projects to pixel 0 (in frame) and
+            # x=1 projects outside it.
+            backproj.process_view(
+                np.array([10.0, 10.0, 0.0, 0.0], np.float32),
+                np.eye(3, dtype=np.float32),
+                np.array([0.0, 0.0, 5.0], np.float32),
+                np.ones((1, 1), np.float32),
+            )
+            values = backproj.get_values().ravel()
+        except Exception as e:
+            # If OpenCL isn't properly configured or fails, skip the test
+            self.skipTest(f"OpenCL test failed: {str(e)}")
+
+        self.assertAlmostEqual(values[0], np.log(EPS + 1), places=4)
+        self.assertAlmostEqual(values[1], np.log(EPS), places=4)
 
 
 if __name__ == '__main__':
