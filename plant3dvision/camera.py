@@ -627,7 +627,6 @@ def image_rotation(image_f: "File") -> int:
     -------
     int
         The clockwise rotation in degrees: 0, 90, 180 or 270.
-
     """
     rotation = int(image_f.get_metadata('rotation', default=0) or 0) % 360
     return (rotation + 45) // 90 * 90 % 360
@@ -651,7 +650,6 @@ def rotated_image_path(image_f: "File", rotation: int, cache_dir: str | Path) ->
     -------
     str
         Path to the (cached) rotated copy, or to the original image if the rotation could not be applied.
-
     """
     if rotation not in _CV2_ROTATIONS:
         return str(image_f.path())
@@ -718,9 +716,13 @@ def camera_params_from_file(image_f: "File",
     >>> image_f = scan.get_fileset('images').get_files()[0]
     >>> cam_pos, focal, up, fov = camera_params_from_file(image_f)
     >>> print(cam_pos)
-    (0.0, 0.0, 0.0)          # example values
+    (75.13817987259904, 378.32946425921693, 77.70216061126882)
+    >>> print(focal)
+    (76.07672806917685, 378.37733056595454, 77.36034765162591)
+    >>> print(up)
+    (0.3390191175518756, 0.0579549181538338, 0.9389926865509284)
     >>> print(fov)
-    45.0                     # example value in degrees
+    49.66411511166417
     >>> db.disconnect()
     """
     # Retrieve COLMAP camera metadata; raise if absent
@@ -778,4 +780,4 @@ def camera_params_from_file(image_f: "File",
     # Vertical field‑of‑view (degrees) derived from the displayed image dimension and focal length
     fov_y_deg = np.degrees(2.0 * np.arctan(img_extent / (2.0 * focal)))
 
-    return cam_pos, tuple(focal_point), tuple(up_world), fov_y_deg
+    return tuple(map(float, cam_pos)), tuple(map(float, focal_point)), tuple(map(float, up_world)), fov_y_deg
